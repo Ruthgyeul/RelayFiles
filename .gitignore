@@ -1,36 +1,48 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
-/node_modules
+node_modules/
 /.pnp
-.pnp.js
+.pnp.*
+
+# environment (keep the template)
+.env
+.env.*
+!.env.example
+
+# next.js / build output
+/.next/
+/out/
+/build/
+dist/
+next-env.d.ts
+*.tsbuildinfo
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
-# next.js
-/.next/
-/out/
+# local storage volume used in development (production lives on /mnt/relayfilesDB)
+/.data/
 
-# production
-/build
+# uploads / temp
+uploads/
+tmp/
+
+# logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
 
 # misc
-.DS_Store
 *.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
-.env*.local
-.env
-
-# vercel
 .vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
