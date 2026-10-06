@@ -1,8 +1,9 @@
 import "server-only";
-import { STORAGE } from "@/config/policy";
+import { SEARCH, STORAGE } from "@/config/policy";
 import type { CreatedFolder, FolderNode, FolderView, NodeItem, NodeProperties, TaggedItem, Visibility } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
+import { parseSearchQuery, rankByName } from "@/domain/search";
 import { effectiveVisibility } from "@/domain/tree";
 import type { AccountRow } from "../repositories/account.repo";
 import { db, Prisma } from "../db/client";
@@ -12,6 +13,7 @@ import {
   childCounts,
   createFolderNode,
   descendantCounts,
+  findByName,
   findByTags,
   findNode,
   findRootFolder,
@@ -19,6 +21,7 @@ import {
   listChildren,
   listFolders,
   listSiblingNames,
+  recentFiles,
   tagUsage,
   type NodeRow,
 } from "../repositories/node.repo";
@@ -104,17 +107,39 @@ export async function getProperties(accountId: string, nodeId: string): Promise<
   };
 }
 
-/** Items anywhere in the account that carry every tag, with their folder path. */
-export async function searchByTags(accountId: string, tags: string[]): Promise<TaggedItem[]> {
-  const [rows, folders] = await Promise.all([findByTags(db(), accountId, tags, TAG_SEARCH_LIMIT), listFolders(db(), accountId)]);
+/** Adds the folder path ("Videos / 2024") to each hit, keeping the order. */
+async function withPaths(accountId: string, rows: NodeRow[]): Promise<TaggedItem[]> {
+  const [folders, items] = await Promise.all([listFolders(db(), accountId), withFolderStats(rows)]);
   const byId = new Map(folders.map((folder) => [folder.id, folder]));
   const pathOf = (parentId: string | null): string => {
     const names: string[] = [];
     for (let folder = parentId ? byId.get(parentId) : undefined; folder; folder = folder.parentId ? byId.get(folder.parentId) : undefined) names.unshift(folder.name);
     return names.join(" / ");
   };
-  const items = await withFolderStats(rows);
-  return items.map((item, index) => ({ ...item, parentPath: pathOf(rows[index]!.parentId) }));
+  return items.map((item, index) => {
+    const parentId = rows[index]!.parentId ?? "root";
+    return { ...item, parentPath: pathOf(rows[index]!.parentId), parentId, parentIsRoot: byId.get(parentId)?.parentId === null };
+  });
+}
+
+/** Items anywhere in the account that carry every tag, with their folder path. */
+export async function searchByTags(accountId: string, tags: string[]): Promise<TaggedItem[]> {
+  return withPaths(accountId, await findByTags(db(), accountId, tags, TAG_SEARCH_LIMIT));
+}
+
+/**
+ * Global search (Ctrl/⌘ K): recent files for an empty query, items with every tag for
+ * "#tag1 #tag2", otherwise names containing the text, best matches first.
+ */
+export async function searchItems(accountId: string, raw: string): Promise<TaggedItem[]> {
+  const query = parseSearchQuery(raw);
+  if (query.mode === "recent") return withPaths(accountId, await recentFiles(db(), accountId, SEARCH.recentItems));
+  const rows = query.mode === "tags" ? await findByTags(db(), accountId, query.tags, TAG_SEARCH_LIMIT) : await findByName(db(), accountId, query.text, SEARCH.nameCandidates);
+  const ranked = rankByName(
+    rows.map((row) => ({ row, name: row.name, type: row.type === "FOLDER" ? ("folder" as const) : ("file" as const) })),
+    query.mode === "name" ? query.text : "",
+  ).slice(0, SEARCH.maxResults);
+  return withPaths(accountId, ranked.map(({ row }) => row));
 }
 
 function isUniqueViolation(error: unknown): boolean {

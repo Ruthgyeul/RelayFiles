@@ -102,4 +102,33 @@ describe("folders", () => {
     expect(live.json.data).toHaveLength(2);
     expect((await callRoute(search, { cookie, query: "?tags=" })).status).toBe(400);
   });
+
+  it("searches names, tags and recent files across the account", async () => {
+    const { id, cookie } = await newAccount();
+    const trips = (await mkdir(cookie, "root", "Trips")).json.data.folder.id;
+    const now = Date.now();
+    await prisma.node.createMany({
+      data: [
+        { id: newNodeId(), accountId: id, parentId: trips, type: "FILE", kind: "VIDEO", name: "My trip.mp4", size: 10n, linkId: newLinkId(), tags: ["2024"], createdAt: new Date(now - 2_000) },
+        { id: newNodeId(), accountId: id, parentId: trips, type: "FILE", kind: "OTHER", name: "trip notes.txt", size: 5n, linkId: newLinkId(), createdAt: new Date(now - 1_000) },
+      ],
+    });
+    const other = await newAccount();
+    await mkdir(other.cookie, "root", "Trip ideas");
+
+    const byName = (await callRoute<TaggedItem[]>(search, { cookie, query: "?q=TRIP" })).json.data;
+    expect(byName.map((item) => [item.name, item.parentPath])).toEqual([
+      ["Trips", "root"],
+      ["trip notes.txt", "root / Trips"],
+      ["My trip.mp4", "root / Trips"],
+    ]);
+    expect(byName[0]).toMatchObject({ parentIsRoot: true, itemCount: 2 });
+    expect(byName[1]).toMatchObject({ parentId: trips, parentIsRoot: false });
+
+    const tagged = (await callRoute<TaggedItem[]>(search, { cookie, query: "?q=%232024" })).json.data;
+    expect(tagged.map((item) => item.name)).toEqual(["My trip.mp4"]);
+    const recent = (await callRoute<TaggedItem[]>(search, { cookie, query: "?q=" })).json.data;
+    expect(recent.map((item) => item.name)).toEqual(["trip notes.txt", "My trip.mp4"]);
+    expect((await callRoute(search, { cookie, query: `?q=${"x".repeat(201)}` })).status).toBe(400);
+  });
 });

@@ -42,6 +42,20 @@ export const FILES = {
   maxBatchItems: 500,
 } as const;
 
+/** Global search (design `gs*`, Ctrl/⌘ K). */
+export const SEARCH = {
+  /** Recent files listed before anything is typed. */
+  recentItems: 8,
+  /** Results shown for a name or tag query. */
+  maxResults: 30,
+  /** Name matches fetched before ranking. */
+  nameCandidates: 200,
+  /** Longest query accepted. */
+  maxQueryLength: 200,
+  /** Delay before a query runs while typing. */
+  debounceMs: 150,
+} as const;
+
 export const UPLOAD = {
   /** tus chunk size; stays below Cloudflare's 100 MB request limit. */
   chunkSizeMb: 50,

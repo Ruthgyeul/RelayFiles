@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { NodeItem } from "@/contracts/nodes";
 import { zipName } from "@/domain/serving";
 import { useShell } from "@/features/shell/ShellProvider";
@@ -16,11 +16,15 @@ const toViewerItem = (item: Item): ViewerItem => ({ id: item.id, name: item.name
  * Downloads (single file, folder or selection as zip, recorded in the transfers panel) and
  * the media viewer for the files listed in the current folder.
  */
-export function useFileMedia(listed: Item[], folderName: string) {
+export function useFileMedia(listed: Item[], folderName: string, initialView?: string) {
   const { notify } = useShell();
   const transfers = useTransfers();
-  const [viewing, setViewing] = useState<string | null>(null);
   const files = listed.filter((item) => item.type === "file");
+  const [viewing, setViewing] = useState<string | null>(() => (initialView && files.some((item) => item.id === initialView) ? initialView : null));
+  // The `?view=` link only opens the viewer once; closing it leaves the plain folder URL.
+  useEffect(() => {
+    if (initialView) window.history.replaceState(window.history.state, "", window.location.pathname);
+  }, [initialView]);
 
   const total = (items: Item[]) => items.reduce((sum, item) => sum + Number(item.size), 0);
   const fileCount = (items: Item[]) => items.reduce((sum, item) => sum + item.fileCount, 0);
