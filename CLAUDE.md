@@ -41,7 +41,7 @@ npm run test         # 단위 테스트 (외부 서비스 없음)
 npm run test:integration  # PostgreSQL·Redis가 필요한 통합 테스트 (.env 사용)
 npm run db:migrate   # prisma migrate dev (개발: 스키마 변경 → 마이그레이션 생성)
 npm run db:deploy    # prisma migrate deploy (운영)
-npm run volume:init  # STORAGE_ROOT 볼륨 초기화·등록 (재실행 안전)
+npm run volume:init  # STORAGE_ROOT(또는 인자로 준 경로) 볼륨 초기화·등록 (재실행 안전)
 npm run admin:create # 관리자 계정 생성, 토큰을 한 번만 출력
 npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지정 가능)
 npm run check:emoji  # 이모지 사용 검사
@@ -52,6 +52,10 @@ npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 
 npm run data:migrate     # 데이터 마이그레이션(src/server/migrations) 실행, 중단 지점부터 재개
 npm run keys:rotate      # *_PREVIOUS 키로 저장된 토큰을 현재 키로 다시 암호화
 npm run check:migrations # 파괴적 SQL 마이그레이션에 contract 표시가 있는지 검사
+npm run storage:migrate  # 볼륨 디렉터리 레이아웃을 코드 버전으로 올림(READONLY + 저널, 재개 가능)
+npm run volume:list      # 볼륨 상태·계정 수·여유 공간
+npm run volume:migrate   # -- --account <id> --to <vol> | --volume <vol> [--to <vol>] (복사 → SHA-256 대조 → 전환)
+npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해제
 ```
 
 운영 배포는 Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃)와 Nginx(`deploy/nginx/templates`)로 한다. 절차는 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 운영 작업은 [`docs/runbook.md`](docs/runbook.md). 업데이트는 서버에서 `git pull && deploy/scripts/release.sh`.

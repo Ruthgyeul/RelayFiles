@@ -9,4 +9,4 @@
 | [api.md](api.md) | 응답 형식, 에러 코드, 엔드포인트 | M2부터 |
 | [security.md](security.md) | 보안 모델 (스토리지, 로그, 인증) | M2부터 |
 | [deploy-ubuntu.md](deploy-ubuntu.md) | Ubuntu 서버·외장 SSD·Nginx·Docker 배포 | M15 |
-| [runbook.md](runbook.md) | 운영 절차 (백업, 복구, 롤백, 점검, SSD) | M15 (마이그레이션·서버 이전은 M16) |
+| [runbook.md](runbook.md) | 운영 절차 (백업, 복구, 롤백, 점검, SSD, 마이그레이션, 볼륨 추가·교체, 서버 이전, 비밀값 교체, 리허설 기록) | M15–M16 |

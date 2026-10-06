@@ -1,0 +1,17 @@
+# Mounts for additional storage volumes (docs/runbook.md "볼륨 추가·교체").
+# Copy to deploy/docker-compose.volumes.yml (not committed) and list every extra SSD under each
+# service, at the same path as on the host. deploy/scripts/*.sh pick the file up automatically;
+# by hand add `-f deploy/docker-compose.volumes.yml` after `-f deploy/docker-compose.yml`.
+services:
+  app:
+    volumes:
+      - /mnt/relayfilesDB2:/mnt/relayfilesDB2
+  worker:
+    volumes:
+      - /mnt/relayfilesDB2:/mnt/relayfilesDB2
+  tools:
+    volumes:
+      - /mnt/relayfilesDB2:/mnt/relayfilesDB2
+  nginx:
+    volumes:
+      - /mnt/relayfilesDB2:/mnt/relayfilesDB2:ro

@@ -53,3 +53,5 @@ Thumbs.db
 # deployment state (never committed)
 /deploy/maintenance/on
 /deploy/backups/
+/deploy/docker-compose.volumes.yml
+/deploy/nginx/volumes/*.conf

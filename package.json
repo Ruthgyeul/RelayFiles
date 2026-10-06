@@ -27,7 +27,11 @@
     "deploy:error-pages": "tsx scripts/build-error-pages.mts",
     "data:migrate": "tsx --conditions=react-server scripts/data-migrate.mts",
     "keys:rotate": "tsx --conditions=react-server scripts/keys-rotate.mts",
-    "check:migrations": "node scripts/check-migrations.mjs"
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "storage:migrate": "tsx --conditions=react-server scripts/storage-migrate.mts",
+    "volume:migrate": "tsx --conditions=react-server scripts/volume-migrate.mts",
+    "volume:list": "tsx --conditions=react-server scripts/volume-list.mts",
+    "volume:remove": "tsx --conditions=react-server scripts/volume-remove.mts"
   },
   "dependencies": {
     "@fontsource-variable/figtree": "^5.3.0",

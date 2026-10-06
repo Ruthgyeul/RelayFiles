@@ -6,6 +6,7 @@
 # nginx    the only published port; serves files via X-Accel and the static error pages
 # postgres / redis   internal only, data under DATA_DIR on the internal disk
 # tools    one-off commands (profile "tools"): migrations, volume:init, admin:create
+# Extra SSDs are mounted by deploy/docker-compose.volumes.yml (see docker-compose.volumes.example.yml).
 # cloudflared        optional Cloudflare Tunnel (profile "tunnel")
 name: relayfiles
 
@@ -98,7 +99,11 @@ services:
     image: relayfiles-tools:${RELEASE_TAG:-latest}
     profiles: [tools]
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
-    volumes: *storage
+    volumes:
+      - ${STORAGE_ROOT:?set STORAGE_ROOT in .env}:${STORAGE_ROOT}
+      - ${LOG_DIR:-/var/log/relayfiles}:${LOG_DIR:-/var/log/relayfiles}
+      # volume:init writes the Nginx location of an extra SSD here (or prints it when not allowed).
+      - ./nginx/volumes:/app/deploy/nginx/volumes
     networks: [relay]
     depends_on:
       postgres: { condition: service_healthy }
@@ -121,6 +126,7 @@ services:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./error-pages:/usr/share/nginx/error:ro
       - ./maintenance:/etc/nginx/maintenance:ro
+      - ./nginx/volumes:/etc/nginx/volumes:ro
       - ${STORAGE_ROOT}:${STORAGE_ROOT}:ro
     networks: [relay]
     depends_on: [app]

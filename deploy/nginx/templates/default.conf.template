@@ -40,6 +40,9 @@ server {
         alias /usr/share/nginx/error/;
     }
 
+    # Additional volumes (deploy/nginx/volumes/<volumeId>.conf, written by volume:init).
+    include /etc/nginx/volumes/*.conf;
+
     # Files are sent by Nginx after the app has checked access (X-Accel-Redirect):
     # ${STORAGE_ACCEL_PREFIX}<volumeId>/<accountId>/<path> → ${STORAGE_ROOT}/users/<accountId>/<path>
     location ~ ^${STORAGE_ACCEL_PREFIX}[a-z0-9-]+/(.+)$ {

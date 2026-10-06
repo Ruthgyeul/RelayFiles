@@ -91,7 +91,7 @@ export async function purgeExpired(owner: AccountRow, now: Date): Promise<{ dele
  * the volume's trash (purged later), so a failed database delete can be undone.
  */
 export async function deleteAccount(owner: AccountRow): Promise<void> {
-  const driver = await driverForAccount(owner);
+  const driver = await driverForAccount(owner, "write");
   await withStorageTransaction(db(), async (tx, undo) => {
     await deleteAccountRow(tx, owner.id);
     const location = { accountId: owner.id, segments: [] };

@@ -36,6 +36,7 @@
 | `INTERNAL` | 500 | `error.tsx` |
 | `MAINTENANCE` | 503 | `/error/503` |
 | `STORAGE_OFFLINE` | 503 | `/error/storage-offline` |
+| `STORAGE_BUSY` | 503 | 토스트(계정 이동·레이아웃 마이그레이션 중. 탐색·다운로드는 계속됨) |
 | `INSUFFICIENT_STORAGE` | 507 | 토스트 + 용량 배너 |
 
 ## 엔드포인트

@@ -14,5 +14,9 @@ env_value() {
 }
 
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT/deploy/docker-compose.yml")
+# Extra SSD mounts (docs/runbook.md "볼륨 추가·교체").
+if [ -f "$ROOT/deploy/docker-compose.volumes.yml" ]; then
+  COMPOSE+=(-f "$ROOT/deploy/docker-compose.volumes.yml")
+fi
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*"; }

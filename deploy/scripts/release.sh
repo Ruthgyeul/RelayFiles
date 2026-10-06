@@ -25,9 +25,10 @@ log "Build images"
 trap 'rm -f "$FLAG"' EXIT
 touch "$FLAG"
 
-log "Database migrations (schema, then data)"
+log "Migrations (schema, data, storage layout)"
 "${COMPOSE[@]}" run --rm tools npm run db:deploy
 "${COMPOSE[@]}" run --rm tools npm run data:migrate
+"${COMPOSE[@]}" run --rm tools npm run storage:migrate
 
 log "Restart app, worker and nginx"
 "${COMPOSE[@]}" up -d --no-build app worker nginx
