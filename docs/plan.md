@@ -579,7 +579,7 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 - 볼륨에 `driver`(local|s3) 필드를 두고, ③과 같은 계정 단위 이동 작업으로 옮긴다(복사 → 해시 검증 → 전환). 로컬과 S3 볼륨을 함께 운영할 수 있다.
 
 **⑥ 키·비밀값 교체**
-- `TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, 쿠키 서명 키는 **키 ID 방식**(`KEYS_JSON={"k2":"…","k1":"…"}`, 현재 키 `ACTIVE_KEY_ID`)으로 둔다. 암호문 앞에 키 ID를 붙여 저장하므로 새 키를 추가해도 기존 데이터를 읽을 수 있다. `scripts/rotate-keys.ts`가 배치로 재암호화하고, 끝나면 옛 키를 제거한다. 토큰 값 자체는 바뀌지 않는다.
+- `TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, `COOKIE_SECRET`은 교체 기간에 `*_PREVIOUS` 키를 함께 둔다(§19). 암호문 앞에 키 식별자(현재/이전)를 붙여 저장하므로 새 키로 바꿔도 기존 데이터를 읽을 수 있다. `scripts/rotate-keys.ts`가 배치로 재암호화하고, 끝나면 옛 키를 제거한다. 토큰 값 자체는 바뀌지 않는다.
 
 **⑦ 캐시·계약·클라이언트 데이터 버전**
 - Redis 키에 버전 접두사(`rf:v1:`)를 붙인다. 캐시 형식이 바뀌면 버전을 올려 옛 키를 자연 만료시킨다(별도 삭제 작업 불필요).
@@ -654,3 +654,127 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 2. **로그인 잠금 정책**: 기본은 시안 문구(5회마다 30s/120s/600s). CLAUDE.md 기준(3회)으로 바꿀 경우 `config/policy.ts` 값과 문구를 함께 바꾼다.
 3. **위치 정보**: Cloudflare Tunnel 뒤에서는 `CF-IPCountry`/`CF-IPCity`를 쓴다. 터널 없이 LAN으로 접속하면 "Local network"으로 표시한다.
 4. **테마 선택 UI**: Server 페이지에 admin 전역 설정으로 추가한다(시안에는 편집기 prop으로만 있음).
+
+---
+
+## 18. M1 상세 계획 (디자인 시스템)
+
+### 18.1 M1 목표
+디자인 시스템 기반을 만든다: 토큰, 테마 10종, 폰트 3종, 아이콘 레지스트리, 공용 UI 프리미티브(§6), 개발용 카탈로그, 수치 스펙 문서. 이후 화면(M3+)은 이 프리미티브만 조립한다.
+
+### 18.2 의존성 추가
+- `@phosphor-icons/react@2.1.10`(SSR 엔트리 `@phosphor-icons/react/ssr` 사용: context가 없어 서버·클라이언트 컴포넌트 양쪽에서 동작), `pretendard@1.3.9`, `clsx`, `tailwind-merge@3`(Tailwind 4 지원, `className` 덮어쓰기 충돌 해결).
+- 테스트: `@testing-library/react`, `jsdom`(프리미티브 동작 테스트용, `vitest` 환경을 파일별 `// @vitest-environment jsdom`으로 지정).
+
+### 18.3 파일 계획
+
+| 파일 | 내용 |
+|---|---|
+| `src/shared/styles/themes.css` | 시안 11행의 10개 테마 블록을 값 그대로 옮김(`:root` = blue, `:root[data-theme="…"]` 9개) |
+| `src/shared/styles/globals.css` | `src/app/globals.css`를 대체. `@import "tailwindcss"` + themes.css + `@theme`(색 토큰 매핑, `--breakpoint-sm: 45rem`, `--breakpoint-lg: 64rem`, 폰트 변수, `--animate-skel`, `--animate-spin`) + **고정 팔레트**(`--color-ok`, `--color-ok-text`, `--color-ok-bg`, `--color-warn*`, `--color-danger*`, `--color-info*`, `--color-kind-folder/video/audio/image` 등 §3.5 값을 이름 붙여 정의) + **z-index 변수**(§1.2 값: `--z-header: 10` … `--z-account-toast: 72`) + 기본 스타일 + `:focus-visible` 링 |
+| `src/shared/styles/palette.ts` | 데이터로 색을 고르는 곳용 TS 상수: 이름 → `var(--color-…)` 문자열. **값의 원천은 CSS 하나**(TS는 참조만 하므로 값이 어긋날 수 없음) |
+| `src/shared/styles/fonts.ts` | `next/font/google` Figtree(variable, `--font-figtree`, display swap), JetBrains Mono(400/600, `--font-jetbrains`). Pretendard는 `pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css`를 layout에서 import(unicode-range 분할로 한글이 있을 때만 필요한 조각만 로드, 셀프호스팅) |
+| `src/shared/ui/icon/registry.ts`, `Icon.tsx` | 시안의 아이콘 101개 + 에러 페이지용(WarningOctagon, ShieldWarning, FileX, LinkBreak, Bug, WifiSlash)을 kebab 이름 → 컴포넌트로 매핑. `IconName` 유니온 타입, `<Icon name weight size className />`(기본 `1em`, `flex:none`, `aria-hidden`, `label`을 주면 `role="img"`+`aria-label`) |
+| `src/shared/lib/cn.ts` | `clsx` + `tailwind-merge` |
+| `src/shared/ui/*` | §6 프리미티브 전부: Button, IconButton, Card, ListCard, OptionChip, OptionCard, CheckRow, Pill, Tag, Banner, Menu/MenuItem/MenuSeparator, BottomSheet(모바일 메뉴용), Modal(+ModalHeader/ModalFooter, focus trap, Esc, 포커스 복원, `zLayer` prop), ConfirmDialog, PromptDialog, TextInput, TextArea, Avatar, Skeleton, StatTile, Meter, BarChart(빈 칸은 NoData 막대), Kbd, Logo, EmptyState, NoData. 대화형(Modal, Menu, BottomSheet, Confirm/Prompt)만 `"use client"` |
+| `src/domain/avatar.ts` (+test) | 시안 `avatarOf` 이식(FNV-1a + xorshift, 6×6 대칭 SVG data URI). 테스트는 시안 원본 함수로 만든 기대값과 비교 |
+| `src/app/layout.tsx` | 폰트 변수 클래스, Pretendard CSS, `globals.css` 경로 변경, `<html data-theme>` 유지 |
+| `src/app/icon.svg` | 로고(accent 둥근 사각 + arrow-up-right) 파비콘 |
+| `src/app/dev/ui/page.tsx` | **UI 카탈로그**: 모든 프리미티브 × 변형 × 크기를 그리고 테마 10종 전환 버튼을 둔다. env `ENABLE_UI_CATALOG=true`일 때만 열리고 아니면 `notFound()`(운영 기본값 false). 표시 텍스트는 컴포넌트 견본이며 앱 데이터가 아니다 |
+| `src/config/env.ts` (+test) | `ENABLE_UI_CATALOG`(boolean, 기본 false) 추가 |
+| `docs/design/spec.md` | 토큰 표(테마 22개 변수 × 10, 고정 팔레트, z-index), 프리미티브별 수치 표(§6 확장), 반응형 표(§7) |
+
+### 18.4 테스트
+- 단위(Vitest): `avatarOf` 결정성·시안 동일 출력, **아이콘 레지스트리가 시안의 모든 `ph-*` 이름을 포함**(시안 HTML을 읽어 대조), themes.css에 10개 테마와 22개 변수가 모두 있는지, palette.ts가 참조하는 변수가 globals.css에 모두 정의되어 있는지, `cn` 병합 규칙, Modal(Esc로 닫힘, 포커스 트랩·복원), CheckRow `aria-checked`, `ENABLE_UI_CATALOG` 파싱.
+- E2E(Playwright, `ENABLE_UI_CATALOG=true`로 서버 실행): `/dev/ui`에서 핵심 프리미티브의 계산 스타일을 시안 수치와 비교(primary 버튼 h34·radius 10·weight 700·bg accent, Card radius 16·border cardLine, Pill 10px/800, Modal 폭과 shadow, Menu 항목 높이 36/44), 테마 전환 시 `--accent`가 바뀌는지, 360/768/1280 가로 스크롤 없음, 카탈로그 스크린샷 기준 이미지 생성.
+- 이모지 검사, `npm run check` 전체 통과 후 커밋·푸시·PR.
+
+### 18.5 완료 기준
+- `npm run check` + `npm run test:e2e` 통과, CI 녹색.
+- `/dev/ui` 스크린샷에서 sky 테마 기준 토큰과 프리미티브가 시안 수치와 일치.
+- 운영 빌드에서 `/dev/ui`는 404.
+
+### 18.6 실행 방식 (사용자 지시: "PR & merge를 계속 진행하면서 끝까지")
+- M1 → M16을 순서대로 진행한다. 마일스톤마다 다음을 반복한다.
+  1. `claude/eager-bell-lrz3vc`를 최신 `origin/main`에서 다시 시작한다(머지된 이력만 있으므로 `--force-with-lease` 푸시).
+  2. 구현 → `npm run check` + `npm run test:e2e`(+ M2부터 DB·Redis 통합 테스트)를 로컬에서 통과시킨다.
+  3. 커밋(Conventional Commits) → 푸시 → PR(`## Changes / ## How to Test / ## Related Issues`) → PR 구독.
+  4. CI가 녹색이고 리뷰 지적이 없으면 **merge commit 방식**(squash/rebase 아님, 사용자 Git 규칙)으로 머지하고 다음 마일스톤으로 간다. CI가 빨간색이면 원인을 고쳐 다시 푸시한 뒤 머지한다.
+- 마일스톤이 크면(M5–M9 등) 리뷰하기 쉽게 PR을 2~3개로 나눌 수 있다. 각 PR은 단독으로 `npm run check`를 통과해야 한다.
+- **클라우드 컨테이너의 한계**: 실제 N95 서버, 외장 SSD(LUKS2 설정), Cloudflare Tunnel, 실기기 모바일 확인은 여기서 실행할 수 없다. 해당 부분은 스크립트, 설정 파일, `docs/deploy-ubuntu.md`, `docs/runbook.md`, 체크리스트로 제공하고, 동작은 컨테이너 안의 로컬 디렉터리 볼륨과 PostgreSQL·Redis(로컬 설치 또는 CI 서비스 컨테이너)로 검증한다. 실서버 검증 항목(§14)은 마지막에 사용자가 실행할 목록으로 정리한다.
+- 각 마일스톤이 끝날 때 짧게 보고한다(무엇을 했는지, 검증 결과, 다음 단계). 결정이 꼭 필요한 경우가 아니면 멈추지 않는다.
+
+---
+
+## 19. 환경 변수 정책 (사용자 요청: 필요한 설정 값과 포트는 전부 `.env.example`에, `.env`는 사용자가 직접 작성)
+
+### 19.1 원칙
+- 레포에 커밋되는 env 파일은 **`.env.example` 하나**다. 실제 값이 든 `.env`(개발은 `.env` 또는 `.env.local`, 운영은 compose 옆의 `.env`)는 **사용자가 `.env.example`을 복사해 직접 만든다**. `.gitignore`가 모든 `.env*`를 제외하고 `.env.example`만 허용한다(M0에서 적용됨).
+- 포트, 호스트, 경로, 도메인, 비밀값, 배포마다 다른 정책값은 **코드·compose·nginx 설정에 하드코딩하지 않는다**. 앱은 `src/config/env.ts`만 통해 읽고, `docker-compose.yml`은 `${VAR}`로, Nginx 설정은 `.env`로 렌더링하는 템플릿(`deploy/nginx/relayfiles.conf.template` → `npm run deploy:nginx`, `envsubst`)으로 같은 값을 쓴다.
+- `.env.example`의 모든 키에는 그룹 제목, 설명, 필수/선택, 기본값, 예시를 주석으로 단다. 비밀값은 비워 두고 생성 방법을 적는다.
+- **env 그룹별 지연 검증**: `env.ts`를 `app`, `database`, `redis`, `storage`, `secrets`, `uploads`, `jobs`, `observability` 그룹 스키마로 나누고 `getAppEnv()`, `getDatabaseEnv()` 등은 그 서브시스템이 처음 쓰일 때 검증한다. 빌드(CI)는 DB 비밀번호 없이도 통과하고, 실행 시 빠진 키는 "어떤 키가 왜 잘못됐는지" 목록으로 즉시 실패한다.
+- **누락 방지 테스트**: 모든 그룹 스키마의 키 집합 = `.env.example`의 키 집합임을 단위 테스트로 검사한다. 새 설정을 추가하는 PR은 `.env.example`과 스키마를 함께 바꿔야 CI를 통과한다.
+- 보조 명령: `npm run env:check`(작성한 `.env`를 앱 실행 없이 검증하고 문제를 목록으로 출력), `npm run env:secrets`(비밀값 무작위 생성 결과를 출력만 함, 파일을 쓰지 않음. 사용자가 `.env`에 붙여 넣음).
+- `.env` 값은 Next(`@next/env`)와 Docker Compose 모두 `${VAR}` 확장을 지원하므로 `DATABASE_URL`, `REDIS_URL`은 개별 키로 조합한다. Prisma 7 CLI는 `prisma.config.ts`에서 같은 `.env`를 읽는다.
+
+### 19.2 키 목록 (M1 PR에서 `.env.example`을 이 목록 전체로 교체)
+
+| 그룹 | 키 | 기본값(예시) | 비고 |
+|---|---|---|---|
+| app | `NODE_ENV` | `development` | `production`이면 로그 최소화, 에러 마스킹 |
+| app | `APP_HOST` | `0.0.0.0` | standalone 서버 바인드 주소(`HOSTNAME`으로 전달) |
+| app | `APP_PORT` | `3000` | 앱 포트(`PORT`로 전달), compose·nginx가 같은 값 사용 |
+| app | `PUBLIC_URL` | `http://localhost:3000` | 공유 링크 origin(운영: `https://files.example.com`) |
+| app | `DEFAULT_THEME` | `sky` | 10종 중 기본 테마(관리자가 Server 페이지에서 바꾸면 DB 값 우선) |
+| app | `SERVER_LOCATION` | `Seoul, KR` | Status 페이지 표기 |
+| app | `ENABLE_UI_CATALOG` | `false` | `/dev/ui` 컴포넌트 카탈로그 노출(운영은 false) |
+| app | `TRUSTED_PROXY_CIDRS` | `127.0.0.1/32,172.16.0.0/12` | 이 대역에서 온 `X-Forwarded-For`/`CF-Connecting-IP`만 신뢰 |
+| app | `ADMIN_ALLOWED_CIDRS` | (빈 값 = 제한 없음) | admin 페이지·API를 내부망(예 `192.168.0.0/24`)으로 제한 |
+| database | `POSTGRES_HOST` | `localhost`(compose 내부: `postgres`) | |
+| database | `POSTGRES_PORT` | `5432` | |
+| database | `POSTGRES_DB` | `relayfiles` | |
+| database | `POSTGRES_USER` | `relayfiles` | |
+| database | `POSTGRES_PASSWORD` | (필수, 비움) | `npm run env:secrets`로 생성 |
+| database | `POSTGRES_PUBLISH` | `127.0.0.1:5432` | compose가 호스트에 여는 주소:포트(외부 비공개 기본) |
+| database | `DATABASE_URL` | `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public` | 조합값, 보통 수정 불필요 |
+| redis | `REDIS_HOST` | `localhost`(compose 내부: `redis`) | |
+| redis | `REDIS_PORT` | `6379` | |
+| redis | `REDIS_PASSWORD` | (필수, 비움) | |
+| redis | `REDIS_DB` | `0` | |
+| redis | `REDIS_PUBLISH` | `127.0.0.1:6379` | |
+| redis | `REDIS_URL` | `redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}` | 조합값 |
+| redis | `REDIS_KEY_PREFIX` | `rf:v1:` | 캐시 형식 버전(§13.8 ⑦) |
+| storage | `STORAGE_ROOT` | 개발 `./.data/relayfilesDB`, 운영 `/mnt/relayfilesDB` | 외장 SSD 마운트 지점 |
+| storage | `STORAGE_RESERVE_PERCENT` | `5` | 볼륨 여유 공간 예약 |
+| storage | `STORAGE_UID` / `STORAGE_GID` | `10001` / `10001` | 컨테이너 실행 계정, 파일 소유자 |
+| storage | `STORAGE_ACCEL_ENABLED` | 개발 `false`, 운영 `true` | Nginx `X-Accel-Redirect` 사용 여부(false면 앱이 직접 전송) |
+| storage | `STORAGE_ACCEL_PREFIX` | `/_protected/` | Nginx internal location |
+| storage | `VOLUME_WATCH_INTERVAL_SEC` | `30` | 마운트 감시 주기 |
+| uploads | `UPLOAD_CHUNK_SIZE_MB` | `50` | tus 청크(Cloudflare 100MB 제한 아래) |
+| uploads | `UPLOAD_MAX_FILE_SIZE_GB` | (빈 값 = 무제한) | 파일당 최대 크기 |
+| uploads | `UPLOAD_TMP_TTL_HOURS` | `6` | 미완료 업로드 조각 정리 |
+| secrets | `TOKEN_ENC_KEY` | (필수, 32바이트 base64) | 계정 토큰 암호화 |
+| secrets | `TOKEN_HMAC_KEY` | (필수) | 토큰 조회용 HMAC |
+| secrets | `COOKIE_SECRET` | (필수) | 세션 쿠키 서명 |
+| secrets | `TOKEN_ENC_KEY_PREVIOUS` 외 `*_PREVIOUS` | (선택) | 키 교체 기간에만 설정(§13.8 ⑥의 키 교체는 이 방식으로 한다) |
+| policy | `ACCOUNT_TTL_DAYS` | `14` | 회원 계정 자동 삭제 기간 |
+| policy | `DEFAULT_QUOTA_GB` | `5` | 신규 계정 기본 용량 |
+| policy | `LOGIN_MAX_ATTEMPTS` | `5` | 잠금 전 실패 허용 횟수 |
+| policy | `LOGIN_LOCK_SECONDS` | `30,120,600` | 단계별 잠금 시간 |
+| jobs | `CLEANUP_CRON` | `0 4 * * *` | 정리 작업 시각 |
+| jobs | `JOBS_TIMEZONE` | `Asia/Seoul` | cron 기준 시간대 |
+| jobs | `METRICS_SAMPLE_INTERVAL_SEC` | `60` | 서버 지표 샘플링 |
+| jobs | `HEALTH_PROBE_INTERVAL_SEC` | `60` | 상태 점검 주기 |
+| observability | `LOG_LEVEL` | (빈 값 = 운영 warn, 개발 debug) | |
+| observability | `LOG_DIR` | `/var/log/relayfiles` | 운영 파일 로그 위치(개발은 콘솔만) |
+| observability | `DISK_DEVICE` | `/dev/sda` | Disk health(SMART) 대상 장치 |
+| observability | `TLS_CERT_PATH` | (선택) | Status 페이지 인증서 만료일 표시 |
+| deploy | `SERVER_NAME` | `files.example.com` | Nginx `server_name` |
+| deploy | `NGINX_LISTEN_PORT` | `80` | Nginx 수신 포트(TLS는 Cloudflare Tunnel 또는 certbot) |
+| deploy | `CLOUDFLARE_TUNNEL_TOKEN` | (선택) | compose의 `cloudflared` 서비스 사용 시 |
+| testing | `E2E_PORT` / `E2E_BASE_URL` / `PLAYWRIGHT_CHROMIUM_PATH` | `3100` / (빈 값) / (빈 값) | 테스트 전용, 운영 `.env`에는 불필요 |
+
+- 위 기본값은 `src/config/policy.ts`의 상수에서 오며, env는 덮어쓰기만 한다(정책 값의 원천은 한곳).
+- 적용 시점: **M1 PR**에서 `.env.example` 전체 목록과 `env.ts` 그룹 스키마·`env:check`·`env:secrets`·누락 방지 테스트를 함께 넣는다. 이후 마일스톤은 이미 정의된 키를 사용하고, 새 키가 생기면 같은 PR에서 `.env.example`과 스키마를 함께 갱신한다.
+- `docs/deploy-ubuntu.md`에 "`.env.example` → `.env` 작성 → `npm run env:secrets` → `npm run env:check`" 절차를 첫 단계로 둔다.
+
