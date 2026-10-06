@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+/*
+ * Placeholder base styles for M0. The full design-token system (10 themes, fonts,
+ * fixed palette) replaces this file in M1 — see docs/plan.md §5.
+ */
+:root {
+  --bg: #0f1419;
+  --t1: #eef3f7;
+  --t4: #8695a2;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--t1);
+  font-family: system-ui, sans-serif;
+}
