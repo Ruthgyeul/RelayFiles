@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { hasFiles } from "@/features/transfers/read-drop";
+import { FILES } from "@/config/policy";
 import { cn } from "@/shared/lib/cn";
 import { EmptyFolder, NodeCard } from "./NodeCard";
 import { NodeRow, RowButton, type ItemProps } from "./NodeRow";
@@ -22,6 +23,7 @@ interface FileListProps {
 /** The items of a folder as rows or cards, and a drop zone for files from the computer. */
 export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onOpen, onDownload, onDropFiles }: FileListProps) {
   const [filesOver, setFilesOver] = useState(false);
+  const lazy = items.length > FILES.lazyRenderAfter;
   return (
     <div
       onDragOver={(event) => {
@@ -43,7 +45,7 @@ export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onO
       ) : view === "grid" ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] gap-3 bg-card p-3.5">
           {items.map((item) => (
-            <NodeCard key={item.id} {...itemProps(item)} />
+            <NodeCard key={item.id} {...itemProps(item)} lazy={lazy} />
           ))}
         </div>
       ) : (
@@ -51,6 +53,7 @@ export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onO
           <NodeRow
             key={item.id}
             {...itemProps(item)}
+            lazy={lazy}
             actions={
               <>
                 {item.type === "folder" ? <RowButton icon="folder-open" label="Open" onClick={() => onOpen(item)} /> : <RowButton icon="eye" label="Preview" onClick={() => onOpen(item)} />}

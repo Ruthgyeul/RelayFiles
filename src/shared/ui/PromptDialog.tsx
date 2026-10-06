@@ -71,6 +71,7 @@ export function PromptDialog({
         <input
           autoFocus
           spellCheck={false}
+          aria-label={title}
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onFocus={onFocus}

@@ -40,6 +40,8 @@ export const STORAGE = {
 export const FILES = {
   /** Most items one request may move, copy, delete, tag or zip. */
   maxBatchItems: 500,
+  /** Longer lists let the browser skip rendering rows outside the screen (content-visibility). */
+  lazyRenderAfter: 100,
 } as const;
 
 /** Global search (design `gs*`, Ctrl/⌘ K). */

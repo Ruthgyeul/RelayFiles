@@ -22,11 +22,13 @@ export interface AnchorRect {
   top: number;
   bottom: number;
   right: number;
+  /** The button the menu belongs to, to tell whether it has moved since. */
+  element?: HTMLElement;
 }
 
 export function anchorOf(element: HTMLElement): AnchorRect {
   const rect = element.getBoundingClientRect();
-  return { top: rect.top, bottom: rect.bottom, right: rect.right };
+  return { top: rect.top, bottom: rect.bottom, right: rect.right, element };
 }
 
 interface ActionMenuProps {
@@ -53,7 +55,14 @@ export function ActionMenu({ anchor, label, onClose, entries, children, placemen
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    const onMove = () => onClose();
+    // Close when the anchor really moves (the user scrolled or resized), not when rows
+    // rendered later shift the page and scroll anchoring keeps the anchor in place.
+    const element = anchor.element;
+    const start = element?.getBoundingClientRect();
+    const onMove = () => {
+      const now = element?.getBoundingClientRect();
+      if (!start || !now || Math.abs(now.top - start.top) >= 1 || Math.abs(now.left - start.left) >= 1) onClose();
+    };
     document.addEventListener("keydown", onKey);
     // Only the anchored popover goes stale when the page moves; the bottom sheet does not.
     if (!small) {
@@ -66,7 +75,7 @@ export function ActionMenu({ anchor, label, onClose, entries, children, placemen
       window.removeEventListener("scroll", onMove);
       window.removeEventListener("resize", onMove);
     };
-  }, [onClose, small]);
+  }, [anchor, onClose, small]);
 
   const body = entries
     ? entries.map((entry) => (

@@ -63,8 +63,10 @@ export function Button({
   children,
   ...rest
 }: ButtonProps) {
+  // A label hidden on phones still names the button for assistive technology.
+  const label = hideLabelOnMobile && typeof children === "string" ? children : undefined;
   return (
-    <button type={type} className={cn(buttonClassName({ variant, size, hoverable }), className)} {...rest}>
+    <button type={type} aria-label={label} className={cn(buttonClassName({ variant, size, hoverable }), className)} {...rest}>
       {icon && <Icon name={icon} weight={iconWeight} size={iconSize} />}
       {children != null && <span className={cn(hideLabelOnMobile && "max-sm:hidden")}>{children}</span>}
     </button>

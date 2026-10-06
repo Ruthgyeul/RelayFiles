@@ -8,7 +8,7 @@ import { MediaThumb, ResumeBar } from "./MediaThumb";
 import { itemMeta, MenuButton, type ItemProps } from "./NodeRow";
 
 /** Grid card: 4:3 preview area with the type icon, corner checkbox, name, meta and menu. */
-export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver }: ItemProps) {
+export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy }: ItemProps) {
   const kind = kindOf(item);
   const media = item.kind === "video" || item.kind === "image";
   return (
@@ -16,7 +16,12 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPr
       {...drag}
       {...drop}
       data-item={item.name}
-      className={cn("relative flex flex-col overflow-hidden rounded-xl border", dropOver ? "bg-accent-soft" : "bg-sunk", dropOver || selected ? "border-accent-hi" : "border-card-line")}
+      className={cn(
+        "relative flex flex-col overflow-hidden rounded-xl border",
+        dropOver ? "bg-accent-soft" : "bg-sunk",
+        dropOver || selected ? "border-accent-hi" : "border-card-line",
+        lazy && "[contain-intrinsic-size:auto_220px] [content-visibility:auto]",
+      )}
     >
       <div onClick={onPrimary} className="relative flex aspect-[4/3] cursor-pointer items-center justify-center overflow-hidden bg-bg">
         {media ? (
