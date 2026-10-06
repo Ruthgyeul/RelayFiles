@@ -45,5 +45,5 @@ export async function clearFailures(ipKey: string): Promise<void> {
 /** Counts an anonymous sign-up; false when the address exceeded the hourly limit. */
 export async function allowSignup(ipKey: string): Promise<boolean> {
   const count = firstResult(await redis().multi().incr(signupKey(ipKey)).expire(signupKey(ipKey), AUTH.signupWindowSec, "NX").exec());
-  return count <= AUTH.signupsPerHour;
+  return count <= getEnv("policy").SIGNUPS_PER_HOUR;
 }

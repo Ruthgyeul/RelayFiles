@@ -7,6 +7,7 @@ import { deletionDate, isExpired } from "@/domain/account";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import type { AccountRow } from "../repositories/account.repo";
+import { accountUsage } from "../repositories/node.repo";
 import { findLiveSessions, touchSessions } from "../repositories/session.repo";
 import { cookieSecrets } from "./keys";
 import { decodeSessionCookie, encodeSessionCookie, SESSION_COOKIE, SESSION_COOKIE_MAX_AGE, type SessionCookie } from "./session-cookie";
@@ -77,11 +78,14 @@ export function toSessionAccount(account: AccountRow): SessionAccount {
   };
 }
 
-export function toSessionState(device: Pick<DeviceSession, "accounts" | "active">, signupMode: SignupMode): SessionState {
+/** Session state for the client, including the active account's storage use. */
+export async function toSessionState(device: Pick<DeviceSession, "accounts" | "active">, signupMode: SignupMode): Promise<SessionState> {
+  const usage = device.active ? await accountUsage(db(), device.active.account.id) : null;
   return {
     accounts: device.accounts.map((item) => toSessionAccount(item.account)),
     activeAccountId: device.active?.account.id ?? null,
     signupMode,
+    usage: usage && { usedBytes: usage.usedBytes.toString(), rootItems: usage.rootItems },
   };
 }
 

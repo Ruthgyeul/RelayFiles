@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, JOBS, LOGIN, STORAGE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, JOBS, LOGIN, STORAGE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -93,6 +93,7 @@ export const ENV_GROUPS = {
     DEFAULT_QUOTA_GB: z.coerce.number().positive().default(ACCOUNT.defaultQuotaGb),
     LOGIN_MAX_ATTEMPTS: positiveInt.default(LOGIN.maxAttempts),
     LOGIN_LOCK_SECONDS: secondsList.default([...LOGIN.lockSeconds]),
+    SIGNUPS_PER_HOUR: positiveInt.default(AUTH.signupsPerHour),
   }),
   jobs: z.object({
     CLEANUP_CRON: z.string().default(JOBS.cleanupCron),

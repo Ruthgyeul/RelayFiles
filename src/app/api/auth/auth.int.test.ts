@@ -27,11 +27,11 @@ const runId = Math.floor(Math.random() * 200) + 20;
 let ipCounter = 0;
 const nextIp = () => `198.51.${runId}.${++ipCounter}`;
 
-async function call<T>(handler: Handler, { body, cookie, ip, method = "POST" }: { body?: unknown; cookie?: string; ip?: string; method?: string } = {}) {
+async function call<T>(handler: Handler, { body, cookie, ip, method = "POST", query = "" }: { body?: unknown; cookie?: string; ip?: string; method?: string; query?: string } = {}) {
   const headers = new Headers({ "content-type": "application/json", "user-agent": "Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0" });
   if (cookie) headers.set("cookie", `${SESSION_COOKIE}=${cookie}`);
   if (ip) headers.set("x-real-ip", ip);
-  const req = new NextRequest("http://localhost/api/test", { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const req = new NextRequest(`http://localhost/api/test${query}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const res = await handler(req, { params: Promise.resolve({}) });
   const setCookie = res.headers.getSetCookie().find((line) => line.startsWith(`${SESSION_COOKIE}=`));
   const nextCookie = setCookie === undefined ? cookie : setCookie.split(";")[0]!.slice(SESSION_COOKIE.length + 1);
@@ -75,6 +75,7 @@ describe("anonymous accounts", () => {
     expect(account.isAdmin).toBe(false);
     expect(account.deletesAt).not.toBeNull();
     expect(state.activeAccountId).toBe(account.id);
+    expect(state.usage).toEqual({ usedBytes: "0", rootItems: 0 });
     expect(res.setCookie).toMatch(/HttpOnly/i);
     expect(res.setCookie).toMatch(/SameSite=lax/i);
 
@@ -139,6 +140,11 @@ describe("token sign-in, multi-account and sign-out", () => {
 
     const foreign = await call(switchAccount, { body: { accountId: "abcdefghjkmn" }, cookie: switched.cookie });
     expect(foreign.status).toBe(404);
+
+    // Tokens of other accounts on this device can be revealed ("Copy token" menu), foreign ones cannot.
+    const other = await call<{ token: string }>(meToken, { method: "GET", cookie: switched.cookie, query: `?accountId=${ids[1]}` });
+    expect(other.json.data.token).toBe(b.json.data.token);
+    expect((await call(meToken, { method: "GET", cookie: switched.cookie, query: "?accountId=abcdefghjkmn" })).status).toBe(404);
 
     const out = await call<SessionState>(signout, { body: { accountId: ids[0] }, cookie: switched.cookie });
     expect(out.json.data.accounts.map((x) => x.id)).toEqual([ids[1]]);

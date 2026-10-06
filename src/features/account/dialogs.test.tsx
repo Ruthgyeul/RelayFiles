@@ -11,7 +11,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const session: SessionState = { accounts: [], activeAccountId: null, signupMode: "open" };
+const session: SessionState = { accounts: [], activeAccountId: null, signupMode: "open", usage: null };
 
 function renderSignIn(overrides: Partial<Parameters<typeof SignInDialog>[0]> = {}) {
   const api = { signInWithToken: vi.fn(async () => session), createAnonymous: vi.fn(async () => ({}) as CreatedAccount) };
