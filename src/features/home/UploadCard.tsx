@@ -32,12 +32,9 @@ export function UploadCard() {
         </div>
       </div>
       <div className="p-5">
+        {/* A click anywhere picks files (design); keyboard users get the two buttons inside. */}
         <div
-          role="button"
-          tabIndex={0}
-          aria-label="Choose files to upload"
           onClick={() => pickFiles(HOME)}
-          onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && (event.preventDefault(), pickFiles(HOME))}
           onDragOver={(event) => {
             if (!hasFiles(event.dataTransfer)) return;
             event.preventDefault();
@@ -59,10 +56,17 @@ export function UploadCard() {
           </span>
           <span className="text-[13px] text-t4">Video, audio, images, archives</span>
           <div className="flex flex-wrap justify-center gap-2">
-            <span className="flex h-[38px] items-center gap-2 rounded-[10px] bg-accent px-[18px] text-[14px] font-bold text-on-accent">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                pickFiles(HOME);
+              }}
+              className="flex h-[38px] items-center gap-2 rounded-[10px] border-0 bg-accent px-[18px] text-[14px] font-bold text-on-accent"
+            >
               <Icon name="upload-simple" />
               Select files
-            </span>
+            </button>
             <button
               type="button"
               onClick={(event) => {

@@ -63,39 +63,35 @@ export function AccountList({ variant, collapsed = false, onNavigate }: AccountL
         const active = account.id === session.activeAccountId;
         return (
           <div key={account.id} className="relative">
-            <div
-              role="button"
-              tabIndex={0}
-              title={account.name}
-              aria-label={account.name}
-              aria-current={active ? "true" : undefined}
-              onClick={() => select(account)}
-              onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && (event.preventDefault(), select(account))}
-              className={cn(rowClass, "cursor-pointer", active ? "border-accent-soft-line bg-accent-soft" : "border-transparent bg-transparent")}
-            >
-              <Avatar seed={account.id} size={38} active={active} />
-              {!collapsed && (
-                <>
+            {/* The card holds two sibling controls: the account itself and its menu (no nested buttons). */}
+            <div className={cn(rowClass, active ? "border-accent-soft-line bg-accent-soft" : "border-transparent bg-transparent")}>
+              <button
+                type="button"
+                title={account.name}
+                aria-label={account.name}
+                aria-current={active ? "true" : undefined}
+                onClick={() => select(account)}
+                className={cn("flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent p-0 text-left text-t1", collapsed && "justify-center")}
+              >
+                <Avatar seed={account.id} size={38} active={active} />
+                {!collapsed && (
                   <div className="flex min-w-0 flex-1 flex-col gap-px">
                     <span className="truncate text-[14px] font-bold">{account.name}</span>
                     <span className="text-[12px] whitespace-nowrap text-t4">{accountRole(account)}</span>
                   </div>
-                  {withMenu && (
-                    <button
-                      type="button"
-                      aria-label={`Account menu for ${account.name}`}
-                      aria-haspopup="menu"
-                      aria-expanded={menuFor === account.id}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setMenuFor((open) => (open === account.id ? null : account.id));
-                      }}
-                      className="flex size-7 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-t4 hover:bg-btn"
-                    >
-                      <Icon name="dots-three-vertical" weight="bold" />
-                    </button>
-                  )}
-                </>
+                )}
+              </button>
+              {!collapsed && withMenu && (
+                <button
+                  type="button"
+                  aria-label={`Account menu for ${account.name}`}
+                  aria-haspopup="menu"
+                  aria-expanded={menuFor === account.id}
+                  onClick={() => setMenuFor((open) => (open === account.id ? null : account.id))}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-t4 hover:bg-btn"
+                >
+                  <Icon name="dots-three-vertical" weight="bold" />
+                </button>
               )}
             </div>
             {menuFor === account.id && (

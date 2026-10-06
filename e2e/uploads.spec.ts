@@ -12,7 +12,7 @@ async function choose(page: Page, trigger: () => Promise<void>, files: ReturnTyp
 test("uploads from Home into a new folder and shows its link", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText(/^You're signed in as anon-/)).toBeVisible();
-  await choose(page, () => page.getByRole("button", { name: "Choose files to upload" }).click(), [file("holiday.txt", "sun and sea")]);
+  await choose(page, () => page.getByRole("button", { name: "Select files" }).click(), [file("holiday.txt", "sun and sea")]);
 
   const panel = page.getByRole("region", { name: "Transfers" });
   await expect(panel.getByText("COMPLETE")).toBeVisible();

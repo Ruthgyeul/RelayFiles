@@ -35,6 +35,8 @@ export interface ItemProps {
   drop?: DropTargetProps;
   /** A dragged item is over this folder. */
   dropOver?: boolean;
+  /** Long lists: skip rendering while off screen (content-visibility). */
+  lazy?: boolean;
 }
 
 /** "3 items" for folders, the size for files, prefixed with the folder path in tag search. */
@@ -119,7 +121,7 @@ function RowTags({ item, parentVisibility, now, onTag }: Pick<ItemProps, "item" 
 }
 
 /** One list row: checkbox, type icon (with folder count), name, meta, tags and actions. */
-export function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onPreview, onMenu, onTag, menuOpen, drag, drop, dropOver, actions }: ItemProps & { actions: ReactNode }) {
+export function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onPreview, onMenu, onTag, menuOpen, drag, drop, dropOver, lazy, actions }: ItemProps & { actions: ReactNode }) {
   const kind = kindOf(item);
   const folder = item.type === "folder";
   const { small } = useViewport();
@@ -129,7 +131,11 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
       {...drag}
       {...drop}
       data-item={item.name}
-      className={cn("relative flex flex-col gap-2.5 px-4 py-3 -outline-offset-2", dropOver ? "bg-accent-soft outline-2 outline-accent-hi outline-dashed" : "bg-card")}
+      className={cn(
+        "relative flex flex-col gap-2.5 px-4 py-3 -outline-offset-2",
+        dropOver ? "bg-accent-soft outline-2 outline-accent-hi outline-dashed" : "bg-card",
+        lazy && "[contain-intrinsic-size:auto_68px] [content-visibility:auto]",
+      )}
     >
       <div className="flex items-center gap-3">
         <button
