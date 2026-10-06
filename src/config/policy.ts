@@ -52,7 +52,7 @@ export const JOBS = {
 export const AUTH = {
   /** Failed sign-ins are forgotten after this long without another failure. */
   failureWindowSec: 24 * 60 * 60,
-  /** Anonymous accounts one client address may create per hour (stops crawlers filling the disk). */
+  /** Default for SIGNUPS_PER_HOUR: anonymous accounts one address may create per hour (stops crawlers filling the disk). */
   signupsPerHour: 10,
   signupWindowSec: 60 * 60,
   /** Session "last seen" is written at most this often. */

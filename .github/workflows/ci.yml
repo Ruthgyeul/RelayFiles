@@ -35,6 +35,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: check
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: relayfiles
+          POSTGRES_USER: relayfiles
+          POSTGRES_PASSWORD: ci-postgres-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U relayfiles" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: "true"
+      POSTGRES_HOST: localhost
+      POSTGRES_PASSWORD: ci-postgres-password
+      REDIS_HOST: localhost
+      REDIS_PASSWORD: ci-redis-password
+      # Absolute: the standalone server changes into .next/standalone when it starts.
+      STORAGE_ROOT: ${{ github.workspace }}/.data/relayfilesDB
+      # Test-only secrets (not used anywhere else).
+      TOKEN_ENC_KEY: Y2ktb25seS10b2tlbi1lbmNyeXB0aW9uLWtleS0zMmI=
+      TOKEN_HMAC_KEY: ci-only-token-lookup-hmac-key-0123456789
+      COOKIE_SECRET: ci-only-cookie-signing-secret-0123456789
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,10 +64,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Start Redis
+        run: |
+          docker run -d --name redis -p 6379:6379 redis:7 redis-server --requirepass "$REDIS_PASSWORD"
+          for i in $(seq 1 20); do docker exec redis redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG && break; sleep 1; done
+      - run: npx prisma migrate deploy
+      - run: npm run volume:init
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-        env:
-          CI: "true"
 
   integration:
     name: Integration (PostgreSQL · Redis · migrations)
@@ -66,7 +92,8 @@ jobs:
       POSTGRES_PASSWORD: ci-postgres-password
       REDIS_HOST: localhost
       REDIS_PASSWORD: ci-redis-password
-      STORAGE_ROOT: ./.data/relayfilesDB
+      # Absolute: the standalone server changes into .next/standalone when it starts.
+      STORAGE_ROOT: ${{ github.workspace }}/.data/relayfilesDB
       # Test-only secrets (not used anywhere else).
       TOKEN_ENC_KEY: Y2ktb25seS10b2tlbi1lbmNyeXB0aW9uLWtleS0zMmI=
       TOKEN_HMAC_KEY: ci-only-token-lookup-hmac-key-0123456789

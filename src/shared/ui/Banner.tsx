@@ -16,6 +16,8 @@ export interface BannerProps {
   title?: ReactNode;
   titleColor?: string;
   children?: ReactNode;
+  /** Body text color; most banners use t1, the account banner uses t2. */
+  bodyClassName?: string;
   actions?: ReactNode;
   onDismiss?: () => void;
   dismissLabel?: string;
@@ -36,6 +38,7 @@ export function Banner({
   title,
   titleColor,
   children,
+  bodyClassName,
   actions,
   onDismiss,
   dismissLabel = "Dismiss",
@@ -60,7 +63,7 @@ export function Banner({
             {title}
           </span>
         )}
-        {children && <span className="text-[13px] leading-[1.45] text-pretty text-t1">{children}</span>}
+        {children && <span className={cn("text-[13px] leading-[1.45] text-pretty text-t1", bodyClassName)}>{children}</span>}
       </div>
       {(actions || onDismiss) && (
         <div className="flex items-center gap-1">

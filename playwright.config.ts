@@ -1,5 +1,9 @@
+import { loadEnvConfig } from "@next/env";
 import { defineConfig, devices } from "@playwright/test";
 import { parseEnvGroup } from "./src/config/env";
+
+// The app server under test reads the same .env (PostgreSQL, Redis, storage, secrets).
+loadEnvConfig(process.cwd());
 
 const testing = parseEnvGroup("testing", process.env);
 const BASE_URL = testing.E2E_BASE_URL ?? `http://localhost:${testing.E2E_PORT}`;
@@ -8,7 +12,8 @@ const BASE_URL = testing.E2E_BASE_URL ?? `http://localhost:${testing.E2E_PORT}`;
  * E2E runs against the production standalone build.
  * - E2E_BASE_URL: test an already running server instead (e.g. the Ubuntu deployment).
  * - PLAYWRIGHT_CHROMIUM_PATH: use a preinstalled Chromium binary.
- * The local server enables the /dev/ui catalog so primitives can be checked against the design.
+ * The local server enables the /dev/ui catalog so primitives can be checked against the design,
+ * and allows many anonymous sign-ups because every test context is a new visitor.
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -30,7 +35,7 @@ export default defineConfig({
     ? undefined
     : {
         command: `npm run build && npm run start`,
-        env: { PORT: String(testing.E2E_PORT), HOSTNAME: "127.0.0.1", ENABLE_UI_CATALOG: "true" },
+        env: { PORT: String(testing.E2E_PORT), HOSTNAME: "127.0.0.1", ENABLE_UI_CATALOG: "true", SIGNUPS_PER_HOUR: "10000" },
         url: BASE_URL,
         timeout: 240_000,
         reuseExistingServer: !process.env.CI,

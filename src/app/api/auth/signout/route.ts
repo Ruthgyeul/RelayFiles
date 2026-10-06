@@ -15,7 +15,7 @@ export const POST = apiHandler(async ({ req }) => {
   const cookie = withoutSession(device.cookie, target.sessionId);
   const accounts = device.accounts.filter((item) => item.sessionId !== target.sessionId);
   const active = accounts.find((item) => item.sessionId === cookie.activeSessionId) ?? null;
-  const response = ok(toSessionState({ accounts, active }, await signupMode()));
+  const response = ok(await toSessionState({ accounts, active }, await signupMode()));
   writeSessionCookie(response, cookie);
   return response;
 });

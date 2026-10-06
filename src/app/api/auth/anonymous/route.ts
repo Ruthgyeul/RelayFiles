@@ -16,7 +16,7 @@ export const POST = apiHandler(async ({ req }) => {
   const body: CreatedAccount = {
     account: toSessionAccount(created.account),
     token: created.token,
-    session: toSessionState({ accounts, active }, await signupMode()),
+    session: await toSessionState({ accounts, active }, await signupMode()),
   };
   const response = ok(body, { status: 201 });
   writeSessionCookie(response, withSession(device.cookie, created.sessionId));

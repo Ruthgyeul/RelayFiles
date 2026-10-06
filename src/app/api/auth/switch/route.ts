@@ -11,7 +11,7 @@ export const POST = apiHandler(async ({ req }) => {
   const device = await deviceOf(req);
   const target = device.accounts.find((item) => item.account.id === accountId);
   if (!target) throw new ApiError("NOT_FOUND");
-  const response = ok(toSessionState({ accounts: device.accounts, active: target }, await signupMode()));
+  const response = ok(await toSessionState({ accounts: device.accounts, active: target }, await signupMode()));
   writeSessionCookie(response, { sessionIds: device.cookie.sessionIds, activeSessionId: target.sessionId });
   return response;
 });

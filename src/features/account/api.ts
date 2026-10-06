@@ -8,7 +8,7 @@ export interface AccountApi {
   signInWithToken(token: string): Promise<SessionState>;
   switchAccount(accountId: string): Promise<SessionState>;
   signOut(accountId?: string): Promise<SessionState>;
-  revealToken(): Promise<string>;
+  revealToken(accountId?: string): Promise<string>;
 }
 
 export const accountApi: AccountApi = {
@@ -17,5 +17,5 @@ export const accountApi: AccountApi = {
   signInWithToken: (token) => apiFetch<SessionState>("/api/auth/token", { method: "POST", json: { token } }),
   switchAccount: (accountId) => apiFetch<SessionState>("/api/auth/switch", { method: "POST", json: { accountId } }),
   signOut: (accountId) => apiFetch<SessionState>("/api/auth/signout", { method: "POST", json: { accountId } }),
-  revealToken: async () => (await apiFetch<{ token: string }>("/api/me/token")).token,
+  revealToken: async (accountId) => (await apiFetch<{ token: string }>(accountId ? `/api/me/token?accountId=${encodeURIComponent(accountId)}` : "/api/me/token")).token,
 };

@@ -15,7 +15,7 @@ export const POST = apiHandler(async ({ req }) => {
     device.accounts.map((item) => item.account.id),
   );
   const accounts = [...device.accounts, signedIn];
-  const response = ok(toSessionState({ accounts, active: signedIn }, await signupMode()));
+  const response = ok(await toSessionState({ accounts, active: signedIn }, await signupMode()));
   writeSessionCookie(response, withSession(device.cookie, signedIn.sessionId));
   return response;
 });

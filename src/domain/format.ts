@@ -16,3 +16,38 @@ export function formatClock(seconds: number): string {
 export function formatCountdown(seconds: number): string {
   return formatClock(Math.ceil(Math.max(0, seconds)));
 }
+
+const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+const SIZE_STEP = 1000;
+
+/** Decimal sizes like the design (`fmtSize`): "512 B", "2.4 GB", "18 GB". */
+export function formatSize(bytes: number): string {
+  let value = bytes;
+  let unit = 0;
+  while (value >= SIZE_STEP && unit < SIZE_UNITS.length - 1) {
+    value /= SIZE_STEP;
+    unit++;
+  }
+  return `${unit ? value.toFixed(value < 10 ? 1 : 0) : value} ${SIZE_UNITS[unit]}`;
+}
+
+/** Remaining time like the design (`fmtLeft`): "2d 4h", "3h 12m", "5m", "now". */
+export function formatLeft(ms: number): string {
+  if (ms <= 0) return "now";
+  const days = Math.floor(ms / 86_400_000);
+  const hours = Math.floor((ms % 86_400_000) / 3_600_000);
+  const minutes = Math.floor((ms % 3_600_000) / 60_000);
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${minutes}m`;
+  return `${Math.max(1, minutes)}m`;
+}
+
+/** Short date like "Oct 19" (sidebar "Deletes Oct 19", banners). Rendered in the viewer's time zone. */
+export function formatShortDate(date: Date | string | number): string {
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** Date and time like the design (`fmtDate`): "Oct 5, 2026, 3:12 PM". */
+export function formatDateTime(date: Date | string | number): string {
+  return new Date(date).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}

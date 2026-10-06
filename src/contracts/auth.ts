@@ -17,11 +17,21 @@ export interface SessionAccount {
   quotaBytes: string | null;
 }
 
+/** Storage use of the active account (sidebar meter, quota banners, account switch toast). */
+export interface AccountUsage {
+  /** Bytes as a decimal string (BigInt-safe). */
+  usedBytes: string;
+  /** Items directly in the root folder. */
+  rootItems: number;
+}
+
 /** Accounts signed in on this device and which one is active. */
 export interface SessionState {
   accounts: SessionAccount[];
   activeAccountId: string | null;
   signupMode: SignupMode;
+  /** Usage of the active account; null when nobody is signed in. */
+  usage: AccountUsage | null;
 }
 
 /** Response of account creation: the token is returned exactly once here. */
@@ -50,6 +60,11 @@ export const createAccountSchema = z.object({
 
 export const accountRefSchema = z.object({
   accountId: z.string().min(1).max(32),
+});
+
+export const tokenQuerySchema = z.object({
+  /** Account signed in on this device whose token to reveal; defaults to the active account. */
+  accountId: z.string().min(1).max(32).optional(),
 });
 
 export const signOutSchema = z.object({
