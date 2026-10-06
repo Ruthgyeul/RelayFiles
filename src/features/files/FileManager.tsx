@@ -7,23 +7,23 @@ import { parseTags } from "@/domain/tags";
 import { emptyTitle, itemCount, type FilterKey } from "@/domain/tree";
 import { usePageTitle } from "@/features/shell/page-title";
 import { useShell } from "@/features/shell/ShellProvider";
-import { entriesFromDrop, hasFiles } from "@/features/transfers/read-drop";
+import { entriesFromDrop } from "@/features/transfers/read-drop";
 import { useTransfers } from "@/features/transfers/TransfersProvider";
 import { useNow } from "@/shared/hooks/useNow";
-import { cn } from "@/shared/lib/cn";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { ActionMenu, anchorOf, type AnchorRect } from "./ActionMenu";
 import { filesApi } from "./api";
 import { FilterBar } from "./FilterBar";
 import { FolderHeader } from "./FolderHeader";
-import { EmptyFolder, NodeCard } from "./NodeCard";
 import { buildNodeMenu, type NodeActions } from "./node-menu";
-import { NodeRow, RowButton, type ItemProps } from "./NodeRow";
+import type { ItemProps } from "./NodeRow";
+import { FileList } from "./FileList";
 import { PathBar } from "./PathBar";
-import { folderHref } from "./paths";
+import { folderHref, sharePageHref } from "./paths";
 import { PropertiesDialog } from "./PropertiesDialog";
 import { SearchBox, TagModeBar } from "./SearchBox";
-import { Toolbar, ToolButton } from "./Toolbar";
+import { Toolbar } from "./Toolbar";
+import { toolbarActions } from "./ToolbarActions";
 import { useDragMove } from "./useDragMove";
 import { useFileDialogs } from "./useFileDialogs";
 import { useFileMedia } from "./useFileMedia";
@@ -80,7 +80,6 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
     transfers.upload(await entriesFromDrop(transfer), target);
   };
   const drag = useDragMove(selected, moveTo, (folderId, transfer) => void dropFiles(folderId, transfer));
-  const [filesOver, setFilesOver] = useState(false);
 
   const copyText = (text: string, message: string) => {
     navigator.clipboard?.writeText(text).catch(() => undefined);
@@ -100,6 +99,7 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
       preview: item.type === "file" ? () => media.preview(item) : undefined,
       download: () => media.download(item),
       downloadZip: item.type === "file" ? () => media.zip([item]) : undefined,
+      share: item.type === "folder" ? () => router.push(sharePageHref(item.linkId)) : undefined,
       tags: () => open.tags([item]),
       directLink: () => copyLink(linkOf(item.linkId), current ? view.effectiveVisibility : visibilityOf(item)),
       newLink: () => open.newLink(item),
@@ -162,30 +162,17 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
     dropOver: drag.over === item.id,
   });
 
-  const newFolderButton = <ToolButton icon="folder-plus" label="New folder" onClick={newFolder.open} />;
-  const folderActions = (
-    <>
-      <ToolButton variant="primary" icon="upload-simple" label="Upload" onClick={() => transfers.pickFiles(uploadTarget)} />
-      <ToolButton icon="folder-simple-plus" label="Upload folder" title="Upload a folder" onClick={() => transfers.pickFolder(uploadTarget)} />
-      {newFolderButton}
-    </>
-  );
-  const emptyActions = (
-    <>
-      <ToolButton variant="primary" icon="upload-simple" label="Upload files" onClick={() => transfers.pickFiles(uploadTarget)} />
-      {newFolderButton}
-    </>
-  );
-  const selectionActions = (
-    <>
-      <ToolButton icon="download-simple" label="Download" onClick={() => (media.downloadEach(selectedItems), clearSelection())} />
-      <ToolButton icon="file-zip" label="Zip" title="Download as zip" onClick={() => (media.zip(selectedItems), clearSelection())} />
-      <ToolButton icon="tag" label="Tags" onClick={() => open.tags(selectedItems)} />
-      <ToolButton icon="copy" label="Copy" onClick={() => open.move(selectedItems, "copy", folder.id)} />
-      <ToolButton icon="arrow-bend-up-right" label="Move" onClick={() => open.move(selectedItems, "move", folder.id)} />
-      <ToolButton icon="trash" label="Delete" danger onClick={() => open.remove(selectedItems)} />
-    </>
-  );
+  const toolbar = toolbarActions({
+    upload: () => transfers.pickFiles(uploadTarget),
+    uploadFolder: () => transfers.pickFolder(uploadTarget),
+    newFolder: newFolder.open,
+    download: () => (media.downloadEach(selectedItems), clearSelection()),
+    zip: () => (media.zip(selectedItems), clearSelection()),
+    tags: () => open.tags(selectedItems),
+    copy: () => open.move(selectedItems, "copy", folder.id),
+    move: () => open.move(selectedItems, "move", folder.id),
+    remove: () => open.remove(selectedItems),
+  });
 
   return (
     <>
@@ -194,6 +181,7 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
         view={view}
         now={now}
         onShare={() => copyLink(linkOf(folder.linkId), view.effectiveVisibility)}
+        onSharePage={() => router.push(sharePageHref(folder.linkId))}
         onMenu={(anchor) => openMenu(folder.id, anchor)}
         menuOpen={menu?.id === folder.id}
         upDrop={parentOfCurrent ? drag.dropProps(parentOfCurrent.id) : undefined}
@@ -203,8 +191,8 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
         allSelected={items.length > 0 && items.every((item) => selected.has(item.id))}
         selectedCount={selectedItems.length}
         onToggleAll={() => setSelected(items.length > 0 && items.every((item) => selected.has(item.id)) ? new Set() : new Set(items.map((item) => item.id)))}
-        selectionActions={selectionActions}
-        folderActions={folderActions}
+        selectionActions={toolbar.selection}
+        folderActions={toolbar.folder}
         view={prefs.view}
         onToggleView={() => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" })}
         onToggleSearch={() => {
@@ -227,44 +215,16 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
           onClear={() => (setQuery(""), setSearchOpen(false))}
         />
       )}
-      <div
-        onDragOver={(event) => {
-          if (!hasFiles(event.dataTransfer)) return;
-          event.preventDefault();
-          setFilesOver(true);
-        }}
-        onDragLeave={(event) => !event.currentTarget.contains(event.relatedTarget as Node | null) && setFilesOver(false)}
-        onDrop={(event) => {
-          setFilesOver(false);
-          if (!hasFiles(event.dataTransfer)) return;
-          event.preventDefault();
-          void dropFiles(folder.id, event.dataTransfer);
-        }}
-        className={cn("flex flex-col gap-px overflow-hidden rounded-2xl border bg-card-line", filesOver ? "border-accent-hi" : "border-card-line")}
-      >
-        {items.length === 0 ? (
-          <EmptyFolder title={emptyTitle({ tagMode, wanted, query: q, filter })} actions={emptyActions} />
-        ) : prefs.view === "grid" ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] gap-3 bg-card p-3.5">
-            {items.map((item) => (
-              <NodeCard key={item.id} {...itemProps(item)} />
-            ))}
-          </div>
-        ) : (
-          items.map((item) => (
-            <NodeRow
-              key={item.id}
-              {...itemProps(item)}
-              actions={
-                <>
-                  {item.type === "folder" ? <RowButton icon="folder-open" label="Open" onClick={() => openItem(item)} /> : <RowButton icon="eye" label="Preview" onClick={() => media.preview(item)} />}
-                  <RowButton icon="download-simple" label="Download" onClick={() => media.download(item)} />
-                </>
-              }
-            />
-          ))
-        )}
-      </div>
+      <FileList
+        items={items}
+        view={prefs.view}
+        itemProps={itemProps}
+        emptyTitle={emptyTitle({ tagMode, wanted, query: q, filter })}
+        emptyActions={toolbar.empty}
+        onOpen={openItem}
+        onDownload={media.download}
+        onDropFiles={(transfer) => void dropFiles(folder.id, transfer)}
+      />
       {menu && menuItem && (
         <ActionMenu
           anchor={menu.anchor}

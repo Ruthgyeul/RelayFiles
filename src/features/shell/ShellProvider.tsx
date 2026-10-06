@@ -5,10 +5,10 @@ import type { Route } from "next";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { CreatedAccount, SessionAccount, SessionState } from "@/contracts/auth";
 import { accountApi } from "@/features/account/api";
+import { useNotice } from "@/shared/hooks/useNotice";
 import { autoAccountStore } from "./auto-account";
 
-/** Toast durations from the design (`note`, account switch toast). */
-const NOTICE_MS = 1_800;
+/** Account switch toast duration from the design. */
 const ACCOUNT_TOAST_MS = 3_200;
 
 export interface AccountToast {
@@ -80,22 +80,15 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
     setRenderedSession(initialSession);
     setSession(initialSession);
   }
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, notify] = useNotice();
   const [accountToast, setAccountToast] = useState<AccountToast | null>(null);
   // Without an account and with sign-ups not open, the visitor has to sign in first.
   const [signInOpen, setSignInOpen] = useState(initialSession.accounts.length === 0 && initialSession.signupMode !== "open");
   const [tokenToSave, setTokenToSave] = useState<TokenToSave | null>(null);
   const rememberedAuto = useSyncExternalStore(autoAccountStore.subscribe, autoAccountStore.get, autoAccountStore.getServer);
   const autoAccountId = rememberedAuto && session.accounts.some((item) => item.id === rememberedAuto) ? rememberedAuto : null;
-  const noticeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const autoStarted = useRef(false);
-
-  const notify = useCallback((message: string) => {
-    clearTimeout(noticeTimer.current);
-    setNotice(message);
-    noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MS);
-  }, []);
 
   const dismissAccountToast = useCallback(() => {
     clearTimeout(toastTimer.current);

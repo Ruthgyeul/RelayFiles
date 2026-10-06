@@ -12,6 +12,7 @@ export const ACCOUNT_SELECT = {
   quotaBytes: true,
   createdAt: true,
   volumeId: true,
+  stripMetadataOnShare: true,
 } as const;
 
 export interface AccountRow {
@@ -24,6 +25,8 @@ export interface AccountRow {
   quotaBytes: bigint | null;
   createdAt: Date;
   volumeId: string;
+  /** Images sent through public links lose location and camera data (default on). */
+  stripMetadataOnShare: boolean;
 }
 
 export interface NewAccount {

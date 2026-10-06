@@ -14,9 +14,32 @@ import { driverForAccount } from "./volume.service";
 
 type Owner = Pick<AccountRow, "id" | "volumeId">;
 
+/** One archive entry: a folder (keeps empty folders) or a file opened when the zip reaches it. */
+export type ZipEntry = { name: string; folder: true } | { name: string; folder?: false; open: () => Promise<Readable> };
+
+/** Streams entries as one zip (store mode: media is already compressed). */
+export function zipResponse(entries: readonly ZipEntry[], fileName: string): Response {
+  const archive = new ZipArchive({ store: true });
+  for (const entry of entries) {
+    if (entry.folder) archive.append(Buffer.alloc(0), { name: `${entry.name}/` });
+    else archive.append(new LazyReadable(entry.open), { name: entry.name });
+  }
+  archive.on("warning", (error) => logger.warn("zip warning", { error }));
+  archive.on("error", (error) => logger.error("zip failed", { error }));
+  void archive.finalize();
+  return new Response(Readable.toWeb(archive) as ReadableStream, {
+    headers: {
+      "content-type": "application/zip",
+      "content-disposition": contentDisposition("attachment", fileName),
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, no-store",
+    },
+  });
+}
+
 /**
- * Streams the selected files and folders as one zip (store mode: media is already
- * compressed). Files keep their folder structure under each selected item's name.
+ * The owner's zip of selected files and folders. Files keep their folder structure under
+ * each selected item's name.
  */
 export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
   const items = await topLevel(owner.id, ids, true);
@@ -24,7 +47,7 @@ export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
   const driver = await driverForAccount(owner);
   const parent = items[0]!.parentId ? await findNode(db(), owner.id, items[0]!.parentId) : null;
 
-  const archive = new ZipArchive({ store: true });
+  const entries: ZipEntry[] = [];
   let bytes = 0n;
   for (const item of items) {
     const base = (await ancestorChain(db(), item.id)).slice(1).map((row) => row.name);
@@ -36,25 +59,13 @@ export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
       // Entries sit under the selected item's own name ("Trip/day1/a.jpg"); a selected file is just its name.
       const name = item.type === "FILE" ? item.name : [item.name, ...segments.slice(base.length)].join("/");
       if (row.type !== "FILE") {
-        // Folder entries keep empty folders in the archive.
-        archive.append(Buffer.alloc(0), { name: `${name}/` });
+        entries.push({ name, folder: true });
         continue;
       }
       bytes += row.size;
-      archive.append(new LazyReadable(() => driver.createReadStream({ accountId: owner.id, segments })), { name });
+      entries.push({ name, open: () => driver.createReadStream({ accountId: owner.id, segments }) });
     }
   }
-  archive.on("warning", (error) => logger.warn("zip warning", { error }));
-  archive.on("error", (error) => logger.error("zip failed", { error }));
-  void archive.finalize();
   addTraffic(db(), owner.id, bytes, new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
-
-  return new Response(Readable.toWeb(archive) as ReadableStream, {
-    headers: {
-      "content-type": "application/zip",
-      "content-disposition": contentDisposition("attachment", zipName(items.map((item) => ({ name: item.name, folder: item.type === "FOLDER" })), parent?.name ?? "root")),
-      "x-content-type-options": "nosniff",
-      "cache-control": "private, no-store",
-    },
-  });
+  return zipResponse(entries, zipName(items.map((item) => ({ name: item.name, folder: item.type === "FOLDER" })), parent?.name ?? "root"));
 }

@@ -47,3 +47,12 @@ export const ERROR_PRESETS: Record<ErrorPageCode, ErrorPreset> = {
     description: "Files are temporarily unavailable. Browsing still works; uploads and downloads resume when storage is back.",
   },
 };
+
+/** Share links that don't exist (never did, or were replaced by "New link"). Visitors get no app navigation. */
+export const LINK_NOT_FOUND: ErrorPreset = {
+  badge: "404",
+  icon: "link-break",
+  tone: "danger",
+  title: "Link not found",
+  description: "This link doesn't exist or was replaced with a new one.",
+};

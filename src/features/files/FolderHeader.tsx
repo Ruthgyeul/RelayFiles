@@ -17,6 +17,8 @@ interface FolderHeaderProps {
   view: FolderView;
   now: number;
   onShare: () => void;
+  /** Opens the visitor view of this folder's link. */
+  onSharePage: () => void;
   onMenu: (anchor: HTMLElement) => void;
   menuOpen: boolean;
   /** Drop on the Up button moves dragged items to the parent folder. */
@@ -25,7 +27,7 @@ interface FolderHeaderProps {
 }
 
 /** Header card of the current folder: up button, icon, name, date, item count, setting tags, note. */
-export function FolderHeader({ view, now, onShare, onMenu, menuOpen, upDrop, upOver }: FolderHeaderProps) {
+export function FolderHeader({ view, now, onShare, onSharePage, onMenu, menuOpen, upDrop, upOver }: FolderHeaderProps) {
   const { folder, isRoot, path, effectiveVisibility } = view;
   const parent = path.at(-2);
   const tags: { icon: IconName; label: string }[] = [
@@ -74,6 +76,9 @@ export function FolderHeader({ view, now, onShare, onMenu, menuOpen, upDrop, upO
             ))}
           </div>
         </div>
+        <Button size={34} icon="globe-simple" iconSize={16} hoverable hideLabelOnMobile title="Open share page" onClick={onSharePage} className="px-3">
+          Share page
+        </Button>
         <Button size={34} icon="share-network" iconSize={16} hoverable hideLabelOnMobile onClick={onShare} className="px-3">
           Share
         </Button>
