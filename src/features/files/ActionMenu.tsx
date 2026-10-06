@@ -43,7 +43,8 @@ interface ActionMenuProps {
 
 /**
  * Popover menu anchored to a button, with the design's outside-click catcher; closes on
- * Escape, scroll and resize. Below 720px it is a bottom sheet with 44px items.
+ * Escape, scroll and resize. Below 720px it is a bottom sheet with 44px items that stays
+ * open while the page scrolls behind it.
  */
 export function ActionMenu({ anchor, label, onClose, entries, children, placement = "auto", itemCount }: ActionMenuProps) {
   const mounted = useMounted();
@@ -54,15 +55,18 @@ export function ActionMenu({ anchor, label, onClose, entries, children, placemen
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
     const onMove = () => onClose();
     document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onMove, { passive: true });
-    window.addEventListener("resize", onMove);
+    // Only the anchored popover goes stale when the page moves; the bottom sheet does not.
+    if (!small) {
+      window.addEventListener("scroll", onMove, { passive: true });
+      window.addEventListener("resize", onMove);
+    }
     menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", onMove);
       window.removeEventListener("resize", onMove);
     };
-  }, [onClose]);
+  }, [onClose, small]);
 
   const body = entries
     ? entries.map((entry) => (
