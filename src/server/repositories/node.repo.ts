@@ -1,5 +1,5 @@
 import "server-only";
-import type { DbClient } from "../db/client";
+import type { DbClient, Prisma } from "../db/client";
 
 /** Name of every account's root folder; it maps to users/<accountId>/ on the volume. */
 export const ROOT_FOLDER_NAME = "root";
@@ -95,19 +95,26 @@ export async function childCounts(db: DbClient, parentIds: string[]): Promise<Ma
   return new Map(rows.map((row) => [row.parentId!, row._count._all]));
 }
 
-/** Total file bytes below each folder (recursive). */
-export async function folderSizes(db: DbClient, folderIds: string[]): Promise<Map<string, bigint>> {
+/** Total file bytes and file count below each folder (recursive). */
+export async function folderSizes(db: DbClient, folderIds: string[]): Promise<Map<string, { size: bigint; files: number }>> {
   if (folderIds.length === 0) return new Map();
-  const rows = await db.$queryRaw<{ id: string; size: bigint }[]>`
+  const rows = await db.$queryRaw<{ id: string; size: bigint; files: bigint }[]>`
     WITH RECURSIVE sub AS (
       SELECT id AS top, id FROM "Node" WHERE id = ANY(${folderIds})
       UNION ALL
       SELECT s.top, n.id FROM "Node" n JOIN sub s ON n."parentId" = s.id
     )
-    SELECT s.top AS id, COALESCE(SUM(n.size), 0)::bigint AS size
+    SELECT s.top AS id, COALESCE(SUM(n.size), 0)::bigint AS size, COUNT(n.id)::bigint AS files
     FROM sub s JOIN "Node" n ON n.id = s.id AND n.type = 'FILE'
     GROUP BY s.top`;
-  return new Map(rows.map((row) => [row.id, BigInt(row.size)]));
+  return new Map(rows.map((row) => [row.id, { size: BigInt(row.size), files: Number(row.files) }]));
+}
+
+/** Tags used in an account with how many items carry each, most used first. */
+export function tagUsage(db: DbClient, accountId: string): Promise<{ tag: string; count: number }[]> {
+  return db.$queryRaw<{ tag: string; count: bigint }[]>`
+    SELECT tag, COUNT(*)::bigint AS count FROM "Node", unnest(tags) AS tag
+    WHERE "accountId" = ${accountId} GROUP BY tag ORDER BY count DESC, tag ASC LIMIT 100`.then((rows) => rows.map((row) => ({ tag: row.tag, count: Number(row.count) })));
 }
 
 export interface NewFolder {
@@ -132,4 +139,55 @@ export async function descendantCounts(db: DbClient, folderId: string): Promise<
     )
     SELECT COUNT(*) FILTER (WHERE type = 'FILE') AS files, COUNT(*) FILTER (WHERE type = 'FOLDER') AS folders FROM sub`;
   return { files: Number(row?.files ?? 0), folders: Number(row?.folders ?? 0) };
+}
+
+/** Ids of every node below a folder (not including it). */
+export async function descendantIds(db: DbClient, folderId: string): Promise<string[]> {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    WITH RECURSIVE sub AS (
+      SELECT id FROM "Node" WHERE "parentId" = ${folderId}
+      UNION ALL
+      SELECT n.id FROM "Node" n JOIN sub s ON n."parentId" = s.id
+    )
+    SELECT id FROM sub`;
+  return rows.map((row) => row.id);
+}
+
+/** Full rows of a node and everything below it, parents before children (for copying). */
+export async function subtreeRows(db: DbClient, nodeId: string) {
+  const ids = [nodeId, ...(await descendantIds(db, nodeId))];
+  const rows = await db.node.findMany({ where: { id: { in: ids } } });
+  const order = new Map(ids.map((id, index) => [id, index]));
+  return rows.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+}
+
+export function findNodes(db: DbClient, accountId: string, ids: string[]) {
+  return db.node.findMany({ where: { accountId, id: { in: ids } }, select: NODE_SELECT });
+}
+
+export function updateNode(db: DbClient, nodeId: string, data: Prisma.NodeUpdateInput) {
+  return db.node.update({ where: { id: nodeId }, data, select: NODE_SELECT });
+}
+
+export async function deleteNodes(db: DbClient, ids: string[]): Promise<void> {
+  await db.node.deleteMany({ where: { id: { in: ids } } });
+}
+
+export async function insertNodes(db: DbClient, rows: Prisma.NodeCreateManyInput[]): Promise<void> {
+  await db.node.createMany({ data: rows });
+}
+
+/** "Apply to all subfolders and files": everything inside follows the folder again. */
+export async function inheritVisibilityBelow(db: DbClient, folderId: string): Promise<void> {
+  const ids = await descendantIds(db, folderId);
+  if (ids.length) await db.node.updateMany({ where: { id: { in: ids } }, data: { visibility: "INHERIT" } });
+}
+
+/** Newest link events of nodes (a folder's log includes everything inside it). */
+export function listLinkEvents(db: DbClient, nodeIds: string[], limit: number) {
+  return db.linkEvent.findMany({ where: { nodeId: { in: nodeIds } }, orderBy: { at: "desc" }, take: limit, select: { kind: true, fileName: true, device: true, ipMasked: true, country: true, at: true } });
+}
+
+export async function addLinkEvent(db: DbClient, data: Prisma.LinkEventUncheckedCreateInput): Promise<void> {
+  await db.linkEvent.create({ data });
 }

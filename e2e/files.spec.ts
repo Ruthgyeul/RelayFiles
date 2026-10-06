@@ -1,21 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-
-/** Opens the File Manager as a fresh visitor (an anonymous account is created first). */
-async function openFiles(page: Page) {
-  await page.goto("/");
-  await expect(page.getByText(/^You're signed in as anon-/)).toBeVisible();
-  await page.goto("/files");
-  await expect(page.getByRole("heading", { level: 1, name: "root" })).toBeVisible();
-}
-
-async function newFolder(page: Page, name: string) {
-  await page.getByRole("button", { name: "New folder" }).first().click();
-  const dialog = page.getByRole("dialog", { name: "New folder" });
-  await dialog.getByRole("textbox").fill(name);
-  await dialog.getByRole("button", { name: "Create" }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page.locator(`[data-item="${name}"]`)).toBeVisible();
-}
+import { expect, test } from "@playwright/test";
+import { newFolder, openFiles } from "./helpers";
 
 test("an empty root shows the design's empty state", async ({ page }) => {
   await openFiles(page);

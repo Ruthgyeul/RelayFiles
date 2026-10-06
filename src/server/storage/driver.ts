@@ -37,5 +37,7 @@ export interface StorageDriver {
   copy(from: StorageLocation, to: StorageLocation): Promise<void>;
   /** Moves an item (or a whole account root when segments is empty) to the trash area. */
   moveToTrash(location: StorageLocation): Promise<string>;
+  /** Puts an item moved to the trash back (undo of a failed delete). */
+  restoreFromTrash(trashPath: string, location: StorageLocation): Promise<void>;
   space(): Promise<SpaceInfo>;
 }

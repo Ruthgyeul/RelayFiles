@@ -88,6 +88,11 @@ export class LocalVolumeDriver implements StorageDriver {
     return target;
   }
 
+  async restoreFromTrash(trashPath: string, location: StorageLocation): Promise<void> {
+    if (!trashPath.startsWith(this.layout.trash)) throw new Error("Only items in the volume's trash can be restored.");
+    await rename(trashPath, await this.pathOf(location));
+  }
+
   async space(): Promise<SpaceInfo> {
     const info = await statfs(this.layout.root, { bigint: true });
     return { total: info.blocks * info.bsize, available: info.bavail * info.bsize };

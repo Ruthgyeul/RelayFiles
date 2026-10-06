@@ -1,6 +1,6 @@
 import "server-only";
 import { STORAGE } from "@/config/policy";
-import type { CreatedFolder, FolderView, NodeItem, NodeProperties, TaggedItem, Visibility } from "@/contracts/nodes";
+import type { CreatedFolder, FolderNode, FolderView, NodeItem, NodeProperties, TaggedItem, Visibility } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { effectiveVisibility } from "@/domain/tree";
@@ -19,6 +19,7 @@ import {
   listChildren,
   listFolders,
   listSiblingNames,
+  tagUsage,
   type NodeRow,
 } from "../repositories/node.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
@@ -29,7 +30,7 @@ const TAG_SEARCH_LIMIT = 500;
 
 const VISIBILITY: Record<NodeRow["visibility"], Visibility> = { INHERIT: "inherit", PRIVATE: "private", PUBLIC: "public" };
 
-function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: number } = {}): NodeItem {
+export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: number; fileCount?: number } = {}): NodeItem {
   return {
     id: row.id,
     type: row.type === "FOLDER" ? "folder" : "file",
@@ -39,6 +40,7 @@ function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: number } =
     createdAt: row.createdAt.toISOString(),
     downloads: row.downloads,
     itemCount: extra.itemCount ?? 0,
+    fileCount: extra.fileCount ?? (row.type === "FILE" ? 1 : 0),
     tags: row.tags,
     linkId: row.linkId,
     hasThumb: row.hasThumb,
@@ -60,7 +62,11 @@ function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: number } =
 async function withFolderStats(rows: NodeRow[]): Promise<NodeItem[]> {
   const folderIds = rows.filter((row) => row.type === "FOLDER").map((row) => row.id);
   const [counts, sizes] = await Promise.all([childCounts(db(), folderIds), folderSizes(db(), folderIds)]);
-  return rows.map((row) => toNodeItem(row, row.type === "FOLDER" ? { size: sizes.get(row.id) ?? 0n, itemCount: counts.get(row.id) ?? 0 } : {}));
+  return rows.map((row) => {
+    if (row.type !== "FOLDER") return toNodeItem(row);
+    const stats = sizes.get(row.id);
+    return toNodeItem(row, { size: stats?.size ?? 0n, fileCount: stats?.files ?? 0, itemCount: counts.get(row.id) ?? 0 });
+  });
 }
 
 /** Resolves "root" or a folder id owned by the account; other accounts' folders are 404. */
@@ -78,6 +84,7 @@ export async function getFolderView(accountId: string, ref: string): Promise<Fol
     isRoot: folder.parentId === null,
     path: chain.map(({ id, name }) => ({ id, name })),
     effectiveVisibility: effectiveVisibility(chain.map((row) => VISIBILITY[row.visibility]).reverse()),
+    parentVisibility: effectiveVisibility(chain.slice(0, -1).map((row) => VISIBILITY[row.visibility]).reverse()),
     children: await withFolderStats(children),
   };
 }
@@ -149,4 +156,15 @@ export async function createFolder(account: Pick<AccountRow, "id" | "volumeId">,
       throw caught;
     }
   }
+}
+
+/** Tags in use with counts (tag dialog suggestions). */
+export function tagSuggestions(accountId: string) {
+  return tagUsage(db(), accountId);
+}
+
+/** Every folder of an account (id, name, parent) for the move/copy picker. */
+export async function folderTree(accountId: string): Promise<FolderNode[]> {
+  const folders = await listFolders(db(), accountId);
+  return folders.map(({ id, name, parentId }) => ({ id, name, parentId }));
 }

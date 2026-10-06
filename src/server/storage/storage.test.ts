@@ -129,6 +129,10 @@ describe("LocalVolumeDriver", () => {
     const trashed = await driver.moveToTrash(at("old.txt"));
     expect(trashed.startsWith(layoutOf(root).trash)).toBe(true);
     expect(await driver.stat(at("old.txt"))).toBeNull();
+
+    await driver.restoreFromTrash(trashed, at("old.txt"));
+    expect((await driver.stat(at("old.txt")))?.type).toBe("file");
+    await expect(driver.restoreFromTrash(join(root, "users", ACCOUNT, "old.txt"), at("x.txt"))).rejects.toThrow(/trash/);
   });
 
   it("reports free space", async () => {

@@ -1,32 +1,32 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { FolderView, NodeItem } from "@/contracts/nodes";
-import { uniqName } from "@/domain/names";
-import { hasAllTags, parseTags } from "@/domain/tags";
-import { emptyTitle, FILTER_KEYS, itemCount, matchesFilter, sortNodes, type FilterKey } from "@/domain/tree";
+import { parseTags } from "@/domain/tags";
+import { emptyTitle, itemCount, type FilterKey } from "@/domain/tree";
 import { usePageTitle } from "@/features/shell/page-title";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useNow } from "@/shared/hooks/useNow";
 import { ApiClientError } from "@/shared/lib/api-client";
-import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { ActionMenu, anchorOf, type AnchorRect } from "./ActionMenu";
 import { filesApi } from "./api";
 import { FilterBar } from "./FilterBar";
 import { FolderHeader } from "./FolderHeader";
 import { EmptyFolder, NodeCard } from "./NodeCard";
 import { buildNodeMenu, type NodeActions } from "./node-menu";
-import { NodeRow, RowButton } from "./NodeRow";
+import { NodeRow, RowButton, type ItemProps } from "./NodeRow";
 import { PathBar } from "./PathBar";
 import { folderHref } from "./paths";
 import { PropertiesDialog } from "./PropertiesDialog";
 import { SearchBox, TagModeBar } from "./SearchBox";
-import { toSortable } from "./settings";
 import { Toolbar, ToolButton } from "./Toolbar";
+import { useDragMove } from "./useDragMove";
+import { useFileDialogs } from "./useFileDialogs";
 import { useFileShortcuts } from "./useFileShortcuts";
+import { useFolderItems, type ListedItem } from "./useFolderItems";
+import { useNewFolder } from "./useNewFolder";
 import { usePrefs } from "./usePrefs";
-import { useTagSearch } from "./useTagSearch";
 
 /** Re-render interval for relative times ("Expires in 3h 12m"), as in the design. */
 const CLOCK_TICK_MS = 30_000;
@@ -37,40 +37,39 @@ interface FileManagerProps {
   publicUrl: string;
 }
 
-type OpenMenu = { id: string; anchor: AnchorRect } | null;
-
-/** The File Manager page for one folder: path, header, toolbar, filters, search and items. */
+/** The File Manager page for one folder: path, header, toolbar, filters, search, items and dialogs. */
 export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
   const router = useRouter();
-  const { notify } = useShell();
+  const { notify, activeAccount } = useShell();
   const [prefs, setPrefs] = usePrefs();
   const [filter, setFilter] = useState<FilterKey>("all");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [menu, setMenu] = useState<OpenMenu>(null);
+  const [menu, setMenu] = useState<{ id: string; anchor: AnchorRect } | null>(null);
   const [propertiesFor, setPropertiesFor] = useState<string | null>(null);
-  const [newFolder, setNewFolder] = useState<{ initial: string; error?: string } | null>(null);
   const now = useNow(true, CLOCK_TICK_MS);
   usePageTitle(view.folder.name);
 
-  const q = query.trim().toLowerCase();
-  const { tagMode, wanted, results } = useTagSearch(query);
-
-  const children = view.children;
-  const counts = useMemo(
-    () => Object.fromEntries(FILTER_KEYS.map((key) => [key, children.filter((child) => matchesFilter(child, key)).length])) as Record<FilterKey, number>,
-    [children],
-  );
-  const items: (NodeItem & { parentPath?: string })[] = useMemo(() => {
-    const source = tagMode
-      ? results.filter((item) => hasAllTags(item.tags, wanted) && matchesFilter(item, filter))
-      : children.filter((child) => matchesFilter(child, filter) && (!q || child.name.toLowerCase().includes(q)));
-    return sortNodes(source.map(toSortable), prefs.sort).map((entry) => entry.item);
-  }, [tagMode, results, wanted, filter, children, q, prefs.sort]);
-
-  const allSelected = items.length > 0 && items.every((item) => selected.has(item.id));
+  const { folder, children, path, isRoot } = view;
+  const parentRef = isRoot ? "root" : folder.id;
+  const { items, counts, tagMode, wanted, q } = useFolderItems(children, filter, query, prefs.sort);
   const linkOf = (linkId: string) => `${publicUrl}/d/${linkId}`;
+  const clearSelection = () => setSelected(new Set());
+  const { open, dialogs } = useFileDialogs({ isAdmin, accountDeletesAt: activeAccount?.deletesAt ?? null, linkOf, onChanged: clearSelection });
+  const newFolder = useNewFolder(parentRef, children.map((child) => child.name));
+
+  const moveTo = (ids: string[], targetId: string) =>
+    filesApi
+      .transfer(ids, targetId, "move")
+      .then((result) => {
+        notify(`Moved ${itemCount(result.done)} to ${result.targetName}${result.renamed ? ` · renamed ${result.renamed} to avoid duplicates` : ""}`);
+        clearSelection();
+        router.refresh();
+      })
+      .catch((caught: unknown) => notify(caught instanceof ApiClientError ? caught.message : "Something went wrong."));
+  const drag = useDragMove(selected, moveTo);
+
   const copyText = (text: string, message: string) => {
     navigator.clipboard?.writeText(text).catch(() => undefined);
     notify(message);
@@ -78,42 +77,33 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
   const copyLink = (url: string, visibility: "private" | "public") => copyText(url, visibility === "public" ? "Link copied" : "Link copied · private, only you can open it");
   const visibilityOf = (item: NodeItem) => (item.settings.visibility === "inherit" ? view.effectiveVisibility : item.settings.visibility);
   const openItem = (item: NodeItem) => (item.type === "folder" ? router.push(folderHref(item.id)) : setPropertiesFor(item.id));
-  const searchTag = (tag: string) => {
-    setSearchOpen(true);
-    setSelected(new Set());
-    setQuery((current) => {
-      const trimmed = current.trim();
-      if (trimmed.startsWith("#") && parseTags(trimmed).includes(tag)) return trimmed;
-      return trimmed.startsWith("#") ? `${trimmed} #${tag}` : `#${tag}`;
-    });
-  };
+  const parentOfCurrent = path.at(-2);
 
-  const actionsFor = (item: NodeItem, isRoot: boolean): NodeActions => ({
-    open: item.type === "folder" && !isRoot ? () => router.push(folderHref(item.id)) : undefined,
-    directLink: () => copyLink(linkOf(item.linkId), isRoot || item.id === view.folder.id ? view.effectiveVisibility : visibilityOf(item)),
-    properties: () => setPropertiesFor(item.id),
-  });
-
-  const openNewFolder = () => setNewFolder({ initial: uniqName(children.map((child) => child.name), "New folder", false) });
-  const createFolder = async (name: string) => {
-    try {
-      const created = await filesApi.createFolder(view.isRoot ? "root" : view.folder.id, name);
-      setNewFolder(null);
-      if (created.renamed) notify(`"${created.requestedName}" already exists · created "${created.folder.name}"`);
-      router.refresh();
-    } catch (caught) {
-      setNewFolder((current) => current && { ...current, error: caught instanceof ApiClientError ? caught.message : "Something went wrong." });
-    }
+  const actionsFor = (item: NodeItem): NodeActions => {
+    const current = item.id === folder.id;
+    const parentId = current ? (parentOfCurrent?.id ?? folder.id) : folder.id;
+    const parentVisibility = current ? view.parentVisibility : view.effectiveVisibility;
+    return {
+      open: item.type === "folder" && !current ? () => router.push(folderHref(item.id)) : undefined,
+      tags: () => open.tags([item]),
+      directLink: () => copyLink(linkOf(item.linkId), current ? view.effectiveVisibility : visibilityOf(item)),
+      newLink: () => open.newLink(item),
+      activity: () => open.activity(item),
+      settings: () => open.settings(item, current && isRoot, parentVisibility),
+      togglePause: isAdmin ? () => void open.togglePause(item) : undefined,
+      rename: () => open.rename(item),
+      copy: () => open.move([item], "copy", parentId),
+      move: () => open.move([item], "move", parentId),
+      delete: () => open.remove([item]),
+      properties: () => setPropertiesFor(item.id),
+    };
   };
 
   useFileShortcuts({
     selectAll: () => setSelected(new Set(items.map((item) => item.id))),
     search: () => setSearchOpen(true),
     toggleView: () => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" }),
-    parent: () => {
-      const parent = view.path.at(-2);
-      if (parent) router.push(folderHref(parent.id, view.path.length === 2));
-    },
+    parent: () => parentOfCurrent && router.push(folderHref(parentOfCurrent.id, path.length === 2)),
   });
 
   const toggle = (id: string) =>
@@ -123,15 +113,23 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
       else next.add(id);
       return next;
     });
-
-  const menuItem = menu && (menu.id === view.folder.id ? view.folder : items.find((item) => item.id === menu.id));
-  const menuEntries = menuItem ? buildNodeMenu(menuItem, menuItem.id === view.folder.id && view.isRoot, isAdmin, actionsFor(menuItem, menuItem.id === view.folder.id && view.isRoot)) : [];
+  const selectedItems = items.filter((item) => selected.has(item.id));
+  const menuItem = menu && (menu.id === folder.id ? folder : items.find((item) => item.id === menu.id));
   const openMenu = (id: string, anchor: HTMLElement) => {
     const rect = anchorOf(anchor);
     setMenu((current) => (current?.id === id ? null : { id, anchor: rect }));
   };
+  const searchTag = (tag: string) => {
+    setSearchOpen(true);
+    clearSelection();
+    setQuery((current) => {
+      const trimmed = current.trim();
+      if (trimmed.startsWith("#") && parseTags(trimmed).includes(tag)) return trimmed;
+      return trimmed.startsWith("#") ? `${trimmed} #${tag}` : `#${tag}`;
+    });
+  };
 
-  const itemProps = (item: NodeItem & { parentPath?: string }) => ({
+  const itemProps = (item: ListedItem): ItemProps => ({
     item,
     parentPath: item.parentPath,
     parentVisibility: view.effectiveVisibility,
@@ -139,33 +137,46 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
     now,
     onToggle: () => toggle(item.id),
     onPrimary: () => openItem(item),
-    onMenu: (anchor: HTMLElement) => openMenu(item.id, anchor),
+    onMenu: (anchor) => openMenu(item.id, anchor),
     onTag: searchTag,
     menuOpen: menu?.id === item.id,
+    drag: tagMode ? undefined : drag.dragProps(item.id, item.name),
+    drop: item.type === "folder" && !tagMode ? drag.dropProps(item.id) : undefined,
+    dropOver: drag.over === item.id,
   });
 
-  const newFolderButton = <ToolButton icon="folder-plus" label="New folder" onClick={openNewFolder} />;
+  const newFolderButton = <ToolButton icon="folder-plus" label="New folder" onClick={newFolder.open} />;
+  const selectionActions = (
+    <>
+      <ToolButton icon="tag" label="Tags" onClick={() => open.tags(selectedItems)} />
+      <ToolButton icon="copy" label="Copy" onClick={() => open.move(selectedItems, "copy", folder.id)} />
+      <ToolButton icon="arrow-bend-up-right" label="Move" onClick={() => open.move(selectedItems, "move", folder.id)} />
+      <ToolButton icon="trash" label="Delete" danger onClick={() => open.remove(selectedItems)} />
+    </>
+  );
 
   return (
     <>
-      <PathBar path={view.path} onCopyPath={(path) => copyText(path, "Path copied")} />
+      <PathBar path={path} onCopyPath={(text) => copyText(text, "Path copied")} dropFor={drag.dropProps} over={drag.over} />
       <FolderHeader
         view={view}
         now={now}
-        onShare={() => copyLink(linkOf(view.folder.linkId), view.effectiveVisibility)}
-        onMenu={(anchor) => openMenu(view.folder.id, anchor)}
-        menuOpen={menu?.id === view.folder.id}
+        onShare={() => copyLink(linkOf(folder.linkId), view.effectiveVisibility)}
+        onMenu={(anchor) => openMenu(folder.id, anchor)}
+        menuOpen={menu?.id === folder.id}
+        upDrop={parentOfCurrent ? drag.dropProps(parentOfCurrent.id) : undefined}
+        upOver={parentOfCurrent !== undefined && drag.over === parentOfCurrent.id}
       />
       <Toolbar
-        allSelected={allSelected}
-        selectedCount={selected.size}
-        onToggleAll={() => setSelected(allSelected ? new Set() : new Set(items.map((item) => item.id)))}
-        selectionActions={null}
+        allSelected={items.length > 0 && items.every((item) => selected.has(item.id))}
+        selectedCount={selectedItems.length}
+        onToggleAll={() => setSelected(items.length > 0 && items.every((item) => selected.has(item.id)) ? new Set() : new Set(items.map((item) => item.id)))}
+        selectionActions={selectionActions}
         folderActions={newFolderButton}
         view={prefs.view}
         onToggleView={() => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" })}
         onToggleSearch={() => {
-          setSearchOpen((open) => !open);
+          setSearchOpen((value) => !value);
           setQuery("");
         }}
         sort={prefs.sort}
@@ -175,25 +186,13 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
           notify("Up to date");
         }}
       />
-      {children.length > 0 && (
-        <FilterBar
-          counts={counts}
-          value={filter}
-          onChange={(key) => {
-            setFilter(key);
-            setSelected(new Set());
-          }}
-        />
-      )}
+      {children.length > 0 && <FilterBar counts={counts} value={filter} onChange={(key) => (setFilter(key), clearSelection())} />}
       {searchOpen && <SearchBox value={query} onChange={setQuery} />}
       {tagMode && (
         <TagModeBar
           label={wanted.length ? wanted.map((tag) => `#${tag}`).join(" + ") : "Type a tag after #"}
           count={itemCount(items.length)}
-          onClear={() => {
-            setQuery("");
-            setSearchOpen(false);
-          }}
+          onClear={() => (setQuery(""), setSearchOpen(false))}
         />
       )}
       <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-card-line bg-card-line">
@@ -211,21 +210,33 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
           ))
         )}
       </div>
-      {menu && menuItem && <ActionMenu anchor={menu.anchor} label={`Actions for ${menuItem.name}`} entries={menuEntries} onClose={() => setMenu(null)} />}
-      <PropertiesDialog nodeId={propertiesFor} onClose={() => setPropertiesFor(null)} linkOf={linkOf} onCopyLink={copyLink} />
-      {newFolder && (
-        <PromptDialog
-          open
-          title="New folder"
-          icon="folder-plus"
-          iconColor="var(--color-kind-folder)"
-          initialValue={newFolder.initial}
-          confirmLabel="Create"
-          error={newFolder.error}
-          onSubmit={(name) => void createFolder(name)}
-          onCancel={() => setNewFolder(null)}
+      {menu && menuItem && (
+        <ActionMenu
+          anchor={menu.anchor}
+          label={`Actions for ${menuItem.name}`}
+          entries={buildNodeMenu(menuItem, menuItem.id === folder.id && isRoot, isAdmin, actionsFor(menuItem))}
+          onClose={() => setMenu(null)}
         />
       )}
+      <PropertiesDialog
+        nodeId={propertiesFor}
+        onClose={() => setPropertiesFor(null)}
+        linkOf={linkOf}
+        onCopyLink={copyLink}
+        onEditTags={(id) => {
+          const item = id === folder.id ? folder : items.find((entry) => entry.id === id);
+          setPropertiesFor(null);
+          if (item) open.tags([item]);
+        }}
+        onEditSettings={(id) => {
+          const item = id === folder.id ? folder : items.find((entry) => entry.id === id);
+          setPropertiesFor(null);
+          if (item) open.settings(item, item.id === folder.id && isRoot, item.id === folder.id ? view.parentVisibility : view.effectiveVisibility);
+        }}
+      />
+      {newFolder.dialog}
+      {dialogs}
+      {drag.pill}
     </>
   );
 }
