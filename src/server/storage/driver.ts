@@ -55,6 +55,11 @@ export interface StorageDriver {
   readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null>;
   /** Removes the generated files of these nodes (missing ones are ignored). */
   removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void>;
+  /**
+   * Permanently removes trash entries moved there before `trashBefore` and unfinished uploads
+   * last written before `uploadsBefore`. Returns how many entries were removed.
+   */
+  purgeSystem(trashBefore: Date, uploadsBefore: Date): Promise<{ trash: number; uploads: number }>;
   /** Removes every generated file of an account (account deletion). */
   removeAccountAssets(accountId: string): Promise<void>;
 }

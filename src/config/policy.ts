@@ -29,6 +29,8 @@ export const STORAGE = {
   /** Upload/quota warning levels (percent of quota). */
   quotaWarnPercent: 80,
   quotaFullPercent: 95,
+  /** Deleted items stay in the volume's trash this long before they are removed for good. */
+  trashRetentionHours: 24,
   /** Filesystem limits (ext4). */
   maxNameBytes: 255,
   maxPathBytes: 4096,
