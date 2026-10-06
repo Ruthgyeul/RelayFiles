@@ -13,6 +13,8 @@ export interface PromptDialogProps {
   confirmLabel: string;
   icon?: IconName;
   iconColor?: string;
+  /** Folder icons are filled, file icons regular (design rename dialog). */
+  iconWeight?: "regular" | "fill";
   /** Returns an error message, or an empty string when the value is valid. */
   validate?: (value: string) => string;
   /** Selection range applied on focus, e.g. the file name without its extension. */
@@ -31,6 +33,7 @@ export function PromptDialog({
   confirmLabel,
   icon,
   iconColor,
+  iconWeight = "fill",
   validate,
   selectOnFocus,
   error: externalError,
@@ -38,13 +41,17 @@ export function PromptDialog({
   onCancel,
 }: PromptDialogProps) {
   const [value, setValue] = useState(initialValue);
+  // A server error belongs to the value that was submitted; editing the field clears it.
+  const [submitted, setSubmitted] = useState<string | null>(null);
   const localError = value && validate ? validate(value) : "";
-  const error = localError || externalError || "";
+  const error = localError || (value === submitted ? externalError : "") || "";
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const message = validate ? validate(value) : "";
-    if (!message) onSubmit(value);
+    if (message) return;
+    setSubmitted(value);
+    onSubmit(value);
   };
 
   const onFocus = (event: FocusEvent<HTMLInputElement>) => {
@@ -57,7 +64,7 @@ export function PromptDialog({
     <Modal open={open} onClose={onCancel} width={420} layer="subdialog" label={title}>
       <form onSubmit={submit} className="flex flex-col gap-3.5 p-5">
         <div className="flex items-center gap-2.5">
-          {icon && <Icon name={icon} weight="fill" size={22} style={{ color: iconColor }} />}
+          {icon && <Icon name={icon} weight={iconWeight} size={22} style={{ color: iconColor }} />}
           <span className="flex-1 text-[16px] font-bold">{title}</span>
           <IconButton icon="x" label="Close" size={36} iconSize={18} onClick={onCancel} />
         </div>

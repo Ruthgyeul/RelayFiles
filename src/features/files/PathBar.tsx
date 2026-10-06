@@ -7,11 +7,20 @@ import { useViewport } from "@/shared/hooks/useViewport";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { folderHref } from "./paths";
+import type { DropTargetProps } from "./useDragMove";
 
 const crumbClass = "flex h-8 max-w-[200px] items-center gap-1.5 rounded-lg border border-transparent bg-transparent px-2 text-[13px] whitespace-nowrap no-underline";
 
 /** Breadcrumbs (collapsed to 3 / 6 levels) and the copyable folder path. */
-export function PathBar({ path, onCopyPath }: { path: FolderCrumb[]; onCopyPath: (path: string) => void }) {
+interface PathBarProps {
+  path: FolderCrumb[];
+  onCopyPath: (path: string) => void;
+  /** Drop handlers so dragged items can be moved onto a crumb. */
+  dropFor?: (folderId: string) => DropTargetProps | undefined;
+  over?: string | null;
+}
+
+export function PathBar({ path, onCopyPath, dropFor, over }: PathBarProps) {
   const { small } = useViewport();
   const slots = collapseCrumbs(path, small ? CRUMB_LIMIT.mobile : CRUMB_LIMIT.desktop);
   const last = path.length - 1;
@@ -46,7 +55,12 @@ export function PathBar({ path, onCopyPath }: { path: FolderCrumb[]; onCopyPath:
                 {content}
               </span>
             ) : (
-              <Link href={folderHref(slot.crumb.id, slot.index === 0)} title={slot.crumb.name} className={cn(crumbClass, "font-semibold text-t3 hover:bg-btn hover:text-t3")}>
+              <Link
+                {...dropFor?.(slot.crumb.id)}
+                href={folderHref(slot.crumb.id, slot.index === 0)}
+                title={slot.crumb.name}
+                className={cn(crumbClass, "font-semibold text-t3 hover:bg-btn hover:text-t3", over === slot.crumb.id && "border-accent-hi bg-accent-soft")}
+              >
                 {content}
               </Link>
             )}

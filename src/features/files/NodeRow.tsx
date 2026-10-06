@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { DragEvent, ReactNode } from "react";
 import type { NodeItem } from "@/contracts/nodes";
 import { formatDateTime, formatSize } from "@/domain/format";
 import { itemCount, settingTags } from "@/domain/tree";
@@ -10,6 +10,7 @@ import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
 import { kindOf } from "./kind";
 import { toShareSettings } from "./settings";
+import type { DropTargetProps } from "./useDragMove";
 
 export interface ItemProps {
   item: NodeItem;
@@ -23,6 +24,12 @@ export interface ItemProps {
   onMenu: (anchor: HTMLElement) => void;
   onTag: (tag: string) => void;
   menuOpen: boolean;
+  /** Drag source props (desktop drag-to-move). */
+  drag?: { draggable: true; onDragStart: (event: DragEvent) => void; onDragEnd: () => void };
+  /** Drop target props for folders. */
+  drop?: DropTargetProps;
+  /** A dragged item is over this folder. */
+  dropOver?: boolean;
 }
 
 /** "3 items" for folders, the size for files, prefixed with the folder path in tag search. */
@@ -95,11 +102,16 @@ function RowTags({ item, parentVisibility, now, onTag }: Pick<ItemProps, "item" 
 }
 
 /** One list row: checkbox, type icon (with folder count), name, meta, tags and actions. */
-export function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onMenu, onTag, menuOpen, actions }: ItemProps & { actions: ReactNode }) {
+export function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onMenu, onTag, menuOpen, drag, drop, dropOver, actions }: ItemProps & { actions: ReactNode }) {
   const kind = kindOf(item);
   const folder = item.type === "folder";
   return (
-    <div className="relative flex flex-col gap-2.5 bg-card px-4 py-3" data-item={item.name}>
+    <div
+      {...drag}
+      {...drop}
+      data-item={item.name}
+      className={cn("relative flex flex-col gap-2.5 px-4 py-3 -outline-offset-2", dropOver ? "bg-accent-soft outline-2 outline-accent-hi outline-dashed" : "bg-card")}
+    >
       <div className="flex items-center gap-3">
         <button
           type="button"

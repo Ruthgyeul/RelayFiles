@@ -53,6 +53,16 @@
 | `GET` | `/api/folders/:id` | `id` = `root` 또는 폴더 id. `FolderView { folder, isRoot, path, effectiveVisibility, children }`. 폴더 항목은 하위 전체 크기(`size`)와 직계 항목 수(`itemCount`)를 담는다. 다른 계정 폴더는 404 |
 | `POST` | `/api/folders` | `{ parentId, name }` → 201 `{ folder, requestedName, renamed }`. DB와 볼륨에 함께 만든다. 이름이 겹치면 `Name (2)`로 만들고 `renamed: true` |
 | `GET` | `/api/nodes/:id` | Properties 대화상자 정보: 항목, 위치(루트→부모 이름), 실제 공개 범위, 폴더면 하위 파일·폴더 수 |
+| `GET` | `/api/folders/tree` | 계정의 모든 폴더 `{ id, name, parentId }`(이동·복사 대상 선택) |
+| `PATCH` | `/api/nodes/:id` | `{ name }` 이름 변경(디스크도 함께). 이름이 겹치면 409와 `Suggested:` 문구 |
+| `POST` | `/api/nodes/transfer` | `{ ids, targetId, mode: move\|copy }` → `{ done, renamed, targetName }`. 자기 자신·하위로 이동 불가, 겹치는 이름은 `Name (2)`, 복사는 새 id·링크, 다운로드 수 0, 용량 초과 시 507 |
+| `POST` | `/api/nodes/delete` | `{ ids }` → `{ deleted }`. DB에서 지우고 볼륨의 `system/trash`로 옮긴다(정리 작업이 비움) |
+| `POST` | `/api/nodes/tags` | `{ ids, add, remove }`. 태그는 소문자·공백→`-`·24자, 항목당 20개 |
+| `GET` | `/api/tags` | 계정에서 쓰는 태그와 개수(태그 제안) |
+| `PUT` | `/api/nodes/:id/settings` | 공유 설정(공개 범위, 만료·첫 다운로드 후 삭제는 관리자만, 다운로드 한도, 비밀번호(argon2), 접근, 메모, 하위 항목에 적용) |
+| `POST` | `/api/nodes/:id/link` | 공유 링크 재발급(옛 링크 즉시 무효, 활동 기록에 남음) |
+| `GET` | `/api/nodes/:id/activity` | 링크 활동 최신 200개(폴더는 하위 항목 포함) |
+| `PUT` | `/api/nodes/:id/pause` | 관리자: 다운로드 일시정지/재개 |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
 
 이후 마일스톤에서 추가되는 엔드포인트는 [plan.md](plan.md) §13.3을 따른다.

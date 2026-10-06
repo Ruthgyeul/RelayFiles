@@ -11,6 +11,7 @@ import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
 import { folderHref } from "./paths";
 import { toShareSettings } from "./settings";
+import type { DropTargetProps } from "./useDragMove";
 
 interface FolderHeaderProps {
   view: FolderView;
@@ -18,10 +19,13 @@ interface FolderHeaderProps {
   onShare: () => void;
   onMenu: (anchor: HTMLElement) => void;
   menuOpen: boolean;
+  /** Drop on the Up button moves dragged items to the parent folder. */
+  upDrop?: DropTargetProps;
+  upOver?: boolean;
 }
 
 /** Header card of the current folder: up button, icon, name, date, item count, setting tags, note. */
-export function FolderHeader({ view, now, onShare, onMenu, menuOpen }: FolderHeaderProps) {
+export function FolderHeader({ view, now, onShare, onMenu, menuOpen, upDrop, upOver }: FolderHeaderProps) {
   const { folder, isRoot, path, effectiveVisibility } = view;
   const parent = path.at(-2);
   const tags: { icon: IconName; label: string }[] = [
@@ -35,10 +39,14 @@ export function FolderHeader({ view, now, onShare, onMenu, menuOpen }: FolderHea
       <div className="flex items-start gap-3.5">
         {parent && (
           <Link
+            {...upDrop}
             href={folderHref(parent.id, path.length === 2)}
             title="Up · drop here to move to parent folder"
             aria-label="Parent folder"
-            className="mt-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 hover:bg-btn hover:text-t3"
+            className={cn(
+              "mt-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 hover:bg-btn hover:text-t3",
+              upOver && "bg-accent-soft outline-2 outline-accent-hi outline-dashed",
+            )}
           >
             <Icon name="arrow-left" size={20} />
           </Link>

@@ -51,3 +51,12 @@ export function formatShortDate(date: Date | string | number): string {
 export function formatDateTime(date: Date | string | number): string {
   return new Date(date).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
+
+/** Relative time for activity logs (design `ago`): "just now", "5m ago", "3h ago", then the date. */
+export function formatAgo(at: number, now: number): string {
+  const minutes = Math.round((now - at) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1_440) return `${Math.round(minutes / 60)}h ago`;
+  return formatDateTime(at);
+}

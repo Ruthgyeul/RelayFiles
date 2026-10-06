@@ -38,7 +38,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const colors = TONE[tone];
   return (
-    <Modal open={open} onClose={onCancel} width={400} layer="dialog" className="gap-3 px-5 pt-[22px] pb-[18px]">
+    <Modal open={open} onClose={onCancel} width={400} layer="dialog" label={typeof title === "string" ? title : confirmLabel} className="gap-3 px-5 pt-[22px] pb-[18px]">
       <span className="flex size-11 items-center justify-center rounded-xl" style={{ background: colors.bg }}>
         <Icon name={icon} weight="fill" size={22} style={{ color: colors.icon }} />
       </span>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatClock, formatCountdown, formatDateTime, formatLeft, formatShortDate, formatSize } from "./format";
+import { formatAgo, formatClock, formatCountdown, formatDateTime, formatLeft, formatShortDate, formatSize } from "./format";
 
 describe("formatClock (prototype fmtT)", () => {
   it("formats minutes and hours", () => {
@@ -45,5 +45,15 @@ describe("dates", () => {
     const at = new Date(2026, 9, 19, 15, 12);
     expect(formatShortDate(at)).toBe("Oct 19");
     expect(formatDateTime(at)).toBe("Oct 19, 2026, 3:12 PM");
+  });
+});
+
+describe("formatAgo (design ago)", () => {
+  it("formats recent times", () => {
+    const now = new Date(2026, 9, 19, 15, 12).getTime();
+    expect(formatAgo(now - 20_000, now)).toBe("just now");
+    expect(formatAgo(now - 5 * 60_000, now)).toBe("5m ago");
+    expect(formatAgo(now - 3 * 3_600_000, now)).toBe("3h ago");
+    expect(formatAgo(now - 2 * 86_400_000, now)).toBe("Oct 17, 2026, 3:12 PM");
   });
 });
