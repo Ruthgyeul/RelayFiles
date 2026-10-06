@@ -50,6 +50,8 @@ interface ShellContextValue {
   copyToken: (accountId: string) => Promise<void>;
   saveToken: (accountId: string) => Promise<void>;
   finishSaveToken: () => void;
+  /** Shows the "Save your account token" dialog for a token the server just issued. */
+  showNewToken: (token: TokenToSave) => void;
   dismissAutoAccount: () => void;
 }
 
@@ -168,6 +170,7 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
           setTokenToSave({ id: account.id, name: account.name, token: await accountApi.revealToken(accountId) });
         }),
       finishSaveToken: () => setTokenToSave(null),
+      showNewToken: setTokenToSave,
       dismissAutoAccount: () => autoAccountStore.set(null),
     }),
     [config, session, notice, accountToast, signInOpen, tokenToSave, autoAccountId, notify, dismissAccountToast, applySession, accountCreated, run],

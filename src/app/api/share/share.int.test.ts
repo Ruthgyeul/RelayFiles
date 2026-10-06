@@ -12,9 +12,9 @@ import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
 import { sharePage } from "@/server/services/share.service";
 import { UNLOCK_COOKIE } from "@/server/share/unlock-cookie";
-import { fileFixtures, type FixtureMember } from "../../../../test/file-fixtures";
+import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
 
-const { prisma, member, addFile, cleanup } = fileFixtures(6);
+const { prisma, member, addFile, cleanup } = fileFixtures();
 const noViewer = { accountIds: [], unlocks: new Map<string, number>() };
 
 afterAll(async () => {
@@ -22,7 +22,7 @@ afterAll(async () => {
   await cleanup();
 });
 
-const visitorIp = () => `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
+const visitorIp = randomTestIp;
 
 /** A request from a visitor (no account) or, with `owner`, from the owner's device. */
 async function visit<P>(handler: (req: NextRequest, ctx: { params: Promise<P> }) => Promise<Response>, path: string, params: P, options: { owner?: FixtureMember; cookies?: string[]; headers?: Record<string, string>; method?: string; body?: unknown; ip?: string } = {}) {

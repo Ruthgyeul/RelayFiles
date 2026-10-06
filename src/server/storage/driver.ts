@@ -55,4 +55,6 @@ export interface StorageDriver {
   readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null>;
   /** Removes the generated files of these nodes (missing ones are ignored). */
   removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void>;
+  /** Removes every generated file of an account (account deletion). */
+  removeAccountAssets(accountId: string): Promise<void>;
 }

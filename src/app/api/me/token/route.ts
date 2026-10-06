@@ -3,7 +3,7 @@ import { deviceOf } from "@/server/auth/current";
 import { requireActive } from "@/server/auth/device-session";
 import { ApiError } from "@/server/http/api-error";
 import { apiHandler, ok } from "@/server/http/api-handler";
-import { revealToken } from "@/server/services/auth.service";
+import { regenerateToken, revealToken } from "@/server/services/auth.service";
 
 /**
  * Full token of an account signed in on this device (default: the active one), for
@@ -15,4 +15,11 @@ export const GET = apiHandler(async ({ req }) => {
   const target = accountId ? device.accounts.find((item) => item.account.id === accountId) : requireActive(device);
   if (!target) throw new ApiError("NOT_FOUND");
   return ok({ token: await revealToken(target.account.id) }, { headers: { "cache-control": "no-store" } });
+});
+
+/** "Generate a new token": the old one stops working and other devices are signed out. */
+export const POST = apiHandler(async ({ req }) => {
+  const { account, sessionId } = requireActive(await deviceOf(req));
+  const token = await regenerateToken(account.id, sessionId);
+  return ok({ token, account: { id: account.id, name: account.name } }, { headers: { "cache-control": "no-store" } });
 });

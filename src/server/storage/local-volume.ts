@@ -132,6 +132,11 @@ export class LocalVolumeDriver implements StorageDriver {
     await Promise.all(nodeIds.flatMap((nodeId) => kinds.map((kind) => rm(this.assetPath(kind, accountId, nodeId), { force: true }))));
   }
 
+  async removeAccountAssets(accountId: string): Promise<void> {
+    if (!ASSET_ID.test(accountId)) throw new Error("Invalid asset id.");
+    await Promise.all([this.layout.thumbs, this.layout.derived].map((dir) => rm(join(dir, accountId), { recursive: true, force: true })));
+  }
+
   async space(): Promise<SpaceInfo> {
     const info = await statfs(this.layout.root, { bigint: true });
     return { total: info.blocks * info.bsize, available: info.bavail * info.bsize };

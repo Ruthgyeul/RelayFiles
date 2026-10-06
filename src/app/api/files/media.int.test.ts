@@ -17,7 +17,7 @@ import { callRoute } from "../../../../test/route-call";
 import { fileFixtures } from "../../../../test/file-fixtures";
 import { processMedia } from "@/server/media/process";
 
-const { prisma, member, addFile, get, cleanup } = fileFixtures(5);
+const { prisma, member, addFile, get, cleanup } = fileFixtures();
 const run = promisify(execFile);
 const assetFile = (kind: "thumbs" | "derived", accountId: string, nodeId: string) => join(layoutOf(configuredVolumeRoot())[kind], accountId, nodeId);
 const exists = (path: string) => stat(path).then(() => true, () => false);

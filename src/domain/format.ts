@@ -47,6 +47,11 @@ export function formatShortDate(date: Date | string | number): string {
   return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/** Date with the year, like the profile ("Oct 20, 2026"). Rendered in the viewer's time zone. */
+export function formatLongDate(date: Date | string | number): string {
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 /** Date and time like the design (`fmtDate`): "Oct 5, 2026, 3:12 PM". */
 export function formatDateTime(date: Date | string | number): string {
   return new Date(date).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -59,4 +64,13 @@ export function formatAgo(at: number, now: number): string {
   if (minutes < 60) return `${minutes}m ago`;
   if (minutes < 1_440) return `${Math.round(minutes / 60)}h ago`;
   return formatDateTime(at);
+}
+
+/** When a device was last used (design devices `ago`): "active now", "12m ago", "3h ago", "4d ago". */
+export function formatSeen(at: number, now: number): string {
+  const minutes = Math.round((now - at) / 60_000);
+  if (minutes < 2) return "active now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1_440) return `${Math.round(minutes / 60)}h ago`;
+  return `${Math.round(minutes / 1_440)}d ago`;
 }

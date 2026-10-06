@@ -251,3 +251,18 @@ export interface NewFile {
 export function createFileNode(db: DbClient, data: NewFile) {
   return db.node.create({ data: { ...data, type: "FILE" }, select: NODE_SELECT });
 }
+
+/** Files and folders of an account (the root folder is not counted). */
+export async function contentCounts(db: DbClient, accountId: string): Promise<{ files: number; folders: number }> {
+  const rows = await db.node.groupBy({ by: ["type"], where: { accountId, parentId: { not: null } }, _count: { _all: true } });
+  const count = (type: "FILE" | "FOLDER") => rows.find((row) => row.type === type)?._count._all ?? 0;
+  return { files: count("FILE"), folders: count("FOLDER") };
+}
+
+/** Items past their own expiry, or delete-after-download items that were downloaded. */
+export function expiredItemIds(db: DbClient, accountId: string | null, now: Date) {
+  return db.node.findMany({
+    where: { ...(accountId ? { accountId } : {}), parentId: { not: null }, OR: [{ expAt: { lte: now } }, { burn: true, downloads: { gte: 1 } }] },
+    select: { id: true, accountId: true },
+  });
+}

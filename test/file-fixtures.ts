@@ -16,16 +16,25 @@ type NodeKind = "VIDEO" | "AUDIO" | "IMAGE" | "OTHER";
 type RouteHandler = (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
 
 /**
- * Accounts and files written straight to the volume and the database, for integration tests
- * of file serving. `ipBlock` keeps each test file's sign-up addresses apart.
+ * A random address in the 198.18.0.0/15 test range. Per-address limits (sign-ups, failed
+ * sign-ins) live in Redis across runs, so tests must not reuse fixed addresses.
  */
-export function fileFixtures(ipBlock: number) {
+export function randomTestIp(): string {
+  const octet = () => Math.floor(Math.random() * 256);
+  return `198.${18 + (octet() % 2)}.${octet()}.${octet()}`;
+}
+
+/**
+ * Accounts and files written straight to the volume and the database, for integration tests
+ * of file serving.
+ */
+export function fileFixtures() {
   const prisma = db();
   const accounts: string[] = [];
 
   async function member() {
     // A fresh address per account keeps tests under the per-address sign-up limit.
-    const ip = `198.18.${Math.floor(Math.random() * 250) + 1}.${ipBlock}`;
+    const ip = randomTestIp();
     const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip });
     const id = res.json.data.account.id;
     accounts.push(id);

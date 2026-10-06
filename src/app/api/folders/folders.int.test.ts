@@ -12,11 +12,12 @@ import { db } from "@/server/db/client";
 import { redis } from "@/server/redis";
 import { userRootOf } from "@/server/storage/safe-path";
 import { configuredVolumeRoot } from "@/server/storage/registry";
+import { randomTestIp } from "../../../../test/file-fixtures";
 import { callRoute } from "../../../../test/route-call";
 
 const prisma = db();
 const accounts: string[] = [];
-const ip = `198.18.${Math.floor(Math.random() * 200) + 20}.1`;
+const ip = randomTestIp();
 
 async function newAccount() {
   const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip });
