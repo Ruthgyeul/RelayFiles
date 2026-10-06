@@ -47,9 +47,3 @@ export const ERROR_PRESETS: Record<ErrorPageCode, ErrorPreset> = {
     description: "Files are temporarily unavailable. Browsing still works; uploads and downloads resume when storage is back.",
   },
 };
-
-/** Formats seconds as m:ss for the 429 countdown. */
-export function formatCountdown(seconds: number): string {
-  const s = Math.max(0, Math.ceil(seconds));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}

@@ -67,6 +67,10 @@ jobs:
       REDIS_HOST: localhost
       REDIS_PASSWORD: ci-redis-password
       STORAGE_ROOT: ./.data/relayfilesDB
+      # Test-only secrets (not used anywhere else).
+      TOKEN_ENC_KEY: Y2ktb25seS10b2tlbi1lbmNyeXB0aW9uLWtleS0zMmI=
+      TOKEN_HMAC_KEY: ci-only-token-lookup-hmac-key-0123456789
+      COOKIE_SECRET: ci-only-cookie-signing-secret-0123456789
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

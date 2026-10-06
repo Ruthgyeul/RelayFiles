@@ -7,7 +7,7 @@ import { RetryCountdown } from "@/features/errors/RetryCountdown";
 import { ButtonLink } from "@/shared/ui/ButtonLink";
 
 /** Explicit error screens the app redirects to (docs/plan.md §9.2). */
-const ROUTED_CODES = ["400", "410", "429", "503", "storage-offline"] as const satisfies readonly ErrorPageCode[];
+const ROUTED_CODES = ["400", "403", "410", "429", "503", "storage-offline"] as const satisfies readonly ErrorPageCode[];
 type RoutedCode = (typeof ROUTED_CODES)[number];
 
 /** Wait shown when the redirect did not include a Retry-After value. */

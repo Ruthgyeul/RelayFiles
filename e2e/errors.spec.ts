@@ -13,6 +13,8 @@ test("explicit error screens render their presets", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Storage offline" })).toBeVisible();
   await page.goto("/error/400");
   await expect(page.getByRole("heading", { name: "Bad request" })).toBeVisible();
+  await page.goto("/error/403");
+  await expect(page.getByRole("heading", { name: "Access denied" })).toBeVisible();
 });
 
 test("unknown error codes are 404", async ({ page }) => {

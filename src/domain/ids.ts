@@ -11,7 +11,7 @@ export const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 /** Upper-case invite code alphabet. */
 export const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-export const ID_LENGTH = { account: 12, node: 12, link: 10, token: 40, anonSuffix: 6, inviteGroup: 4 } as const;
+export const ID_LENGTH = { account: 12, node: 12, link: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4 } as const;
 
 type RandomSource = (bytes: Uint8Array) => Uint8Array;
 const webRandom: RandomSource = (bytes) => crypto.getRandomValues(bytes);
@@ -37,6 +37,7 @@ export const ID_PATTERN = {
   node: pattern(ID_LENGTH.node, ID_ALPHABET),
   link: pattern(ID_LENGTH.link, ID_ALPHABET),
   token: pattern(ID_LENGTH.token, TOKEN_ALPHABET),
+  session: pattern(ID_LENGTH.session, ID_ALPHABET),
   anonName: new RegExp(`^anon-[${ID_ALPHABET}]{${ID_LENGTH.anonSuffix}}$`),
   invite: new RegExp(`^[${INVITE_ALPHABET}]{4}-[${INVITE_ALPHABET}]{4}$`),
 } as const;
@@ -45,9 +46,11 @@ export const newAccountId = () => randomString(ID_LENGTH.account, ID_ALPHABET);
 export const newNodeId = () => randomString(ID_LENGTH.node, ID_ALPHABET);
 export const newLinkId = () => randomString(ID_LENGTH.link, ID_ALPHABET);
 export const newAccountToken = () => randomString(ID_LENGTH.token, TOKEN_ALPHABET);
+export const newSessionId = () => randomString(ID_LENGTH.session, ID_ALPHABET);
 export const newAnonName = () => `anon-${randomString(ID_LENGTH.anonSuffix, ID_ALPHABET)}`;
 export const newInviteCode = () => `${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}-${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}`;
 
 export const isAccountId = (value: string) => ID_PATTERN.account.test(value);
 export const isNodeId = (value: string) => ID_PATTERN.node.test(value);
 export const isLinkId = (value: string) => ID_PATTERN.link.test(value);
+export const isSessionId = (value: string) => ID_PATTERN.session.test(value);

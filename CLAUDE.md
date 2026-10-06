@@ -42,6 +42,7 @@ npm run test:integration  # PostgreSQL·Redis가 필요한 통합 테스트 (.en
 npm run db:migrate   # prisma migrate dev (개발: 스키마 변경 → 마이그레이션 생성)
 npm run db:deploy    # prisma migrate deploy (운영)
 npm run volume:init  # STORAGE_ROOT 볼륨 초기화·등록 (재실행 안전)
+npm run admin:create # 관리자 계정 생성, 토큰을 한 번만 출력
 npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지정 가능)
 npm run check:emoji  # 이모지 사용 검사
 npm run check        # typecheck · lint · emoji · test · build 전체

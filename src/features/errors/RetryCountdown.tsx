@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/shared/ui/Button";
-import { formatCountdown } from "./presets";
+import { formatCountdown } from "@/domain/format";
 
 /** 429 screen body: counts down, then enables Retry (reloads the page the user came from). */
 export function RetryCountdown({ seconds, retryHref }: { seconds: number; retryHref: string }) {

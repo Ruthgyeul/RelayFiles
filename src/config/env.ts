@@ -46,7 +46,6 @@ export const ENV_GROUPS = {
     DEFAULT_THEME: z.enum(THEME_KEYS).default(DEFAULT_THEME),
     SERVER_LOCATION: z.string().default("Seoul, KR"),
     ENABLE_UI_CATALOG: bool.default(false),
-    TRUSTED_PROXY_CIDRS: cidrList.default(["127.0.0.1/32", "172.16.0.0/12"]),
     ADMIN_ALLOWED_CIDRS: cidrList.default([]),
   }),
   database: z.object({

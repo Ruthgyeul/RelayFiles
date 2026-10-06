@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { THEME_KEYS, THEMES, type ThemeKey } from "@/config/theme";
 import { OptionChip } from "@/shared/ui/Option";
 import { Logo } from "@/shared/ui/Display";
+import { AccountSection } from "./AccountSection";
 import { ControlsSection } from "./ControlsSection";
 import { DataSection } from "./DataSection";
 import { FeedbackSection } from "./FeedbackSection";
@@ -36,6 +37,7 @@ export function UiCatalog({ initialTheme }: { initialTheme: ThemeKey }) {
       <FeedbackSection />
       <DataSection />
       <OverlaysSection />
+      <AccountSection />
     </main>
   );
 }

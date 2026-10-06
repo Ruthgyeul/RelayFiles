@@ -23,9 +23,13 @@
 |---|---|---|
 | `BAD_REQUEST` | 400 | 필드 오류 표시 또는 `/error/400` |
 | `UNAUTHORIZED` | 401 | 로그인 모달 / `unauthorized.tsx` |
+| `INVALID_TOKEN` | 401 | 로그인 모달에 메시지 표시(남은 시도 횟수 포함) |
+| `INVALID_INVITE` | 400 | 로그인 모달에 메시지 표시 |
+| `SIGNUP_CLOSED` | 403 | 로그인 모달의 Closed 안내 |
 | `FORBIDDEN` | 403 | `forbidden.tsx` |
 | `NOT_FOUND` | 404 | 다른 계정 리소스도 404(존재 여부 비공개) |
 | `CONFLICT` | 409 | 이름 중복 등, 대화상자에 메시지 표시 |
+| `ALREADY_SIGNED_IN` | 409 | 로그인 모달에 메시지 표시 |
 | `GONE` | 410 | `/error/410`(삭제된 계정·링크) |
 | `PAYLOAD_TOO_LARGE` | 413 | 토스트 |
 | `RATE_LIMITED` | 429 | `/error/429?retry=<초>&from=<경로>` 또는 모달 카운트다운 |
@@ -40,5 +44,11 @@
 |---|---|---|
 | `HEAD` | `/api/health` | 생존 확인(204, 백엔드 작업 없음). Status 페이지가 2.5초마다 지연 시간을 잰다 |
 | `GET` | `/api/health` | 준비 상태: `{ status, version, time, components: { database, redis, storage } }`. DB가 죽으면 503 |
+| `GET` | `/api/auth/session` | 이 기기에 로그인한 계정 목록, 활성 계정 id, 가입 모드(`SessionState`). 무효 세션이 있으면 쿠키를 정리한다 |
+| `POST` | `/api/auth/anonymous` | `{ inviteCode? }` → 201 `{ account, token, session }`. 익명 계정을 만들고 이 기기를 로그인시킨다. 토큰은 이 응답에서만 평문으로 나온다 |
+| `POST` | `/api/auth/token` | `{ token }` → `SessionState`. 실패 시 401 `INVALID_TOKEN`, 잠금 시 429 `retryAfter` |
+| `POST` | `/api/auth/switch` | `{ accountId }` → `SessionState`. 이 기기에 로그인한 다른 계정을 활성화 |
+| `POST` | `/api/auth/signout` | `{ accountId? }`(기본: 활성 계정) → `SessionState`. 세션을 DB에서 폐기 |
+| `GET` | `/api/me/token` | 활성 계정의 전체 토큰(`cache-control: no-store`) |
 
 이후 마일스톤에서 추가되는 엔드포인트는 [plan.md](plan.md) §13.3을 따른다.
