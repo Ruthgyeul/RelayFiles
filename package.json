@@ -20,7 +20,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
-    "volume:init": "tsx --conditions=react-server scripts/volume-init.mts"
+    "volume:init": "tsx --conditions=react-server scripts/volume-init.mts",
+    "admin:create": "tsx --conditions=react-server scripts/admin-create.mts"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

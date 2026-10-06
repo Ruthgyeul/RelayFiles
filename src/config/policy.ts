@@ -48,3 +48,13 @@ export const JOBS = {
   metricsSampleIntervalSec: 60,
   healthProbeIntervalSec: 60,
 } as const;
+
+export const AUTH = {
+  /** Failed sign-ins are forgotten after this long without another failure. */
+  failureWindowSec: 24 * 60 * 60,
+  /** Anonymous accounts one client address may create per hour (stops crawlers filling the disk). */
+  signupsPerHour: 10,
+  signupWindowSec: 60 * 60,
+  /** Session "last seen" is written at most this often. */
+  touchIntervalSec: 5 * 60,
+} as const;

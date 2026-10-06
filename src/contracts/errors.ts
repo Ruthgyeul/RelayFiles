@@ -5,9 +5,13 @@
 export const ERRORS = {
   BAD_REQUEST: { status: 400, message: "The request is malformed." },
   UNAUTHORIZED: { status: 401, message: "Sign in required." },
+  INVALID_TOKEN: { status: 401, message: "No account matches this token." },
+  INVALID_INVITE: { status: 400, message: "Invalid or already used invite code." },
+  SIGNUP_CLOSED: { status: 403, message: "New sign-ups are closed on this server." },
   FORBIDDEN: { status: 403, message: "Your account can't do that." },
   NOT_FOUND: { status: 404, message: "Not found." },
   CONFLICT: { status: 409, message: "That name already exists here." },
+  ALREADY_SIGNED_IN: { status: 409, message: "This account is already signed in." },
   GONE: { status: 410, message: "This account or link no longer exists." },
   PAYLOAD_TOO_LARGE: { status: 413, message: "File too large." },
   RATE_LIMITED: { status: 429, message: "Too many requests. Try again later." },

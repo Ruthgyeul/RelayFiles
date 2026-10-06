@@ -728,7 +728,7 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 | app | `DEFAULT_THEME` | `sky` | 10종 중 기본 테마(관리자가 Server 페이지에서 바꾸면 DB 값 우선) |
 | app | `SERVER_LOCATION` | `Seoul, KR` | Status 페이지 표기 |
 | app | `ENABLE_UI_CATALOG` | `false` | `/dev/ui` 컴포넌트 카탈로그 노출(운영은 false) |
-| app | `TRUSTED_PROXY_CIDRS` | `127.0.0.1/32,172.16.0.0/12` | 이 대역에서 온 `X-Forwarded-For`/`CF-Connecting-IP`만 신뢰 |
+| app | (M3에서 제거) `TRUSTED_PROXY_CIDRS` | — | Next route handler에서는 소켓 주소를 알 수 없어 검사할 수 없다. 대신 앱 포트를 Nginx만 접근할 수 있게 묶고 `CF-Connecting-IP`/`X-Real-IP`를 신뢰한다 |
 | app | `ADMIN_ALLOWED_CIDRS` | (빈 값 = 제한 없음) | admin 페이지·API를 내부망(예 `192.168.0.0/24`)으로 제한 |
 | database | `POSTGRES_HOST` | `localhost`(compose 내부: `postgres`) | |
 | database | `POSTGRES_PORT` | `5432` | |

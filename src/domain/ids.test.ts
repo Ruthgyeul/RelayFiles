@@ -4,12 +4,14 @@ import {
   ID_PATTERN,
   isAccountId,
   isLinkId,
+  isSessionId,
   newAccountId,
   newAccountToken,
   newAnonName,
   newInviteCode,
   newLinkId,
   newNodeId,
+  newSessionId,
   randomString,
 } from "./ids";
 
@@ -22,6 +24,7 @@ describe("id generators", () => {
       expect(newAccountToken()).toMatch(ID_PATTERN.token);
       expect(newAnonName()).toMatch(ID_PATTERN.anonName);
       expect(newInviteCode()).toMatch(ID_PATTERN.invite);
+      expect(isSessionId(newSessionId())).toBe(true);
     }
   });
 
