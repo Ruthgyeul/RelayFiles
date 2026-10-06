@@ -65,13 +65,17 @@ export interface MenuItemProps {
   danger?: boolean;
   /** Text color override (e.g. the sort menu's selected option). */
   color?: string;
-  /** `md` = 36px (44px on mobile), `sm` = 34px account menu items at 13px. */
-  size?: "md" | "sm";
+  /** `md` = 36px (44px on mobile), `sm` = 34px account menu items at 13px, `sort` = 34px at 14px. */
+  size?: "md" | "sm" | "sort";
+  /** Icon color when it differs from the text (the sort menu's check mark). */
+  iconColor?: string;
   trailing?: ReactNode;
   disabled?: boolean;
 }
 
-export function MenuItem({ icon, children, onSelect, danger = false, color, size = "md", trailing, disabled }: MenuItemProps) {
+const ITEM_SIZE = { md: "h-11 text-[14px] sm:h-9", sm: "h-[34px] text-[13px]", sort: "h-[34px] text-[14px]" } as const;
+
+export function MenuItem({ icon, children, onSelect, danger = false, color, size = "md", iconColor, trailing, disabled }: MenuItemProps) {
   return (
     <button
       type="button"
@@ -81,11 +85,11 @@ export function MenuItem({ icon, children, onSelect, danger = false, color, size
       style={{ color }}
       className={cn(
         "flex shrink-0 items-center gap-2.5 rounded-lg border-0 bg-transparent px-2.5 text-left font-semibold hover:bg-btn-h disabled:opacity-50",
-        size === "md" ? "h-11 text-[14px] sm:h-9" : "h-[34px] text-[13px]",
+        ITEM_SIZE[size],
         danger ? "text-danger-text" : !color && "text-t1",
       )}
     >
-      <Icon name={icon} size={size === "md" ? 16 : undefined} />
+      <Icon name={icon} size={size === "md" ? 16 : size === "sort" ? 14 : undefined} weight={size === "sort" ? "bold" : undefined} style={iconColor ? { color: iconColor } : undefined} />
       <span className="flex-1">{children}</span>
       {trailing}
     </button>

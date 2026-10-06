@@ -2,7 +2,7 @@ import "server-only";
 import { ApiError } from "../http/api-error";
 import { db } from "../db/client";
 import { logger } from "../logger";
-import { listActiveVolumes } from "../repositories/volume.repo";
+import { findVolume, listActiveVolumes } from "../repositories/volume.repo";
 import type { StorageDriver } from "../storage/driver";
 import { availableAboveReserve, driverFor, pickVolumeForNewAccount, type VolumeCandidate } from "../storage/registry";
 import { checkVolume } from "../storage/volume";
@@ -30,5 +30,12 @@ export async function volumeForNewAccount(): Promise<StorageDriver> {
     throw candidates.length === 0 ? new ApiError("STORAGE_OFFLINE") : new ApiError("INSUFFICIENT_STORAGE");
   }
   const volume = volumes.find((item) => item.id === chosen)!;
+  return driverFor(volume);
+}
+
+/** Storage driver of the volume an account lives on. */
+export async function driverForAccount(account: { volumeId: string }): Promise<StorageDriver> {
+  const volume = await findVolume(db(), account.volumeId);
+  if (!volume) throw new ApiError("STORAGE_OFFLINE");
   return driverFor(volume);
 }
