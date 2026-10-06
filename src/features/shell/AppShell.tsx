@@ -12,6 +12,7 @@ import { TransfersProvider } from "@/features/transfers/TransfersProvider";
 import { readLocalSetting, writeLocalSetting } from "@/shared/lib/local-setting";
 import { AppFooter } from "./AppFooter";
 import { AppHeader } from "./AppHeader";
+import type { AnnouncementDto } from "@/contracts/server-settings";
 import { BannerStack } from "./BannerStack";
 import { Drawer } from "./Drawer";
 import { activeNavItem } from "./nav";
@@ -25,18 +26,18 @@ const DESKTOP_QUERY = "(min-width: 1024px)";
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
 /** Signed-in application frame: sidebar or drawer, header, banners, page, footer, dialogs. */
-export function AppShell({ initialSession, config, children }: { initialSession: SessionState; config: ClientConfig; children: ReactNode }) {
+export function AppShell({ initialSession, config, announcement, children }: { initialSession: SessionState; config: ClientConfig; announcement: AnnouncementDto | null; children: ReactNode }) {
   return (
     <ShellProvider initialSession={initialSession} config={config}>
       <TransfersProvider>
-        <Frame>{children}</Frame>
+        <Frame announcement={announcement}>{children}</Frame>
         <TransfersPanel />
       </TransfersProvider>
     </ShellProvider>
   );
 }
 
-function Frame({ children }: { children: ReactNode }) {
+function Frame({ announcement, children }: { announcement: AnnouncementDto | null; children: ReactNode }) {
   const shell = useShell();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -79,7 +80,7 @@ function Frame({ children }: { children: ReactNode }) {
           <AppHeader title={title} onMenu={toggleNavigation} menuExpanded={drawerOpen} />
           <Drawer open={drawerOpen} onClose={closeDrawer} />
           <main className="mx-auto box-border flex w-full max-w-[880px] flex-1 flex-col gap-3 px-4 pt-7 pb-14">
-            <BannerStack />
+            <BannerStack announcement={announcement} />
             {children}
           </main>
           <AppFooter onShortcuts={() => setShortcutsOpen(true)} />

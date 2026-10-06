@@ -6,6 +6,8 @@ import { parseEnvGroup } from "./src/config/env";
 loadEnvConfig(process.cwd());
 
 const testing = parseEnvGroup("testing", process.env);
+/** Specs that change settings every visitor depends on (see the "server-wide" project). */
+const SERVER_WIDE = /server\.spec\.ts$/;
 const BASE_URL = testing.E2E_BASE_URL ?? `http://localhost:${testing.E2E_PORT}`;
 
 /**
@@ -27,9 +29,17 @@ export default defineConfig({
     launchOptions: testing.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: testing.PLAYWRIGHT_CHROMIUM_PATH } : {},
   },
   projects: [
-    { name: "mobile", use: { ...devices["Desktop Chrome"], viewport: { width: 360, height: 800 } } },
-    { name: "tablet", use: { ...devices["Desktop Chrome"], viewport: { width: 768, height: 1024 } } },
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
+    { name: "mobile", testIgnore: SERVER_WIDE, use: { ...devices["Desktop Chrome"], viewport: { width: 360, height: 800 } } },
+    { name: "tablet", testIgnore: SERVER_WIDE, use: { ...devices["Desktop Chrome"], viewport: { width: 768, height: 1024 } } },
+    { name: "desktop", testIgnore: SERVER_WIDE, use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
+    // Tests that change server-wide settings (sign-up mode, theme) run alone, after the rest.
+    {
+      name: "server-wide",
+      testMatch: SERVER_WIDE,
+      fullyParallel: false,
+      dependencies: ["mobile", "tablet", "desktop"],
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
   ],
   webServer: testing.E2E_BASE_URL
     ? undefined

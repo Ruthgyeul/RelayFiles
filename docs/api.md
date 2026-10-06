@@ -89,6 +89,12 @@
 | `GET` | `/api/admin/accounts` | 모든 계정과 파일 수·사용량, 이 기기에 로그인된 계정(`here`)과 활성 계정(`you`) |
 | `PATCH` | `/api/admin/accounts/:id` | Manage: `{ isAdmin, days: 0\|7\|30\|90\|365\|"default"\|"never", reset, quotaGb\|null }`. 연장은 현재 삭제일(지났으면 오늘)에 더한다. 마지막 관리자는 강등 불가(400 `Keep at least one admin`) |
 | `DELETE` | `/api/admin/accounts/:id` | 멤버 계정과 모든 파일 삭제(관리자는 먼저 멤버로 바꿔야 함) |
+| `GET` | `/api/admin/settings` | 가입 모드, 테마, 최근 공지, 초대 코드 |
+| `PUT` | `/api/admin/settings/signup` | `{ mode: open\|invite\|closed }` |
+| `PUT` | `/api/admin/settings/theme` | `{ theme }` 10종 중 하나. 모든 페이지가 이 테마로 렌더링된다(60초 캐시, 실패 시 `DEFAULT_THEME`) |
+| `POST`·`DELETE` | `/api/admin/announcement` | `{ text, level: info\|warn\|maint }` 게시(이전 공지는 내려감) / 내리기. File Manager 상단에 표시, 브라우저별로 닫기 |
+| `POST` | `/api/admin/invites` | 일회용 초대 코드 `XXXX-XXXX` 생성 |
+| `DELETE` | `/api/admin/invites/:code` | 사용 전 코드 취소(사용된 코드는 404) |
 | `POST` | `/api/admin/cleanup` | "Run cleanup now": 삭제일이 지난 계정과 만료 항목 삭제 → `{ accounts, items }` |
 
 ### 공유 링크 (공개, 로그인 불필요)
