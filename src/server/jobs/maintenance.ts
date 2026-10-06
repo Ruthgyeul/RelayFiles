@@ -6,6 +6,7 @@ import { db } from "../db/client";
 import { logger } from "../logger";
 import { listActiveVolumes } from "../repositories/volume.repo";
 import { recordCleanup, recordSample } from "../metrics/history";
+import { runHealthProbe } from "./health-probe";
 import { networkRates } from "../metrics/system";
 import { runCleanup } from "../services/admin.service";
 import { driverFor } from "../storage/registry";
@@ -14,6 +15,7 @@ import { queueConnection } from "./queue";
 export const MAINTENANCE_QUEUE = "maintenance";
 const DAILY_CLEANUP = "daily-cleanup";
 const METRICS_SAMPLE = "metrics-sample";
+const HEALTH_PROBE = "health-probe";
 
 /**
  * The daily job: expired accounts and items, then trash entries older than the retention
@@ -36,13 +38,15 @@ export async function runMaintenance(now: Date) {
 
 /**
  * Registers the daily cleanup (CLEANUP_CRON in JOBS_TIMEZONE) and the bandwidth sampler
- * (every METRICS_SAMPLE_INTERVAL_SEC, which also keeps the worker heartbeat alive).
+ * (every METRICS_SAMPLE_INTERVAL_SEC, which also keeps the worker heartbeat alive) and the
+ * Status page probe (every HEALTH_PROBE_INTERVAL_SEC).
  */
 export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue: Queue }> {
   const jobs = getEnv("jobs");
   const queue = new Queue(MAINTENANCE_QUEUE, queueConnection("worker"));
   await queue.upsertJobScheduler(DAILY_CLEANUP, { pattern: jobs.CLEANUP_CRON, tz: jobs.JOBS_TIMEZONE }, { name: "cleanup" });
   await queue.upsertJobScheduler(METRICS_SAMPLE, { every: jobs.METRICS_SAMPLE_INTERVAL_SEC * MS.second }, { name: "metrics" });
+  await queue.upsertJobScheduler(HEALTH_PROBE, { every: jobs.HEALTH_PROBE_INTERVAL_SEC * MS.second }, { name: "health" });
   // The first sample only starts the rate measurement.
   await networkRates().catch(() => undefined);
   const worker = new Worker(
@@ -53,12 +57,16 @@ export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue:
         await recordSample((await networkRates()).outPerSec, new Date());
         return null;
       }
+      if (job.name === "health") {
+        const { probe } = await runHealthProbe(new Date());
+        return probe;
+      }
       const result = await runMaintenance(new Date());
       logger.info("cleanup finished", result);
       return result;
     },
     { ...queueConnection("worker"), concurrency: 1 },
   );
-  worker.on("failed", (_job, error) => logger.error("cleanup failed", { error: error.message }));
+  worker.on("failed", (job, error) => logger.error("maintenance job failed", { job: job?.name, error: error.message }));
   return { worker, queue };
 }

@@ -62,4 +62,6 @@ export interface StorageDriver {
   purgeSystem(trashBefore: Date, uploadsBefore: Date): Promise<{ trash: number; uploads: number }>;
   /** Removes every generated file of an account (account deletion). */
   removeAccountAssets(accountId: string): Promise<void>;
+  /** True when the upload staging area accepts a write (Status page probe). */
+  canWrite(): Promise<boolean>;
 }

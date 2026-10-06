@@ -100,6 +100,8 @@ export const ENV_GROUPS = {
     JOBS_TIMEZONE: z.string().default(JOBS.timezone),
     METRICS_SAMPLE_INTERVAL_SEC: positiveInt.default(JOBS.metricsSampleIntervalSec),
     HEALTH_PROBE_INTERVAL_SEC: positiveInt.default(JOBS.healthProbeIntervalSec),
+    /** Where the worker reaches the app for Status page probes; defaults to this host's APP_PORT. */
+    HEALTH_PROBE_URL: z.url().optional(),
     MEDIA_WORKER_CONCURRENCY: positiveInt.max(16).default(MEDIA.workerConcurrency),
     FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   }),
