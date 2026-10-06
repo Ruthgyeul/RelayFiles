@@ -5,12 +5,15 @@ import { MS, STORAGE } from "@/config/policy";
 import { db } from "../db/client";
 import { logger } from "../logger";
 import { listActiveVolumes } from "../repositories/volume.repo";
+import { recordCleanup, recordSample } from "../metrics/history";
+import { networkRates } from "../metrics/system";
 import { runCleanup } from "../services/admin.service";
 import { driverFor } from "../storage/registry";
 import { queueConnection } from "./queue";
 
 export const MAINTENANCE_QUEUE = "maintenance";
 const DAILY_CLEANUP = "daily-cleanup";
+const METRICS_SAMPLE = "metrics-sample";
 
 /**
  * The daily job: expired accounts and items, then trash entries older than the retention
@@ -18,6 +21,7 @@ const DAILY_CLEANUP = "daily-cleanup";
  */
 export async function runMaintenance(now: Date) {
   const cleanup = await runCleanup(now);
+  await recordCleanup({ at: now.toISOString(), ...cleanup }).catch((error: unknown) => logger.warn("cleanup result not stored", { error }));
   const trashBefore = new Date(now.getTime() - STORAGE.trashRetentionHours * MS.hour);
   const uploadsBefore = new Date(now.getTime() - getEnv("uploads").UPLOAD_TMP_TTL_HOURS * MS.hour);
   let trash = 0;
@@ -30,14 +34,25 @@ export async function runMaintenance(now: Date) {
   return { ...cleanup, trash, uploads };
 }
 
-/** Registers the daily schedule (CLEANUP_CRON in JOBS_TIMEZONE) and processes it. */
+/**
+ * Registers the daily cleanup (CLEANUP_CRON in JOBS_TIMEZONE) and the bandwidth sampler
+ * (every METRICS_SAMPLE_INTERVAL_SEC, which also keeps the worker heartbeat alive).
+ */
 export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue: Queue }> {
   const jobs = getEnv("jobs");
   const queue = new Queue(MAINTENANCE_QUEUE, queueConnection("worker"));
   await queue.upsertJobScheduler(DAILY_CLEANUP, { pattern: jobs.CLEANUP_CRON, tz: jobs.JOBS_TIMEZONE }, { name: "cleanup" });
+  await queue.upsertJobScheduler(METRICS_SAMPLE, { every: jobs.METRICS_SAMPLE_INTERVAL_SEC * MS.second }, { name: "metrics" });
+  // The first sample only starts the rate measurement.
+  await networkRates().catch(() => undefined);
   const worker = new Worker(
     MAINTENANCE_QUEUE,
-    async () => {
+    async (job) => {
+      if (job.name === "metrics") {
+        // Average outbound rate since the previous sample (one per interval).
+        await recordSample((await networkRates()).outPerSec, new Date());
+        return null;
+      }
       const result = await runMaintenance(new Date());
       logger.info("cleanup finished", result);
       return result;

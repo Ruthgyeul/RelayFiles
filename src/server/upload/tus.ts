@@ -11,6 +11,7 @@ import { logger } from "../logger";
 import { layoutOf } from "../storage/layout";
 import { checkUploadStart, finalizeUpload } from "../services/upload.service";
 import { forgetUpload, loadBatch, setUploadOwner, uploadOwner } from "./batches";
+import { markActive } from "../metrics/activity";
 
 
 /** Error object the tus server turns into a response. */
@@ -58,6 +59,7 @@ function createServer(volumeId: string, mountPath: string): Server {
       // Only the uploader may continue, query or cancel an upload.
       if (req.method === "POST" || req.method === "OPTIONS") return;
       await ownerOn(req, await uploadOwner(uploadId));
+      if (req.method === "PATCH") void markActive("upload", uploadId);
     },
     async onUploadFinish(req, upload) {
       const { batchId, slot } = slotOf(upload);

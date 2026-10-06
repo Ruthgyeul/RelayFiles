@@ -85,6 +85,23 @@ export const MEDIA = {
   jobBackoffMs: 10_000,
 } as const;
 
+export const METRICS = {
+  /** The Server page stream sends a snapshot this often (design: 1.5 s). */
+  streamIntervalMs: 1_500,
+  /** Bandwidth history length (one sample per METRICS_SAMPLE_INTERVAL_SEC). */
+  historySamples: 60,
+  /** A stream or upload counts as active if it was used this recently. */
+  activeWindowSec: 60,
+  /** The worker heartbeat expires after this many missed samples. */
+  heartbeatMisses: 3,
+  /** smartctl gives up after this long. */
+  smartTimeoutSec: 10,
+  /** Service checks (SMART, volumes) are slower than the stream, so they are reused this long. */
+  servicesCacheSec: 30,
+  /** The network link speed rarely changes; it is read again after this long. */
+  linkCacheSec: 300,
+} as const;
+
 export const JOBS = {
   cleanupCron: "0 4 * * *",
   timezone: "Asia/Seoul",
