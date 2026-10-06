@@ -159,6 +159,12 @@ export const STATUS = {
   probeTimeoutMs: 5_000,
 } as const;
 
+/** Data migrations and key rotation (docs/runbook.md "마이그레이션"). */
+export const MIGRATION = {
+  /** Rows processed per batch; progress is saved after each batch so a run can resume. */
+  batchSize: 1_000,
+} as const;
+
 export const JOBS = {
   cleanupCron: "0 4 * * *",
   timezone: "Asia/Seoul",

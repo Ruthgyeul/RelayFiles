@@ -49,6 +49,9 @@ npm run check        # typecheck · lint · emoji · test · build 전체
 npm run worker       # 백그라운드 워커(썸네일, 공개 링크용 메타데이터 제거본). ffmpeg 필요
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기
 npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 다시 생성
+npm run data:migrate     # 데이터 마이그레이션(src/server/migrations) 실행, 중단 지점부터 재개
+npm run keys:rotate      # *_PREVIOUS 키로 저장된 토큰을 현재 키로 다시 암호화
+npm run check:migrations # 파괴적 SQL 마이그레이션에 contract 표시가 있는지 검사
 ```
 
 운영 배포는 Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃)와 Nginx(`deploy/nginx/templates`)로 한다. 절차는 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 운영 작업은 [`docs/runbook.md`](docs/runbook.md). 업데이트는 서버에서 `git pull && deploy/scripts/release.sh`.
@@ -96,7 +99,8 @@ npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 
 ## DB · 마이그레이션
 
 - 스키마부터 바꾼다: `npx prisma migrate dev --name <설명>` → 마이그레이션 파일 커밋 → 구현. 운영 배포는 `npx prisma migrate deploy`. `db push` 금지.
-- 파괴적 변경은 expand → migrate → contract로 여러 릴리스에 나눈다.
+- 파괴적 변경은 expand → migrate → contract로 여러 릴리스에 나눈다. contract 마이그레이션 SQL에는 `-- relayfiles: contract <이유>`를 적는다(`npm run check:migrations`).
+- 백필·값 변환은 `src/server/migrations/`의 데이터 마이그레이션(`DATA_MIGRATIONS`)으로 하고, 배치마다 커서를 저장한다.
 - 공유 링크(`linkId`)와 계정 토큰은 어떤 마이그레이션에서도 바뀌면 안 된다.
 
 ## Git
