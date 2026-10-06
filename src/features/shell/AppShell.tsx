@@ -7,6 +7,8 @@ import { NewTokenDialog } from "@/features/account/NewTokenDialog";
 import { SignInDialog } from "@/features/account/SignInDialog";
 import { isTypingTarget } from "@/features/shortcuts/shortcuts";
 import { ShortcutsDialog } from "@/features/shortcuts/ShortcutsDialog";
+import { TransfersPanel } from "@/features/transfers/TransfersPanel";
+import { TransfersProvider } from "@/features/transfers/TransfersProvider";
 import { readLocalSetting, writeLocalSetting } from "@/shared/lib/local-setting";
 import { AppFooter } from "./AppFooter";
 import { AppHeader } from "./AppHeader";
@@ -14,7 +16,7 @@ import { BannerStack } from "./BannerStack";
 import { Drawer } from "./Drawer";
 import { activeNavItem } from "./nav";
 import { PageTitleContext } from "./page-title";
-import { ShellProvider, useShell } from "./ShellProvider";
+import { ShellProvider, useShell, type ClientConfig } from "./ShellProvider";
 import { Sidebar } from "./Sidebar";
 import { Toasts } from "./Toasts";
 
@@ -23,10 +25,13 @@ const DESKTOP_QUERY = "(min-width: 1024px)";
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
 /** Signed-in application frame: sidebar or drawer, header, banners, page, footer, dialogs. */
-export function AppShell({ initialSession, children }: { initialSession: SessionState; children: ReactNode }) {
+export function AppShell({ initialSession, config, children }: { initialSession: SessionState; config: ClientConfig; children: ReactNode }) {
   return (
-    <ShellProvider initialSession={initialSession}>
-      <Frame>{children}</Frame>
+    <ShellProvider initialSession={initialSession} config={config}>
+      <TransfersProvider>
+        <Frame>{children}</Frame>
+        <TransfersPanel />
+      </TransfersProvider>
     </ShellProvider>
   );
 }

@@ -7,14 +7,17 @@ import { useMounted } from "@/shared/hooks/useMounted";
 import { Icon, type IconName } from "./icon/Icon";
 import { IconButton } from "./IconButton";
 
-/** Stacking layers from the design (backdrop, panel). */
+/**
+ * Stacking layers from the design (backdrop, panel). Each class is written out in full so
+ * Tailwind's scanner generates it.
+ */
 const LAYER = {
-  modal: "z-(--z-modal-backdrop)|z-(--z-modal)",
-  token: "z-(--z-token-backdrop)|z-(--z-token)",
-  dialog: "z-(--z-dialog-backdrop)|z-(--z-dialog)",
-  subdialog: "z-(--z-subdialog-backdrop)|z-(--z-subdialog)",
-  shortcuts: "z-(--z-shortcuts-backdrop)|z-(--z-shortcuts)",
-  search: "z-(--z-search-backdrop)|z-(--z-search)",
+  modal: ["z-(--z-modal-backdrop)", "z-(--z-modal)"],
+  token: ["z-(--z-token-backdrop)", "z-(--z-token)"],
+  dialog: ["z-(--z-dialog-backdrop)", "z-(--z-dialog)"],
+  subdialog: ["z-(--z-subdialog-backdrop)", "z-(--z-subdialog)"],
+  shortcuts: ["z-(--z-shortcuts-backdrop)", "z-(--z-shortcuts)"],
+  search: ["z-(--z-search-backdrop)", "z-(--z-search)"],
 } as const;
 
 export type ModalLayer = keyof typeof LAYER;
@@ -58,7 +61,7 @@ export function Modal({
   const mounted = useMounted();
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
-  const [backdropZ, panelZ] = LAYER[layer].split("|");
+  const [backdropZ, panelZ] = LAYER[layer];
 
   useEffect(() => {
     if (!open) return;

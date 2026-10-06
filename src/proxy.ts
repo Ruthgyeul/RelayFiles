@@ -57,6 +57,7 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Skip build assets and static files; everything else (pages and API) goes through the proxy.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:woff2?|png|jpe?g|webp|svg|ico)$).*)"],
+  // Skip build assets and static files, and tus uploads (the proxy would buffer their bodies);
+  // everything else (pages and API) goes through the proxy.
+  matcher: ["/((?!_next/static|_next/image|api/uploads/tus|favicon.ico|icon.svg|.*\\.(?:woff2?|png|jpe?g|webp|svg|ico)$).*)"],
 };

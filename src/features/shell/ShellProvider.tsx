@@ -16,6 +16,14 @@ export interface AccountToast {
   meta: string;
 }
 
+/** Deployment values the browser needs (from env, rendered by the server). */
+export interface ClientConfig {
+  /** Origin used in share links, e.g. https://files.example.com */
+  publicUrl: string;
+  /** tus chunk size in bytes (below Cloudflare's request limit). */
+  uploadChunkBytes: number;
+}
+
 export interface TokenToSave {
   id: string;
   name: string;
@@ -23,6 +31,7 @@ export interface TokenToSave {
 }
 
 interface ShellContextValue {
+  config: ClientConfig;
   session: SessionState;
   activeAccount: SessionAccount | null;
   notice: string | null;
@@ -61,10 +70,16 @@ function toastMeta(account: SessionAccount, session: SessionState): string {
  * The server renders the first session state; changes go through the auth API and then
  * refresh the server components so every page sees the new active account.
  */
-export function ShellProvider({ initialSession, children }: { initialSession: SessionState; children: ReactNode }) {
+export function ShellProvider({ initialSession, config, children }: { initialSession: SessionState; config: ClientConfig; children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [session, setSession] = useState(initialSession);
+  // A server refresh (router.refresh) renders new session data, e.g. storage use after an upload.
+  const [renderedSession, setRenderedSession] = useState(initialSession);
+  if (renderedSession !== initialSession) {
+    setRenderedSession(initialSession);
+    setSession(initialSession);
+  }
   const [notice, setNotice] = useState<string | null>(null);
   const [accountToast, setAccountToast] = useState<AccountToast | null>(null);
   // Without an account and with sign-ups not open, the visitor has to sign in first.
@@ -129,6 +144,7 @@ export function ShellProvider({ initialSession, children }: { initialSession: Se
 
   const value = useMemo<ShellContextValue>(
     () => ({
+      config,
       session,
       activeAccount: session.accounts.find((item) => item.id === session.activeAccountId) ?? null,
       notice,
@@ -161,7 +177,7 @@ export function ShellProvider({ initialSession, children }: { initialSession: Se
       finishSaveToken: () => setTokenToSave(null),
       dismissAutoAccount: () => autoAccountStore.set(null),
     }),
-    [session, notice, accountToast, signInOpen, tokenToSave, autoAccountId, notify, dismissAccountToast, applySession, accountCreated, run],
+    [config, session, notice, accountToast, signInOpen, tokenToSave, autoAccountId, notify, dismissAccountToast, applySession, accountCreated, run],
   );
 
   // First visit with open sign-ups: create an anonymous account (design `componentDidMount`).
