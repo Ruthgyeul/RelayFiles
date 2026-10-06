@@ -1,0 +1,16 @@
+# Everything the image build does not need. Secrets never enter the image: .env is
+# passed at run time by docker compose.
+.git
+.github
+.next
+.data
+node_modules
+test-results
+playwright-report
+coverage
+*.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+deploy/backups

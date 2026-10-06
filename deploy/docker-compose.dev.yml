@@ -1,7 +1,6 @@
 # Development services (PostgreSQL 16 + Redis 7). All values come from .env:
 #   docker compose --env-file .env -f deploy/docker-compose.dev.yml up -d
-# The app itself runs on the host with `npm run dev`. The production compose file
-# (app, worker, database, redis) is added in M15.
+# The app itself runs on the host with `npm run dev`. Production: deploy/docker-compose.yml.
 name: relayfiles-dev
 
 services:

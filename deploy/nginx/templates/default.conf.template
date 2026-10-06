@@ -1,0 +1,84 @@
+# RelayFiles behind Nginx (rendered by the nginx image's envsubst at start-up; values come
+# from .env through docker compose). Nginx variables ($host, $1, …) are left untouched.
+
+# Docker's DNS: the app container gets a new address whenever a release recreates it, so
+# the upstream is resolved again instead of being fixed at start-up.
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+upstream relayfiles_app {
+    zone relayfiles_app 64k;
+    server ${APP_UPSTREAM} resolve;
+    keepalive 16;
+}
+
+# The real client address: only cloudflared (fixed address on the compose network) may
+# set it through CF-Connecting-IP. Everyone else is identified by the TCP peer.
+set_real_ip_from ${CLOUDFLARED_IP};
+real_ip_header CF-Connecting-IP;
+
+# No client addresses in Nginx logs (same rule as the app's logs).
+log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
+
+server {
+    listen 8080;
+    server_name ${SERVER_NAME};
+    server_tokens off;
+    access_log /dev/stdout relayfiles;
+
+    # Uploads arrive in tus chunks of UPLOAD_CHUNK_SIZE_MB (at most 95 MB).
+    client_max_body_size 100m;
+
+    sendfile on;
+    tcp_nopush on;
+
+    # When the app is down or the server is in maintenance, Nginx answers with static pages.
+    error_page 502 /_errors/502.html;
+    error_page 503 /_errors/503.html;
+    error_page 504 /_errors/504.html;
+    location ^~ /_errors/ {
+        internal;
+        alias /usr/share/nginx/error/;
+    }
+
+    # Files are sent by Nginx after the app has checked access (X-Accel-Redirect):
+    # ${STORAGE_ACCEL_PREFIX}<volumeId>/<accountId>/<path> → ${STORAGE_ROOT}/users/<accountId>/<path>
+    location ~ ^${STORAGE_ACCEL_PREFIX}[a-z0-9-]+/(.+)$ {
+        internal;
+        alias ${STORAGE_ROOT}/users/$1;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Cache-Control "private, no-cache" always;
+    }
+
+    # Resumable uploads stream straight to the app.
+    location ^~ /api/uploads/tus {
+        if (-f /etc/nginx/maintenance/on) { return 503; }
+        proxy_pass http://relayfiles_app;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header CF-Connecting-IP "";
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header Connection "";
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+
+    location / {
+        # Maintenance mode: touch deploy/maintenance/on (remove it to come back).
+        if (-f /etc/nginx/maintenance/on) { return 503; }
+        proxy_pass http://relayfiles_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header CF-Connecting-IP "";
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header Connection "";
+        # Streams, zips and the Server page's live updates can run long.
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+}

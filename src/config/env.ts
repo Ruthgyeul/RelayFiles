@@ -115,6 +115,11 @@ export const ENV_GROUPS = {
     SERVER_NAME: z.string().default("localhost"),
     NGINX_LISTEN_PORT: port.default(80),
     CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
+    /** Host directory for PostgreSQL, Redis and backups (docker compose). */
+    DATA_DIR: z.string().startsWith("/").default("/srv/relayfiles"),
+    /** Private network of the compose services; cloudflared gets a fixed address in it. */
+    DOCKER_SUBNET: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/).default("172.28.0.0/24"),
+    CLOUDFLARED_IP: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("172.28.0.250"),
   }),
   testing: z.object({
     E2E_PORT: port.default(3100),
