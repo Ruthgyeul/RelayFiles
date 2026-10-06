@@ -11,3 +11,22 @@ export async function consumeInvite(db: DbClient, code: string, accountName: str
   const { count } = await db.invite.updateMany({ where: { code, usedAt: null }, data: { usedAt: at, usedByName: accountName } });
   return count === 1;
 }
+
+export async function updateServerConfig(db: DbClient, data: { signupMode?: "OPEN" | "INVITE" | "CLOSED"; theme?: string | null }): Promise<void> {
+  await db.serverConfig.upsert({ where: { id: 1 }, create: { id: 1, ...data }, update: data });
+}
+
+/** Invite codes, newest first. */
+export function listInvites(db: DbClient) {
+  return db.invite.findMany({ orderBy: { createdAt: "desc" }, select: { code: true, createdAt: true, usedByName: true } });
+}
+
+export async function createInvite(db: DbClient, code: string): Promise<void> {
+  await db.invite.create({ data: { code } });
+}
+
+/** Revokes an unused code; false when it is unknown or already used. */
+export async function revokeInvite(db: DbClient, code: string): Promise<boolean> {
+  const { count } = await db.invite.deleteMany({ where: { code, usedAt: null } });
+  return count === 1;
+}

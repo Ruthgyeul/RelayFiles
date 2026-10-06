@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import { useState } from "react";
 import { formatShortDate, formatSize } from "@/domain/format";
@@ -9,15 +10,17 @@ import { useOnline } from "@/shared/hooks/useOnline";
 import { buttonClassName } from "@/shared/ui/Button";
 import { Banner } from "@/shared/ui/Banner";
 import { Button } from "@/shared/ui/Button";
+import type { AnnouncementDto } from "@/contracts/server-settings";
+import { AnnouncementBanner } from "./AnnouncementBanner";
 import { useShell } from "./ShellProvider";
 
 /**
  * Notices above the page content, in the design's order: the account created for this
- * visit, storage quota, then connectivity. Announcement and expiry banners join this stack
- * with their features (M6, M12).
+ * visit, the admin announcement (File Manager), storage quota, then connectivity.
  */
-export function BannerStack() {
+export function BannerStack({ announcement }: { announcement: AnnouncementDto | null }) {
   const { session, activeAccount, autoAccountId, dismissAutoAccount, saveToken } = useShell();
+  const pathname = usePathname();
   const online = useOnline();
   const [quotaDismissed, setQuotaDismissed] = useState<string | null>(null);
 
@@ -48,6 +51,7 @@ export function BannerStack() {
           {auto.deletesAt && ` It's deleted with its files on ${formatShortDate(auto.deletesAt)}.`}
         </Banner>
       )}
+      {announcement && pathname.startsWith("/files") && <AnnouncementBanner announcement={announcement} />}
       {level > 0 && quotaDismissed !== quotaKey && quota !== null && (
         <Banner
           tone={level === 2 ? "danger" : "warn"}
