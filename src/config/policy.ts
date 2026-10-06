@@ -102,6 +102,47 @@ export const METRICS = {
   linkCacheSec: 300,
 } as const;
 
+/** Status page (design `isStatus`): browser checks, history ranges and the rating thresholds. */
+export const STATUS = {
+  /** The browser checks the server this often while the page is open (design: 2.5 s). */
+  pingIntervalMs: 2_500,
+  /** Browser checks kept for the averages (design: last 40). */
+  pingHistory: 40,
+  /** Latency ratings: below `excellentMs` Excellent, `goodMs` Good, `fairMs` Fair, else Poor. */
+  excellentMs: 100,
+  goodMs: 250,
+  fairMs: 500,
+  /** The overall card turns "Degraded" above this average or loss. */
+  degradedAvgMs: 400,
+  degradedLossPercent: 5,
+  /** Jitter ratings: below `stableJitterMs` Stable, `variableJitterMs` Some variation, else Unstable. */
+  stableJitterMs: 30,
+  variableJitterMs: 80,
+  /** Latency chart: hours shown and the latency drawn as a full bar. */
+  latencyHours: 48,
+  latencyScaleMs: 600,
+  minBarPercent: 4,
+  /** Service strips and the server uptime ranges. */
+  serviceDays: 60,
+  uptimeDays: 90,
+  /** A day is "Degraded" when any check failed, an "Outage" when more than this share failed. */
+  outageFailPercent: 5,
+  /** Response p50/p95 are computed over this many hours of probes. */
+  responseWindowHours: 24,
+  /** A component's latest probe counts as current for this many missed intervals. */
+  freshProbes: 3,
+  /** Raw probe samples and hourly rollups are kept this long; daily rollups are kept forever. */
+  sampleRetentionHours: 72,
+  hourlyRetentionDays: 7,
+  /** The page refreshes the server-side history this often; the server reuses it this long. */
+  refreshMs: 60_000,
+  cacheSec: 15,
+  /** Incidents listed on the page, newest first. */
+  incidentsShown: 20,
+  /** Probe request timeout. */
+  probeTimeoutMs: 5_000,
+} as const;
+
 export const JOBS = {
   cleanupCron: "0 4 * * *",
   timezone: "Asia/Seoul",

@@ -39,6 +39,8 @@ export const cacheKey = {
   folderSize: (nodeId: string) => `cache:folder-size:${nodeId}`,
   nodePath: (nodeId: string) => `cache:node-path:${nodeId}`,
   adminStats: () => "cache:admin-stats",
+  status: () => "cache:status",
+  serverServices: () => "cache:server-services",
 } as const;
 
 // BigInt values (file sizes) survive the JSON round trip as tagged strings.

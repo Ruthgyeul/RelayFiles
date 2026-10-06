@@ -169,6 +169,18 @@ export class LocalVolumeDriver implements StorageDriver {
     await Promise.all([this.layout.thumbs, this.layout.derived].map((dir) => rm(join(dir, accountId), { recursive: true, force: true })));
   }
 
+  async canWrite(): Promise<boolean> {
+    const probe = join(this.layout.uploads, `.probe-${randomUUID()}`);
+    try {
+      await writeFile(probe, "", { mode: FILE_MODE, flag: "wx" });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      await rm(probe, { force: true });
+    }
+  }
+
   async space(): Promise<SpaceInfo> {
     const info = await statfs(this.layout.root, { bigint: true });
     return { total: info.blocks * info.bsize, available: info.bavail * info.bsize };
