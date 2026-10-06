@@ -9,6 +9,7 @@ import type { AccountRow } from "../repositories/account.repo";
 import { ancestorChain, findNode } from "../repositories/node.repo";
 import { addTraffic } from "../repositories/traffic.repo";
 import { driverForAccount } from "./volume.service";
+import { markActive } from "../metrics/activity";
 
 type Owner = Pick<AccountRow, "id" | "volumeId">;
 
@@ -19,6 +20,7 @@ export async function serveOwnFile(req: Request, owner: Owner, nodeId: string, m
   const chain = await ancestorChain(db(), row.id);
   const driver = await driverForAccount(owner);
   const location = { accountId: owner.id, segments: chain.slice(1).map((ancestor) => ancestor.name) };
+  if (mode === "stream" && req.method === "GET") void markActive("stream", `${row.id}:${owner.id}`);
   return sendFile(req, {
     driver,
     location,

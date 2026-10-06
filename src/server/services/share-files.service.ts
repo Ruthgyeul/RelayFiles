@@ -21,6 +21,7 @@ import type { StorageDriver, StorageLocation } from "../storage/driver";
 import { resolveSharedFile, resolveSharedTree, type LoadedLink, type ShareViewer } from "./share.service";
 import { driverForAccount } from "./volume.service";
 import { zipResponse, type ZipEntry } from "./zip.service";
+import { markActive } from "../metrics/activity";
 
 /** The link owner's account (for the storage volume and the metadata setting). */
 async function ownerOf(link: LoadedLink): Promise<AccountRow> {
@@ -71,6 +72,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
       void logLinkEvent(row, row.kind === "IMAGE" ? "VIEW" : "PLAY", client);
     }
   }
+  if (mode === "stream" && req.method === "GET") void markActive("stream", `${row.id}:${client.ipKey}`);
   return sendFile(req, {
     driver,
     location,

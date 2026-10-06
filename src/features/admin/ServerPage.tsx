@@ -2,19 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { ServerSnapshot } from "@/contracts/server-metrics";
 import type { ServerSettings } from "@/contracts/server-settings";
 import { usePageTitle } from "@/features/shell/page-title";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { AnnouncementCard } from "./AnnouncementCard";
+import { ServerMetrics } from "./ServerMetrics";
 import { settingsApi } from "./settings-api";
 import { SignupCard } from "./SignupCard";
 import { ThemeCard } from "./ThemeCard";
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
-/** Admin "Server" page: announcement, (live metrics), new accounts and theme. */
-export function ServerPage({ settings }: { settings: ServerSettings }) {
+/** Admin "Server" page: announcement, live metrics, services, new accounts and theme. */
+export function ServerPage({ settings, snapshot }: { settings: ServerSettings; snapshot: ServerSnapshot }) {
   usePageTitle("Server");
   const router = useRouter();
   const { notify } = useShell();
@@ -53,6 +55,7 @@ export function ServerPage({ settings }: { settings: ServerSettings }) {
           })
         }
       />
+      <ServerMetrics initial={snapshot} />
       <SignupCard
         mode={settings.signupMode}
         invites={settings.invites}
