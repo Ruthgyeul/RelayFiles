@@ -2,7 +2,7 @@
 
 Fast and easy file sharing system. A private file drop for sharing and streaming media from a self-hosted server: upload, get a link, and let it expire on a date or after a set number of downloads.
 
-> Status: **M0 (project setup)**. The UI and backend are built milestone by milestone — see [`docs/plan.md`](docs/plan.md).
+> Status: **M1 (design system)**. The UI and backend are built milestone by milestone — see [`docs/plan.md`](docs/plan.md).
 
 ## Stack
 
@@ -13,8 +13,10 @@ Next.js 16.3 (App Router) · React 19.3 · Tailwind CSS 4.3 · TypeScript 6 · P
 ```bash
 nvm use            # Node.js 24
 npm ci
-cp .env.example .env.local
-npm run dev        # http://localhost:3000
+cp .env.example .env   # then fill in values
+npm run env:secrets    # prints random secrets to paste into .env
+npm run env:check      # validates .env
+npm run dev            # http://localhost:3000
 ```
 
 ## Scripts
@@ -26,6 +28,8 @@ npm run dev        # http://localhost:3000
 | `npm run start` | Run the standalone server |
 | `npm run check` | Typecheck, lint, emoji check, unit tests and build |
 | `npm run test:e2e` | Playwright E2E at 360 / 768 / 1280 px |
+| `npm run env:check` | Validate `.env` without starting the app |
+| `npm run env:secrets` | Print freshly generated secrets for `.env` |
 
 ## Documentation
 

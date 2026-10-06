@@ -65,6 +65,13 @@ npm run check        # typecheck · lint · emoji · test · build 전체
 - 반응형 경계: mobile `<720px`, tablet `720–1023px`, desktop `≥1024px`. 최소 폭 320px에서 가로 스크롤이 없어야 한다.
 - 데모 데이터, 데모 미디어, 가짜 지표를 넣지 않는다. 모든 화면은 실제 데이터를 쓴다.
 
+## 환경 변수
+
+- 커밋되는 env 파일은 `.env.example` 하나다. 사용자가 복사해서 `.env`를 직접 만든다(`npm run env:secrets`로 비밀값 생성, `npm run env:check`로 검증).
+- 포트, 호스트, 경로, 도메인, 비밀값을 코드·compose·nginx 설정에 하드코딩하지 않는다.
+- 앱은 `src/config/env.ts`의 그룹별 getter(`getAppEnv()`, `getEnv("database")` 등)로만 읽는다. 그룹은 처음 쓰일 때 검증된다.
+- 새 설정은 `env.ts` 스키마와 `.env.example`을 같은 PR에서 함께 바꾼다(`env.test.ts`가 두 목록이 같은지 검사).
+
 ## API · 보안
 
 - 응답 형식: `{ success: true, data }` / `{ success: false, error, code }`. 스택 트레이스, 쿼리, 내부 경로를 노출하지 않는다.

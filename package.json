@@ -12,17 +12,26 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check:emoji": "node scripts/check-no-emoji.mjs",
-    "check": "npm run typecheck && npm run lint && npm run check:emoji && npm run test && npm run build"
+    "check": "npm run typecheck && npm run lint && npm run check:emoji && npm run test && npm run build",
+    "env:check": "tsx scripts/env-check.ts",
+    "env:secrets": "node scripts/env-secrets.mjs"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "clsx": "^2.1.1",
     "next": "16.3.8",
+    "pretendard": "^1.3.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "tailwind-merge": "^3.7.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@next/env": "^16.3.8",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^24.19.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -30,7 +39,9 @@
     "eslint-config-next": "16.3.8",
     "eslint-import-resolver-typescript": "^4.4.5",
     "eslint-plugin-boundaries": "^7.2.0",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "vitest": "^5.0.3"
   },

@@ -1,0 +1,265 @@
+/*
+ * Color themes, copied verbatim from the design prototype (docs/design/Relay_App.dc.html line 11).
+ * `:root` is "Midnight Blue"; the others apply via <html data-theme="…">. Default theme: sky.
+ * Do not edit values here without updating the design source.
+ */
+
+/* Midnight Blue */
+:root {
+  --bg: #141b2e;
+  --header: #161e33;
+  --sunk: #182038;
+  --card: #1e2740;
+  --elev: #222c47;
+  --btn: #263049;
+  --btnH: #2e3a57;
+  --line: #26304a;
+  --cardLine: #2c3754;
+  --ctrl: #36425f;
+  --t1: #eef2fa;
+  --t2: #cdd6ea;
+  --t3: #a9b5cf;
+  --t4: #8d9bb8;
+  --t5: #6d7a98;
+  --accent: #1f63ff;
+  --accentHi: #3a76ff;
+  --accentIcon: #6f9bff;
+  --accentText: #9dbcff;
+  --accentSoft: #1d3366;
+  --accentSoftLine: #2f4a8a;
+  --onAccent: #ffffff;
+}
+
+/* Graphite Lime */
+:root[data-theme="lime"] {
+  --bg: #111312;
+  --header: #141715;
+  --sunk: #161917;
+  --card: #1a1d1b;
+  --elev: #202421;
+  --btn: #252a27;
+  --btnH: #2d332f;
+  --line: #232724;
+  --cardLine: #2a2f2c;
+  --ctrl: #383e3a;
+  --t1: #eef1ee;
+  --t2: #cfd5d0;
+  --t3: #a8b0aa;
+  --t4: #8a938c;
+  --t5: #697169;
+  --accent: #c6f24e;
+  --accentHi: #d4f76f;
+  --accentIcon: #c6f24e;
+  --accentText: #dcf79a;
+  --accentSoft: #2a3315;
+  --accentSoftLine: #4d5f22;
+  --onAccent: #111312;
+}
+
+/* Ink Coral */
+:root[data-theme="coral"] {
+  --bg: #15121a;
+  --header: #18141e;
+  --sunk: #1a1620;
+  --card: #1f1a26;
+  --elev: #261f2e;
+  --btn: #2b2434;
+  --btnH: #342c3e;
+  --line: #2a2333;
+  --cardLine: #322a3d;
+  --ctrl: #43394f;
+  --t1: #f3eef6;
+  --t2: #d6cddd;
+  --t3: #b0a6b9;
+  --t4: #928899;
+  --t5: #73697b;
+  --accent: #ff7a59;
+  --accentHi: #ff9476;
+  --accentIcon: #ff8f72;
+  --accentText: #ffc2b0;
+  --accentSoft: #3d2124;
+  --accentSoftLine: #7a3a33;
+  --onAccent: #1a0f0c;
+}
+
+/* Charcoal Amber */
+:root[data-theme="amber"] {
+  --bg: #141414;
+  --header: #171716;
+  --sunk: #191918;
+  --card: #1d1c1a;
+  --elev: #23221f;
+  --btn: #2a2824;
+  --btnH: #33302b;
+  --line: #262522;
+  --cardLine: #2f2c27;
+  --ctrl: #403c35;
+  --t1: #f2efe9;
+  --t2: #d5d0c6;
+  --t3: #ada79c;
+  --t4: #8f897f;
+  --t5: #6f6a62;
+  --accent: #f5b23d;
+  --accentHi: #f7c264;
+  --accentIcon: #f5b23d;
+  --accentText: #f9d796;
+  --accentSoft: #3a2c12;
+  --accentSoftLine: #6b5220;
+  --onAccent: #1a1408;
+}
+
+/* Deep Teal */
+:root[data-theme="teal"] {
+  --bg: #0d1716;
+  --header: #101b1a;
+  --sunk: #111d1c;
+  --card: #142321;
+  --elev: #1a2b29;
+  --btn: #1e302e;
+  --btnH: #253a37;
+  --line: #1c2e2c;
+  --cardLine: #213633;
+  --ctrl: #2d4744;
+  --t1: #ecf5f3;
+  --t2: #c9dbd8;
+  --t3: #a0b6b2;
+  --t4: #829894;
+  --t5: #647975;
+  --accent: #4fe3c1;
+  --accentHi: #74ebcf;
+  --accentIcon: #4fe3c1;
+  --accentText: #a6f2df;
+  --accentSoft: #123a33;
+  --accentSoftLine: #23695b;
+  --onAccent: #06201a;
+}
+
+/* Mono Black */
+:root[data-theme="mono"] {
+  --bg: #0a0a0a;
+  --header: #0e0e0e;
+  --sunk: #111111;
+  --card: #161616;
+  --elev: #1c1c1c;
+  --btn: #222222;
+  --btnH: #2b2b2b;
+  --line: #1f1f1f;
+  --cardLine: #262626;
+  --ctrl: #363636;
+  --t1: #f5f5f5;
+  --t2: #d4d4d4;
+  --t3: #a3a3a3;
+  --t4: #858585;
+  --t5: #666666;
+  --accent: #f5f5f5;
+  --accentHi: #ffffff;
+  --accentIcon: #e5e5e5;
+  --accentText: #ffffff;
+  --accentSoft: #2a2a2a;
+  --accentSoftLine: #4a4a4a;
+  --onAccent: #0a0a0a;
+}
+
+/* Plum Violet */
+:root[data-theme="plum"] {
+  --bg: #140f1c;
+  --header: #171121;
+  --sunk: #1a1324;
+  --card: #20182c;
+  --elev: #271e35;
+  --btn: #2d233c;
+  --btnH: #362a47;
+  --line: #2a2135;
+  --cardLine: #31263f;
+  --ctrl: #433653;
+  --t1: #f2edf8;
+  --t2: #d5cce2;
+  --t3: #ada2bd;
+  --t4: #8f84a0;
+  --t5: #706583;
+  --accent: #a78bfa;
+  --accentHi: #b9a2fb;
+  --accentIcon: #b49dfb;
+  --accentText: #d5c8fd;
+  --accentSoft: #2e2350;
+  --accentSoftLine: #51408a;
+  --onAccent: #140f1c;
+}
+
+/* Crimson Rose */
+:root[data-theme="crimson"] {
+  --bg: #160f11;
+  --header: #1a1214;
+  --sunk: #1c1416;
+  --card: #22181b;
+  --elev: #2a1e22;
+  --btn: #302328;
+  --btnH: #3a2a30;
+  --line: #2c2025;
+  --cardLine: #34262b;
+  --ctrl: #47353b;
+  --t1: #f6eef0;
+  --t2: #dccdd1;
+  --t3: #b5a3a8;
+  --t4: #97858a;
+  --t5: #77666b;
+  --accent: #f43f5e;
+  --accentHi: #f7627c;
+  --accentIcon: #fb7185;
+  --accentText: #fecdd3;
+  --accentSoft: #3f1520;
+  --accentSoftLine: #7a2638;
+  --onAccent: #1a0a0e;
+}
+
+/* Forest Sage */
+:root[data-theme="forest"] {
+  --bg: #0f1410;
+  --header: #121813;
+  --sunk: #141a15;
+  --card: #18201a;
+  --elev: #1e2820;
+  --btn: #232e25;
+  --btnH: #2b382d;
+  --line: #202a22;
+  --cardLine: #263128;
+  --ctrl: #344236;
+  --t1: #eef3ee;
+  --t2: #cfd9cf;
+  --t3: #a6b4a7;
+  --t4: #879688;
+  --t5: #68776a;
+  --accent: #84cc7a;
+  --accentHi: #9bd892;
+  --accentIcon: #93d38a;
+  --accentText: #c4ecbd;
+  --accentSoft: #1d3a1d;
+  --accentSoftLine: #3b6a36;
+  --onAccent: #0f1410;
+}
+
+/* Slate Sky */
+:root[data-theme="sky"] {
+  --bg: #0f1419;
+  --header: #12181e;
+  --sunk: #141b21;
+  --card: #182028;
+  --elev: #1e2730;
+  --btn: #232d37;
+  --btnH: #2b3641;
+  --line: #212a33;
+  --cardLine: #27313b;
+  --ctrl: #36424e;
+  --t1: #eef3f7;
+  --t2: #cdd8e1;
+  --t3: #a4b2bf;
+  --t4: #8695a2;
+  --t5: #677683;
+  --accent: #38bdf8;
+  --accentHi: #5ccbfa;
+  --accentIcon: #4cc4f9;
+  --accentText: #bae6fd;
+  --accentSoft: #0f3347;
+  --accentSoftLine: #1f5d80;
+  --onAccent: #06141c;
+}

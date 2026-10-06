@@ -1,0 +1,197 @@
+@import "tailwindcss";
+@import "./themes.css";
+
+/*
+ * Design tokens (docs/plan.md §5, docs/design/spec.md).
+ * - Theme colors come from themes.css (CSS variables switched by <html data-theme>).
+ * - The fixed palette below holds colors the design hardcodes regardless of theme.
+ * TypeScript code refers to these through src/shared/styles/palette.ts, never by hex value.
+ */
+
+@theme inline {
+  /* Theme colors → utilities such as bg-card, text-t3, border-ctrl, bg-accent-soft */
+  --color-bg: var(--bg);
+  --color-header: var(--header);
+  --color-sunk: var(--sunk);
+  --color-card: var(--card);
+  --color-elev: var(--elev);
+  --color-btn: var(--btn);
+  --color-btn-h: var(--btnH);
+  --color-line: var(--line);
+  --color-card-line: var(--cardLine);
+  --color-ctrl: var(--ctrl);
+  --color-t1: var(--t1);
+  --color-t2: var(--t2);
+  --color-t3: var(--t3);
+  --color-t4: var(--t4);
+  --color-t5: var(--t5);
+  --color-accent: var(--accent);
+  --color-accent-hi: var(--accentHi);
+  --color-accent-icon: var(--accentIcon);
+  --color-accent-text: var(--accentText);
+  --color-accent-soft: var(--accentSoft);
+  --color-accent-soft-line: var(--accentSoftLine);
+  --color-on-accent: var(--onAccent);
+  --color-kind-other: var(--t4);
+
+  --font-sans: var(--font-figtree), "Pretendard Variable", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+/* `static` keeps every token in the CSS output so palette.ts can reference it from inline styles. */
+@theme static {
+  /* Responsive boundaries from the design: mobile <720, tablet 720–1023, desktop ≥1024 */
+  --breakpoint-*: initial;
+  --breakpoint-sm: 45rem;
+  --breakpoint-lg: 64rem;
+
+  /* Fixed palette: success */
+  --color-ok: #3fd49a;
+  --color-ok-text: #4fe0a6;
+  --color-ok-bg: #123c33;
+  --color-ok-bg-strong: #10302a;
+  --color-ok-line: #2f6b55;
+  --color-ok-bar: #2fbf86;
+
+  /* Fixed palette: warning */
+  --color-warn-text: #f5c04a;
+  --color-warn-strong: #f5b400;
+  --color-warn-orange: #f5a142;
+  --color-warn-bg: #33290f;
+  --color-warn-line: #6b5518;
+  --color-warn-bg-soft: #3a2e12;
+  --color-warn-bg-orange: #3a2a1c;
+  --color-warn-pale: #f5d58a;
+  --color-warn-ink: #1a1206;
+  --color-preview-bg: #2a2410;
+  --color-preview-line: #4a3d14;
+  --color-preview-btn: #3a3214;
+  --color-preview-btn-line: #5a4b1a;
+
+  /* Fixed palette: danger */
+  --color-danger-text: #ff8a94;
+  --color-danger-icon: #ff6b7d;
+  --color-danger-solid: #e5484d;
+  --color-danger-bg: #3a1d24;
+  --color-danger-line: #6b2d39;
+  --color-danger-bg-strong: #33171d;
+  --color-danger-pale: #ffc9cf;
+
+  /* Fixed palette: info */
+  --color-info-text: #7cc8f5;
+  --color-info-bg: #14324a;
+  --color-info-line: #245a7d;
+  --color-cyan: #3fc1d5;
+  --color-cyan-bg: #163a44;
+  --color-memory-bg: #2c2350;
+
+  /* Fixed palette: file kinds */
+  --color-kind-folder: #f5b400;
+  --color-kind-video: #f2667a;
+  --color-kind-audio: #b18cff;
+  --color-kind-image: #3fc1a5;
+
+  /* Fixed palette: misc */
+  --color-nav-hover: #222b45;
+  --color-dashed: #3a4666;
+  --color-active-dot: #3a8bff;
+  --color-confirm-disabled: #2a3350;
+  --color-grid-check: rgba(20, 27, 46, 0.72);
+  --color-viewer-line: #1d2233;
+  --color-viewer-hover: #1a1f2e;
+  --color-backdrop-drawer: rgba(6, 10, 20, 0.55);
+  --color-backdrop: rgba(6, 10, 20, 0.6);
+  --color-backdrop-strong: rgba(6, 10, 20, 0.7);
+  --color-backdrop-viewer: rgba(8, 12, 24, 0.72);
+  --color-overlay-dark: rgba(0, 0, 0, 0.6);
+  --color-track-light: rgba(255, 255, 255, 0.18);
+
+  /* Shadows */
+  --shadow-toolbar: 0 6px 18px rgba(0, 0, 0, 0.18);
+  --shadow-logo: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-popover: 0 12px 30px rgba(0, 0, 0, 0.4);
+  --shadow-panel: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.5);
+  --shadow-search: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --shadow-viewer: 0 30px 80px rgba(0, 0, 0, 0.6);
+
+  --animate-skel: skel 1.4s ease-in-out infinite;
+
+  @keyframes skel {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 0.9;
+    }
+  }
+}
+
+/* Stacking layers from the design (docs/plan.md §1.2). Use as z-(--z-modal). */
+:root {
+  --z-header: 10;
+  --z-menu-catcher: 15;
+  --z-sidebar: 16;
+  --z-popover: 20;
+  --z-drawer-backdrop: 30;
+  --z-drawer: 31;
+  --z-transfers: 40;
+  --z-moving-pill: 44;
+  --z-share-preview: 45;
+  --z-modal-backdrop: 50;
+  --z-modal: 51;
+  --z-token-backdrop: 55;
+  --z-token: 56;
+  --z-dialog-backdrop: 57;
+  --z-dialog: 58;
+  --z-viewer-backdrop: 60;
+  --z-viewer: 61;
+  --z-subdialog-backdrop: 62;
+  --z-subdialog: 63;
+  --z-shortcuts-backdrop: 64;
+  --z-shortcuts: 65;
+  --z-search-backdrop: 66;
+  --z-search: 67;
+  --z-notice: 70;
+  --z-account-toast: 72;
+}
+
+@layer base {
+  /* The design uses the browser's default line height, not Tailwind's 1.5. */
+  html {
+    line-height: normal;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--bg);
+    color: var(--t1);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: var(--accentIcon);
+  }
+
+  a:hover {
+    color: var(--accentText);
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  /* Keyboard focus only (the design has no focus styles for pointer users). */
+  :focus-visible {
+    outline: 2px solid var(--accentHi);
+    outline-offset: 2px;
+  }
+}
