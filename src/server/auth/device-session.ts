@@ -65,6 +65,13 @@ export function requireActive(device: DeviceSession): DeviceAccount {
   return device.active;
 }
 
+/** The active account when it is an admin; members get 403 (the proxy may also limit by address). */
+export function requireAdmin(device: DeviceSession): DeviceAccount {
+  const active = requireActive(device);
+  if (!active.account.isAdmin) throw new ApiError("FORBIDDEN");
+  return active;
+}
+
 export function toSessionAccount(account: AccountRow): SessionAccount {
   const deletesAt = deletionDate(account, getEnv("policy").ACCOUNT_TTL_DAYS);
   return {

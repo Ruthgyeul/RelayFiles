@@ -4,6 +4,9 @@
  */
 
 /** Banner thresholds (percent of quota). */
+/** Storage sizes are decimal like the design (1 GB = 10^9 bytes). */
+export const BYTES_PER_GB = 1_000_000_000;
+
 export const QUOTA_WARN_PERCENT = 80;
 export const QUOTA_FULL_PERCENT = 95;
 /** Meter color thresholds (percent of quota). */

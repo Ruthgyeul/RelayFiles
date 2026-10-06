@@ -42,6 +42,7 @@ route handler (src/app/api/**/route.ts)
 
 | 큐 | 작업 | 넣는 곳 |
 |---|---|---|
+| `maintenance` | 매일 `CLEANUP_CRON`(`JOBS_TIMEZONE`): 삭제일이 지난 계정과 만료 항목 삭제, 볼륨 휴지통에서 24시간 지난 항목과 `UPLOAD_TMP_TTL_HOURS`가 지난 미완료 업로드 영구 삭제 | 워커 시작 시 스케줄 등록, 관리자 "Run cleanup now"는 계정·항목 정리만 즉시 실행 |
 | `media` | 썸네일(이미지: sharp, 영상: ffmpeg 1초 프레임 → WebP 576px), 공개 링크용 메타데이터 제거본(JPEG·PNG·WebP는 픽셀을 다시 인코딩하지 않고 메타데이터 구간만 제거, 방향 정보는 유지. GIF·AVIF·TIFF는 같은 형식으로 다시 쓰기) | 업로드 완료, 복사 |
 
 - 생성 파일은 `system/thumbs/<accountId>/<nodeId>`, `system/derived/<accountId>/<nodeId>`에 두고, 원본은 건드리지 않는다. 항목을 지우면 함께 지운다.

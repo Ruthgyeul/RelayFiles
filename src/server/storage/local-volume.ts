@@ -1,12 +1,23 @@
 import "server-only";
 import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { cp, copyFile, mkdir, open, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { cp, copyFile, lstat, mkdir, open, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
 import type { AssetKind, AssetRef, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path";
+
+/** "2026-10-06T03-12-00-000Z": when an item was moved to the trash (filename-safe ISO time). */
+const trashStamp = (at: Date) => at.toISOString().replace(/[:.]/g, "-");
+const TRASH_STAMP = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-/;
+
+function trashTime(name: string): number | null {
+  const match = TRASH_STAMP.exec(name);
+  if (!match) return null;
+  const [, date, hours, minutes, seconds, millis] = match;
+  return Date.parse(`${date}T${hours}:${minutes}:${seconds}.${millis}Z`);
+}
 
 /** Account and node ids (generated, lowercase alphanumerics). */
 const ASSET_ID = /^[a-z0-9]{6,32}$/;
@@ -85,7 +96,7 @@ export class LocalVolumeDriver implements StorageDriver {
 
   async moveToTrash(location: StorageLocation): Promise<string> {
     const source = await this.pathOf(location);
-    const name = `${new Date().toISOString().replace(/[:.]/g, "-")}-${location.accountId}-${basename(source)}`;
+    const name = `${trashStamp(new Date())}-${location.accountId}-${basename(source)}`;
     const target = join(this.layout.trash, name);
     await mkdir(this.layout.trash, { recursive: true, mode: DIR_MODE });
     await rename(source, target);
@@ -130,6 +141,27 @@ export class LocalVolumeDriver implements StorageDriver {
   async removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void> {
     const kinds: AssetKind[] = ["thumb", "derived"];
     await Promise.all(nodeIds.flatMap((nodeId) => kinds.map((kind) => rm(this.assetPath(kind, accountId, nodeId), { force: true }))));
+  }
+
+  async purgeSystem(trashBefore: Date, uploadsBefore: Date): Promise<{ trash: number; uploads: number }> {
+    const entries = async (dir: string) => readdir(dir).catch(() => [] as string[]);
+    let trash = 0;
+    for (const name of await entries(this.layout.trash)) {
+      // Entries start with the time they were moved (the item keeps its own mtime).
+      const movedAt = trashTime(name);
+      if (movedAt === null || movedAt >= trashBefore.getTime()) continue;
+      await rm(join(this.layout.trash, name), { recursive: true, force: true });
+      trash++;
+    }
+    let uploads = 0;
+    for (const name of await entries(this.layout.uploads)) {
+      const path = join(this.layout.uploads, name);
+      const info = await lstat(path).catch(() => null);
+      if (!info || info.mtime >= uploadsBefore) continue;
+      await rm(path, { recursive: true, force: true });
+      uploads++;
+    }
+    return { trash, uploads };
   }
 
   async removeAccountAssets(accountId: string): Promise<void> {

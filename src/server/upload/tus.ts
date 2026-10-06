@@ -1,4 +1,5 @@
 import "server-only";
+import { BYTES_PER_GB } from "@/domain/quota";
 import { FileStore } from "@tus/file-store";
 import { Server, type Upload } from "@tus/server";
 import { getEnv } from "@/config/env";
@@ -11,7 +12,6 @@ import { layoutOf } from "../storage/layout";
 import { checkUploadStart, finalizeUpload } from "../services/upload.service";
 import { forgetUpload, loadBatch, setUploadOwner, uploadOwner } from "./batches";
 
-const BYTES_PER_GB = 1_000_000_000;
 
 /** Error object the tus server turns into a response. */
 function tusError(code: keyof typeof ERRORS, message: string = ERRORS[code].message) {

@@ -140,13 +140,16 @@ export interface ModalHeaderProps {
   titleSize?: 16 | 17;
   /** Close button size: 32 or 36. */
   closeSize?: 32 | 36;
+  /** Shown before the title instead of an icon (e.g. an avatar). */
+  leading?: ReactNode;
 }
 
 /** Dialog header row: padding 16px 20px, bottom hairline, title and close button. */
-export function ModalHeader({ title, onClose, icon, iconColor, subtitle, titleSize = 16, closeSize = 32 }: ModalHeaderProps) {
+export function ModalHeader({ title, onClose, icon, iconColor, subtitle, titleSize = 16, closeSize = 32, leading }: ModalHeaderProps) {
   const titleId = useContext(TitleIdContext);
   return (
-    <div className="flex shrink-0 items-center gap-2.5 border-b border-card-line px-5 py-4">
+    <div className={cn("flex shrink-0 items-center border-b border-card-line px-5 py-4", leading ? "gap-3" : "gap-2.5")}>
+      {leading}
       {icon && <Icon name={icon} size={20} style={{ color: iconColor }} className={iconColor ? undefined : "text-accent-icon"} />}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <h2 className={cn("m-0 truncate font-bold", titleSize === 16 ? "text-[16px]" : "text-[17px]")} id={titleId}>

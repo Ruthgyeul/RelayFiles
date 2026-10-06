@@ -3,7 +3,7 @@ import { newFolder, openFiles } from "./helpers";
 
 test("an empty root shows the design's empty state", async ({ page }) => {
   await openFiles(page);
-  await expect(page.getByText("This folder is empty")).toBeVisible();
+  await expect(page.getByRole("main").getByText("This folder is empty")).toBeVisible();
   await expect(page.getByText("root folder")).toBeVisible();
   await expect(page.getByText("Private", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy path" })).toHaveText("/");

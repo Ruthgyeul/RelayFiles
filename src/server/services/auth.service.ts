@@ -1,4 +1,5 @@
 import "server-only";
+import { BYTES_PER_GB } from "@/domain/quota";
 import { getEnv } from "@/config/env";
 import type { SignupMode } from "@/contracts/auth";
 import { accountColor, isExpired } from "@/domain/account";
@@ -20,7 +21,6 @@ import { volumeForNewAccount } from "./volume.service";
 
 /** Random ids collide practically never; a unique violation is retried with fresh ids. */
 const CREATE_ATTEMPTS = 3;
-const BYTES_PER_GB = 1_000_000_000;
 
 export interface SignedIn {
   account: AccountRow;

@@ -82,6 +82,15 @@
 | `POST` | `/api/me/purge` | "Purge now": 만료된 항목(만료 시각이 지났거나 1회 다운로드 후 삭제가 사용됨)을 바로 삭제 → `{ deleted }` |
 | `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃 |
 
+### 관리자 (`ADMIN_ALLOWED_CIDRS`로 접근 주소 제한 가능)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| `GET` | `/api/admin/accounts` | 모든 계정과 파일 수·사용량, 이 기기에 로그인된 계정(`here`)과 활성 계정(`you`) |
+| `PATCH` | `/api/admin/accounts/:id` | Manage: `{ isAdmin, days: 0\|7\|30\|90\|365\|"default"\|"never", reset, quotaGb\|null }`. 연장은 현재 삭제일(지났으면 오늘)에 더한다. 마지막 관리자는 강등 불가(400 `Keep at least one admin`) |
+| `DELETE` | `/api/admin/accounts/:id` | 멤버 계정과 모든 파일 삭제(관리자는 먼저 멤버로 바꿔야 함) |
+| `POST` | `/api/admin/cleanup` | "Run cleanup now": 삭제일이 지난 계정과 만료 항목 삭제 → `{ accounts, items }` |
+
 ### 공유 링크 (공개, 로그인 불필요)
 
 페이지 `/d/<linkId>`(하위 폴더는 `?f=<folderId>`)는 서버가 상태를 판정한다. 순서: 만료(만료 시각이 지났거나 "다운로드 1회 후 삭제"가 사용됨) → 다운로드 한도 도달 → 비공개 → 비밀번호 → 열림. 비공개로 설정된 하위 항목은 목록·크기·zip에서 빠진다. 링크 소유자가 보면 "Visitor preview" 바가 붙고, 다운로드 수·활동 기록에 남지 않는다.
