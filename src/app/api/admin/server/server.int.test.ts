@@ -49,6 +49,7 @@ async function firstEvent(cookie: string): Promise<{ status: number; type: strin
 
 describe("server metrics", () => {
   it("measures the host, storage and services", async () => {
+    await member();
     const snapshot = await serverSnapshot();
     expect(snapshot.cpu.cores).toBeGreaterThan(0);
     expect(snapshot.cpu.percent).toBeGreaterThanOrEqual(0);
