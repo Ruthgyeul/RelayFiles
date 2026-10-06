@@ -14,7 +14,7 @@ import { logger } from "../logger";
 import { createAccount, findAccountByLookups, findAccountToken, touchAccountLogin, updateAccountToken, type AccountRow } from "../repositories/account.repo";
 import { createRootFolder } from "../repositories/node.repo";
 import { consumeInvite, getServerConfig } from "../repositories/server-config.repo";
-import { createSession, revokeSession } from "../repositories/session.repo";
+import { createSession, revokeOtherSessions, revokeSession } from "../repositories/session.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { volumeForNewAccount } from "./volume.service";
 
@@ -168,5 +168,26 @@ export async function revealToken(accountId: string): Promise<string> {
   } catch (error) {
     logger.error("token decryption failed", { accountId, error });
     throw new ApiError("INTERNAL");
+  }
+}
+
+/**
+ * Replaces the account token: the old one stops working at once and every other device is
+ * signed out (design "Generate a new token"). Returns the new token to show once.
+ */
+export async function regenerateToken(accountId: string, keepSessionId: string): Promise<string> {
+  const keys = tokenKeys();
+  for (let attempt = 1; ; attempt++) {
+    const token = newAccountToken();
+    try {
+      await db().$transaction(async (tx) => {
+        await updateAccountToken(tx, accountId, { tokenLookup: tokenLookups(token, keys)[0]!, tokenEnc: bytes(encryptToken(token, keys)) });
+        await revokeOtherSessions(tx, accountId, keepSessionId, new Date());
+      });
+      return token;
+    } catch (error) {
+      if (isUniqueViolation(error) && attempt < CREATE_ATTEMPTS) continue;
+      throw error;
+    }
   }
 }

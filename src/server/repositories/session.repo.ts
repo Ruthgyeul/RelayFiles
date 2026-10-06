@@ -33,3 +33,24 @@ export async function touchSessions(db: DbClient, ids: string[], at: Date): Prom
   if (ids.length === 0) return;
   await db.session.updateMany({ where: { id: { in: ids } }, data: { lastSeenAt: at } });
 }
+
+/** Live sessions of an account, most recently used first. */
+export function listAccountSessions(db: DbClient, accountId: string) {
+  return db.session.findMany({
+    where: { accountId, revokedAt: null },
+    orderBy: { lastSeenAt: "desc" },
+    select: { id: true, os: true, browser: true, country: true, city: true, ipMasked: true, lastSeenAt: true },
+  });
+}
+
+/** Revokes one session of an account; false when it is not one of its live sessions. */
+export async function revokeAccountSession(db: DbClient, accountId: string, sessionId: string, at: Date): Promise<boolean> {
+  const { count } = await db.session.updateMany({ where: { id: sessionId, accountId, revokedAt: null }, data: { revokedAt: at } });
+  return count > 0;
+}
+
+/** Revokes every live session of an account except `keepId`. Returns how many were revoked. */
+export async function revokeOtherSessions(db: DbClient, accountId: string, keepId: string, at: Date): Promise<number> {
+  const { count } = await db.session.updateMany({ where: { accountId, revokedAt: null, id: { not: keepId } }, data: { revokedAt: at } });
+  return count;
+}

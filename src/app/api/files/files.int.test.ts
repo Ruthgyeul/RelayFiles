@@ -7,7 +7,7 @@ import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { NextRequest } from "next/server";
 import { fileFixtures } from "../../../../test/file-fixtures";
 
-const { prisma, member, addFile, get, cleanup } = fileFixtures(4);
+const { prisma, member, addFile, get, cleanup } = fileFixtures();
 
 afterAll(cleanup);
 

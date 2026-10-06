@@ -10,3 +10,8 @@ export async function addTraffic(db: DbClient, accountId: string, bytes: bigint,
     update: { bytes: { increment: bytes } },
   });
 }
+
+/** Stored daily totals of an account since `from` (days without traffic have no row). */
+export function trafficSince(db: DbClient, accountId: string, from: Date) {
+  return db.trafficDaily.findMany({ where: { accountId, day: { gte: from } }, select: { day: true, bytes: true } });
+}

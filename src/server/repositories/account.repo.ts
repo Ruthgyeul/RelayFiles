@@ -65,3 +65,18 @@ export async function touchAccountLogin(db: DbClient, accountId: string, at: Dat
 export function findAccountById(db: DbClient, accountId: string) {
   return db.account.findUnique({ where: { id: accountId }, select: ACCOUNT_SELECT });
 }
+
+export async function updatePreferences(db: DbClient, accountId: string, data: { stripMetadataOnShare: boolean }): Promise<void> {
+  await db.account.update({ where: { id: accountId }, data });
+}
+
+/** Deletes the account row; sessions, items, events and traffic go with it (cascade). */
+export async function deleteAccountRow(db: DbClient, accountId: string): Promise<void> {
+  await db.account.delete({ where: { id: accountId } });
+}
+
+/** Last sign-in time (the profile shows it; the session account row omits it). */
+export async function lastLoginOf(db: DbClient, accountId: string): Promise<Date | null> {
+  const row = await db.account.findUnique({ where: { id: accountId }, select: { lastLoginAt: true } });
+  return row?.lastLoginAt ?? null;
+}

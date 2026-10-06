@@ -21,11 +21,12 @@ import { redis } from "@/server/redis";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
+import { randomTestIp } from "../../../../test/file-fixtures";
 import { callRoute } from "../../../../test/route-call";
 
 const prisma = db();
 const accounts: string[] = [];
-const ip = `198.18.${Math.floor(Math.random() * 200) + 20}.2`;
+const ip = randomTestIp();
 
 interface Session {
   id: string;
