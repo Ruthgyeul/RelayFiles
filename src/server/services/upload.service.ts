@@ -30,7 +30,7 @@ import { layoutOf } from "../storage/layout";
 import { availableAboveReserve, driverFor } from "../storage/registry";
 import type { StorageDriver } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
-import { loadBatch, saveBatch, type UploadBatch } from "../uploads/batches";
+import { loadBatch, saveBatch, type UploadBatch } from "../upload/batches";
 import { createFolder } from "./node.service";
 import { driverForAccount } from "./volume.service";
 
