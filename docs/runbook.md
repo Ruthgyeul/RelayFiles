@@ -85,11 +85,54 @@ $C restart app worker nginx
 $C run --rm tools npm run admin:create   # 새 관리자 계정. 이전 관리자 계정은 Accounts에서 정리한다
 ```
 
+## 마이그레이션
+
+### DB 스키마 (Prisma)
+
+- 개발: `npx prisma migrate dev --name <설명>` → `prisma/migrations/` 커밋. 운영: `release.sh`가 `prisma migrate deploy`를 실행한다. `db push`는 쓰지 않는다.
+- **expand → migrate → contract**: 열 이름 변경이나 삭제처럼 데이터를 잃는 변경은 한 릴리스에 넣지 않는다.
+  1. expand: 새 열·테이블을 추가한다(옛 코드도 계속 동작).
+  2. migrate: 앱이 새 열을 쓰게 하고, 기존 값은 데이터 마이그레이션(아래)으로 채운다.
+  3. contract: 다음 릴리스에서 옛 열을 지운다. 이 마이그레이션 SQL 맨 위에 `-- relayfiles: contract <이유>`를 적는다.
+- `npm run check:migrations`(CI 포함)는 `DROP`, 타입 변경, `RENAME`, `DELETE FROM`, `TRUNCATE`가 있는데 contract 표시가 없는 마이그레이션을 막는다.
+- CI는 모든 마이그레이션을 빈 DB에 적용하고, 결과가 `schema.prisma`와 같은지(`prisma migrate diff`) 확인한다.
+- 공유 링크(`linkId`)와 계정 토큰은 어떤 마이그레이션에서도 바꾸지 않는다.
+
+### 데이터 마이그레이션 (백필, 값 변환)
+
+`release.sh`가 스키마 마이그레이션 다음에 `npm run data:migrate`를 실행한다.
+
+1. `src/server/migrations/<날짜>-<이름>.ts`에 `DataMigrationStep`을 만든다. `id`는 바꾸지 않는다.
+2. `run({ db, cursor, save })`는 `MIGRATION.batchSize`(1,000)행씩 처리하고 배치마다 `save(cursor)`를 부른다. 다시 실행해도 결과가 같아야 한다.
+3. `src/server/migrations/registry.ts`의 `DATA_MIGRATIONS` 끝에 추가한다.
+
+진행 상황은 `DataMigration` 테이블에 남는다. 중간에 멈추면 다음 실행이 저장된 커서 다음부터 이어 간다. 끝난 마이그레이션은 다시 실행하지 않는다.
+
+```bash
+$C run --rm tools npm run data:migrate      # 수동 실행
+$C exec postgres psql -U relayfiles -c 'SELECT * FROM "DataMigration" ORDER BY "startedAt";'
+```
+
 ## 비밀값 교체
 
-`TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, `COOKIE_SECRET`을 바꿀 때는 기존 값을 `*_PREVIOUS`로 옮기고 새 값을 넣은 뒤 `release.sh`를 실행한다. 옛 키로 만든 값도 계속 읽히고, 로그인할 때 새 키로 다시 저장된다. 일괄 재암호화와 `*_PREVIOUS` 제거는 M16의 키 회전 스크립트에서 다룬다.
+### 토큰 키 (`TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`)
 
-`POSTGRES_PASSWORD`를 바꿀 때는 DB 안의 비밀번호도 같이 바꾼다.
+토큰 값은 바뀌지 않는다. 저장된 암호문과 조회용 해시만 새 키로 다시 만든다.
+
+1. `.env`에서 지금 값을 `TOKEN_ENC_KEY_PREVIOUS`, `TOKEN_HMAC_KEY_PREVIOUS`로 옮기고, 새 값(`env:secrets`)을 넣는다.
+2. `$C up -d app worker` (두 키를 모두 읽을 수 있는 상태가 된다. 로그인할 때 새 키로 다시 저장된다)
+3. `$C run --rm tools npm run keys:rotate` (모든 계정을 배치로 다시 암호화한다. 다시 실행해도 안전하다)
+4. "Remove the *_PREVIOUS keys"가 나오면 `.env`에서 `*_PREVIOUS`를 지우고 `$C up -d app worker`.
+
+어떤 키로도 풀리지 않는 계정이 있으면 3단계가 그 계정 id를 출력하고 실패한다. 이때는 `*_PREVIOUS`를 지우지 않는다.
+
+### 쿠키 서명 키 (`COOKIE_SECRET`)
+
+지금 값을 `COOKIE_SECRET_PREVIOUS`로 옮기고 새 값을 넣은 뒤 재시작한다. 옛 키로 서명된 기기 쿠키도 계속 받아들이고, 쿠키를 다시 저장할 때(로그인, 계정 추가·전환·로그아웃) 새 키로 서명한다. 한 달쯤 뒤에 `COOKIE_SECRET_PREVIOUS`를 지운다. 그때까지 쿠키가 다시 저장되지 않은 기기는 토큰으로 다시 로그인해야 한다.
+
+### DB 비밀번호 (`POSTGRES_PASSWORD`)
+
+DB 안의 비밀번호도 같이 바꾼다.
 
 ```bash
 $C exec postgres psql -U relayfiles -c "ALTER USER relayfiles PASSWORD '<새 비밀번호>';"

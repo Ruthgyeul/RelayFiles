@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Releases the checked-out version: backup → build → maintenance on → migrate → restart →
-# health check → maintenance off. Run on the server from the repository:
+# Releases the checked-out version: backup → build → maintenance on → migrate (schema and
+# data) → restart → health check → maintenance off. Run on the server from the repository:
 #   git pull && deploy/scripts/release.sh
 # Rollback: docs/deploy-ubuntu.md ("롤백").
 set -euo pipefail
@@ -25,8 +25,9 @@ log "Build images"
 trap 'rm -f "$FLAG"' EXIT
 touch "$FLAG"
 
-log "Database migrations"
+log "Database migrations (schema, then data)"
 "${COMPOSE[@]}" run --rm tools npm run db:deploy
+"${COMPOSE[@]}" run --rm tools npm run data:migrate
 
 log "Restart app, worker and nginx"
 "${COMPOSE[@]}" up -d --no-build app worker nginx

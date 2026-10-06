@@ -12,7 +12,7 @@
     "test:watch": "vitest --project unit",
     "test:e2e": "playwright test",
     "check:emoji": "node scripts/check-no-emoji.mjs",
-    "check": "npm run typecheck && npm run lint && npm run check:emoji && npm run test && npm run build",
+    "check": "npm run typecheck && npm run lint && npm run check:emoji && npm run check:migrations && npm run test && npm run build",
     "env:check": "tsx scripts/env-check.ts",
     "env:secrets": "node scripts/env-secrets.mjs",
     "postinstall": "prisma generate",
@@ -24,7 +24,10 @@
     "admin:create": "tsx --conditions=react-server scripts/admin-create.mts",
     "worker": "tsx --conditions=react-server scripts/worker.mts",
     "media:backfill": "tsx --conditions=react-server scripts/media-backfill.mts",
-    "deploy:error-pages": "tsx scripts/build-error-pages.mts"
+    "deploy:error-pages": "tsx scripts/build-error-pages.mts",
+    "data:migrate": "tsx --conditions=react-server scripts/data-migrate.mts",
+    "keys:rotate": "tsx --conditions=react-server scripts/keys-rotate.mts",
+    "check:migrations": "node scripts/check-migrations.mjs"
   },
   "dependencies": {
     "@fontsource-variable/figtree": "^5.3.0",
