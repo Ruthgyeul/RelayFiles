@@ -2,6 +2,7 @@
 
 import { Avatar } from "@/shared/ui/Avatar";
 import { Icon } from "@/shared/ui/icon/Icon";
+import { NoticePill } from "@/shared/ui/NoticePill";
 import { useShell } from "./ShellProvider";
 
 /** Short confirmation pill (design `note`) and the "Switched to …" account toast. */
@@ -9,16 +10,7 @@ export function Toasts() {
   const { notice, accountToast, dismissAccountToast } = useShell();
   return (
     <>
-      {notice && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed top-[76px] left-1/2 z-(--z-notice) flex -translate-x-1/2 items-center gap-2 rounded-full bg-t1 px-4 py-2.5 text-[14px] font-bold whitespace-nowrap text-bg shadow-popover"
-        >
-          <Icon name="check" weight="bold" />
-          {notice}
-        </div>
-      )}
+      {notice && <NoticePill message={notice} />}
       {accountToast && (
         <div
           role="status"

@@ -47,6 +47,25 @@ export const UPLOAD = {
   tmpTtlHours: 6,
 } as const;
 
+export const SHARE = {
+  /** Downloads counted for the busy level (design: 10 minutes). */
+  busyWindowMs: 600_000,
+  /** Downloads in the window from which a file is "Busy" (throttled) and "Server busy" (paused). */
+  busyThrottleAt: 5,
+  busyPauseAt: 10,
+  /** Speed of each download while a file is busy. */
+  throttledBytesPerSec: 2_000_000,
+  /** How long a password unlock lasts on a device. */
+  unlockHours: 12,
+  /** Wrong passwords allowed per link and address before a pause. */
+  unlockMaxAttempts: 10,
+  unlockWindowSec: 600,
+  /** "Opened link" / "Played" are logged once per visitor and item in this window. */
+  eventDedupeSec: 1_800,
+  /** Link activity entries kept per item (design: 200). */
+  eventsKeptPerNode: 200,
+} as const;
+
 export const MEDIA = {
   /** Longest side of generated thumbnails (2x the 288px list preview). */
   thumbSizePx: 576,

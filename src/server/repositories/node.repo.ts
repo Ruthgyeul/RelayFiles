@@ -211,6 +211,14 @@ export async function addLinkEvent(db: DbClient, data: Prisma.LinkEventUnchecked
   await db.linkEvent.create({ data });
 }
 
+/** Keeps the newest `keep` events of a node. */
+export async function trimLinkEvents(db: DbClient, nodeId: string, keep: number): Promise<void> {
+  await db.$executeRaw`
+    DELETE FROM "LinkEvent" WHERE "nodeId" = ${nodeId} AND id NOT IN (
+      SELECT id FROM "LinkEvent" WHERE "nodeId" = ${nodeId} ORDER BY at DESC, id DESC LIMIT ${keep}
+    )`;
+}
+
 /** A child with this exact name, if any. */
 export function findChildByName(db: DbClient, parentId: string, name: string) {
   return db.node.findFirst({ where: { parentId, name }, select: NODE_SELECT });

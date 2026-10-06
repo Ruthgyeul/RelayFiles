@@ -14,6 +14,7 @@ export const ERRORS = {
   ALREADY_SIGNED_IN: { status: 409, message: "This account is already signed in." },
   GONE: { status: 410, message: "This account or link no longer exists." },
   PAYLOAD_TOO_LARGE: { status: 413, message: "File too large." },
+  UNSUPPORTED_MEDIA: { status: 415, message: "This photo can't be shared without its location data. Ask the owner for a JPEG or PNG." },
   RATE_LIMITED: { status: 429, message: "Too many requests. Try again later." },
   INTERNAL: { status: 500, message: "Something went wrong." },
   MAINTENANCE: { status: 503, message: "The server is under maintenance." },

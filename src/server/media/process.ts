@@ -13,6 +13,9 @@ import { imageThumbnail, videoThumbnail } from "./thumbnail";
 /** Image types sharp can rewrite in the same format (metadata is dropped on output). */
 const REENCODE: Readonly<Record<string, "gif" | "avif" | "tiff">> = { "image/gif": "gif", "image/avif": "avif", "image/tiff": "tiff" };
 
+/** Whether {@link strippedCopy} can clean this image type. */
+export const canStripType = (mime: string) => LOSSLESS_STRIP_TYPES.has(mime) || Object.hasOwn(REENCODE, mime);
+
 /**
  * Copy of an image without location and camera data, in the original format: lossless
  * segment removal for JPEG/PNG/WebP, a same-format rewrite for GIF/AVIF/TIFF. Null when the

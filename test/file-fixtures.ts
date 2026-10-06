@@ -17,14 +17,15 @@ type RouteHandler = (req: NextRequest, ctx: { params: Promise<{ id: string }> })
 
 /**
  * Accounts and files written straight to the volume and the database, for integration tests
- * of file serving. `ipBlock` keeps each test file under its own signup rate limit.
+ * of file serving. `ipBlock` keeps each test file's sign-up addresses apart.
  */
 export function fileFixtures(ipBlock: number) {
   const prisma = db();
   const accounts: string[] = [];
-  const ip = `198.18.${Math.floor(Math.random() * 200) + 20}.${ipBlock}`;
 
   async function member() {
+    // A fresh address per account keeps tests under the per-address sign-up limit.
+    const ip = `198.18.${Math.floor(Math.random() * 250) + 1}.${ipBlock}`;
     const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip });
     const id = res.json.data.account.id;
     accounts.push(id);
