@@ -16,6 +16,7 @@ const LOOK: Record<TransferStatus, { badge: string; box: string; badgeText: stri
   paused: { badge: "PAUSED", box: "bg-warn-bg-soft", badgeText: "text-warn-text", icon: "pause", weight: "fill", iconColor: "text-warn-text" },
   complete: { badge: "COMPLETE", box: "bg-ok-bg", badgeText: "text-ok-text", icon: "check", weight: "bold", iconColor: "text-ok-text" },
   error: { badge: "FAILED", box: "bg-danger-bg", badgeText: "text-danger-text", icon: "warning", weight: "fill", iconColor: "text-danger-icon" },
+  handed: { badge: "DOWNLOAD", box: "bg-accent-soft", badgeText: "text-accent-text", icon: "download-simple", weight: "bold", iconColor: "text-accent-icon" },
 };
 
 const iconButton = "flex size-[34px] items-center justify-center rounded-lg border-0 bg-transparent text-t3 hover:bg-btn-h";

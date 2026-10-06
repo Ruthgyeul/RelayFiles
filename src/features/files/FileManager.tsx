@@ -26,6 +26,7 @@ import { SearchBox, TagModeBar } from "./SearchBox";
 import { Toolbar, ToolButton } from "./Toolbar";
 import { useDragMove } from "./useDragMove";
 import { useFileDialogs } from "./useFileDialogs";
+import { useFileMedia } from "./useFileMedia";
 import { useFileShortcuts } from "./useFileShortcuts";
 import { useFolderItems, type ListedItem } from "./useFolderItems";
 import { useNewFolder } from "./useNewFolder";
@@ -61,6 +62,7 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
   const clearSelection = () => setSelected(new Set());
   const { open, dialogs } = useFileDialogs({ isAdmin, accountDeletesAt: activeAccount?.deletesAt ?? null, linkOf, onChanged: clearSelection });
   const newFolder = useNewFolder(parentRef, children.map((child) => child.name));
+  const media = useFileMedia(items, folder.name);
 
   const moveTo = (ids: string[], targetId: string) =>
     filesApi
@@ -86,7 +88,7 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
   };
   const copyLink = (url: string, visibility: "private" | "public") => copyText(url, visibility === "public" ? "Link copied" : "Link copied · private, only you can open it");
   const visibilityOf = (item: NodeItem) => (item.settings.visibility === "inherit" ? view.effectiveVisibility : item.settings.visibility);
-  const openItem = (item: NodeItem) => (item.type === "folder" ? router.push(folderHref(item.id)) : setPropertiesFor(item.id));
+  const openItem = (item: NodeItem) => (item.type === "folder" ? router.push(folderHref(item.id)) : media.preview(item));
   const parentOfCurrent = path.at(-2);
 
   const actionsFor = (item: NodeItem): NodeActions => {
@@ -95,6 +97,9 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
     const parentVisibility = current ? view.parentVisibility : view.effectiveVisibility;
     return {
       open: item.type === "folder" && !current ? () => router.push(folderHref(item.id)) : undefined,
+      preview: item.type === "file" ? () => media.preview(item) : undefined,
+      download: () => media.download(item),
+      downloadZip: item.type === "file" ? () => media.zip([item]) : undefined,
       tags: () => open.tags([item]),
       directLink: () => copyLink(linkOf(item.linkId), current ? view.effectiveVisibility : visibilityOf(item)),
       newLink: () => open.newLink(item),
@@ -148,6 +153,7 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
     now,
     onToggle: () => toggle(item.id),
     onPrimary: () => openItem(item),
+    onPreview: () => media.preview(item),
     onMenu: (anchor) => openMenu(item.id, anchor),
     onTag: searchTag,
     menuOpen: menu?.id === item.id,
@@ -172,6 +178,8 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
   );
   const selectionActions = (
     <>
+      <ToolButton icon="download-simple" label="Download" onClick={() => (media.downloadEach(selectedItems), clearSelection())} />
+      <ToolButton icon="file-zip" label="Zip" title="Download as zip" onClick={() => (media.zip(selectedItems), clearSelection())} />
       <ToolButton icon="tag" label="Tags" onClick={() => open.tags(selectedItems)} />
       <ToolButton icon="copy" label="Copy" onClick={() => open.move(selectedItems, "copy", folder.id)} />
       <ToolButton icon="arrow-bend-up-right" label="Move" onClick={() => open.move(selectedItems, "move", folder.id)} />
@@ -244,7 +252,16 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
           </div>
         ) : (
           items.map((item) => (
-            <NodeRow key={item.id} {...itemProps(item)} actions={item.type === "folder" ? <RowButton icon="folder-open" label="Open" onClick={() => openItem(item)} /> : null} />
+            <NodeRow
+              key={item.id}
+              {...itemProps(item)}
+              actions={
+                <>
+                  {item.type === "folder" ? <RowButton icon="folder-open" label="Open" onClick={() => openItem(item)} /> : <RowButton icon="eye" label="Preview" onClick={() => media.preview(item)} />}
+                  <RowButton icon="download-simple" label="Download" onClick={() => media.download(item)} />
+                </>
+              }
+            />
           ))
         )}
       </div>
@@ -266,12 +283,17 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
           setPropertiesFor(null);
           if (item) open.tags([item]);
         }}
+        onZip={(id) => {
+          const item = id === folder.id ? folder : items.find((entry) => entry.id === id);
+          if (item) media.zip([item]);
+        }}
         onEditSettings={(id) => {
           const item = id === folder.id ? folder : items.find((entry) => entry.id === id);
           setPropertiesFor(null);
           if (item) open.settings(item, item.id === folder.id && isRoot, item.id === folder.id ? view.parentVisibility : view.effectiveVisibility);
         }}
       />
+      {media.viewer}
       {newFolder.dialog}
       {dialogs}
       {drag.pill}

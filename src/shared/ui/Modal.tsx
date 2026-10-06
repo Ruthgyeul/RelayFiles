@@ -18,6 +18,7 @@ const LAYER = {
   subdialog: ["z-(--z-subdialog-backdrop)", "z-(--z-subdialog)"],
   shortcuts: ["z-(--z-shortcuts-backdrop)", "z-(--z-shortcuts)"],
   search: ["z-(--z-search-backdrop)", "z-(--z-search)"],
+  viewer: ["z-(--z-viewer-backdrop)", "z-(--z-viewer)"],
 } as const;
 
 export type ModalLayer = keyof typeof LAYER;
@@ -30,13 +31,15 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:n
 export interface ModalProps {
   open: boolean;
   onClose: () => void;
-  /** Panel width in px; the panel never exceeds `100vw - 24px`. */
+  /** Panel width in px; the panel never exceeds `100vw - 24px` (or `100vw - gutter`). */
   width: number;
+  /** Horizontal space kept free around the panel (the media viewer keeps 48px). */
+  gutter?: number;
   layer?: ModalLayer;
   /** When false, the backdrop and Escape do not close the dialog (e.g. "Save your account token"). */
   dismissible?: boolean;
-  /** `strong` = rgba(6,10,20,.7) used behind the token dialog. */
-  backdrop?: "default" | "strong";
+  /** `strong` = rgba(6,10,20,.7) behind the token dialog; `viewer` = rgba(8,12,24,.72) with blur. */
+  backdrop?: "default" | "strong" | "viewer";
   /** `top` positions the panel at max(12px, 10vh) like the global search. */
   position?: "center" | "top";
   /** Accessible name when there is no ModalHeader. */
@@ -50,6 +53,7 @@ export function Modal({
   open,
   onClose,
   width,
+  gutter = 24,
   layer = "modal",
   dismissible = true,
   backdrop = "default",
@@ -102,7 +106,7 @@ export function Modal({
       <div
         aria-hidden
         onClick={dismissible ? onClose : undefined}
-        className={cn("fixed inset-0", backdropZ, backdrop === "strong" ? "bg-backdrop-strong" : "bg-backdrop")}
+        className={cn("fixed inset-0", backdropZ, { default: "bg-backdrop", strong: "bg-backdrop-strong", viewer: "bg-backdrop-viewer backdrop-blur-[2px]" }[backdrop])}
       />
       <div
         ref={panel}
@@ -111,7 +115,7 @@ export function Modal({
         aria-label={label}
         aria-labelledby={label ? undefined : titleId}
         tabIndex={-1}
-        style={{ width: `min(${width}px, calc(100vw - 24px))` }}
+        style={{ width: `min(${width}px, calc(100vw - ${gutter}px))` }}
         className={cn(
           "fixed left-1/2 flex max-h-[calc(100dvh-24px)] flex-col overflow-auto rounded-2xl border border-ctrl bg-card shadow-modal outline-none",
           position === "center" ? "top-1/2 -translate-x-1/2 -translate-y-1/2" : "top-[max(12px,10vh)] -translate-x-1/2",

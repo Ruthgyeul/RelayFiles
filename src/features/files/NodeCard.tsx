@@ -4,11 +4,13 @@ import type { ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { kindOf } from "./kind";
+import { MediaThumb, ResumeBar } from "./MediaThumb";
 import { itemMeta, MenuButton, type ItemProps } from "./NodeRow";
 
 /** Grid card: 4:3 preview area with the type icon, corner checkbox, name, meta and menu. */
-export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onMenu, menuOpen, drag, drop, dropOver }: ItemProps) {
+export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver }: ItemProps) {
   const kind = kindOf(item);
+  const media = item.kind === "video" || item.kind === "image";
   return (
     <div
       {...drag}
@@ -17,7 +19,14 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onMe
       className={cn("relative flex flex-col overflow-hidden rounded-xl border", dropOver ? "bg-accent-soft" : "bg-sunk", dropOver || selected ? "border-accent-hi" : "border-card-line")}
     >
       <div onClick={onPrimary} className="relative flex aspect-[4/3] cursor-pointer items-center justify-center overflow-hidden bg-bg">
-        <Icon name={kind.icon} weight={item.type === "folder" ? "fill" : "regular"} size={48} style={{ color: kind.color }} />
+        {media ? (
+          <MediaThumb item={item} variant="card" onOpen={onPreview} />
+        ) : (
+          <>
+            <Icon name={kind.icon} weight={item.type === "folder" ? "fill" : "regular"} size={48} style={{ color: kind.color }} />
+            {item.kind === "audio" && <ResumeBar id={item.id} />}
+          </>
+        )}
       </div>
       <button
         type="button"

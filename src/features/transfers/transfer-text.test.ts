@@ -10,6 +10,7 @@ describe("transfer text (design meta)", () => {
     expect(transferMeta({ ...base, status: "paused" })).toContain("· paused ·");
     expect(transferMeta({ ...base, folders: 0, files: 1, status: "complete", done: base.total, elapsed: 75 })).toBe("1 file · 3.0 GB · in 1:15 · uploaded");
     expect(transferMeta({ ...base, status: "error", error: "Not enough space on the server." })).toBe("1 folder · 3 files · 3.0 GB · Not enough space on the server.");
+    expect(transferMeta({ ...base, folders: 0, files: 2, status: "handed", done: 0, elapsed: 0 })).toBe("2 files · 3.0 GB · saving in your browser");
   });
 
   it("summarizes the panel", () => {

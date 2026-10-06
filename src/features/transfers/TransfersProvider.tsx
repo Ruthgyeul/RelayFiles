@@ -19,8 +19,17 @@ export interface UploadTarget {
   name: string;
 }
 
+/** A download handed to the browser: what the panel shows about it. */
+export interface DownloadRequest {
+  url: string;
+  title: string;
+  files: number;
+  total: number;
+}
+
 export interface Transfer {
   id: string;
+  direction: "up" | "down";
   title: string;
   folderId: string;
   fromHome: boolean;
@@ -44,6 +53,7 @@ interface TransfersContextValue {
   pickFiles: (target: UploadTarget) => void;
   pickFolder: (target: UploadTarget) => void;
   upload: (entries: UploadEntry[], target: UploadTarget) => void;
+  download: (request: DownloadRequest) => void;
   togglePause: (id: string) => void;
   remove: (id: string) => void;
   clearFinished: () => void;
@@ -95,6 +105,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
           const id = plan.batchId;
           const transfer: Transfer = {
             id,
+            direction: "up",
             title: plan.folder.name,
             folderId: plan.folder.id,
             fromHome: target.ref === "home",
@@ -147,6 +158,32 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
     [notify, start],
   );
 
+  const download = useCallback((request: DownloadRequest) => {
+    // The browser streams the file to disk (Content-Disposition: attachment), so no page change.
+    const anchor = document.createElement("a");
+    anchor.href = request.url;
+    anchor.download = "";
+    anchor.rel = "noopener";
+    anchor.click();
+    const transfer: Transfer = {
+      id: crypto.randomUUID(),
+      direction: "down",
+      title: request.title,
+      folderId: "",
+      fromHome: false,
+      files: request.files,
+      folders: 0,
+      total: request.total,
+      done: 0,
+      status: "handed",
+      auto: false,
+      activeMs: 0,
+      runningSince: null,
+    };
+    setTransfers((list) => [transfer, ...list]);
+    setPanelState({ open: true, expanded: true });
+  }, []);
+
   const pause = useCallback(
     (id: string, auto: boolean) => {
       runners.current.get(id)?.pause();
@@ -185,6 +222,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
       panelExpanded: panel.expanded,
       lastUpload,
       upload,
+      download,
       pickFiles: (target) => {
         pickTarget.current = target;
         fileInput.current?.click();
@@ -206,7 +244,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
       clearFinished: () => setTransfers((list) => list.filter((entry) => entry.status === "active" || entry.status === "paused")),
       setPanel: (open, expanded) => setPanelState((current) => ({ open, expanded: expanded ?? current.expanded })),
     }),
-    [transfers, panel, lastUpload, upload, pause, resume],
+    [transfers, panel, lastUpload, upload, download, pause, resume],
   );
 
   const onPicked = (list: FileList | null) => {

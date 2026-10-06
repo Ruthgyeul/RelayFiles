@@ -2,13 +2,16 @@
 
 import type { DragEvent, ReactNode } from "react";
 import type { NodeItem } from "@/contracts/nodes";
-import { formatDateTime, formatSize } from "@/domain/format";
+import { formatClock, formatDateTime, formatSize } from "@/domain/format";
 import { itemCount, settingTags } from "@/domain/tree";
+import { useResume } from "@/features/viewer/useResume";
+import { useViewport } from "@/shared/hooks/useViewport";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
 import { kindOf } from "./kind";
+import { MediaThumb } from "./MediaThumb";
 import { toShareSettings } from "./settings";
 import type { DropTargetProps } from "./useDragMove";
 
@@ -21,6 +24,8 @@ export interface ItemProps {
   now: number;
   onToggle: () => void;
   onPrimary: () => void;
+  /** Opens a file in the viewer (thumbnails, "Open viewer"). */
+  onPreview: () => void;
   onMenu: (anchor: HTMLElement) => void;
   onTag: (tag: string) => void;
   menuOpen: boolean;
@@ -71,6 +76,18 @@ export function MenuButton({ label, open, onMenu, className }: { label: string; 
   );
 }
 
+/** "1:12 / 4:05" when a video or audio file has a saved position (design `resumeText`). */
+function ResumeMeta({ id }: { id: string }) {
+  const point = useResume(id);
+  if (!point) return null;
+  return (
+    <span className="flex items-center gap-1 text-accent-text">
+      <Icon name="play-circle" weight="fill" />
+      {formatClock(point.t)} / {formatClock(point.d)}
+    </span>
+  );
+}
+
 /** User tags (clickable, start a tag search) followed by setting tags, without "Password" (shown as a lock). */
 function RowTags({ item, parentVisibility, now, onTag }: Pick<ItemProps, "item" | "parentVisibility" | "now" | "onTag">) {
   const settings = settingTags(toShareSettings(item.settings), item.downloads, parentVisibility, now).filter((tag) => tag.icon !== "lock-simple");
@@ -102,9 +119,11 @@ function RowTags({ item, parentVisibility, now, onTag }: Pick<ItemProps, "item" 
 }
 
 /** One list row: checkbox, type icon (with folder count), name, meta, tags and actions. */
-export function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onMenu, onTag, menuOpen, drag, drop, dropOver, actions }: ItemProps & { actions: ReactNode }) {
+export function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onPreview, onMenu, onTag, menuOpen, drag, drop, dropOver, actions }: ItemProps & { actions: ReactNode }) {
   const kind = kindOf(item);
   const folder = item.type === "folder";
+  const { small } = useViewport();
+  const thumb = !small && (item.kind === "video" || item.kind === "image");
   return (
     <div
       {...drag}
@@ -146,12 +165,20 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
                 {item.downloads}
               </span>
             )}
+            {!folder && <ResumeMeta id={item.id} />}
           </div>
           <RowTags item={item} parentVisibility={parentVisibility} now={now} onTag={onTag} />
         </div>
         {actions}
         <MenuButton label={`Actions for ${item.name}`} open={menuOpen} onMenu={onMenu} />
       </div>
+      {thumb && (
+        <div className="pl-[92px] max-sm:hidden">
+          <div onClick={onPreview} className="relative flex aspect-square w-[min(288px,100%)] cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-card-line bg-black">
+            <MediaThumb item={item} variant="row" onOpen={onPreview} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
