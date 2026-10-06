@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FILES } from "@/config/policy";
 
 export type NodeKind = "video" | "audio" | "image" | "other";
 export type NodeType = "folder" | "file";
@@ -75,7 +76,7 @@ export interface TaggedItem extends NodeItem {
 export const nodeIdSchema = z.string().regex(/^[a-z0-9]{12}$/);
 
 /** "root" or a node id. */
-export const folderRefSchema = z.union([z.literal("root"), z.string().regex(/^[a-z0-9]{12}$/)]);
+export const folderRefSchema = z.union([z.literal("root"), nodeIdSchema]);
 
 export const tagSearchSchema = z.object({
   tags: z
@@ -96,7 +97,13 @@ export interface CreatedFolder {
   renamed: boolean;
 }
 
-const nodeIds = z.array(z.string().regex(/^[a-z0-9]{12}$/)).min(1).max(500);
+const nodeIds = z.array(nodeIdSchema).min(1).max(FILES.maxBatchItems);
+
+/** `?ids=a,b,c` on download URLs (zip). */
+export const idsQuerySchema = z
+  .string()
+  .transform((value) => value.split(",").filter(Boolean))
+  .pipe(nodeIds);
 
 export const renameSchema = z.object({ name: z.string().max(1024) });
 

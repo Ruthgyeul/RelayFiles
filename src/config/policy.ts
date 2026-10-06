@@ -35,6 +35,11 @@ export const STORAGE = {
   maxFolderDepth: 32,
 } as const;
 
+export const FILES = {
+  /** Most items one request may move, copy, delete, tag or zip. */
+  maxBatchItems: 500,
+} as const;
+
 export const UPLOAD = {
   /** tus chunk size; stays below Cloudflare's 100 MB request limit. */
   chunkSizeMb: 50,

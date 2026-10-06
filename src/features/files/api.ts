@@ -13,6 +13,13 @@ import { apiFetch } from "@/shared/lib/api-client";
 
 const node = (id: string) => `/api/nodes/${encodeURIComponent(id)}`;
 
+/** URLs the browser loads directly (media elements, downloads). */
+export const fileUrls = {
+  stream: (id: string) => `/api/files/${encodeURIComponent(id)}/stream`,
+  download: (id: string) => `/api/files/${encodeURIComponent(id)}/download`,
+  zip: (ids: string[]) => `/api/zip?ids=${ids.map(encodeURIComponent).join(",")}`,
+};
+
 /** File Manager API calls (reads come from the server render; these refresh or change data). */
 export const filesApi = {
   getFolder: (id: string) => apiFetch<FolderView>(`/api/folders/${encodeURIComponent(id)}`),

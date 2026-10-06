@@ -1,6 +1,10 @@
 import { formatClock, formatSize } from "@/domain/format";
 
-export type TransferStatus = "active" | "paused" | "complete" | "error";
+/**
+ * Upload states, plus "handed" for downloads: the browser saves those itself, so the panel
+ * records that a download started instead of showing progress it cannot see.
+ */
+export type TransferStatus = "active" | "paused" | "complete" | "error" | "handed";
 
 export interface TransferProgress {
   status: TransferStatus;
@@ -33,6 +37,8 @@ export function transferMeta(progress: TransferProgress): string {
       return `${head} · ${percent}% · ${formatSize(progress.done / Math.max(progress.elapsed, 0.3))}/s`;
     case "error":
       return `${head} · ${progress.error ?? "failed"}`;
+    case "handed":
+      return `${head} · saving in your browser`;
     default:
       return `${head} · in ${formatClock(progress.elapsed)} · uploaded`;
   }

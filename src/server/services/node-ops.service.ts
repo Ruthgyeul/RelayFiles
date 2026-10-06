@@ -98,9 +98,9 @@ function isInside(chainIds: string[], nodeId: string): boolean {
   return chainIds.includes(nodeId);
 }
 
-/** Top-level items only: drops items whose ancestor is also in the list. */
-async function topLevel(accountId: string, ids: string[]): Promise<NodeRow[]> {
-  const rows = (await findNodes(db(), accountId, [...new Set(ids)])).filter((row) => row.parentId !== null);
+/** Top-level items only: drops items whose ancestor is also in the list (and the root unless allowed). */
+export async function topLevel(accountId: string, ids: string[], allowRoot = false): Promise<NodeRow[]> {
+  const rows = (await findNodes(db(), accountId, [...new Set(ids)])).filter((row) => allowRoot || row.parentId !== null);
   const chosen = new Set(rows.map((row) => row.id));
   const result: NodeRow[] = [];
   for (const row of rows) {
