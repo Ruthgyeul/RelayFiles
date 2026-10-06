@@ -32,6 +32,13 @@ export const ERROR_PRESETS: Record<ErrorPageCode, ErrorPreset> = {
     title: "Something went wrong",
     description: "An unexpected error occurred. It has been logged.",
   },
+  "502": {
+    badge: "502",
+    icon: "plugs",
+    tone: "warn",
+    title: "Server unreachable",
+    description: "The app server is not responding. Please try again in a moment.",
+  },
   "503": {
     badge: "503",
     icon: "wrench",

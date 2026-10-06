@@ -31,5 +31,5 @@ export function isErrorCode(value: unknown): value is ErrorCode {
 }
 
 /** Error codes that have a dedicated page under /error/[code]. */
-export const ERROR_PAGE_CODES = ["400", "401", "403", "404", "410", "429", "500", "503", "storage-offline"] as const;
+export const ERROR_PAGE_CODES = ["400", "401", "403", "404", "410", "429", "500", "502", "503", "storage-offline"] as const;
 export type ErrorPageCode = (typeof ERROR_PAGE_CODES)[number];

@@ -34,8 +34,9 @@
   --color-on-accent: var(--onAccent);
   --color-kind-other: var(--t4);
 
-  --font-sans: var(--font-figtree), "Pretendard Variable", system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  /* Figtree (Latin, variable 300–900), Pretendard (Hangul), JetBrains Mono (fixed width). */
+  --font-sans: "Figtree Variable", "Pretendard Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 }
 
 /* `static` keeps every token in the CSS output so palette.ts can reference it from inline styles. */

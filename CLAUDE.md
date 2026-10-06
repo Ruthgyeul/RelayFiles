@@ -48,7 +48,10 @@ npm run check:emoji  # 이모지 사용 검사
 npm run check        # typecheck · lint · emoji · test · build 전체
 npm run worker       # 백그라운드 워커(썸네일, 공개 링크용 메타데이터 제거본). ffmpeg 필요
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기
+npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 다시 생성
 ```
+
+운영 배포는 Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃)와 Nginx(`deploy/nginx/templates`)로 한다. 절차는 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 운영 작업은 [`docs/runbook.md`](docs/runbook.md). 업데이트는 서버에서 `git pull && deploy/scripts/release.sh`.
 
 결과물을 전달하기 전에 `npm run check`를 통과시킨다. DB나 스토리지를 건드리면 `npm run test:integration`도 통과시킨다.
 
