@@ -58,3 +58,7 @@ export async function updateAccountToken(db: DbClient, accountId: string, token:
 export async function touchAccountLogin(db: DbClient, accountId: string, at: Date): Promise<void> {
   await db.account.update({ where: { id: accountId }, data: { lastLoginAt: at } });
 }
+
+export function findAccountById(db: DbClient, accountId: string) {
+  return db.account.findUnique({ where: { id: accountId }, select: ACCOUNT_SELECT });
+}

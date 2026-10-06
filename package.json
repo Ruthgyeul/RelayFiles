@@ -28,7 +28,10 @@
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@tus/file-store": "^2.1.1",
+    "@tus/server": "^2.4.5",
     "clsx": "^2.1.1",
+    "file-type": "^22.1.1",
     "ioredis": "^6.0.0",
     "next": "16.3.8",
     "pg": "^8.23.1",
@@ -37,6 +40,7 @@
     "react-dom": "^19.3.0",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.7.0",
+    "tus-js-client": "^4.3.1",
     "winston": "^3.19.0",
     "zod": "^4.6.5"
   },

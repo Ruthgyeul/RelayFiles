@@ -27,8 +27,8 @@ next-env.d.ts
 /.data/
 
 # uploads / temp
-uploads/
-tmp/
+/uploads/
+/tmp/
 
 # logs
 *.log

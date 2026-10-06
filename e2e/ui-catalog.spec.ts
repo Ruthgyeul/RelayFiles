@@ -72,8 +72,16 @@ test("modal is capped at the viewport width minus 24px and closes on Escape", as
   const box = (await dialog.boundingBox())!;
   expect(Math.round(box.width)).toBe(Math.min(480, viewport.width - 24));
   expect(await css(dialog, "border-radius")).toBe("16px");
+  expect(await css(dialog, "z-index")).toBe("51");
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
+});
+
+test("confirm dialogs stack on the design's dialog layer", async ({ page }) => {
+  await page.getByRole("button", { name: "Confirm dialog" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  expect(await css(dialog, "z-index")).toBe("58");
 });
 
 test("switching theme updates the palette", async ({ page }) => {

@@ -63,6 +63,8 @@
 | `POST` | `/api/nodes/:id/link` | 공유 링크 재발급(옛 링크 즉시 무효, 활동 기록에 남음) |
 | `GET` | `/api/nodes/:id/activity` | 링크 활동 최신 200개(폴더는 하위 항목 포함) |
 | `PUT` | `/api/nodes/:id/pause` | 관리자: 다운로드 일시정지/재개 |
+| `POST` | `/api/uploads` | 업로드 준비 `{ target: home\|root\|폴더id, files: [{ rel, size }], dup?, fallbackName? }` → `{ kind: duplicates, names }` / `{ kind: nothing }` / `{ kind: ready, batchId, endpoint, folder, files }`. 이름 검증, 용량·볼륨 여유 공간(507), Home 업로드 폴더 생성 |
+| tus | `/api/uploads/tus/:volumeId[/:uploadId]` | 재개 가능한 업로드(tus 1.0, 청크 `UPLOAD_CHUNK_SIZE_MB`). 메타데이터 `batch`, `index`, `filename`. 업로드한 기기의 계정만 이어 올리거나 조회할 수 있다. 완료되면 `{ success, data: { nodeId, name, folderId } }`. `proxy.ts`를 거치지 않는다(본문 버퍼링 방지) |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
 
 이후 마일스톤에서 추가되는 엔드포인트는 [plan.md](plan.md) §13.3을 따른다.

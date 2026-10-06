@@ -191,3 +191,36 @@ export function listLinkEvents(db: DbClient, nodeIds: string[], limit: number) {
 export async function addLinkEvent(db: DbClient, data: Prisma.LinkEventUncheckedCreateInput): Promise<void> {
   await db.linkEvent.create({ data });
 }
+
+/** A child with this exact name, if any. */
+export function findChildByName(db: DbClient, parentId: string, name: string) {
+  return db.node.findFirst({ where: { parentId, name }, select: NODE_SELECT });
+}
+
+/** Every node below a folder with its path relative to it ("Photos/a.jpg"). */
+export async function relativePaths(db: DbClient, folderId: string): Promise<Map<string, { id: string; type: "FILE" | "FOLDER" }>> {
+  const rows = await db.$queryRaw<{ id: string; path: string; type: "FILE" | "FOLDER" }[]>`
+    WITH RECURSIVE sub AS (
+      SELECT id, name::text AS path, type FROM "Node" WHERE "parentId" = ${folderId}
+      UNION ALL
+      SELECT n.id, s.path || '/' || n.name, n.type FROM "Node" n JOIN sub s ON n."parentId" = s.id
+    )
+    SELECT id, path, type::text AS type FROM sub`;
+  return new Map(rows.map((row) => [row.path, { id: row.id, type: row.type }]));
+}
+
+export interface NewFile {
+  id: string;
+  accountId: string;
+  parentId: string;
+  name: string;
+  kind: "VIDEO" | "AUDIO" | "IMAGE" | "OTHER";
+  mime: string;
+  size: bigint;
+  sha256: string;
+  linkId: string;
+}
+
+export function createFileNode(db: DbClient, data: NewFile) {
+  return db.node.create({ data: { ...data, type: "FILE" }, select: NODE_SELECT });
+}

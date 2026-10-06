@@ -9,5 +9,5 @@ export function listActiveVolumes(db: DbClient) {
 }
 
 export function findVolume(db: DbClient, volumeId: string) {
-  return db.storageVolume.findUnique({ where: { id: volumeId }, select: { id: true, driver: true, mountPath: true, status: true } });
+  return db.storageVolume.findUnique({ where: { id: volumeId }, select: { id: true, driver: true, mountPath: true, status: true, reservePct: true } });
 }

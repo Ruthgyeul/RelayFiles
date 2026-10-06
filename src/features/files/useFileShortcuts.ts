@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { isTypingTarget } from "@/features/shortcuts/shortcuts";
 
 interface ShortcutHandlers {
+  upload: () => void;
   selectAll: () => void;
   search: () => void;
   toggleView: () => void;
@@ -11,7 +12,7 @@ interface ShortcutHandlers {
 }
 
 /**
- * File Manager keys from the design: / search, G grid or list, Ctrl/Cmd+A select all,
+ * File Manager keys from the design: U upload, / search, G grid or list, Ctrl/Cmd+A select all,
  * Backspace parent folder. Ignored while typing or while a dialog is open.
  */
 export function useFileShortcuts(handlers: ShortcutHandlers): void {
@@ -24,7 +25,7 @@ export function useFileShortcuts(handlers: ShortcutHandlers): void {
     const onKey = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target) || document.querySelector('[role="dialog"]')) return;
       const key = event.key.toLowerCase();
-      const { selectAll, search, toggleView, parent } = latest.current;
+      const { upload, selectAll, search, toggleView, parent } = latest.current;
       if ((event.metaKey || event.ctrlKey) && key === "a") {
         event.preventDefault();
         selectAll();
@@ -34,7 +35,8 @@ export function useFileShortcuts(handlers: ShortcutHandlers): void {
       if (key === "/") {
         event.preventDefault();
         search();
-      } else if (key === "g") toggleView();
+      } else if (key === "u") upload();
+      else if (key === "g") toggleView();
       else if (key === "backspace") parent();
     };
     document.addEventListener("keydown", onKey);

@@ -7,7 +7,10 @@ import { parseTags } from "@/domain/tags";
 import { emptyTitle, itemCount, type FilterKey } from "@/domain/tree";
 import { usePageTitle } from "@/features/shell/page-title";
 import { useShell } from "@/features/shell/ShellProvider";
+import { entriesFromDrop, hasFiles } from "@/features/transfers/read-drop";
+import { useTransfers } from "@/features/transfers/TransfersProvider";
 import { useNow } from "@/shared/hooks/useNow";
+import { cn } from "@/shared/lib/cn";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { ActionMenu, anchorOf, type AnchorRect } from "./ActionMenu";
 import { filesApi } from "./api";
@@ -68,7 +71,14 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
         router.refresh();
       })
       .catch((caught: unknown) => notify(caught instanceof ApiClientError ? caught.message : "Something went wrong."));
-  const drag = useDragMove(selected, moveTo);
+  const transfers = useTransfers();
+  const uploadTarget = { ref: parentRef, name: folder.name };
+  const dropFiles = async (folderId: string, transfer: DataTransfer) => {
+    const target = folderId === folder.id ? uploadTarget : { ref: folderId, name: items.find((item) => item.id === folderId)?.name ?? folder.name };
+    transfers.upload(await entriesFromDrop(transfer), target);
+  };
+  const drag = useDragMove(selected, moveTo, (folderId, transfer) => void dropFiles(folderId, transfer));
+  const [filesOver, setFilesOver] = useState(false);
 
   const copyText = (text: string, message: string) => {
     navigator.clipboard?.writeText(text).catch(() => undefined);
@@ -100,6 +110,7 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
   };
 
   useFileShortcuts({
+    upload: () => transfers.pickFiles(uploadTarget),
     selectAll: () => setSelected(new Set(items.map((item) => item.id))),
     search: () => setSearchOpen(true),
     toggleView: () => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" }),
@@ -146,6 +157,19 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
   });
 
   const newFolderButton = <ToolButton icon="folder-plus" label="New folder" onClick={newFolder.open} />;
+  const folderActions = (
+    <>
+      <ToolButton variant="primary" icon="upload-simple" label="Upload" onClick={() => transfers.pickFiles(uploadTarget)} />
+      <ToolButton icon="folder-simple-plus" label="Upload folder" title="Upload a folder" onClick={() => transfers.pickFolder(uploadTarget)} />
+      {newFolderButton}
+    </>
+  );
+  const emptyActions = (
+    <>
+      <ToolButton variant="primary" icon="upload-simple" label="Upload files" onClick={() => transfers.pickFiles(uploadTarget)} />
+      {newFolderButton}
+    </>
+  );
   const selectionActions = (
     <>
       <ToolButton icon="tag" label="Tags" onClick={() => open.tags(selectedItems)} />
@@ -172,7 +196,7 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
         selectedCount={selectedItems.length}
         onToggleAll={() => setSelected(items.length > 0 && items.every((item) => selected.has(item.id)) ? new Set() : new Set(items.map((item) => item.id)))}
         selectionActions={selectionActions}
-        folderActions={newFolderButton}
+        folderActions={folderActions}
         view={prefs.view}
         onToggleView={() => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" })}
         onToggleSearch={() => {
@@ -195,9 +219,23 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
           onClear={() => (setQuery(""), setSearchOpen(false))}
         />
       )}
-      <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-card-line bg-card-line">
+      <div
+        onDragOver={(event) => {
+          if (!hasFiles(event.dataTransfer)) return;
+          event.preventDefault();
+          setFilesOver(true);
+        }}
+        onDragLeave={(event) => !event.currentTarget.contains(event.relatedTarget as Node | null) && setFilesOver(false)}
+        onDrop={(event) => {
+          setFilesOver(false);
+          if (!hasFiles(event.dataTransfer)) return;
+          event.preventDefault();
+          void dropFiles(folder.id, event.dataTransfer);
+        }}
+        className={cn("flex flex-col gap-px overflow-hidden rounded-2xl border bg-card-line", filesOver ? "border-accent-hi" : "border-card-line")}
+      >
         {items.length === 0 ? (
-          <EmptyFolder title={emptyTitle({ tagMode, wanted, query: q, filter })} actions={newFolderButton} />
+          <EmptyFolder title={emptyTitle({ tagMode, wanted, query: q, filter })} actions={emptyActions} />
         ) : prefs.view === "grid" ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] gap-3 bg-card p-3.5">
             {items.map((item) => (

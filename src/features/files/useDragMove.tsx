@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type DragEvent, type ReactNode } from "react";
+import { hasFiles } from "@/features/transfers/read-drop";
 import { Icon } from "@/shared/ui/icon/Icon";
 
 /** Props spread onto an element that accepts dropped items (folder rows, crumbs, the Up button). */
@@ -24,7 +25,12 @@ interface DragMove {
  * Drag-to-move from the design: dragging shows a "Moving N items" pill; dropping on a
  * folder, a crumb or the Up button moves the items there. Touch devices use Move instead.
  */
-export function useDragMove(selected: ReadonlySet<string>, onMove: (ids: string[], targetId: string) => void): DragMove {
+export function useDragMove(
+  selected: ReadonlySet<string>,
+  onMove: (ids: string[], targetId: string) => void,
+  /** Files dropped from the operating system onto a folder are uploaded there. */
+  onFiles?: (folderId: string, transfer: DataTransfer) => void,
+): DragMove {
   const [dragging, setDragging] = useState<string[] | null>(null);
   const [over, setOver] = useState<string | null>(null);
 
@@ -47,7 +53,7 @@ export function useDragMove(selected: ReadonlySet<string>, onMove: (ids: string[
       if (dragging?.includes(folderId)) return undefined;
       return {
         onDragOver: (event) => {
-          if (!dragging) return;
+          if (!dragging && !(onFiles && hasFiles(event.dataTransfer))) return;
           event.preventDefault();
           event.stopPropagation();
           setOver(folderId);
@@ -58,11 +64,12 @@ export function useDragMove(selected: ReadonlySet<string>, onMove: (ids: string[
         },
         onDrop: (event) => {
           const ids = dragging;
-          if (!ids) return;
+          if (!ids && !(onFiles && hasFiles(event.dataTransfer))) return;
           event.preventDefault();
           event.stopPropagation();
           end();
-          onMove(ids, folderId);
+          if (ids) onMove(ids, folderId);
+          else onFiles?.(folderId, event.dataTransfer);
         },
       };
     },
