@@ -9,6 +9,8 @@ import { extname, join, relative } from "node:path";
 
 const ROOTS = ["src", "deploy", "scripts", "e2e"];
 const EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".css", ".html", ".json", ".conf", ".sh", ".yml", ".yaml"]);
+/** Generated third-party output (not committed) is skipped. */
+const SKIP_DIRS = new Set(["node_modules", "generated"]);
 const ALLOWED = new Set(["©", "®", "™"]);
 const PICTOGRAPHIC = /[\p{Extended_Pictographic}\u{FE0F}]/gu;
 
@@ -20,7 +22,7 @@ function* walk(dir) {
     return;
   }
   for (const name of entries) {
-    if (name === "node_modules" || name.startsWith(".")) continue;
+    if (SKIP_DIRS.has(name) || name.startsWith(".")) continue;
     const path = join(dir, name);
     if (statSync(path).isDirectory()) yield* walk(path);
     else if (EXTENSIONS.has(extname(name))) yield path;

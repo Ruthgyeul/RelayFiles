@@ -63,10 +63,10 @@ const eslintConfig = defineConfig([
   },
   {
     // Node scripts and tooling configs may log to the console.
-    files: ["scripts/**/*.{mjs,ts}", "*.config.{mjs,ts}"],
+    files: ["scripts/**/*.{mjs,mts,ts}", "*.config.{mjs,mts,ts}"],
     rules: { "no-console": "off" },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "playwright-report/**", "test-results/**", "next-env.d.ts"]),
+  globalIgnores(["src/server/db/generated/**", ".next/**", "out/**", "build/**", "coverage/**", "playwright-report/**", "test-results/**", "next-env.d.ts"]),
 ]);
 
 export default eslintConfig;

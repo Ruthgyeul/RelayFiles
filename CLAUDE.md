@@ -37,13 +37,19 @@ npm run build        # next build + standalone 번들 준비
 npm run start        # node .next/standalone/server.js
 npm run typecheck    # next typegen && tsc --noEmit
 npm run lint         # eslint (경고 0개 허용)
-npm run test         # vitest run
+npm run test         # 단위 테스트 (외부 서비스 없음)
+npm run test:integration  # PostgreSQL·Redis가 필요한 통합 테스트 (.env 사용)
+npm run db:migrate   # prisma migrate dev (개발: 스키마 변경 → 마이그레이션 생성)
+npm run db:deploy    # prisma migrate deploy (운영)
+npm run volume:init  # STORAGE_ROOT 볼륨 초기화·등록 (재실행 안전)
 npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지정 가능)
 npm run check:emoji  # 이모지 사용 검사
 npm run check        # typecheck · lint · emoji · test · build 전체
 ```
 
-결과물을 전달하기 전에 `npm run check`를 통과시킨다.
+결과물을 전달하기 전에 `npm run check`를 통과시킨다. DB나 스토리지를 건드리면 `npm run test:integration`도 통과시킨다.
+
+개발용 PostgreSQL·Redis: `docker compose --env-file .env -f deploy/docker-compose.dev.yml up -d` (값은 `.env`에서 읽음). Prisma 클라이언트는 `src/server/db/generated/`에 생성되며 커밋하지 않는다(`postinstall`이 생성).
 
 ## 구조 규칙
 

@@ -39,6 +39,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children?: ReactNode;
 }
 
+/** Class names for a button-styled element (also used by ButtonLink). */
+export function buttonClassName({ variant = "secondary", size = 32, hoverable = false }: { variant?: ButtonVariant; size?: ButtonSize; hoverable?: boolean }): string {
+  const v = VARIANT[variant];
+  return cn(
+    "inline-flex shrink-0 items-center justify-center gap-1.5 font-bold whitespace-nowrap no-underline disabled:cursor-not-allowed disabled:opacity-50",
+    SIZE[size],
+    v.base,
+    hoverable && v.hover,
+  );
+}
+
 export function Button({
   variant = "secondary",
   size = 32,
@@ -52,19 +63,8 @@ export function Button({
   children,
   ...rest
 }: ButtonProps) {
-  const v = VARIANT[variant];
   return (
-    <button
-      type={type}
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-1.5 font-bold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50",
-        SIZE[size],
-        v.base,
-        hoverable && v.hover,
-        className,
-      )}
-      {...rest}
-    >
+    <button type={type} className={cn(buttonClassName({ variant, size, hoverable }), className)} {...rest}>
       {icon && <Icon name={icon} weight={iconWeight} size={iconSize} />}
       {children != null && <span className={cn(hideLabelOnMobile && "max-sm:hidden")}>{children}</span>}
     </button>
