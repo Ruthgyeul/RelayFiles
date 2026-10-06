@@ -78,7 +78,7 @@ export async function renameNode(owner: Owner, nodeId: string, requested: string
 
   // The root's folder on disk is named after the account id, so only its display name changes.
   if (!row.parentId) return toNodeItem(await updateNode(db(), row.id, { name }));
-  const driver = await driverForAccount(owner);
+  const driver = await driverForAccount(owner, "write");
   const from = await locationOf(owner.id, row.id);
   const to = { ...from, segments: [...from.segments.slice(0, -1), name] };
   try {
@@ -123,7 +123,7 @@ export async function moveNodes(owner: Owner, ids: string[], targetRef: string):
   const items = (await topLevel(owner.id, ids)).filter((row) => row.id !== target.id && row.parentId !== target.id && !isInside(targetIds, row.id));
   if (items.length === 0) throw new ApiError("BAD_REQUEST", "Can't move there");
 
-  const driver = await driverForAccount(owner);
+  const driver = await driverForAccount(owner, "write");
   const targetSegments = targetChain.slice(1).map((row) => row.name);
   const taken = await listSiblingNames(db(), target.id);
   let renamed = 0;
@@ -161,7 +161,7 @@ export async function copyNodes(owner: Owner, ids: string[], targetRef: string):
     if (usedBytes + bytes > owner.quotaBytes) throw new ApiError("INSUFFICIENT_STORAGE", "Not enough space in this account for the copy.");
   }
 
-  const driver = await driverForAccount(owner);
+  const driver = await driverForAccount(owner, "write");
   const targetSegments = targetChain.slice(1).map((row) => row.name);
   const taken = await listSiblingNames(db(), target.id);
   let renamed = 0;
@@ -210,7 +210,7 @@ export async function copyNodes(owner: Owner, ids: string[], targetRef: string):
 export async function deleteItems(owner: Owner, ids: string[]): Promise<{ deleted: number }> {
   const items = await topLevel(owner.id, ids);
   if (items.length === 0) throw new ApiError("NOT_FOUND");
-  const driver = await driverForAccount(owner);
+  const driver = await driverForAccount(owner, "write");
   const locations = await Promise.all(items.map((row) => locationOf(owner.id, row.id)));
   const files = (await Promise.all(items.map((row) => subtreeRows(db(), row.id)))).flat().filter((row) => row.type === "FILE");
   await withStorageTransaction(db(), async (tx, undo) => {

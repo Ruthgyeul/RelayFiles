@@ -1,5 +1,5 @@
 import "server-only";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { STORAGE } from "@/config/policy";
 import { DIR_MODE, FILE_MODE, layoutOf } from "./layout";
@@ -41,6 +41,13 @@ export async function initVolume(root: string, volumeId: string, now: Date = new
   const marker: VolumeMarker = { volumeId, layoutVersion: STORAGE.layoutVersion, createdAt: now.toISOString() };
   await writeFile(layout.marker, `${JSON.stringify(marker, null, 2)}\n`, { mode: FILE_MODE, flag: "wx" });
   return marker;
+}
+
+/** Replaces the marker atomically (write a temporary file, then rename over the old one). */
+export async function writeVolumeMarker(root: string, marker: VolumeMarker): Promise<void> {
+  const path = layoutOf(root).marker;
+  await writeFile(`${path}.tmp`, `${JSON.stringify(marker, null, 2)}\n`, { mode: FILE_MODE });
+  await rename(`${path}.tmp`, path);
 }
 
 /**

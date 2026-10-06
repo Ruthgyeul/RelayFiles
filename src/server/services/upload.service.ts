@@ -32,7 +32,7 @@ import type { StorageDriver } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { loadBatch, saveBatch, type UploadBatch } from "../upload/batches";
 import { createFolder } from "./node.service";
-import { driverForAccount } from "./volume.service";
+import { assertAccountWritable, driverForAccount } from "./volume.service";
 import { enqueueMedia } from "../jobs/queue";
 
 type Owner = Pick<AccountRow, "id" | "volumeId" | "quotaBytes">;
@@ -71,6 +71,7 @@ async function assertSpace(owner: Owner, bytes: number, driver: StorageDriver, r
  */
 export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Promise<PrepareUploadResult> {
   input.files.forEach((file) => checkRelPath(file.rel));
+  await assertAccountWritable(owner.id);
   const volume = await findVolume(db(), owner.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
   const driver = driverFor(volume);
@@ -121,6 +122,7 @@ export async function checkUploadStart(owner: Owner, batchId: string, slot: numb
   const entry = batch?.files[slot];
   if (!batch || !entry || batch.accountId !== owner.id) throw new ApiError("NOT_FOUND", "This upload has expired. Start it again.");
   if (size !== undefined && size !== entry.size) throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
+  await assertAccountWritable(owner.id);
   const volume = await findVolume(db(), batch.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
   await assertSpace(owner, entry.size, driverFor(volume), volume.reservePct);
@@ -179,7 +181,7 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
   const entry = batch.files[slot];
   if (!entry) throw new ApiError("NOT_FOUND");
   const rel = entry.rel;
-  const driver = await driverForAccount(owner);
+  const driver = await driverForAccount(owner, "write");
   const volume = await findVolume(db(), batch.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
   const tempPath = `${layoutOf(volume.mountPath).uploads}/${uploadId}`;

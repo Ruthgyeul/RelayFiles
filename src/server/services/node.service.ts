@@ -158,7 +158,7 @@ export async function createFolder(account: Pick<AccountRow, "id" | "volumeId">,
   const parent = await resolveFolder(account.id, parentRef);
   const chain = await ancestorChain(db(), parent.id);
   if (chain.length >= STORAGE.maxFolderDepth) throw new ApiError("BAD_REQUEST", `Folders can be nested at most ${STORAGE.maxFolderDepth} levels deep.`);
-  const driver = await driverForAccount(account);
+  const driver = await driverForAccount(account, "write");
   // The account root maps to users/<accountId>/, so its own name is not part of the path.
   const parentSegments = chain.slice(1).map((row) => row.name);
 

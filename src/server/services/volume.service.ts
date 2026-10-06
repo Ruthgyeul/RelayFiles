@@ -33,8 +33,19 @@ export async function volumeForNewAccount(): Promise<StorageDriver> {
   return driverFor(volume);
 }
 
-/** Storage driver of the volume an account lives on. */
-export async function driverForAccount(account: { volumeId: string }): Promise<StorageDriver> {
+/**
+ * Refuses changes while an account's files are being moved to another volume, or while its
+ * volume is read-only for a layout migration (docs/runbook.md). Reads keep working.
+ */
+export async function assertAccountWritable(accountId: string): Promise<void> {
+  const row = await db().account.findUnique({ where: { id: accountId }, select: { migrating: true, volume: { select: { status: true } } } });
+  if (!row) throw new ApiError("NOT_FOUND");
+  if (row.migrating || row.volume.status === "READONLY") throw new ApiError("STORAGE_BUSY");
+}
+
+/** Storage driver of the volume an account lives on; `write` also checks that changes are allowed. */
+export async function driverForAccount(account: { id: string; volumeId: string }, mode: "read" | "write" = "read"): Promise<StorageDriver> {
+  if (mode === "write") await assertAccountWritable(account.id);
   const volume = await findVolume(db(), account.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
   return driverFor(volume);

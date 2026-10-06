@@ -137,3 +137,4 @@ jobs:
           sed -i 's|^STORAGE_ROOT=.*|STORAGE_ROOT=/mnt/relayfilesDB|; s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=ci-postgres-password|; s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=ci-redis-password|' .env
           docker compose --env-file .env -f deploy/docker-compose.yml config --quiet
           docker compose --env-file .env -f deploy/docker-compose.yml --profile tools --profile tunnel config --quiet
+          docker compose --env-file .env -f deploy/docker-compose.yml -f deploy/docker-compose.volumes.example.yml --profile tools config --quiet

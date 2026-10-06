@@ -53,7 +53,7 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
   if (!row || row.type !== "FILE" || (row.kind !== "IMAGE" && row.kind !== "VIDEO")) return null;
   const account = await findAccountById(db(), row.accountId);
   if (!account) return null;
-  const driver = await driverForAccount(account);
+  const driver = await driverForAccount(account, "write");
   const chain = await ancestorChain(db(), row.id);
   const path = await driver.localPath({ accountId: row.accountId, segments: chain.slice(1).map((ancestor) => ancestor.name) });
   if (!path) throw new Error("Media processing needs a local volume.");

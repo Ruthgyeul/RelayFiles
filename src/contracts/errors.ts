@@ -19,6 +19,7 @@ export const ERRORS = {
   INTERNAL: { status: 500, message: "Something went wrong." },
   MAINTENANCE: { status: 503, message: "The server is under maintenance." },
   STORAGE_OFFLINE: { status: 503, message: "Storage is temporarily unavailable." },
+  STORAGE_BUSY: { status: 503, message: "Your files are being moved to new storage. Changes are paused for a few minutes; browsing and downloads still work." },
   INSUFFICIENT_STORAGE: { status: 507, message: "Not enough space on the server." },
 } as const satisfies Record<string, { status: number; message: string }>;
 

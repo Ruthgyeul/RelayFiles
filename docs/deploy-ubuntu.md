@@ -148,7 +148,7 @@ deploy/scripts/release.sh
 1. DB 백업 (`DATA_DIR/backups`, 최근 14개 유지)
 2. 이미지 빌드 (태그 = git 커밋)
 3. 점검 모드 켜기 (Nginx가 503 점검 페이지를 보여 준다)
-4. `prisma migrate deploy`
+4. `prisma migrate deploy`, 데이터 마이그레이션(`data:migrate`), 스토리지 레이아웃(`storage:migrate`)
 5. app·worker·nginx 재시작, 점검 모드 끄기
 6. `/api/health` 확인, `DATA_DIR/releases.log`에 기록
 
@@ -175,5 +175,5 @@ deploy/scripts/release.sh
 
 - **Server 페이지 지표**: app이 컨테이너 안에서 잰다. CPU 사용률과 메모리는 컨테이너도 호스트의 `/proc` 값을 보므로 호스트와 거의 같다. 네트워크는 컨테이너 인터페이스 기준이라 RelayFiles 트래픽만 잡힌다(대역폭 그래프의 목적에 맞다).
 - **Disk health**: `smartctl`은 장치 접근과 root 권한이 필요해서 컨테이너에서는 기본으로 "Unavailable"이 표시된다. SMART 상태는 호스트에서 `sudo smartctl -d sat -H /dev/sdX`로 확인한다. 앱에 보여야 한다면 app 서비스에 `devices`, `cap_add: [SYS_RAWIO]`, root 실행이 필요하므로 권장하지 않는다.
-- **두 번째 SSD**: `STORAGE_ROOT`가 다른 경로이면 Nginx `templates`에 같은 형식의 `location`을 하나 더 두고 compose의 마운트를 추가한다(M16 `volume:migrate` 참고).
+- **두 번째 SSD**: `volume:init -- <경로>`가 Nginx location(`deploy/nginx/volumes/`)을 만들고, 마운트는 `deploy/docker-compose.volumes.yml` 오버레이로 추가한다. 절차와 계정 이동은 [runbook.md](runbook.md#볼륨-추가교체).
 - **TLS 인증서 만료일**: Cloudflare를 쓰면 앞단 인증서는 Cloudflare가 관리한다. 서버에서 직접 TLS를 쓰는 경우에만 `TLS_CERT_PATH`를 지정한다.
