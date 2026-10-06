@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, JOBS, LOGIN, STORAGE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, JOBS, LOGIN, MEDIA, STORAGE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -100,6 +100,8 @@ export const ENV_GROUPS = {
     JOBS_TIMEZONE: z.string().default(JOBS.timezone),
     METRICS_SAMPLE_INTERVAL_SEC: positiveInt.default(JOBS.metricsSampleIntervalSec),
     HEALTH_PROBE_INTERVAL_SEC: positiveInt.default(JOBS.healthProbeIntervalSec),
+    MEDIA_WORKER_CONCURRENCY: positiveInt.max(16).default(MEDIA.workerConcurrency),
+    FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   }),
   observability: z.object({
     LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).optional(),

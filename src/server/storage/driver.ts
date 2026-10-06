@@ -13,6 +13,15 @@ export interface StorageStat {
   modifiedAt: Date;
 }
 
+/** Files generated from an original: a thumbnail, or the metadata-stripped copy for public links. */
+export type AssetKind = "thumb" | "derived";
+
+export interface AssetRef {
+  kind: AssetKind;
+  accountId: string;
+  nodeId: string;
+}
+
 export interface SpaceInfo {
   total: bigint;
   available: bigint;
@@ -40,4 +49,10 @@ export interface StorageDriver {
   /** Puts an item moved to the trash back (undo of a failed delete). */
   restoreFromTrash(trashPath: string, location: StorageLocation): Promise<void>;
   space(): Promise<SpaceInfo>;
+  /** Writes a generated file atomically (temp file + rename), replacing an older one. */
+  writeAsset(asset: AssetRef, data: Uint8Array): Promise<void>;
+  /** Reads a generated file, or null when it does not exist. */
+  readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null>;
+  /** Removes the generated files of these nodes (missing ones are ignored). */
+  removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void>;
 }

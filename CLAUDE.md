@@ -46,6 +46,8 @@ npm run admin:create # 관리자 계정 생성, 토큰을 한 번만 출력
 npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지정 가능)
 npm run check:emoji  # 이모지 사용 검사
 npm run check        # typecheck · lint · emoji · test · build 전체
+npm run worker       # 백그라운드 워커(썸네일, 공개 링크용 메타데이터 제거본). ffmpeg 필요
+npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기
 ```
 
 결과물을 전달하기 전에 `npm run check`를 통과시킨다. DB나 스토리지를 건드리면 `npm run test:integration`도 통과시킨다.

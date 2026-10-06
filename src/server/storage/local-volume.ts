@@ -1,11 +1,15 @@
 import "server-only";
 import { constants } from "node:fs";
-import { cp, copyFile, mkdir, open, rename, stat, statfs } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { cp, copyFile, mkdir, open, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { Readable } from "node:stream";
-import { DIR_MODE, layoutOf, type VolumeLayout } from "./layout";
-import type { SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
+import { DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
+import type { AssetKind, AssetRef, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path";
+
+/** Account and node ids (generated, lowercase alphanumerics). */
+const ASSET_ID = /^[a-z0-9]{6,32}$/;
 
 /**
  * Storage on a locally mounted volume (the external SSD at /mnt/relayfilesDB).
@@ -91,6 +95,41 @@ export class LocalVolumeDriver implements StorageDriver {
   async restoreFromTrash(trashPath: string, location: StorageLocation): Promise<void> {
     if (!trashPath.startsWith(this.layout.trash)) throw new Error("Only items in the volume's trash can be restored.");
     await rename(trashPath, await this.pathOf(location));
+  }
+
+  /** `system/<thumbs|derived>/<accountId>/<nodeId>`; ids are generated, never user input. */
+  private assetPath(kind: AssetKind, accountId: string, nodeId: string): string {
+    if (!ASSET_ID.test(accountId) || !ASSET_ID.test(nodeId)) throw new Error("Invalid asset id.");
+    return join(kind === "thumb" ? this.layout.thumbs : this.layout.derived, accountId, nodeId);
+  }
+
+  async writeAsset({ kind, accountId, nodeId }: AssetRef, data: Uint8Array): Promise<void> {
+    const target = this.assetPath(kind, accountId, nodeId);
+    await mkdir(dirname(target), { recursive: true, mode: DIR_MODE });
+    const temp = `${target}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temp, data, { mode: FILE_MODE, flag: "wx" });
+      await rename(temp, target);
+    } catch (error) {
+      await rm(temp, { force: true });
+      throw error;
+    }
+  }
+
+  async readAsset({ kind, accountId, nodeId }: AssetRef): Promise<{ stream: Readable; size: number } | null> {
+    try {
+      const handle = await open(this.assetPath(kind, accountId, nodeId), constants.O_RDONLY | constants.O_NOFOLLOW);
+      const info = await handle.stat();
+      return { stream: handle.createReadStream({ autoClose: true }), size: info.size };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+  }
+
+  async removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void> {
+    const kinds: AssetKind[] = ["thumb", "derived"];
+    await Promise.all(nodeIds.flatMap((nodeId) => kinds.map((kind) => rm(this.assetPath(kind, accountId, nodeId), { force: true }))));
   }
 
   async space(): Promise<SpaceInfo> {

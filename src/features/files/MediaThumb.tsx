@@ -36,10 +36,15 @@ export function MediaThumb({ item, variant, onOpen }: MediaThumbProps) {
   const [playing, setPlaying] = useState(false);
   const src = fileUrls.stream(item.id);
   const fit = variant === "row" ? "object-contain" : "object-cover";
+  // The worker's small WebP preview when it exists; otherwise the original (first frame for videos).
+  const still = item.hasThumb ? (
+    // eslint-disable-next-line @next/next/no-img-element -- user media is served with auth cookies, not optimizable by next/image
+    <img src={fileUrls.thumb(item.id)} alt="" loading="lazy" className={cn("size-full", item.kind === "image" ? "object-cover" : fit)} />
+  ) : null;
 
   if (item.kind === "image") {
-    // eslint-disable-next-line @next/next/no-img-element -- user media is served with auth cookies, not optimizable by next/image
-    return <img src={src} alt="" loading="lazy" className="size-full object-cover" />;
+    // eslint-disable-next-line @next/next/no-img-element -- see above
+    return still ?? <img src={src} alt="" loading="lazy" className="size-full object-cover" />;
   }
   if (playing) {
     return (
@@ -75,7 +80,7 @@ export function MediaThumb({ item, variant, onOpen }: MediaThumbProps) {
   }
   return (
     <>
-      <video src={src} preload="metadata" muted={variant === "card"} playsInline className={cn("size-full", fit)} />
+      {still ?? <video src={src} preload="metadata" muted={variant === "card"} playsInline className={cn("size-full", fit)} />}
       <button
         type="button"
         title="Play here"

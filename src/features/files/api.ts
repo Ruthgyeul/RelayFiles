@@ -16,6 +16,7 @@ const node = (id: string) => `/api/nodes/${encodeURIComponent(id)}`;
 /** URLs the browser loads directly (media elements, downloads). */
 export const fileUrls = {
   stream: (id: string) => `/api/files/${encodeURIComponent(id)}/stream`,
+  thumb: (id: string) => `/api/files/${encodeURIComponent(id)}/thumb`,
   download: (id: string) => `/api/files/${encodeURIComponent(id)}/download`,
   zip: (ids: string[]) => `/api/zip?ids=${ids.map(encodeURIComponent).join(",")}`,
 };

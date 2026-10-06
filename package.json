@@ -21,7 +21,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "volume:init": "tsx --conditions=react-server scripts/volume-init.mts",
-    "admin:create": "tsx --conditions=react-server scripts/admin-create.mts"
+    "admin:create": "tsx --conditions=react-server scripts/admin-create.mts",
+    "worker": "tsx --conditions=react-server scripts/worker.mts",
+    "media:backfill": "tsx --conditions=react-server scripts/media-backfill.mts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.1",
@@ -31,6 +33,7 @@
     "@tus/file-store": "^2.1.1",
     "@tus/server": "^2.4.5",
     "archiver": "^8.0.0",
+    "bullmq": "^6.3.11",
     "clsx": "^2.1.1",
     "file-type": "^22.1.1",
     "ioredis": "^6.0.0",
@@ -40,6 +43,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "server-only": "^0.0.1",
+    "sharp": "^0.35.5",
     "tailwind-merge": "^3.7.0",
     "tus-js-client": "^4.3.1",
     "winston": "^3.19.0",

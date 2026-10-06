@@ -66,5 +66,9 @@
 | `POST` | `/api/uploads` | 업로드 준비 `{ target: home\|root\|폴더id, files: [{ rel, size }], dup?, fallbackName? }` → `{ kind: duplicates, names }` / `{ kind: nothing }` / `{ kind: ready, batchId, endpoint, folder, files }`. 이름 검증, 용량·볼륨 여유 공간(507), Home 업로드 폴더 생성 |
 | tus | `/api/uploads/tus/:volumeId[/:uploadId]` | 재개 가능한 업로드(tus 1.0, 청크 `UPLOAD_CHUNK_SIZE_MB`). 메타데이터 `batch`, `index`, `filename`. 업로드한 기기의 계정만 이어 올리거나 조회할 수 있다. 완료되면 `{ success, data: { nodeId, name, folderId } }`. `proxy.ts`를 거치지 않는다(본문 버퍼링 방지) |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
+| `GET`·`HEAD` | `/api/files/:id/download` | 원본 그대로 첨부 파일로 받기. SHA-256 ETag(304), Range(206/416), RFC 6266 파일명(한글). `STORAGE_ACCEL_ENABLED`면 Nginx `X-Accel-Redirect`로 넘긴다. 받은 바이트는 `TrafficDaily`에 기록 |
+| `GET`·`HEAD` | `/api/files/:id/stream` | 뷰어·인라인 재생용. 영상·음악·이미지만 inline, SVG·HTML은 항상 첨부(`nosniff`) |
+| `GET` | `/api/files/:id/thumb` | 워커가 만든 WebP 썸네일(최대 576px, 메타데이터 없음). 아직 없으면 404 |
+| `GET` | `/api/zip?ids=a,b` | 파일·폴더를 하나의 zip으로(store 모드, 폴더 구조와 빈 폴더 유지). 이름은 `폴더.zip` / `파일.zip` / `상위 · N items.zip` |
 
 이후 마일스톤에서 추가되는 엔드포인트는 [plan.md](plan.md) §13.3을 따른다.

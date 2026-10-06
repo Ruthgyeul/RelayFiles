@@ -7,6 +7,8 @@ import { isExpiryOption, nextExpiry } from "@/domain/share";
 import { normalizeTag } from "@/domain/tags";
 import { db, Prisma } from "../db/client";
 import { ApiError } from "../http/api-error";
+import { enqueueMedia } from "../jobs/queue";
+import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
 import {
   accountUsage,
@@ -165,6 +167,7 @@ export async function copyNodes(owner: Owner, ids: string[], targetRef: string):
   let renamed = 0;
   const now = new Date();
   const copies = await Promise.all(items.map(async (row) => ({ row, from: await locationOf(owner.id, row.id) })));
+  const media: string[] = [];
 
   await withStorageTransaction(db(), async (tx, undo) => {
     for (const [index, { row, from }] of copies.entries()) {
@@ -183,6 +186,7 @@ export async function copyNodes(owner: Owner, ids: string[], targetRef: string):
           name: isTop ? name : source.name,
           linkId: newLinkId(),
           downloads: 0,
+          hasThumb: false,
           hasDerived: false,
           createdAt: now,
           updatedAt: now,
@@ -194,8 +198,11 @@ export async function copyNodes(owner: Owner, ids: string[], targetRef: string):
       undo.push("remove copy", async () => {
         await driver.moveToTrash(to);
       });
+      media.push(...rows.filter((copy) => copy.type === "FILE" && (copy.kind === "IMAGE" || copy.kind === "VIDEO")).map((copy) => copy.id));
     }
   });
+  // Assets are keyed by node id, so copies get their own (rebuilt by the worker).
+  void enqueueMedia(media);
   return { done: items.length, renamed, targetName: target.name };
 }
 
@@ -205,6 +212,7 @@ export async function deleteItems(owner: Owner, ids: string[]): Promise<{ delete
   if (items.length === 0) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner);
   const locations = await Promise.all(items.map((row) => locationOf(owner.id, row.id)));
+  const files = (await Promise.all(items.map((row) => subtreeRows(db(), row.id)))).flat().filter((row) => row.type === "FILE");
   await withStorageTransaction(db(), async (tx, undo) => {
     await deleteNodes(
       tx,
@@ -215,6 +223,8 @@ export async function deleteItems(owner: Owner, ids: string[]): Promise<{ delete
       undo.push("restore deleted item", () => driver.restoreFromTrash(trashed, location));
     }
   });
+  // Thumbnails and stripped copies are rebuilt on demand, so they are removed right away.
+  await driver.removeAssets(owner.id, files.map((row) => row.id)).catch((error: unknown) => logger.warn("assets not removed", { error }));
   return { deleted: items.length };
 }
 
