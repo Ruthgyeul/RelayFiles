@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   typedRoutes: true,
+  experimental: {
+    // Enables forbidden() / unauthorized() and their 403 / 401 pages (docs/plan.md §9).
+    authInterrupts: true,
+  },
 };
 
 export default nextConfig;

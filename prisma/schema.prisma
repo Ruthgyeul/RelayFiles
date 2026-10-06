@@ -1,0 +1,309 @@
+// RelayFiles data model (docs/plan.md §13.1).
+// PostgreSQL is the index of the file tree and all metadata; file bytes live on the
+// storage volume (/mnt/relayfilesDB) under users/<accountId>/ with the same folder names.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/server/db/generated"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Storage volumes
+// ---------------------------------------------------------------------------
+
+enum StorageDriver {
+  LOCAL
+  S3
+}
+
+enum VolumeStatus {
+  ACTIVE
+  READONLY
+  DRAINING
+  OFFLINE
+}
+
+/// A storage location (external SSD mount or object store). Accounts are assigned to one.
+model StorageVolume {
+  id            String        @id
+  driver        StorageDriver @default(LOCAL)
+  /// Absolute mount path for LOCAL volumes, bucket URL for S3.
+  mountPath     String
+  status        VolumeStatus  @default(ACTIVE)
+  /// Directory layout version; must match the code (docs/plan.md §13.8 ②).
+  layoutVersion Int           @default(1)
+  reservePct    Int           @default(5)
+  createdAt     DateTime      @default(now())
+  accounts      Account[]
+}
+
+// ---------------------------------------------------------------------------
+// Accounts and sessions
+// ---------------------------------------------------------------------------
+
+/// Anonymous token account. The token is stored encrypted (shown in full on the profile)
+/// and as an HMAC for lookup; the plain token never touches the database.
+model Account {
+  id                   String        @id
+  name                 String        @unique
+  tokenLookup          String        @unique
+  tokenEnc             Bytes
+  color                String
+  isAdmin              Boolean       @default(false)
+  neverExpire          Boolean       @default(false)
+  /// Explicit deletion date set by an admin; null = createdAt + ACCOUNT_TTL_DAYS.
+  expiresAt            DateTime?
+  /// Storage quota in bytes; null = unlimited.
+  quotaBytes           BigInt?
+  stripMetadataOnShare Boolean       @default(true)
+  /// True while the account's files are being moved to another volume.
+  migrating            Boolean       @default(false)
+  volumeId             String
+  volume               StorageVolume @relation(fields: [volumeId], references: [id])
+  createdAt            DateTime      @default(now())
+  lastLoginAt          DateTime      @default(now())
+  sessions             Session[]
+  nodes                Node[]
+  traffic              TrafficDaily[]
+
+  @@index([volumeId])
+}
+
+/// One signed-in device for an account.
+model Session {
+  id         String    @id
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  os         String
+  browser    String
+  country    String?
+  city       String?
+  /// IP with the last two octets masked (a.b.•••.•••); the real IP is never stored.
+  ipMasked   String
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([accountId])
+}
+
+// ---------------------------------------------------------------------------
+// File tree
+// ---------------------------------------------------------------------------
+
+enum NodeType {
+  FOLDER
+  FILE
+}
+
+enum FileKind {
+  VIDEO
+  AUDIO
+  IMAGE
+  OTHER
+}
+
+enum Visibility {
+  INHERIT
+  PRIVATE
+  PUBLIC
+}
+
+enum Access {
+  BOTH
+  STREAM
+}
+
+/// A folder or file. Each account has exactly one root folder (parentId = null), created
+/// together with the account; the root maps to users/<accountId>/ on the volume.
+model Node {
+  id            String      @id
+  accountId     String
+  account       Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  parentId      String?
+  parent        Node?       @relation("NodeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children      Node[]      @relation("NodeTree")
+  type          NodeType
+  /// File or folder name, identical to the name on disk (validated by domain/names.ts).
+  name          String
+  kind          FileKind?
+  mime          String?
+  size          BigInt      @default(0)
+  sha256        String?
+  hasThumb      Boolean     @default(false)
+  hasDerived    Boolean     @default(false)
+  /// Set by the reconcile job when the file is missing on disk.
+  missing       Boolean     @default(false)
+  /// Public link id (/d/<linkId>). Never changes during migrations; regenerated only on request.
+  linkId        String      @unique
+  visibility    Visibility  @default(INHERIT)
+  expiryLabel   String      @default("Never")
+  expAt         DateTime?
+  burn          Boolean     @default(false)
+  downloadLimit Int?
+  passwordHash  String?
+  access        Access      @default(BOTH)
+  note          String      @default("")
+  dlPaused      Boolean     @default(false)
+  downloads     Int         @default(0)
+  tags          String[]    @default([])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  events        LinkEvent[]
+
+  @@unique([parentId, name])
+  @@index([accountId, parentId])
+  @@index([accountId, type])
+  @@index([expAt])
+  @@index([tags], type: Gin)
+}
+
+enum LinkEventKind {
+  OPEN
+  PLAY
+  VIEW
+  DOWNLOAD
+  RESET
+}
+
+/// Share link activity (opens, plays, downloads, link resets). The newest 200 per node are kept.
+model LinkEvent {
+  id        BigInt        @id @default(autoincrement())
+  nodeId    String
+  node      Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  kind      LinkEventKind
+  fileName  String
+  device    String        @default("")
+  ipMasked  String        @default("")
+  country   String        @default("")
+  at        DateTime      @default(now())
+
+  @@index([nodeId, at])
+}
+
+/// Bytes served per account per day (profile "Traffic" card).
+model TrafficDaily {
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  day       DateTime @db.Date
+  bytes     BigInt   @default(0)
+
+  @@id([accountId, day])
+}
+
+// ---------------------------------------------------------------------------
+// Server administration
+// ---------------------------------------------------------------------------
+
+enum SignupMode {
+  OPEN
+  INVITE
+  CLOSED
+}
+
+/// Singleton row (id = 1) with settings an admin changes at runtime.
+model ServerConfig {
+  id         Int        @id @default(1)
+  signupMode SignupMode @default(OPEN)
+  /// Theme key overriding DEFAULT_THEME; null = use the env default.
+  theme      String?
+  updatedAt  DateTime   @updatedAt
+}
+
+/// One-time invite code for INVITE sign-up mode.
+model Invite {
+  code       String    @id
+  createdAt  DateTime  @default(now())
+  usedAt     DateTime?
+  usedByName String?
+}
+
+enum AnnouncementLevel {
+  INFO
+  WARN
+  MAINT
+}
+
+model Announcement {
+  id    String            @id
+  text  String
+  level AnnouncementLevel @default(INFO)
+  live  Boolean           @default(true)
+  at    DateTime          @default(now())
+}
+
+enum IncidentSeverity {
+  MINOR
+  MAJOR
+  MAINT
+}
+
+model Incident {
+  id        String           @id
+  title     String
+  text      String           @default("")
+  severity  IncidentSeverity @default(MINOR)
+  date      DateTime
+  duration  String           @default("")
+  resolved  Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Health history (Status page)
+// ---------------------------------------------------------------------------
+
+/// Raw per-minute probe results, rolled up into hourly and daily rows.
+model HealthSample {
+  id        BigInt   @id @default(autoincrement())
+  component String
+  at        DateTime @default(now())
+  ok        Boolean
+  ms        Int?
+
+  @@index([component, at])
+}
+
+model HealthHourly {
+  component String
+  hour      DateTime
+  okCount   Int      @default(0)
+  failCount Int      @default(0)
+  avgMs     Int?
+  p95Ms     Int?
+
+  @@id([component, hour])
+}
+
+enum HealthLevel {
+  OK
+  WARN
+  DOWN
+}
+
+model HealthDaily {
+  component String
+  day       DateTime    @db.Date
+  level     HealthLevel
+  okCount   Int         @default(0)
+  failCount Int         @default(0)
+
+  @@id([component, day])
+}
+
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
+
+/// Progress of resumable data migrations (scripts/migrations/data, docs/plan.md §13.8 ①).
+model DataMigration {
+  id         String    @id
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  cursor     String?
+}

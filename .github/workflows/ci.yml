@@ -5,6 +5,9 @@ on:
     branches: [main, develop]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -43,3 +46,42 @@ jobs:
       - run: npm run test:e2e
         env:
           CI: "true"
+
+  integration:
+    name: Integration (PostgreSQL · Redis · migrations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: relayfiles
+          POSTGRES_USER: relayfiles
+          POSTGRES_PASSWORD: ci-postgres-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U relayfiles" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PASSWORD: ci-postgres-password
+      REDIS_HOST: localhost
+      REDIS_PASSWORD: ci-redis-password
+      STORAGE_ROOT: ./.data/relayfilesDB
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Redis runs with a password like in production (service containers cannot pass server flags).
+      - name: Start Redis
+        run: |
+          docker run -d --name redis -p 6379:6379 redis:7 redis-server --requirepass "$REDIS_PASSWORD"
+          for i in $(seq 1 20); do docker exec redis redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG && break; sleep 1; done
+      - name: Migrations apply cleanly and match the schema
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+      - run: npm run volume:init
+      - run: npm run test:integration

@@ -20,6 +20,8 @@ export const LOGIN = {
 } as const;
 
 export const STORAGE = {
+  /** Directory layout version written to the volume marker (docs/plan.md §13.8 ②). */
+  layoutVersion: 1,
   /** Free space kept on each volume; uploads are refused below it. */
   reservePercent: 5,
   /** How often the volume marker file is checked, in seconds. */

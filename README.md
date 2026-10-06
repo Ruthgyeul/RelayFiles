@@ -2,7 +2,7 @@
 
 Fast and easy file sharing system. A private file drop for sharing and streaming media from a self-hosted server: upload, get a link, and let it expire on a date or after a set number of downloads.
 
-> Status: **M1 (design system)**. The UI and backend are built milestone by milestone — see [`docs/plan.md`](docs/plan.md).
+> Status: **M2 (infrastructure)**. The UI and backend are built milestone by milestone — see [`docs/plan.md`](docs/plan.md).
 
 ## Stack
 
@@ -16,6 +16,9 @@ npm ci
 cp .env.example .env   # then fill in values
 npm run env:secrets    # prints random secrets to paste into .env
 npm run env:check      # validates .env
+docker compose --env-file .env -f deploy/docker-compose.dev.yml up -d   # PostgreSQL + Redis
+npm run db:deploy      # apply database migrations
+npm run volume:init    # prepare the storage folder (STORAGE_ROOT)
 npm run dev            # http://localhost:3000
 ```
 
@@ -27,6 +30,7 @@ npm run dev            # http://localhost:3000
 | `npm run build` | Production build (standalone bundle) |
 | `npm run start` | Run the standalone server |
 | `npm run check` | Typecheck, lint, emoji check, unit tests and build |
+| `npm run test:integration` | Integration tests against PostgreSQL and Redis |
 | `npm run test:e2e` | Playwright E2E at 360 / 768 / 1280 px |
 | `npm run env:check` | Validate `.env` without starting the app |
 | `npm run env:secrets` | Print freshly generated secrets for `.env` |
