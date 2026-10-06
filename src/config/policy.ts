@@ -47,6 +47,23 @@ export const UPLOAD = {
   tmpTtlHours: 6,
 } as const;
 
+export const MEDIA = {
+  /** Longest side of generated thumbnails (2x the 288px list preview). */
+  thumbSizePx: 576,
+  thumbQuality: 72,
+  /** Video thumbnails use the frame at this time (or the first frame of shorter clips). */
+  videoFrameSeconds: 1,
+  /** Images larger than this get no metadata-stripped copy (held in memory while stripping). */
+  maxStripBytes: 200_000_000,
+  /** Largest image (in pixels) the thumbnailer decodes; stops decompression bombs. */
+  maxInputPixels: 268_402_689,
+  /** ffmpeg gives up after this long. */
+  ffmpegTimeoutSec: 60,
+  workerConcurrency: 2,
+  jobAttempts: 3,
+  jobBackoffMs: 10_000,
+} as const;
+
 export const JOBS = {
   cleanupCron: "0 4 * * *",
   timezone: "Asia/Seoul",

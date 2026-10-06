@@ -29,6 +29,7 @@ export const NODE_SELECT = {
   size: true,
   sha256: true,
   hasThumb: true,
+  hasDerived: true,
   linkId: true,
   visibility: true,
   expiryLabel: true,
@@ -48,6 +49,22 @@ export type NodeRow = NonNullable<Awaited<ReturnType<typeof findNode>>>;
 
 export function findNode(db: DbClient, accountId: string, nodeId: string) {
   return db.node.findFirst({ where: { id: nodeId, accountId }, select: NODE_SELECT });
+}
+
+/** A node by id for background jobs (no account scope: the caller is the server itself). */
+export function findNodeForJob(db: DbClient, nodeId: string) {
+  return db.node.findUnique({ where: { id: nodeId }, select: NODE_SELECT });
+}
+
+/** Images and videos still without a thumbnail, oldest first, for the backfill script. */
+export function mediaWithoutThumbs(db: DbClient, take: number, afterId?: string) {
+  return db.node.findMany({
+    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, hasThumb: false, missing: false },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take,
+    ...(afterId ? { cursor: { id: afterId }, skip: 1 } : {}),
+  });
 }
 
 export function findRootFolder(db: DbClient, accountId: string) {

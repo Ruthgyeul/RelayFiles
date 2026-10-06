@@ -36,6 +36,18 @@ route handler (src/app/api/**/route.ts)
       → cache (src/server/cache): Redis, 파생 데이터만
 ```
 
+## 백그라운드 워커
+
+웹 앱과 별도 프로세스(`npm run worker`)가 BullMQ 큐를 처리한다. 큐 키는 `REDIS_KEY_PREFIX + "q"` 아래에 있다.
+
+| 큐 | 작업 | 넣는 곳 |
+|---|---|---|
+| `media` | 썸네일(이미지: sharp, 영상: ffmpeg 1초 프레임 → WebP 576px), 공개 링크용 메타데이터 제거본(JPEG·PNG·WebP는 픽셀을 다시 인코딩하지 않고 메타데이터 구간만 제거, 방향 정보는 유지. GIF·AVIF·TIFF는 같은 형식으로 다시 쓰기) | 업로드 완료, 복사 |
+
+- 생성 파일은 `system/thumbs/<accountId>/<nodeId>`, `system/derived/<accountId>/<nodeId>`에 두고, 원본은 건드리지 않는다. 항목을 지우면 함께 지운다.
+- 웹 앱은 큐에 넣기만 하고 실패해도 요청을 막지 않는다(Redis 장애 시 썸네일만 늦어짐). 빠진 썸네일은 `npm run media:backfill`로 다시 큐에 넣는다.
+- 디코딩할 수 없는 파일은 경고 로그만 남기고 다시 시도하지 않는다.
+
 ## 교체 가능한 인터페이스
 
 | 인터페이스 | 현재 구현 | 확장 |

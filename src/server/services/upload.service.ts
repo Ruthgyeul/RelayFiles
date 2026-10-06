@@ -33,6 +33,7 @@ import { withStorageTransaction } from "../storage/storage-transaction";
 import { loadBatch, saveBatch, type UploadBatch } from "../upload/batches";
 import { createFolder } from "./node.service";
 import { driverForAccount } from "./volume.service";
+import { enqueueMedia } from "../jobs/queue";
 
 type Owner = Pick<AccountRow, "id" | "volumeId" | "quotaBytes">;
 
@@ -219,5 +220,7 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
   });
   // tus keeps upload state next to the data file; the data moved, so drop the state too.
   await unlink(`${tempPath}.json`).catch(() => undefined);
+  if (replace) await driver.removeAssets(owner.id, [replace.id]).catch(() => undefined);
+  if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
   return { nodeId: row.id, name: row.name, folderId: folder.id };
 }
