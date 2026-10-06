@@ -39,10 +39,12 @@ interface FileManagerProps {
   view: FolderView;
   isAdmin: boolean;
   publicUrl: string;
+  /** A file of this folder to open in the viewer right away (global search `?view=`). */
+  initialView?: string;
 }
 
 /** The File Manager page for one folder: path, header, toolbar, filters, search, items and dialogs. */
-export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
+export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManagerProps) {
   const router = useRouter();
   const { notify, activeAccount } = useShell();
   const [prefs, setPrefs] = usePrefs();
@@ -62,7 +64,7 @@ export function FileManager({ view, isAdmin, publicUrl }: FileManagerProps) {
   const clearSelection = () => setSelected(new Set());
   const { open, dialogs } = useFileDialogs({ isAdmin, accountDeletesAt: activeAccount?.deletesAt ?? null, linkOf, onChanged: clearSelection });
   const newFolder = useNewFolder(parentRef, children.map((child) => child.name));
-  const media = useFileMedia(items, folder.name);
+  const media = useFileMedia(items, folder.name, initialView);
 
   const moveTo = (ids: string[], targetId: string) =>
     filesApi

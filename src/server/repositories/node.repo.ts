@@ -84,6 +84,16 @@ export function findByTags(db: DbClient, accountId: string, tags: string[], limi
   return db.node.findMany({ where: { accountId, parentId: { not: null }, tags: { hasEvery: tags } }, select: NODE_SELECT, take: limit });
 }
 
+/** Items whose name contains `text` (any case), outside the account root. */
+export function findByName(db: DbClient, accountId: string, text: string, limit: number) {
+  return db.node.findMany({ where: { accountId, parentId: { not: null }, name: { contains: text, mode: "insensitive" } }, select: NODE_SELECT, take: limit });
+}
+
+/** The newest files of an account. */
+export function recentFiles(db: DbClient, accountId: string, limit: number) {
+  return db.node.findMany({ where: { accountId, type: "FILE" }, orderBy: { createdAt: "desc" }, select: NODE_SELECT, take: limit });
+}
+
 /** Every folder of an account (id, name, parent) to build paths. */
 export function listFolders(db: DbClient, accountId: string) {
   return db.node.findMany({ where: { accountId, type: "FOLDER" }, select: { id: true, name: true, parentId: true, visibility: true } });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FILES } from "@/config/policy";
+import { FILES, SEARCH } from "@/config/policy";
 
 export type NodeKind = "video" | "audio" | "image" | "other";
 export type NodeType = "folder" | "file";
@@ -71,6 +71,9 @@ export interface NodeProperties {
 /** A tag search hit, with its folder path for context ("Videos / 2024"). */
 export interface TaggedItem extends NodeItem {
   parentPath: string;
+  /** The folder it is in, to open it there. */
+  parentId: string;
+  parentIsRoot: boolean;
 }
 
 export const nodeIdSchema = z.string().regex(/^[a-z0-9]{12}$/);
@@ -84,6 +87,9 @@ export const tagSearchSchema = z.object({
     .transform((value) => value.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean))
     .pipe(z.array(z.string().max(24)).min(1).max(10)),
 });
+
+/** Global search query (empty = recent files). */
+export const globalSearchSchema = z.object({ q: z.string().max(SEARCH.maxQueryLength) });
 
 export const createFolderSchema = z.object({
   parentId: folderRefSchema,
