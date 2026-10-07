@@ -12,7 +12,11 @@ import { hash } from "@node-rs/argon2";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
 import { processMedia } from "@/server/media/process";
-import { sharePage } from "@/server/services/share.service";
+import { getFolderView } from "@/server/services/node.service";
+import { retiredSharePage, sharePage } from "@/server/services/share.service";
+import { purgeExpired } from "@/server/services/profile.service";
+import { findAccountById } from "@/server/repositories/account.repo";
+import { purgeRetiredLinks } from "@/server/repositories/link-tombstone.repo";
 import { UNLOCK_COOKIE } from "@/server/share/unlock-cookie";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
 
@@ -95,6 +99,26 @@ describe("share page", () => {
     expect(await statusOf({ downloadLimit: 2, downloads: 2 })).toBe("blocked");
     expect(await statusOf({ visibility: "INHERIT" })).toBe("private");
     expect(await statusOf({ passwordHash: await hash("open sesame") })).toBe("locked");
+  });
+
+  it("still says a link expired after its items were deleted", async () => {
+    const { m, trip, a } = await sharedTrip({ expAt: new Date(Date.now() - 1_000) });
+    const linkOf = async (id: string) => (await prisma.node.findUniqueOrThrow({ where: { id } })).linkId;
+    const fileLink = await linkOf(a);
+    const owner = (await findAccountById(prisma, m.id))!;
+    expect((await purgeExpired(owner, new Date())).deleted).toBeGreaterThan(0);
+    expect(await prisma.node.count({ where: { id: { in: [trip.id, a] } } })).toBe(0);
+
+    // The link and the links of everything that was inside it.
+    expect(await sharePage(trip.linkId, null, noViewer, Date.now())).toBeNull();
+    expect(await retiredSharePage(trip.linkId)).toMatchObject({ status: "expired", view: null, owner: null });
+    expect(await retiredSharePage(fileLink)).toMatchObject({ status: "expired" });
+    expect((await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a))).status).toBe(410);
+
+    // Links that never existed stay "not found", and old records are forgotten.
+    expect(await retiredSharePage(newLinkId())).toBeNull();
+    await purgeRetiredLinks(prisma, new Date(Date.now() + 1_000));
+    expect(await retiredSharePage(trip.linkId)).toBeNull();
   });
 
   it("unlocks with the right password and limits wrong guesses", async () => {
@@ -212,6 +236,18 @@ describe("share downloads", () => {
     const item = (await sharePage(trip.linkId, null, noViewer, Date.now()))!.page.view!.items.find((entry) => entry.name === "a.txt")!;
     expect(item.busy?.label).toMatch(/^Server busy · retry in \d+m$/);
     expect(item.canDownload).toBe(false);
+  });
+
+  it("shows the owner how busy a shared item is in the file manager", async () => {
+    const { m, trip, a } = await sharedTrip();
+    const busyOf = async () => (await getFolderView(m.id, trip.id)).children.find((entry) => entry.name === "a.txt")!.busy;
+    expect(await busyOf()).toBeNull();
+    for (let index = 0; index < SHARE.busyThrottleAt; index++) await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a));
+    expect(await busyOf()).toMatchObject({ level: 1, label: "Busy" });
+    for (let index = SHARE.busyThrottleAt; index < SHARE.busyPauseAt; index++) await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a));
+    expect(await busyOf()).toMatchObject({ level: 2, label: "Server busy" });
+    // The folder that holds the link counts too.
+    expect((await getFolderView(m.id, m.rootId)).children.find((entry) => entry.name === "Trip")!.busy).toMatchObject({ level: 2 });
   });
 
   it("zips the visible contents for Download all", async () => {

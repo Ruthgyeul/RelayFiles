@@ -10,6 +10,7 @@ import { cookieSecrets } from "../auth/keys";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { ancestorChain, type NodeRow } from "../repositories/node.repo";
+import { isRetiredLink } from "../repositories/link-tombstone.repo";
 import { findByLinkId, publicTree, type SharedRow } from "../repositories/share.repo";
 import { redis } from "../redis";
 import { busyLevels } from "../share/busy";
@@ -166,6 +167,20 @@ export async function sharePage(linkId: string, folderId: string | null, viewer:
   return { page, link };
 }
 
+/**
+ * The page for a link that no longer exists because its items expired and were deleted
+ * (design "This link has expired"); null for links that never existed or were replaced.
+ */
+export async function retiredSharePage(linkId: string): Promise<SharePage | null> {
+  if (!(await isRetiredLink(db(), linkId))) return null;
+  return { linkId, url: shareUrl(linkId), status: "expired", name: "", owner: null, view: null };
+}
+
+/** A request for a link that does not exist: 410 when its items expired, otherwise 404. */
+async function missingLinkError(linkId: string): Promise<ApiError> {
+  return (await isRetiredLink(db(), linkId)) ? statusError("expired") : new ApiError("NOT_FOUND");
+}
+
 /** Error a file request gets when the page would show a card instead of the files. */
 function statusError(status: Exclude<ShareStatus, "open">): ApiError {
   switch (status) {
@@ -203,7 +218,7 @@ export interface SharedFile {
  */
 export async function resolveSharedFile(linkId: string, nodeId: string, viewer: ShareViewer, purpose: "stream" | "download", now: number): Promise<SharedFile> {
   const link = await loadLink(linkId, viewer, now);
-  if (!link) throw new ApiError("NOT_FOUND");
+  if (!link) throw await missingLinkError(linkId);
   if (link.status !== "open") throw statusError(link.status);
   const tree = await publicTree(db(), link.root.id);
   const { byId } = indexTree(tree);
@@ -225,7 +240,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
 /** Visible items of a link for "Download all" (zip), with the same checks as single downloads. */
 export async function resolveSharedTree(linkId: string, folderId: string, viewer: ShareViewer, now: number) {
   const link = await loadLink(linkId, viewer, now);
-  if (!link) throw new ApiError("NOT_FOUND");
+  if (!link) throw await missingLinkError(linkId);
   if (link.status !== "open") throw statusError(link.status);
   if (link.root.access === "STREAM") throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
   const tree = await publicTree(db(), link.root.id);

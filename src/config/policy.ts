@@ -86,6 +86,8 @@ export const SHARE = {
   eventDedupeSec: 1_800,
   /** Link activity entries kept per item (design: 200). */
   eventsKeptPerNode: 200,
+  /** Links of expired items keep answering "This link has expired" for this long. */
+  tombstoneDays: 90,
 } as const;
 
 export const MEDIA = {

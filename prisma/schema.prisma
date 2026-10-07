@@ -300,6 +300,16 @@ model HealthDaily {
 // Operations
 // ---------------------------------------------------------------------------
 
+/// Share links whose items were deleted because they expired (own expiry, delete after
+/// download, or the account's deletion date). Visitors then see "This link has expired"
+/// instead of "Link not found". Kept for SHARE.tombstoneDays.
+model LinkTombstone {
+  linkId  String   @id
+  endedAt DateTime @default(now())
+
+  @@index([endedAt])
+}
+
 /// Progress of resumable data migrations (scripts/migrations/data, docs/plan.md §13.8 ①).
 model DataMigration {
   id         String    @id

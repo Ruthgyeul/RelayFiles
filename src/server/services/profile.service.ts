@@ -7,6 +7,7 @@ import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { deleteAccountRow, lastLoginOf, updatePreferences, type AccountRow } from "../repositories/account.repo";
+import { retireLinks } from "../repositories/link-tombstone.repo";
 import { accountUsage, contentCounts, expiredItemIds } from "../repositories/node.repo";
 import { listAccountSessions, revokeAccountSession, revokeOtherSessions } from "../repositories/session.repo";
 import { trafficSince } from "../repositories/traffic.repo";
@@ -83,6 +84,7 @@ export async function savePreferences(accountId: string, preferences: Preference
 export async function purgeExpired(owner: AccountRow, now: Date): Promise<{ deleted: number }> {
   const ids = (await expiredItemIds(db(), owner.id, now)).map((row) => row.id);
   if (ids.length === 0) return { deleted: 0 };
+  await retireLinks(db(), ids, now);
   return deleteItems(owner, ids);
 }
 
