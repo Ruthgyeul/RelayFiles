@@ -106,6 +106,7 @@
 |---|---|---|
 | `POST` | `/api/share/:linkId/unlock` | `{ password }` argon2 확인. 맞으면 서명된 `rf_sh` 쿠키(12시간)에 링크를 기록. 틀리면 403 `Wrong password`, 주소당 10분에 10회를 넘기면 429 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/stream` | 방문자 재생·보기. 처음 요청만 "Played/Viewed"로 기록(30분 중복 제거) |
+| `GET` | `/api/share/:linkId/files/:id/thumb` | 목록 미리보기(WebP, 메타데이터 없음). 재생과 같은 접근 검사(만료 410, 잠김 401, 비공개 404)이고 Stream only 링크에서도 허용. 세거나 기록하지 않는다. 썸네일이 아직 없으면 404 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일과 링크의 다운로드 수 +1, "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
 | `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만 |
 
