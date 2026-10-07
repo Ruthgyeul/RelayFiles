@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
+import { BusyPill } from "@/shared/ui/BusyPill";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { kindOf } from "./kind";
 import { MediaThumb, ResumeBar } from "./MediaThumb";
@@ -48,6 +49,7 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPr
           <span className="flex items-center gap-[5px] text-[14px] font-bold">
             <span className="truncate">{item.name}</span>
             {item.settings.hasPassword && <Icon name="lock-simple" size={12} label="Password protected" className="text-t4" />}
+            {item.busy && <BusyPill busy={item.busy} />}
           </span>
           <span className="truncate text-[12px] text-t4">{itemMeta(item, parentPath)}</span>
         </div>

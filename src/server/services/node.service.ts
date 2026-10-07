@@ -4,6 +4,7 @@ import type { CreatedFolder, FolderNode, FolderView, NodeItem, NodeProperties, T
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { parseSearchQuery, rankByName } from "@/domain/search";
+import { busyBadge } from "@/domain/share";
 import { effectiveVisibility } from "@/domain/tree";
 import type { AccountRow } from "../repositories/account.repo";
 import { db, Prisma } from "../db/client";
@@ -25,6 +26,7 @@ import {
   tagUsage,
   type NodeRow,
 } from "../repositories/node.repo";
+import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { driverForAccount } from "./volume.service";
 
@@ -58,17 +60,20 @@ export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: num
       note: row.note,
       dlPaused: row.dlPaused,
     },
+    busy: null,
   };
 }
 
 /** Adds folder sizes and child counts to listed rows. */
 async function withFolderStats(rows: NodeRow[]): Promise<NodeItem[]> {
   const folderIds = rows.filter((row) => row.type === "FOLDER").map((row) => row.id);
-  const [counts, sizes] = await Promise.all([childCounts(db(), folderIds), folderSizes(db(), folderIds)]);
+  const now = Date.now();
+  const [counts, sizes, busy] = await Promise.all([childCounts(db(), folderIds), folderSizes(db(), folderIds), busyLevels(rows, now)]);
   return rows.map((row) => {
-    if (row.type !== "FOLDER") return toNodeItem(row);
     const stats = sizes.get(row.id);
-    return toNodeItem(row, { size: stats?.size ?? 0n, fileCount: stats?.files ?? 0, itemCount: counts.get(row.id) ?? 0 });
+    const item = row.type === "FOLDER" ? toNodeItem(row, { size: stats?.size ?? 0n, fileCount: stats?.files ?? 0, itemCount: counts.get(row.id) ?? 0 }) : toNodeItem(row);
+    const level = busy.get(row.id);
+    return level ? { ...item, busy: busyBadge(level, now, "app") } : item;
   });
 }
 

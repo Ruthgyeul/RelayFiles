@@ -138,3 +138,15 @@ test("share pages show image and audio previews under the file names", async ({ 
   expect(width[0]).toBeLessThanOrEqual(width[1]!);
   await visitor.context().close();
 });
+
+test("the file manager shows when a shared item is busy", async ({ page }) => {
+  const trip = await tripWithFile(page);
+  await saveSettings(page, trip.id, {});
+  const notes = (await page.evaluate(async (id) => ((await (await fetch(`/api/folders/${id}`)).json()) as { data: FolderView }).data.children, trip.id)).find((item) => item.name === "notes.txt")!;
+  // Visitors' downloads through the link (a fresh context has no account cookies).
+  const visitor = await page.context().browser()!.newContext({ baseURL: page.url().replace(/\/files.*$/, "") });
+  for (let index = 0; index < 5; index++) expect((await visitor.request.get(`/api/share/${trip.linkId}/files/${notes.id}/download`)).status()).toBe(200);
+  await visitor.close();
+  await page.reload();
+  await expect(page.locator('[data-item="notes.txt"]').getByText("Busy", { exact: true })).toBeVisible();
+});
