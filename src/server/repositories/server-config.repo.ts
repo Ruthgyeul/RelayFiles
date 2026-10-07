@@ -1,9 +1,20 @@
 import "server-only";
 import type { DbClient } from "../db/client";
 
+const CONFIG_ID = 1;
+
+/**
+ * Creates the singleton settings row with defaults if it is missing. `INSERT … ON CONFLICT DO
+ * NOTHING` is atomic, unlike Prisma's upsert, so concurrent first requests cannot collide.
+ */
+async function ensureRow(db: DbClient): Promise<void> {
+  await db.serverConfig.createMany({ data: [{ id: CONFIG_ID }], skipDuplicates: true });
+}
+
 /** The singleton settings row; created with defaults on first use. */
-export function getServerConfig(db: DbClient) {
-  return db.serverConfig.upsert({ where: { id: 1 }, create: { id: 1 }, update: {}, select: { signupMode: true, theme: true } });
+export async function getServerConfig(db: DbClient) {
+  await ensureRow(db);
+  return db.serverConfig.findUniqueOrThrow({ where: { id: CONFIG_ID }, select: { signupMode: true, theme: true } });
 }
 
 /** Marks an unused invite as used; false when the code is unknown or already used. */
@@ -13,7 +24,8 @@ export async function consumeInvite(db: DbClient, code: string, accountName: str
 }
 
 export async function updateServerConfig(db: DbClient, data: { signupMode?: "OPEN" | "INVITE" | "CLOSED"; theme?: string | null }): Promise<void> {
-  await db.serverConfig.upsert({ where: { id: 1 }, create: { id: 1, ...data }, update: data });
+  await ensureRow(db);
+  await db.serverConfig.update({ where: { id: CONFIG_ID }, data });
 }
 
 /** Invite codes, newest first. */

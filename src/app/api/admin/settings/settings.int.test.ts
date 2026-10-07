@@ -10,12 +10,16 @@ import { POST as tokenSignIn } from "@/app/api/auth/token/route";
 import type { CreatedAccount, SessionState } from "@/contracts/auth";
 import type { ServerSettings } from "@/contracts/server-settings";
 import { db } from "@/server/db/client";
+import { getServerConfig, updateServerConfig } from "@/server/repositories/server-config.repo";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { currentAnnouncement, currentTheme, setTheme } from "@/server/services/server-settings.service";
 import { callRoute } from "../../../../../test/route-call";
 import { fileFixtures, randomTestIp } from "../../../../../test/file-fixtures";
 
 const { cleanup } = fileFixtures();
+/** Concurrent first requests per round, and rounds, for the settings-row race. */
+const RACE_REQUESTS = 20;
+const RACE_ROUNDS = 10;
 const created: string[] = [];
 
 afterAll(async () => {
@@ -74,5 +78,18 @@ describe("server settings", () => {
     expect((await callRoute(theme, { method: "PUT", cookie, body: { theme: "plum" } })).status).toBe(200);
     expect(await currentTheme()).toBe("plum");
     expect((await callRoute(theme, { method: "PUT", cookie, body: { theme: "neon" } })).status).toBe(400);
+  });
+
+  it("creates the settings row once when the first requests arrive together", async () => {
+    const before = await getServerConfig(db());
+    for (let round = 0; round < RACE_ROUNDS; round++) {
+      await db().serverConfig.deleteMany({});
+      const reads = Array.from({ length: RACE_REQUESTS }, () => getServerConfig(db()));
+      const writes = [updateServerConfig(db(), { signupMode: before.signupMode }), updateServerConfig(db(), { theme: before.theme })];
+      // Any request losing the race would reject here.
+      await Promise.all([...reads, ...writes]);
+      expect(await db().serverConfig.count()).toBe(1);
+    }
+    expect(await getServerConfig(db())).toEqual(before);
   });
 });
