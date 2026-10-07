@@ -1,8 +1,8 @@
 import "server-only";
-import { Readable } from "node:stream";
 import { mimeFromName } from "@/domain/upload";
 import { db } from "../db/client";
 import { sendFile } from "../files/send-file";
+import { sendThumb } from "../files/send-thumb";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
@@ -36,24 +36,9 @@ export async function serveOwnFile(req: Request, owner: Owner, nodeId: string, m
   });
 }
 
-/** Thumbnails change only when the file does; browsers may keep them for a day. */
-const THUMB_MAX_AGE_SEC = 86_400;
-
 /** The owner's thumbnail (WebP), with an ETag tied to the file contents. */
 export async function serveOwnThumb(req: Request, owner: Owner, nodeId: string): Promise<Response> {
   const row = await findNode(db(), owner.id, nodeId);
   if (!row || row.type !== "FILE" || !row.hasThumb) throw new ApiError("NOT_FOUND");
-  const etag = `"${row.sha256 ?? row.id}-thumb"`;
-  const headers = new Headers({
-    "content-type": "image/webp",
-    "cache-control": `private, max-age=${THUMB_MAX_AGE_SEC}`,
-    "x-content-type-options": "nosniff",
-    etag,
-  });
-  if (req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
-  const driver = await driverForAccount(owner);
-  const asset = await driver.readAsset({ kind: "thumb", accountId: owner.id, nodeId: row.id });
-  if (!asset) throw new ApiError("NOT_FOUND");
-  headers.set("content-length", String(asset.size));
-  return new Response(Readable.toWeb(asset.stream) as ReadableStream, { headers });
+  return sendThumb(req, await driverForAccount(owner), owner.id, row);
 }

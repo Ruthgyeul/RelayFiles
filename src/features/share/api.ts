@@ -8,6 +8,7 @@ const base = (linkId: string) => `/api/share/${encodeURIComponent(linkId)}`;
 export const shareUrls = {
   stream: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/stream`,
   download: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/download`,
+  thumb: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/thumb`,
   zip: (linkId: string, folderId: string) => `${base(linkId)}/zip?folder=${encodeURIComponent(folderId)}`,
 };
 

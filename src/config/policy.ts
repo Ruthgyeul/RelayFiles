@@ -42,6 +42,10 @@ export const FILES = {
   maxBatchItems: 500,
   /** Longer lists let the browser skip rendering rows outside the screen (content-visibility). */
   lazyRenderAfter: 100,
+  /** Height a lazy row is assumed to have before it renders (content-visibility estimate). */
+  rowEstimatePx: 68,
+  /** The same for rows with a media preview (288px square or audio player under the name). */
+  previewRowEstimatePx: 370,
 } as const;
 
 /** Global search (design `gs*`, Ctrl/⌘ K). */
@@ -96,6 +100,8 @@ export const MEDIA = {
   maxInputPixels: 268_402_689,
   /** ffmpeg gives up after this long. */
   ffmpegTimeoutSec: 60,
+  /** Thumbnails change only when the file does; browsers may keep them for a day. */
+  thumbMaxAgeSec: 86_400,
   workerConcurrency: 2,
   jobAttempts: 3,
   jobBackoffMs: 10_000,

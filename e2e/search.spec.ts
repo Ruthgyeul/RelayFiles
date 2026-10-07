@@ -16,8 +16,12 @@ test("finds files anywhere and opens them in their folder", async ({ page }) => 
   await page.getByRole("region", { name: "Transfers" }).getByRole("button", { name: "Close transfers" }).click();
 
   await page.goto("/files");
-  await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.getByRole("dialog", { name: "Search all files" });
+  // The shortcut is handled once the page is interactive; a press before that is lost.
+  await expect(async () => {
+    if (!(await dialog.isVisible())) await page.keyboard.press("ControlOrMeta+k");
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
+  }).toPass();
   // Before typing: the newest files.
   await expect(dialog.getByText("Recent files · type #tag (or #tag1 #tag2) to search tags")).toBeVisible();
   await expect(dialog.getByRole("option", { name: /beach\.png/ })).toBeVisible();

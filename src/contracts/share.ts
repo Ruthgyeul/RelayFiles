@@ -15,6 +15,8 @@ export interface ShareItem {
   itemCount: number;
   busy: BusyBadge | null;
   canDownload: boolean;
+  /** A generated preview exists (`/api/share/<link>/files/<id>/thumb`). */
+  hasThumb: boolean;
 }
 
 export interface ShareCrumb {

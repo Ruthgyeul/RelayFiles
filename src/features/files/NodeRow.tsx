@@ -4,14 +4,16 @@ import type { DragEvent, ReactNode } from "react";
 import type { NodeItem } from "@/contracts/nodes";
 import { formatClock, formatDateTime, formatSize } from "@/domain/format";
 import { itemCount, settingTags } from "@/domain/tree";
+import { FILES } from "@/config/policy";
+import { previewKindOf } from "@/domain/media";
+import { ListPreview } from "@/features/viewer/ListPreview";
 import { useResume } from "@/features/viewer/useResume";
-import { useViewport } from "@/shared/hooks/useViewport";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
+import { fileUrls } from "./api";
 import { kindOf } from "./kind";
-import { MediaThumb } from "./MediaThumb";
 import { toShareSettings } from "./settings";
 import type { DropTargetProps } from "./useDragMove";
 
@@ -124,8 +126,7 @@ function RowTags({ item, parentVisibility, now, onTag }: Pick<ItemProps, "item" 
 export function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onPreview, onMenu, onTag, menuOpen, drag, drop, dropOver, lazy, actions }: ItemProps & { actions: ReactNode }) {
   const kind = kindOf(item);
   const folder = item.type === "folder";
-  const { small } = useViewport();
-  const thumb = !small && (item.kind === "video" || item.kind === "image");
+  const preview = previewKindOf(item.type, item.kind);
   return (
     <div
       {...drag}
@@ -134,10 +135,12 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
       className={cn(
         "relative flex flex-col gap-2.5 px-4 py-3 -outline-offset-2",
         dropOver ? "bg-accent-soft outline-2 outline-accent-hi outline-dashed" : "bg-card",
-        lazy && "[contain-intrinsic-size:auto_68px] [content-visibility:auto]",
+        lazy && "[content-visibility:auto]",
       )}
+      style={lazy ? { containIntrinsicSize: `auto ${preview ? FILES.previewRowEstimatePx : FILES.rowEstimatePx}px` } : undefined}
     >
-      <div className="flex items-center gap-3">
+      {/* Phones: the row buttons move under the name so it keeps the width (menu stays on top). */}
+      <div className="flex items-center gap-3 max-sm:flex-wrap">
         <button
           type="button"
           role="checkbox"
@@ -175,15 +178,20 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
           </div>
           <RowTags item={item} parentVisibility={parentVisibility} now={now} onTag={onTag} />
         </div>
-        {actions}
+        <div className="flex shrink-0 items-center gap-3 max-sm:order-last max-sm:w-full max-sm:pl-[88px]">{actions}</div>
         <MenuButton label={`Actions for ${item.name}`} open={menuOpen} onMenu={onMenu} />
       </div>
-      {thumb && (
-        <div className="pl-[92px] max-sm:hidden">
-          <div onClick={onPreview} className="relative flex aspect-square w-[min(288px,100%)] cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-card-line bg-black">
-            <MediaThumb item={item} variant="row" onOpen={onPreview} />
-          </div>
-        </div>
+      {preview && (
+        <ListPreview
+          id={item.id}
+          name={item.name}
+          kind={preview}
+          src={fileUrls.stream(item.id)}
+          thumbSrc={item.hasThumb ? fileUrls.thumb(item.id) : null}
+          loadOriginal
+          onOpen={onPreview}
+          className="sm:pl-[92px]"
+        />
       )}
     </div>
   );

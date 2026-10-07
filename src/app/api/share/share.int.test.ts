@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { afterAll, describe, expect, it } from "vitest";
 import { GET as shareDownload } from "@/app/api/share/[linkId]/files/[id]/download/route";
 import { GET as shareStream } from "@/app/api/share/[linkId]/files/[id]/stream/route";
+import { GET as shareThumb } from "@/app/api/share/[linkId]/files/[id]/thumb/route";
 import { POST as unlock } from "@/app/api/share/[linkId]/unlock/route";
 import { GET as shareZip, HEAD as shareZipCheck } from "@/app/api/share/[linkId]/zip/route";
 import { SHARE } from "@/config/policy";
@@ -10,6 +11,7 @@ import { newLinkId, newNodeId } from "@/domain/ids";
 import { hash } from "@node-rs/argon2";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
+import { processMedia } from "@/server/media/process";
 import { sharePage } from "@/server/services/share.service";
 import { UNLOCK_COOKIE } from "@/server/share/unlock-cookie";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
@@ -115,6 +117,51 @@ describe("share page", () => {
     const blocked = await visit(unlock, `/api/share/${trip.linkId}/unlock`, { linkId: trip.linkId }, { method: "POST", body: { password: "open sesame" }, ip: guesser });
     expect(blocked.status).toBe(429);
     expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+  });
+});
+
+describe("share previews", () => {
+  it("lists which files have a preview and serves it without counting or logging", async () => {
+    const { trip, a, photo } = await sharedTrip({ access: "STREAM" });
+    await processMedia(photo);
+    const items = (await sharePage(trip.linkId, null, noViewer, Date.now()))!.page.view!.items;
+    expect(items.map((item) => [item.name, item.hasThumb])).toEqual([
+      ["Day1", false],
+      ["a.txt", false],
+      ["photo.jpg", true],
+    ]);
+
+    // Stream-only links still show previews; thumbnails carry no camera data.
+    const res = await visit(shareThumb, path(trip.linkId, photo, "thumb"), fileParams(trip.linkId, photo));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/webp");
+    const preview = Buffer.from(await res.arrayBuffer());
+    expect(preview.includes(Buffer.from("RelayCam"))).toBe(false);
+    expect((await visit(shareThumb, path(trip.linkId, photo, "thumb"), fileParams(trip.linkId, photo), { headers: { "if-none-match": res.headers.get("etag")! } })).status).toBe(304);
+    expect(await prisma.node.findMany({ where: { id: { in: [photo, trip.id] } }, select: { downloads: true } })).toEqual([{ downloads: 0 }, { downloads: 0 }]);
+    expect(await prisma.linkEvent.count({ where: { nodeId: photo } })).toBe(0);
+
+    // Files without a preview, and files of other accounts, are not found.
+    expect((await visit(shareThumb, path(trip.linkId, a, "thumb"), fileParams(trip.linkId, a))).status).toBe(404);
+    const other = await member();
+    const elsewhere = await addFile(other, other.rootId, [], "x.jpg", await cameraJpeg(), "image/jpeg", "IMAGE");
+    await processMedia(elsewhere);
+    expect((await visit(shareThumb, path(trip.linkId, elsewhere, "thumb"), fileParams(trip.linkId, elsewhere))).status).toBe(404);
+  });
+
+  it("follows the link's state: private items, passwords and expiry", async () => {
+    const locked = await sharedTrip({ passwordHash: await hash("open sesame") });
+    await processMedia(locked.photo);
+    expect((await visit(shareThumb, path(locked.trip.linkId, locked.photo, "thumb"), fileParams(locked.trip.linkId, locked.photo))).status).toBe(401);
+
+    const expired = await sharedTrip({ expAt: new Date(Date.now() - 1_000) });
+    await processMedia(expired.photo);
+    expect((await visit(shareThumb, path(expired.trip.linkId, expired.photo, "thumb"), fileParams(expired.trip.linkId, expired.photo))).status).toBe(410);
+
+    const hiddenPhoto = await sharedTrip();
+    await prisma.node.update({ where: { id: hiddenPhoto.photo }, data: { visibility: "PRIVATE" } });
+    await processMedia(hiddenPhoto.photo);
+    expect((await visit(shareThumb, path(hiddenPhoto.trip.linkId, hiddenPhoto.photo, "thumb"), fileParams(hiddenPhoto.trip.linkId, hiddenPhoto.photo))).status).toBe(404);
   });
 });
 

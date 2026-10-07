@@ -126,6 +126,7 @@ async function buildView(link: LoadedLink, folderId: string | null, now: number)
     itemCount: (children.get(row.id) ?? []).length,
     busy: busyBadge(busy.get(row.id)!, now, "share"),
     canDownload: canDownload(row, root, busy.get(row.id)),
+    hasThumb: row.type === "FILE" && row.hasThumb,
   }));
   return {
     root: { id: root.id, type: fileLink ? "file" : "folder", kind: kindOf(root), createdAt: root.createdAt.toISOString() },
