@@ -6,7 +6,7 @@ import type { SessionAccount, SessionState, SignupMode } from "@/contracts/auth"
 import { deletionDate, isExpired } from "@/domain/account";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
-import type { AccountRow } from "../repositories/account.repo";
+import { storageBusyOf, type AccountRow } from "../repositories/account.repo";
 import { accountUsage } from "../repositories/node.repo";
 import { findLiveSessions, touchSessions } from "../repositories/session.repo";
 import { cookieSecrets } from "./keys";
@@ -87,12 +87,13 @@ export function toSessionAccount(account: AccountRow): SessionAccount {
 
 /** Session state for the client, including the active account's storage use. */
 export async function toSessionState(device: Pick<DeviceSession, "accounts" | "active">, signupMode: SignupMode): Promise<SessionState> {
-  const usage = device.active ? await accountUsage(db(), device.active.account.id) : null;
+  const id = device.active?.account.id;
+  const [usage, storageBusy] = id ? await Promise.all([accountUsage(db(), id), storageBusyOf(db(), id)]) : [null, null];
   return {
     accounts: device.accounts.map((item) => toSessionAccount(item.account)),
     activeAccountId: device.active?.account.id ?? null,
     signupMode,
-    usage: usage && { usedBytes: usage.usedBytes.toString(), rootItems: usage.rootItems },
+    usage: usage && { usedBytes: usage.usedBytes.toString(), rootItems: usage.rootItems, storageBusy: storageBusy === true },
   };
 }
 

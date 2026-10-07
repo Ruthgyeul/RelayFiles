@@ -80,3 +80,12 @@ export async function lastLoginOf(db: DbClient, accountId: string): Promise<Date
   const row = await db.account.findUnique({ where: { id: accountId }, select: { lastLoginAt: true } });
   return row?.lastLoginAt ?? null;
 }
+
+/**
+ * Whether changes to an account's files are paused: its files are moving to another volume,
+ * or its volume is read-only during a layout migration. null when the account is unknown.
+ */
+export async function storageBusyOf(db: DbClient, accountId: string): Promise<boolean | null> {
+  const row = await db.account.findUnique({ where: { id: accountId }, select: { migrating: true, volume: { select: { status: true } } } });
+  return row ? row.migrating || row.volume.status === "READONLY" : null;
+}

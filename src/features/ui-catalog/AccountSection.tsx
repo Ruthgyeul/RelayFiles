@@ -27,7 +27,7 @@ function useCatalogApi(): NonNullable<SignInDialogProps["api"]> {
         throw new ApiClientError("INVALID_INVITE", "Invalid or already used invite code.", 400);
       }
       const account = { id: newAccountId(), name: newAnonName(), color: "var(--accent)", isAdmin: false, neverExpire: false, deletesAt: null, quotaBytes: null };
-      return { account, token: newAccountToken(), session: { accounts: [account], activeAccountId: account.id, signupMode: "open", usage: { usedBytes: "0", rootItems: 0 } } } satisfies CreatedAccount;
+      return { account, token: newAccountToken(), session: { accounts: [account], activeAccountId: account.id, signupMode: "open", usage: { usedBytes: "0", rootItems: 0, storageBusy: false } } } satisfies CreatedAccount;
     },
   };
 }

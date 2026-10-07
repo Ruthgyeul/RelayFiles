@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { GET as download } from "@/app/api/files/[id]/download/route";
+import { GET as session } from "@/app/api/auth/session/route";
 import { POST as createFolder } from "@/app/api/folders/route";
+import type { SessionState } from "@/contracts/auth";
 import { db } from "@/server/db/client";
 import { layoutOf } from "@/server/storage/layout";
 import type { LayoutMigration } from "@/server/storage/layout-migrations";
@@ -71,6 +73,8 @@ describe("moving an account to another volume", () => {
     const m = await member();
     const file = await addFile(m, m.rootId, [], "a.txt", "hello", "text/plain");
     await prisma.account.update({ where: { id: m.id }, data: { migrating: true } });
+    // The app shows the "moved to new storage" banner from the session state.
+    expect((await callRoute<SessionState>(session, { cookie: m.cookie })).json.data.usage).toMatchObject({ storageBusy: true });
     const blocked = await callRoute(createFolder, { method: "POST", cookie: m.cookie, body: { parentId: "root", name: "New" } });
     expect(blocked.status).toBe(503);
     expect(blocked.json.code).toBe("STORAGE_BUSY");
