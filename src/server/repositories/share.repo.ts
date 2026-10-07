@@ -16,6 +16,7 @@ export interface SharedRow {
   size: bigint;
   sha256: string | null;
   hasDerived: boolean;
+  hasThumb: boolean;
   downloads: number;
   downloadLimit: number | null;
   dlPaused: boolean;
@@ -34,7 +35,7 @@ export async function publicTree(db: DbClient, rootId: string): Promise<SharedRo
       UNION ALL
       SELECT n.id FROM "Node" n JOIN tree t ON n."parentId" = t.id WHERE n.visibility <> 'PRIVATE'
     )
-    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n.downloads,
+    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."hasThumb", n.downloads,
            n."downloadLimit", n."dlPaused", n.access::text AS access, n."createdAt"
     FROM tree JOIN "Node" n ON n.id = tree.id`;
 }

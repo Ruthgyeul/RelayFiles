@@ -7,6 +7,7 @@ import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { db } from "../db/client";
 import { sendFile } from "../files/send-file";
+import { sendThumb } from "../files/send-thumb";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
@@ -88,6 +89,18 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
       addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
     },
   });
+}
+
+/**
+ * The list preview of a file inside a share link. Same access checks as playback; nothing is
+ * counted or logged (opening the page is not a view). Thumbnails are re-encoded without
+ * metadata, so they are safe whatever the owner's metadata setting.
+ */
+export async function serveSharedThumb(req: Request, linkId: string, nodeId: string, viewer: ShareViewer): Promise<Response> {
+  const { link, row } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
+  if (!row.hasThumb) throw new ApiError("NOT_FOUND");
+  const owner = await ownerOf(link);
+  return sendThumb(req, await driverForAccount(owner), owner.id, row);
 }
 
 /** "Download all": a zip of a folder inside a share link, with images cleaned like single downloads. */

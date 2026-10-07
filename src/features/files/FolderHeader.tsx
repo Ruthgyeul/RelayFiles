@@ -38,7 +38,8 @@ export function FolderHeader({ view, now, onShare, onSharePage, onMenu, menuOpen
 
   return (
     <section aria-label="Folder" className="flex flex-col gap-2.5 rounded-2xl border border-card-line bg-card px-5 py-[18px]">
-      <div className="flex items-start gap-3.5">
+      {/* Phones: the buttons move to their own line so the name keeps the full width. */}
+      <div className="flex items-start gap-3.5 max-sm:flex-wrap">
         {parent && (
           <Link
             {...upDrop}
@@ -76,22 +77,24 @@ export function FolderHeader({ view, now, onShare, onSharePage, onMenu, menuOpen
             ))}
           </div>
         </div>
-        <Button size={34} icon="globe-simple" iconSize={16} hoverable hideLabelOnMobile title="Open share page" onClick={onSharePage} className="px-3">
-          Share page
-        </Button>
-        <Button size={34} icon="share-network" iconSize={16} hoverable hideLabelOnMobile onClick={onShare} className="px-3">
-          Share
-        </Button>
-        <button
-          type="button"
-          aria-label="Folder menu"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={(event) => onMenu(event.currentTarget)}
-          className="flex size-[34px] shrink-0 items-center justify-center rounded-lg border-0 bg-transparent text-t3 hover:bg-btn"
-        >
-          <Icon name="dots-three-vertical" weight="bold" size={18} />
-        </button>
+        <div className="flex shrink-0 items-center gap-3.5 max-sm:w-full">
+          <Button size={34} icon="globe-simple" iconSize={16} hoverable hideLabelOnMobile title="Open share page" onClick={onSharePage} className="px-3">
+            Share page
+          </Button>
+          <Button size={34} icon="share-network" iconSize={16} hoverable hideLabelOnMobile onClick={onShare} className="px-3">
+            Share
+          </Button>
+          <button
+            type="button"
+            aria-label="Folder menu"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={(event) => onMenu(event.currentTarget)}
+            className="flex size-[34px] shrink-0 items-center justify-center rounded-lg border-0 bg-transparent text-t3 hover:bg-btn"
+          >
+            <Icon name="dots-three-vertical" weight="bold" size={18} />
+          </button>
+        </div>
       </div>
       {folder.settings.note && (
         <div className="flex gap-2 rounded-[10px] bg-sunk px-3 py-2.5 text-[14px] text-t2">

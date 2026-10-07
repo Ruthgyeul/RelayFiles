@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page, type ViewportSize } from "@playwright/test";
 import type { FolderView, NodeItem } from "@/contracts/nodes";
-import { itemMenu, newFolder, openFiles } from "./helpers";
+import { itemMenu, newFolder, openFiles, silentWav } from "./helpers";
 
 const rootItems = (page: Page) => page.evaluate(async () => ((await (await fetch("/api/folders/root")).json()) as { data: FolderView }).data.children);
 
@@ -115,4 +115,26 @@ test("the file menu has no Share entry but folders do", async ({ page }) => {
   await page.goto("/files");
   await itemMenu(page, "Trip", "Share");
   await expect(page.getByRole("region", { name: "This link is private" })).toBeVisible();
+});
+
+test("share pages show image and audio previews under the file names", async ({ page, browser, baseURL, viewport }) => {
+  const trip = await tripWithFile(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([
+    { name: "dot.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64") },
+    { name: "tone.wav", mimeType: "audio/wav", buffer: silentWav() },
+  ]);
+  await expect(page.locator('[data-item="tone.wav"]')).toBeVisible();
+  await saveSettings(page, trip.id, {});
+
+  const visitor = await visitorPage(browser, baseURL, viewport);
+  await visitor.goto(`/d/${trip.linkId}`);
+  await expect(visitor.locator('[data-item="tone.wav"] [data-preview="audio"] audio')).toBeVisible();
+  await expect(visitor.locator('[data-item="notes.txt"] [data-preview]')).toHaveCount(0);
+  await visitor.locator('[data-item="dot.png"] [data-preview="image"] > div').click();
+  await expect(visitor.getByRole("dialog", { name: "dot.png" })).toBeVisible();
+  const width = await visitor.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+  expect(width[0]).toBeLessThanOrEqual(width[1]!);
+  await visitor.context().close();
 });

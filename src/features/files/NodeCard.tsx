@@ -25,7 +25,7 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPr
     >
       <div onClick={onPrimary} className="relative flex aspect-[4/3] cursor-pointer items-center justify-center overflow-hidden bg-bg">
         {media ? (
-          <MediaThumb item={item} variant="card" onOpen={onPreview} />
+          <MediaThumb item={item} onOpen={onPreview} />
         ) : (
           <>
             <Icon name={kind.icon} weight={item.type === "folder" ? "fill" : "regular"} size={48} style={{ color: kind.color }} />

@@ -36,6 +36,7 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
     if (problem) notify(problem);
   };
   // Folders download as a zip of what visitors can see inside them.
+  const rowUrls = { stream: (id: string) => shareUrls.stream(linkId, id), thumb: (id: string) => shareUrls.thumb(linkId, id) };
   const downloadItem = (item: ShareItem) => void download(item.type === "folder" ? shareUrls.zip(linkId, item.id) : shareUrls.download(linkId, item.id));
   const downloadAll = () => {
     if (view.folderBusy?.level === 2) return notify("Server busy · try again later");
@@ -119,7 +120,7 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
         )}
       </section>
 
-      <ShareRows items={view.items} folderHref={folderHref} onOpen={(item) => setViewing(item.id)} onDownload={downloadItem} />
+      <ShareRows items={view.items} urls={rowUrls} folderHref={folderHref} onOpen={(item) => setViewing(item.id)} onDownload={downloadItem} />
       <span className="pt-2 text-center text-[12px] text-t5">Shared privately with RelayFiles</span>
 
       <MediaViewer

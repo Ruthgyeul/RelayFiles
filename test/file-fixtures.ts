@@ -8,7 +8,6 @@ import { newLinkId, newNodeId } from "@/domain/ids";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { db } from "@/server/db/client";
 import { redis } from "@/server/redis";
-import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
 import { callRoute } from "./route-call";
 
@@ -31,15 +30,22 @@ export function randomTestIp(): string {
 export function fileFixtures() {
   const prisma = db();
   const accounts: string[] = [];
+  /** Account folders to remove afterwards (each on the volume the account was placed on). */
+  const dirs: string[] = [];
 
   async function member() {
     // A fresh address per account keeps tests under the per-address sign-up limit.
     const ip = randomTestIp();
     const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip });
     const id = res.json.data.account.id;
+    // New accounts go to the volume with the most free space, which is not always STORAGE_ROOT
+    // while another test has an extra volume registered.
+    const { volume } = await prisma.account.findUniqueOrThrow({ where: { id }, select: { volume: { select: { mountPath: true } } } });
+    const dir = userRootOf(volume.mountPath, id);
     accounts.push(id);
+    dirs.push(dir);
     const root = await prisma.node.findFirstOrThrow({ where: { accountId: id, parentId: null } });
-    return { id, cookie: res.cookie!, dir: userRootOf(configuredVolumeRoot(), id), rootId: root.id };
+    return { id, cookie: res.cookie!, dir, rootId: root.id };
   }
   type Member = Awaited<ReturnType<typeof member>>;
 
@@ -60,7 +66,7 @@ export function fileFixtures() {
   }
 
   async function cleanup() {
-    for (const id of accounts) await rm(userRootOf(configuredVolumeRoot(), id), { recursive: true, force: true });
+    for (const dir of dirs) await rm(dir, { recursive: true, force: true });
     await prisma.account.deleteMany({ where: { id: { in: accounts } } });
     await prisma.$disconnect();
     redis().disconnect();

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import type { FolderView } from "@/contracts/nodes";
-import { openFiles } from "./helpers";
+import { openFiles, silentWav } from "./helpers";
 
 /** 1×1 PNG, detected as an image by the server. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
@@ -36,12 +36,25 @@ test("previews files in the viewer and steps between them", async ({ page }) => 
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("shows image thumbnails above 720px only", async ({ page }) => {
+test("shows media previews under file names at every width", async ({ page }) => {
   await uploadTwo(page);
-  const thumb = page.locator('[data-item="dot.png"] img');
-  const width = page.viewportSize()!.width;
-  if (width < 720) await expect(thumb).toHaveCount(0);
-  else await expect(thumb).toBeVisible();
+  await expect(page.locator('[data-item="dot.png"] [data-preview="image"] img')).toBeVisible();
+  await expect(page.locator('[data-item="notes.txt"] [data-preview]')).toHaveCount(0);
+
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([{ name: "tone.wav", mimeType: "audio/wav", buffer: silentWav() }]);
+  const player = page.locator('[data-item="tone.wav"] audio');
+  await expect(player).toBeVisible();
+  await page.getByRole("region", { name: "Transfers" }).getByRole("button", { name: "Close transfers" }).click();
+  await expect(player).toHaveAttribute("preload", "none");
+  await player.click();
+  await expect(page.getByRole("dialog", { name: "tone.wav" })).toHaveCount(0);
+
+  await page.locator('[data-item="dot.png"] [data-preview="image"] img').click();
+  await expect(page.getByRole("dialog", { name: "dot.png" })).toBeVisible();
+  const width = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+  expect(width[0]).toBeLessThanOrEqual(width[1]!);
 });
 
 test("downloads originals and zips, recorded in the transfers panel", async ({ page }) => {
