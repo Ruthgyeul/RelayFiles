@@ -23,6 +23,8 @@ export interface AccountUsage {
   usedBytes: string;
   /** Items directly in the root folder. */
   rootItems: number;
+  /** Changes are paused while the files move to new storage (reads keep working). */
+  storageBusy: boolean;
 }
 
 /** Accounts signed in on this device and which one is active. */

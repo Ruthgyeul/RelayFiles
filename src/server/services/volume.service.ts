@@ -1,4 +1,5 @@
 import "server-only";
+import { storageBusyOf } from "../repositories/account.repo";
 import { ApiError } from "../http/api-error";
 import { db } from "../db/client";
 import { logger } from "../logger";
@@ -38,9 +39,9 @@ export async function volumeForNewAccount(): Promise<StorageDriver> {
  * volume is read-only for a layout migration (docs/runbook.md). Reads keep working.
  */
 export async function assertAccountWritable(accountId: string): Promise<void> {
-  const row = await db().account.findUnique({ where: { id: accountId }, select: { migrating: true, volume: { select: { status: true } } } });
-  if (!row) throw new ApiError("NOT_FOUND");
-  if (row.migrating || row.volume.status === "READONLY") throw new ApiError("STORAGE_BUSY");
+  const busy = await storageBusyOf(db(), accountId);
+  if (busy === null) throw new ApiError("NOT_FOUND");
+  if (busy) throw new ApiError("STORAGE_BUSY");
 }
 
 /** Storage driver of the volume an account lives on; `write` also checks that changes are allowed. */

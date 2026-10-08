@@ -75,7 +75,7 @@ describe("anonymous accounts", () => {
     expect(account.isAdmin).toBe(false);
     expect(account.deletesAt).not.toBeNull();
     expect(state.activeAccountId).toBe(account.id);
-    expect(state.usage).toEqual({ usedBytes: "0", rootItems: 0 });
+    expect(state.usage).toEqual({ usedBytes: "0", rootItems: 0, storageBusy: false });
     expect(res.setCookie).toMatch(/HttpOnly/i);
     expect(res.setCookie).toMatch(/SameSite=lax/i);
 

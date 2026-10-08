@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { BusyBadge } from "@/domain/share";
 import { FILES, SEARCH } from "@/config/policy";
 
 export type NodeKind = "video" | "audio" | "image" | "other";
@@ -37,6 +38,8 @@ export interface NodeItem {
   linkId: string;
   hasThumb: boolean;
   settings: NodeSettingsDto;
+  /** Share-link download congestion (design `busyShow`): "Busy", "Server busy" or paused. */
+  busy: BusyBadge | null;
 }
 
 export interface FolderCrumb {

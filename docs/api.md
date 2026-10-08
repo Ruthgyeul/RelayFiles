@@ -45,13 +45,13 @@
 |---|---|---|
 | `HEAD` | `/api/health` | 생존 확인(204, 백엔드 작업 없음). Status 페이지가 2.5초마다 지연 시간을 잰다 |
 | `GET` | `/api/health` | 준비 상태: `{ status, version, time, components: { database, redis, storage } }`. DB가 죽으면 503 |
-| `GET` | `/api/auth/session` | 이 기기에 로그인한 계정 목록, 활성 계정 id, 가입 모드, 활성 계정 사용량 `usage { usedBytes, rootItems }`(`SessionState`). 무효 세션이 있으면 쿠키를 정리한다 |
+| `GET` | `/api/auth/session` | 이 기기에 로그인한 계정 목록, 활성 계정 id, 가입 모드, 활성 계정 사용량 `usage { usedBytes, rootItems, storageBusy }`(`SessionState`). `storageBusy`가 true면 파일을 새 저장소로 옮기는 중이라 변경이 잠시 막힌다(배너 표시). 무효 세션이 있으면 쿠키를 정리한다 |
 | `POST` | `/api/auth/anonymous` | `{ inviteCode? }` → 201 `{ account, token, session }`. 익명 계정을 만들고 이 기기를 로그인시킨다. 토큰은 이 응답에서만 평문으로 나온다 |
 | `POST` | `/api/auth/token` | `{ token }` → `SessionState`. 실패 시 401 `INVALID_TOKEN`, 잠금 시 429 `retryAfter` |
 | `POST` | `/api/auth/switch` | `{ accountId }` → `SessionState`. 이 기기에 로그인한 다른 계정을 활성화 |
 | `POST` | `/api/auth/signout` | `{ accountId? }`(기본: 활성 계정) → `SessionState`. 세션을 DB에서 폐기 |
 | `GET` | `/api/me/token?accountId=` | 이 기기에 로그인한 계정(기본: 활성 계정)의 전체 토큰(`cache-control: no-store`). 다른 기기의 계정은 404 |
-| `GET` | `/api/folders/:id` | `id` = `root` 또는 폴더 id. `FolderView { folder, isRoot, path, effectiveVisibility, children }`. 폴더 항목은 하위 전체 크기(`size`)와 직계 항목 수(`itemCount`)를 담는다. 다른 계정 폴더는 404 |
+| `GET` | `/api/folders/:id` | `id` = `root` 또는 폴더 id. `FolderView { folder, isRoot, path, effectiveVisibility, children }`. 폴더 항목은 하위 전체 크기(`size`)와 직계 항목 수(`itemCount`)를 담는다. 각 항목의 `busy`는 공유 링크 다운로드 혼잡도 배지(`Busy`/`Server busy`/`Downloads paused`, 없으면 null). 다른 계정 폴더는 404 |
 | `POST` | `/api/folders` | `{ parentId, name }` → 201 `{ folder, requestedName, renamed }`. DB와 볼륨에 함께 만든다. 이름이 겹치면 `Name (2)`로 만들고 `renamed: true` |
 | `GET` | `/api/nodes/:id` | Properties 대화상자 정보: 항목, 위치(루트→부모 이름), 실제 공개 범위, 폴더면 하위 파일·폴더 수 |
 | `GET` | `/api/folders/tree` | 계정의 모든 폴더 `{ id, name, parentId }`(이동·복사 대상 선택) |
@@ -106,6 +106,7 @@
 |---|---|---|
 | `POST` | `/api/share/:linkId/unlock` | `{ password }` argon2 확인. 맞으면 서명된 `rf_sh` 쿠키(12시간)에 링크를 기록. 틀리면 403 `Wrong password`, 주소당 10분에 10회를 넘기면 429 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/stream` | 방문자 재생·보기. 처음 요청만 "Played/Viewed"로 기록(30분 중복 제거) |
+| — | 만료로 지워진 링크 | 만료(자체 만료일, 첫 다운로드 후 삭제, 계정 삭제일)로 항목이 정리되면 그 링크와 하위 항목의 링크를 `LinkTombstone`에 `SHARE.tombstoneDays`(90일) 동안 남긴다. 그동안 `/d/<linkId>`는 "This link has expired" 카드, 파일 요청은 410. 존재한 적 없는 링크나 새 링크로 바뀐 옛 링크는 계속 404 |
 | `GET` | `/api/share/:linkId/files/:id/thumb` | 목록 미리보기(WebP, 메타데이터 없음). 재생과 같은 접근 검사(만료 410, 잠김 401, 비공개 404)이고 Stream only 링크에서도 허용. 세거나 기록하지 않는다. 썸네일이 아직 없으면 404 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일과 링크의 다운로드 수 +1, "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
 | `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만 |

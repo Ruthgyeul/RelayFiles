@@ -16,7 +16,8 @@ import { useShell } from "./ShellProvider";
 
 /**
  * Notices above the page content, in the design's order: the account created for this
- * visit, the admin announcement (File Manager), storage quota, then connectivity.
+ * visit, the admin announcement (File Manager), storage quota, paused changes while files
+ * move to new storage, then connectivity.
  */
 export function BannerStack({ announcement }: { announcement: AnnouncementDto | null }) {
   const { session, activeAccount, autoAccountId, dismissAutoAccount, saveToken } = useShell();
@@ -68,6 +69,11 @@ export function BannerStack({ announcement }: { announcement: AnnouncementDto | 
         >
           {formatSize(used)} of {formatSize(quota)} used ({Math.round(usedPercent(used, quota))}%). {level === 2 ? "New uploads will be blocked." : "Uploads stop at 100%."} Delete files or ask the
           admin for more space.
+        </Banner>
+      )}
+      {session.usage?.storageBusy && (
+        <Banner tone="warn" icon="hard-drives" title="Your files are being moved to new storage" titleColor="var(--color-warn-text)" iconColor="var(--color-warn-text)">
+          Changes are paused for a few minutes; browsing and downloads still work.
         </Banner>
       )}
       {!online && (

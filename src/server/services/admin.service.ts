@@ -1,5 +1,6 @@
 import "server-only";
 import { getEnv } from "@/config/env";
+import { MS, SHARE } from "@/config/policy";
 import type { AdminAccounts, CleanupResult, ManageInput } from "@/contracts/admin";
 import { isExpired } from "@/domain/account";
 import { applyManage } from "@/domain/admin";
@@ -9,7 +10,8 @@ import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { findAccountById } from "../repositories/account.repo";
 import { countAdmins, fileTotalsByAccount, listAccountsForAdmin, updateAccountByAdmin } from "../repositories/admin.repo";
-import { expiredItemIds } from "../repositories/node.repo";
+import { purgeRetiredLinks, retireLinks } from "../repositories/link-tombstone.repo";
+import { expiredItemIds, findRootFolder } from "../repositories/node.repo";
 import { deleteItems } from "./node-ops.service";
 import { deleteAccount } from "./profile.service";
 
@@ -77,6 +79,8 @@ export async function runCleanup(now: Date): Promise<CleanupResult> {
     const full = await findAccountById(db(), account.id);
     if (!full) continue;
     try {
+      const root = await findRootFolder(db(), account.id);
+      if (root) await retireLinks(db(), [root.id], now);
       await deleteAccount(full);
       result.accounts++;
     } catch (error) {
@@ -89,10 +93,12 @@ export async function runCleanup(now: Date): Promise<CleanupResult> {
     const owner = await findAccountById(db(), accountId);
     if (!owner) continue;
     try {
+      await retireLinks(db(), ids, now);
       result.items += (await deleteItems(owner, ids)).deleted;
     } catch (error) {
       logger.error("cleanup: items not deleted", { accountId, error });
     }
   }
+  await purgeRetiredLinks(db(), new Date(now.getTime() - SHARE.tombstoneDays * MS.day));
   return result;
 }
