@@ -1,0 +1,79 @@
+# RelayFiles on the host's Nginx (systemd deployment, docs/deploy-systemd.md).
+# Rendered by deploy/scripts/systemd/install.sh into /etc/nginx/sites-available/relayfiles.conf;
+# edit this template and re-run install.sh instead of editing the rendered file.
+# Nginx variables ($host, $1, ...) are left untouched by the renderer.
+
+upstream relayfiles_app {
+    server 127.0.0.1:${APP_PORT};
+    keepalive 16;
+}
+
+# Behind Cloudflare Tunnel, cloudflared sets X-Forwarded-Proto; otherwise use this hop's scheme.
+map $http_x_forwarded_proto $relayfiles_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+# No client addresses in the access log (same rule as the app's logs).
+log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
+
+server {
+    listen ${NGINX_LISTEN_PORT};
+    server_name ${SERVER_NAME};
+    server_tokens off;
+    access_log /var/log/nginx/relayfiles.access.log relayfiles;
+    error_log /var/log/nginx/relayfiles.error.log warn;
+
+    # The real client address: only a local cloudflared may set it through CF-Connecting-IP.
+    # Anyone else is identified by the TCP peer (their own CF-Connecting-IP is ignored).
+    set_real_ip_from 127.0.0.1;
+    real_ip_header CF-Connecting-IP;
+
+    # Uploads arrive in tus chunks of UPLOAD_CHUNK_SIZE_MB (at most 95 MB).
+    client_max_body_size 100m;
+
+    # When the app is down or the server is in maintenance, Nginx answers with static pages.
+    error_page 502 /_errors/502.html;
+    error_page 503 /_errors/503.html;
+    error_page 504 /_errors/504.html;
+    location ^~ /_errors/ {
+        internal;
+        alias ${APP_DIR}/deploy/error-pages/;
+    }
+
+    # Resumable uploads stream straight to the app.
+    location ^~ /api/uploads/tus {
+        if (-f ${APP_DIR}/deploy/maintenance/on) { return 503; }
+        proxy_pass http://relayfiles_app;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header CF-Connecting-IP "";
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $relayfiles_proto;
+        proxy_set_header Connection "";
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+
+    location / {
+        # Maintenance mode: touch deploy/maintenance/on (remove it to come back).
+        if (-f ${APP_DIR}/deploy/maintenance/on) { return 503; }
+        proxy_pass http://relayfiles_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header CF-Connecting-IP "";
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $relayfiles_proto;
+        proxy_set_header Connection "";
+        # The app sends files itself (STORAGE_ACCEL_ENABLED=false): pass large downloads
+        # through without spooling them to Nginx's temp directory.
+        proxy_max_temp_file_size 0;
+        # Streams, zips and the Server page's live updates can run long.
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+}

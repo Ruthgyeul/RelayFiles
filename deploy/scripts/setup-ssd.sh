@@ -61,4 +61,4 @@ run install -d -o "$UID_" -g "$GID_" -m 0700 "$MOUNT/users" "$MOUNT/system"
 run chown "$UID_:$GID_" "$MOUNT"
 run chmod 0700 "$MOUNT"
 
-log "Done. Next: docker compose ... run --rm tools npm run volume:init (docs/deploy-ubuntu.md §5)"
+log "Done. Next: volume:init (Docker: docs/deploy-ubuntu.md §5, systemd: docs/deploy-systemd.md §6)"

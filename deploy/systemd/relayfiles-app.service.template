@@ -1,0 +1,28 @@
+# RelayFiles web app (Next.js standalone). Rendered by deploy/scripts/systemd/install.sh;
+# edit the template, not /etc/systemd/system/relayfiles-app.service.
+[Unit]
+Description=RelayFiles web app
+Documentation=file://${APP_DIR}/docs/deploy-systemd.md
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${STORAGE_USER}
+Group=${STORAGE_USER}
+WorkingDirectory=${APP_DIR}
+Environment=HOME=${STORAGE_HOME}
+# The release script points .app/current at the bundle of the running release.
+ExecStart=${NODE_BIN} ${APP_DIR}/scripts/start-server.mjs ${APP_DIR}/.app/current
+# Files and folders written to the SSD stay private to the storage account (0600 / 0700).
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

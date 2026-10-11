@@ -1,6 +1,6 @@
 # 운영 절차 (runbook)
 
-배포 방법은 [deploy-ubuntu.md](deploy-ubuntu.md). 아래 명령은 저장소 루트에서 실행한다.
+배포 방법은 [deploy-ubuntu.md](deploy-ubuntu.md)(Docker Compose) 또는 [deploy-systemd.md](deploy-systemd.md)(systemd). 아래 명령은 저장소 루트에서 실행하며 Docker 기준이다. systemd 배포에서는 `$C run --rm tools npm run <명령>` 대신 `deploy/scripts/systemd/rf.sh <명령>`, `$C restart app worker` 대신 `sudo systemctl restart relayfiles-app relayfiles-worker`를 쓴다(백업·롤백은 [deploy-systemd.md §8–9](deploy-systemd.md#8-운영-명령)).
 
 ```bash
 C="docker compose --env-file .env -f deploy/docker-compose.yml"
