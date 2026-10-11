@@ -85,6 +85,8 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const pickTarget = useRef<UploadTarget | null>(null);
+  // crypto.randomUUID() exists only in secure contexts; plain-http LAN access must work too.
+  const downloadSeq = useRef(0);
 
   const update = useCallback((id: string, patch: (transfer: Transfer) => Partial<Transfer>) => {
     setTransfers((list) => list.map((transfer) => (transfer.id === id ? { ...transfer, ...patch(transfer) } : transfer)));
@@ -166,7 +168,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
     anchor.rel = "noopener";
     anchor.click();
     const transfer: Transfer = {
-      id: crypto.randomUUID(),
+      id: `download-${(downloadSeq.current += 1)}`,
       direction: "down",
       title: request.title,
       folderId: "",
