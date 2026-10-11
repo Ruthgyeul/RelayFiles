@@ -230,6 +230,23 @@ $C up -d app worker nginx
 
 실서버(N95, 실제 두 번째 SSD)에서는 위 "SSD 추가" → "계정 하나 옮기기"를 테스트 계정으로 한 번 해 보고 이 표에 한 줄 추가한다.
 
+### 2026-10-11 — systemd 배포 (포트 6000, relayfiles.io)
+
+컨테이너에서 [deploy-systemd.md](deploy-systemd.md) 순서대로 진행했다. systemd가 PID 1이 아닌 환경이라, `systemctl`은 렌더링된 유닛의 `ExecStart`를 `User=`로 실행하는 대역 스크립트로 바꿔서 했다. 서비스 실행 결과는 같지만, 실서버에서 `UMask=0077` 같은 유닛 설정이 적용되는지는 따로 확인해야 한다.
+
+| 단계 | 명령 | 결과 |
+|---|---|---|
+| 1 | `/opt/relayfiles`에 clone, `npm ci`, `.env`(`APP_HOST=127.0.0.1`, `APP_PORT=6000`, `SERVER_NAME=relayfiles.io`) | |
+| 2 | `sudo deploy/scripts/systemd/install.sh` | `relayfiles` 계정·홈, `.env` `0640 root:relayfiles`, 유닛 2개(`systemd-analyze verify` 통과), Nginx 사이트 `nginx -t` 통과 |
+| 3 | `rf.sh db:deploy`, `rf.sh volume:init` | 마이그레이션 적용, 볼륨 표시 파일 `0600 relayfiles` |
+| 4 | `release.sh` | 백업 → 빌드 → `.app/<시각>-<커밋>` → 재시작 → 헬스 체크 통과, `releases.log` 기록 |
+| 5 | `rf.sh admin:create` | 사용자 루트 `drwx------ relayfiles` |
+| 6 | Nginx 경유 `Host: relayfiles.io` | `/api/health` 200, `/`·`/status`·`/files` 200, 없는 링크 404 |
+| 7 | `touch deploy/maintenance/on` / 앱 중지 | 정적 503 "Under maintenance" / 502 "Server unreachable" |
+| 8 | 워커 헬스 프로브 (`127.0.0.1:6000`) | 1분마다 Website·Storage `ok` 기록. 고치기 전의 `fetch`는 `bad port`로 실패했다 |
+| 9 | E2E(업로드·미디어·공유·파일 작업·에러 페이지, desktop+mobile)를 `http://relayfiles.io`로 | 61 통과. 이 과정에서 http 주소에서 다운로드 기록이 빠지는 문제를 찾아 고쳤다(`crypto.randomUUID`) |
+| 10 | `git pull && release.sh` 후 `rollback.sh` | 새 번들로 전환 후 이전 번들로 복귀, 헬스 200 |
+
 ## 비밀값 교체
 
 ### 토큰 키 (`TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`)

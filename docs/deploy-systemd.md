@@ -158,7 +158,7 @@ deploy/scripts/systemd/release.sh               # 빌드 → .app/<릴리스> �
 deploy/scripts/systemd/rf.sh admin:create       # 첫 관리자. 토큰은 한 번만 출력된다
 ```
 
-`rf.sh <npm 스크립트>`는 명령을 서비스와 같은 `relayfiles` 계정으로 실행한다. 그래야 SSD에 만드는 파일의 소유자가 맞다. 이렇게 실행할 명령은 `admin:create`, `volume:*`, `storage:migrate`, `data:migrate`, `keys:rotate`, `media:backfill`이다.
+`rf.sh <npm 스크립트>`는 명령을 서비스와 같은 `relayfiles` 계정으로 실행한다. umask 077로 실행하므로 SSD에 만드는 파일의 소유자와 권한(`0600`/`0700`)이 서비스와 같다. 이렇게 실행할 명령은 `admin:create`, `volume:*`, `storage:migrate`, `data:migrate`, `keys:rotate`, `media:backfill`이다.
 
 ```bash
 curl -fsS http://127.0.0.1:6000/api/health                          # 앱 직접
