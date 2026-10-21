@@ -9,7 +9,7 @@ import { GET as sharePreview } from "@/app/api/share/[linkId]/files/[id]/preview
 import { GET as shareThumb } from "@/app/api/share/[linkId]/files/[id]/thumb/route";
 import { POST as unlock } from "@/app/api/share/[linkId]/unlock/route";
 import { GET as shareZip, HEAD as shareZipCheck } from "@/app/api/share/[linkId]/zip/route";
-import { MEDIA, SHARE } from "@/config/policy";
+import { IMMUTABLE_CACHE, MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER } from "@/contracts/api";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { hash } from "@node-rs/argon2";
@@ -247,7 +247,7 @@ describe("share downloads", () => {
     expect(Buffer.from(await part.arrayBuffer())).toEqual(copy.subarray(2, 10));
   });
 
-  it("shows visitors the screen-sized preview and counts it as a view, not a look-ahead", async () => {
+  it("shows visitors the screen-sized preview, counts views but not look-aheads, and lets the browser keep playback", async () => {
     const { m, trip } = await sharedTrip();
     const big = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: "#808080", noise: { type: "gaussian", mean: 128, sigma: 40 } } })
       .jpeg({ quality: 95 })
@@ -259,16 +259,21 @@ describe("share downloads", () => {
 
     const ahead = await visit(sharePreview, path(trip.linkId, id, "preview"), fileParams(trip.linkId, id), { headers: { [PREFETCH_HEADER]: "1" } });
     expect(ahead.headers.get("content-type")).toBe("image/webp");
-    expect(ahead.headers.get("cache-control")).toBe("private, no-cache");
+    expect(ahead.headers.get("cache-control")).toBe(IMMUTABLE_CACHE);
     const shown = Buffer.from(await ahead.arrayBuffer());
     expect(shown.includes(Buffer.from("RelayCam"))).toBe(false);
     expect((await sharp(shown).metadata()).width).toBe(MEDIA.previewSizePx);
     expect(await views()).toBe(0);
 
-    // Displayed later: the browser revalidates (304) and that is the view.
-    const displayed = await visit(sharePreview, path(trip.linkId, id, "preview"), fileParams(trip.linkId, id), { headers: { "if-none-match": ahead.headers.get("etag")! } });
-    expect(displayed.status).toBe(304);
+    // Opened in the viewer: that is the view.
+    expect((await visit(sharePreview, path(trip.linkId, id, "preview"), fileParams(trip.linkId, id))).status).toBe(200);
     await expect.poll(views).toBe(1);
+
+    // Playback is kept by the browser for good; downloads are checked (and counted) every time.
+    const played = await visit(shareStream, path(trip.linkId, id, "stream"), fileParams(trip.linkId, id), { headers: { range: "bytes=0-99" } });
+    expect(played.headers.get("cache-control")).toBe(IMMUTABLE_CACHE);
+    const downloaded = await visit(shareDownload, path(trip.linkId, id, "download"), fileParams(trip.linkId, id));
+    expect(downloaded.headers.get("cache-control")).toBe("private, no-cache");
   });
 
   it("pauses downloads after 10 in 10 minutes and says when to retry", async () => {

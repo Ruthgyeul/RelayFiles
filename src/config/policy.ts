@@ -115,12 +115,20 @@ export const MEDIA = {
   ffmpegTimeoutSec: 60,
   /** Largest PNG frame read back from ffmpeg (a 8K frame fits); more stops the command. */
   maxFrameBytes: 256 * 1024 * 1024,
-  /** Thumbnails change only when the file does; browsers may keep them for a day. */
-  thumbMaxAgeSec: 86_400,
+  /**
+   * What the browser may keep (playback bytes, thumbnails, previews, converted video). A file's
+   * bytes never change under its URL (a replaced file gets a new id), so they are `immutable`:
+   * replays, seeks back and returning to an earlier video come from the browser's cache with
+   * no request to the server. Downloads are never cached (limits and counts need each request).
+   */
+  cacheMaxAgeSec: 365 * 24 * 60 * 60,
   workerConcurrency: 2,
   jobAttempts: 3,
   jobBackoffMs: 10_000,
 } as const;
+
+/** Cache-Control of responses whose bytes never change for their URL (see MEDIA.cacheMaxAgeSec). */
+export const IMMUTABLE_CACHE = `private, max-age=${MEDIA.cacheMaxAgeSec}, immutable`;
 
 export const METRICS = {
   /** The Server page stream sends a snapshot this often (design: 1.5 s). */

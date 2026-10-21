@@ -126,13 +126,12 @@ export async function serveSharedThumb(req: Request, linkId: string, nodeId: str
 /**
  * What the viewer shows a visitor for an image: the worker's screen-sized preview (re-encoded
  * without metadata, so safe whatever the owner's setting), else the same bytes as playback.
- * Counted as a view like playback. The browser revalidates it on every display (304 once
- * prefetched), so a picture the viewer loaded ahead is counted when it is actually shown.
+ * Counted as a view like playback, except the viewer's look-ahead for the next picture.
  */
 export async function serveSharedPreview(req: Request, linkId: string, nodeId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
   const { link, row } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
   const owner = await ownerOf(link);
-  const preview = row.kind === "IMAGE" ? await sendAsset(req, await driverForAccount(owner), owner.id, row, "preview", true) : null;
+  const preview = row.kind === "IMAGE" ? await sendAsset(req, await driverForAccount(owner), owner.id, row, "preview") : null;
   if (!preview) return serveSharedFile(req, linkId, nodeId, "stream", viewer, client);
   // The viewer's look-ahead for the next picture is not a view.
   const prefetch = req.headers.get(PREFETCH_HEADER) !== null;

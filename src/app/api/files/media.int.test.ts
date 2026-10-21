@@ -10,7 +10,7 @@ import { GET as stream } from "@/app/api/files/[id]/stream/route";
 import { GET as thumb } from "@/app/api/files/[id]/thumb/route";
 import { POST as removeNodes } from "@/app/api/nodes/delete/route";
 import { getEnv } from "@/config/env";
-import { MEDIA } from "@/config/policy";
+import { IMMUTABLE_CACHE, MEDIA } from "@/config/policy";
 import { exifOrientation } from "@/domain/image-metadata";
 import { startMediaWorker } from "@/server/jobs/media.worker";
 import { closeQueues, enqueueMedia } from "@/server/jobs/queue";
@@ -127,6 +127,7 @@ describe("media processing", () => {
     const res = await get(preview, m, id);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/webp");
+    expect(res.headers.get("cache-control")).toBe(IMMUTABLE_CACHE);
     const shown = Buffer.from(await res.arrayBuffer());
     expect(shown.length).toBeLessThan(big.length);
     expect((await sharp(shown).metadata()).width).toBe(MEDIA.previewSizePx);
@@ -151,6 +152,7 @@ describe("media processing", () => {
       const res = await get(stream, m, id, {}, "?transcode=1");
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toBe("video/mp4");
+      expect(res.headers.get("cache-control")).toBe(IMMUTABLE_CACHE);
       const mp4 = Buffer.from(await res.arrayBuffer());
       // Fragmented MP4: a header box, then movie fragments the browser plays as they arrive.
       for (const box of ["ftyp", "moov", "moof", "mdat"]) expect(mp4.includes(Buffer.from(box)), box).toBe(true);
@@ -167,8 +169,13 @@ describe("media processing", () => {
       await reader.cancel();
       await expect.poll(runningTranscodes, { timeout: 5_000 }).toBe(0);
 
+      // Playing the original: cacheable for good, so seeking back or returning needs no request.
+      expect((await get(stream, m, id, { range: "bytes=0-99" })).headers.get("cache-control")).toBe(IMMUTABLE_CACHE);
+
       const text = await addFile(m, m.rootId, [], "notes.txt", "hello", "text/plain");
-      expect((await get(stream, m, text, {}, "?transcode=1")).status).toBe(404);
+      const missing = await get(stream, m, text, {}, "?transcode=1");
+      expect(missing.status).toBe(404);
+      expect(missing.headers.get("cache-control")).toBe("no-store");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

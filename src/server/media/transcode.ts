@@ -2,7 +2,7 @@ import "server-only";
 import { spawn } from "node:child_process";
 import { pipeline, Readable, Transform, type TransformCallback } from "node:stream";
 import { getEnv } from "@/config/env";
-import { TRANSCODE } from "@/config/policy";
+import { IMMUTABLE_CACHE, TRANSCODE } from "@/config/policy";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 
@@ -47,7 +47,8 @@ class OutputLimit extends Transform {
  * viewer leaves or the output limit is reached, and is always reaped (`close`).
  */
 export function transcodeResponse(req: Request, path: string): Response {
-  const headers = new Headers({ "content-type": "video/mp4", "cache-control": "no-store", "x-content-type-options": "nosniff", "x-accel-buffering": "no" });
+  // A finished conversion is kept by the browser: watching again costs no CPU.
+  const headers = new Headers({ "content-type": "video/mp4", "cache-control": IMMUTABLE_CACHE, "x-content-type-options": "nosniff", "x-accel-buffering": "no" });
   const { FFMPEG_PATH, VIDEO_TRANSCODE_MAX } = getEnv("jobs");
   if (VIDEO_TRANSCODE_MAX === 0) throw new ApiError("NOT_FOUND");
   if (req.method === "HEAD") return new Response(null, { headers });

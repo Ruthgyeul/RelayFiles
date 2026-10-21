@@ -1,6 +1,6 @@
 import "server-only";
 import { Readable } from "node:stream";
-import { MEDIA } from "@/config/policy";
+import { IMMUTABLE_CACHE } from "@/config/policy";
 import { ApiError } from "../http/api-error";
 import type { AssetKind, StorageDriver } from "../storage/driver";
 
@@ -15,13 +15,11 @@ export async function sendAsset(
   accountId: string,
   row: { id: string; sha256: string | null },
   kind: Extract<AssetKind, "thumb" | "preview">,
-  /** Ask the browser to check back (a cheap 304) on every use instead of keeping it a day. */
-  revalidate = false,
 ): Promise<Response | null> {
   const etag = `"${row.sha256 ?? row.id}-${kind}"`;
   const headers = new Headers({
     "content-type": "image/webp",
-    "cache-control": revalidate ? "private, no-cache" : `private, max-age=${MEDIA.thumbMaxAgeSec}`,
+    "cache-control": IMMUTABLE_CACHE,
     "x-content-type-options": "nosniff",
     etag,
   });

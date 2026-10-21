@@ -37,7 +37,8 @@ if (root !== resolve(storage.STORAGE_ROOT)) {
   const location =
     `# ${root} (volume ${marker.volumeId}), written by npm run volume:init\n` +
     `location ~ ^${prefix}${marker.volumeId}/(.+)$ {\n    internal;\n    alias ${root}/users/$1;\n` +
-    `    add_header X-Content-Type-Options nosniff always;\n    add_header Cache-Control "private, no-cache" always;\n}\n`;
+    // Cache-Control comes from the app (kept by X-Accel-Redirect); a second one would disable caching.
+    `    add_header X-Content-Type-Options nosniff always;\n}\n`;
   try {
     await writeFile(new URL(`../${name}`, import.meta.url), location);
     console.log(`Nginx location written to ${name}.`);

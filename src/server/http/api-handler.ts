@@ -22,7 +22,8 @@ export function ok<T>(data: T, init?: ResponseInit): NextResponse<ApiSuccess<T>>
 }
 
 function failure(code: ErrorCode, message: string, requestId: string, extra: Omit<ApiFailure, "success" | "error" | "code"> = {}): NextResponse<ApiFailure> {
-  const headers = new Headers({ [REQUEST_ID_HEADER]: requestId });
+  // Never cached: a 404 for a thumbnail the worker has not made yet must not stick.
+  const headers = new Headers({ [REQUEST_ID_HEADER]: requestId, "cache-control": "no-store" });
   if (extra.retryAfter) headers.set("retry-after", String(extra.retryAfter));
   return NextResponse.json({ success: false, error: message, code, ...extra }, { status: ERRORS[code].status, headers });
 }
