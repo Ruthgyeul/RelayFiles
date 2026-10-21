@@ -113,10 +113,14 @@ export const ENV_GROUPS = {
   }),
   deploy: z.object({
     SERVER_NAME: z.string().default("localhost"),
+    /** Host address Nginx is published on: 127.0.0.1 when another proxy on the host sits in front. */
+    NGINX_LISTEN_HOST: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("0.0.0.0"),
     NGINX_LISTEN_PORT: port.default(80),
     CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
     /** Host directory for PostgreSQL, Redis and backups (docker compose). */
     DATA_DIR: z.string().startsWith("/").default("/srv/relayfiles"),
+    /** Docker's data-root (images, containers, build cache); set by deploy/scripts/setup-docker.sh. */
+    DOCKER_DATA_ROOT: z.string().startsWith("/").default("/var/lib/docker"),
     /** Private network of the compose services; cloudflared gets a fixed address in it. */
     DOCKER_SUBNET: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/).default("172.28.0.0/24"),
     CLOUDFLARED_IP: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("172.28.0.250"),
