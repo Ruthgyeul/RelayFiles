@@ -39,5 +39,5 @@ npm run dev            # http://localhost:3000
 
 - [Implementation plan](docs/plan.md)
 - [Architecture](docs/architecture.md)
-- [Design prototype](docs/design/Relay_App.dc.html)
+- [Design spec](docs/design/spec.md)
 - [Project rules for contributors and agents](CLAUDE.md)

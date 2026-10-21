@@ -5,7 +5,6 @@ import { FIXED_COLOR, KIND_COLOR, THEME_COLOR, TONE } from "./palette";
 
 const themesCss = readFileSync("src/shared/styles/themes.css", "utf8");
 const globalsCss = readFileSync("src/shared/styles/globals.css", "utf8");
-const designCss = /<style>(:root\{--bg[^<]*)<\/style>/.exec(readFileSync("docs/design/Relay_App.dc.html", "utf8"))?.[1] ?? "";
 
 /** Parses `selector { --a: x; ... }` blocks into a map of selector → declarations. */
 function parseBlocks(css: string): Map<string, Record<string, string>> {
@@ -20,17 +19,11 @@ function parseBlocks(css: string): Map<string, Record<string, string>> {
 
 describe("themes.css", () => {
   const ours = parseBlocks(themesCss);
-  const design = parseBlocks(designCss);
 
   it("has the default palette and one block per theme key", () => {
     expect(ours.has(":root")).toBe(true);
     for (const key of THEME_KEYS.filter((k) => k !== "blue")) expect(ours.has(`:root[data-theme="${key}"]`), key).toBe(true);
     expect(ours.size).toBe(10);
-  });
-
-  it("matches the design prototype values exactly", () => {
-    expect(design.size).toBe(10);
-    for (const [selector, decls] of design) expect(ours.get(selector), selector).toEqual(decls);
   });
 
   it("defines the same 22 variables in every theme", () => {

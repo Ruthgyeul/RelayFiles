@@ -1,6 +1,6 @@
 # RelayFiles — 디자인 시안 구현 계획서
 
-> 기준 시안: `Relay_App.dc.html` (1,952줄 = 마크업 1–996 + 동작 로직 997–1950)
+> 기준 시안: `Relay_App.dc.html` (1,952줄 = 마크업 1–996 + 동작 로직 997–1950). 구현을 마친 뒤 저장소에서 삭제했다(`git show 056195d:docs/design/Relay_App.dc.html`). 수치는 [`design/spec.md`](design/spec.md)와 코드가 기준이다.
 > 대상 레포: `Ruthgyeul/RelayFiles` (현재 `README.md`, `.gitignore`만 있음) · 작업 브랜치 `claude/eager-bell-lrz3vc`
 > v2 반영 사항: 폰트 재선정 · 이모티콘 금지(SVG 아이콘만) · 데모 데이터 미포함(실서버 동작) · 구조/지속성/확장성 강화 · 반응형 명세 · 에러/경고 페이지 추가
 > v3 반영 사항: PostgreSQL + Redis(캐시 포함) 역할 분담, 외장 SSD `/mnt/relayfilesDB`에 사용자별 루트 폴더로 원본 저장, 보안 대책, 다중 볼륨 확장 구조(§13.4–13.7, §14)
@@ -161,7 +161,6 @@ npm으로 고정하고 `package-lock.json`을 커밋한다. native 모듈은 ARM
 RelayFiles/
 ├─ CLAUDE.md                         # 프로젝트 규칙 (M0에서 가장 먼저 작성)
 ├─ docs/
-│  ├─ design/Relay_App.dc.html       # 시안 원본
 │  ├─ design/spec.md                 # 화면별 수치 스펙(§8 확장)
 │  ├─ architecture.md · api.md · deploy-ubuntu.md · security.md · runbook.md
 ├─ src/
