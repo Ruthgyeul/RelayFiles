@@ -29,6 +29,7 @@
     "keys:rotate": "tsx --conditions=react-server scripts/keys-rotate.mts",
     "check:migrations": "node scripts/check-migrations.mjs",
     "storage:migrate": "tsx --conditions=react-server scripts/storage-migrate.mts",
+    "storage:import": "tsx --conditions=react-server scripts/storage-import.mts",
     "volume:migrate": "tsx --conditions=react-server scripts/volume-migrate.mts",
     "volume:list": "tsx --conditions=react-server scripts/volume-list.mts",
     "volume:remove": "tsx --conditions=react-server scripts/volume-remove.mts"
@@ -56,6 +57,7 @@
     "sharp": "^0.35.5",
     "systeminformation": "^5.33.15",
     "tailwind-merge": "^3.7.0",
+    "tar-stream": "^3.2.2",
     "tus-js-client": "^4.3.1",
     "winston": "^3.19.0",
     "zod": "^4.6.5"
@@ -72,6 +74,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/tar-stream": "^3.1.5",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.8",
     "eslint-import-resolver-typescript": "^4.4.5",

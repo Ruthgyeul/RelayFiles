@@ -53,6 +53,7 @@ npm run data:migrate     # 데이터 마이그레이션(src/server/migrations) �
 npm run keys:rotate      # *_PREVIOUS 키로 저장된 토큰을 현재 키로 다시 암호화
 npm run check:migrations # 파괴적 SQL 마이그레이션에 contract 표시가 있는지 검사
 npm run storage:migrate  # 볼륨 디렉터리 레이아웃을 코드 버전으로 올림(READONLY + 저널, 재개 가능)
+npm run storage:import   # -- --account <id> [--to <폴더>] [--ignore-quota], stdin의 tar를 계정에 복사(재실행 = 이어하기)
 npm run volume:list      # 볼륨 상태·계정 수·여유 공간
 npm run volume:migrate   # -- --account <id> --to <vol> | --volume <vol> [--to <vol>] (복사 → SHA-256 대조 → 전환)
 npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해제
