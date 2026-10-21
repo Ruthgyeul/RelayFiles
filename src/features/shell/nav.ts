@@ -14,16 +14,16 @@ export interface NavItem {
 }
 
 /**
- * Sidebar and drawer navigation in the design's order. Sections are added milestone by
- * milestone (docs/plan.md §15); `as Route` covers pages that are not built yet.
+ * Sidebar and drawer navigation in the design's order (docs/plan.md §1.1). `/files` is an
+ * optional catch-all route, which the typed-route check only accepts with `as Route`.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: "home", href: "/", label: "Home", icon: "house", title: "Home" },
   { id: "files", href: "/files" as Route, label: "File Manager", icon: "folder-simple", title: "root" },
-  { id: "accounts", href: "/admin/accounts" as Route, label: "Accounts", icon: "users-three", title: "Accounts", adminOnly: true },
-  { id: "server", href: "/admin/server" as Route, label: "Server", icon: "cpu", title: "Server", adminOnly: true },
-  { id: "status", href: "/status" as Route, label: "Status", icon: "pulse", title: "Status" },
-  { id: "settings", href: "/settings" as Route, label: "Settings", icon: "gear-six", title: "My Profile" },
+  { id: "accounts", href: "/admin/accounts", label: "Accounts", icon: "users-three", title: "Accounts", adminOnly: true },
+  { id: "server", href: "/admin/server", label: "Server", icon: "cpu", title: "Server", adminOnly: true },
+  { id: "status", href: "/status", label: "Status", icon: "pulse", title: "Status" },
+  { id: "settings", href: "/settings", label: "Settings", icon: "gear-six", title: "My Profile" },
 ];
 
 export function navItemsFor(isAdmin: boolean): NavItem[] {

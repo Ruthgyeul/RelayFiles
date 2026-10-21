@@ -1,17 +1,13 @@
-# RelayFiles — 디자인 시안 구현 계획서
+# RelayFiles — 설계 결정
 
-> 기준 시안: `Relay_App.dc.html` (1,952줄 = 마크업 1–996 + 동작 로직 997–1950). 구현을 마친 뒤 저장소에서 삭제했다(`git show 056195d:docs/design/Relay_App.dc.html`). 수치는 [`design/spec.md`](design/spec.md)와 코드가 기준이다.
-> 대상 레포: `Ruthgyeul/RelayFiles` (현재 `README.md`, `.gitignore`만 있음) · 작업 브랜치 `claude/eager-bell-lrz3vc`
-> v2 반영 사항: 폰트 재선정 · 이모티콘 금지(SVG 아이콘만) · 데모 데이터 미포함(실서버 동작) · 구조/지속성/확장성 강화 · 반응형 명세 · 에러/경고 페이지 추가
-> v3 반영 사항: PostgreSQL + Redis(캐시 포함) 역할 분담, 외장 SSD `/mnt/relayfilesDB`에 사용자별 루트 폴더로 원본 저장, 보안 대책, 다중 볼륨 확장 구조(§13.4–13.7, §14)
-> v4 반영 사항: 마이그레이션 전략(DB 스키마, 스토리지 레이아웃, 계정·볼륨 이동, 서버 이전, 백엔드 전환, 키 교체, 캐시·클라이언트 데이터 버전) — §13.8
-> M0 반영 사항: 실제 설치 검증 결과로 버전 확정(TypeScript 6.0.3, ESLint 9.39), Next 16 규약 반영(`middleware.ts` → `proxy.ts`, `forbidden`/`unauthorized`는 `experimental.authInterrupts`), standalone 실행 방식
+> 디자인 시안(`Relay_App.dc.html`)을 Next.js로 구현하면서 정한 화면 구성, 에러 화면, 백엔드, 스토리지, 마이그레이션 전략을 정리한 문서다. 구현(M0–M16)은 끝났고, 이 문서는 현재 코드와 맞춰 유지한다. 코드 주석의 `docs/plan.md §n`이 이 문서의 절을 가리킨다.
+> 시안 원본은 구현 후 삭제했다(`git show 056195d:docs/design/Relay_App.dc.html`). 수치는 [`design/spec.md`](design/spec.md)와 코드가 기준이다. 버전은 `package.json`, 규칙은 `CLAUDE.md`, 운영 절차는 `deploy-*.md`와 `runbook.md`를 본다.
 
 ---
 
 ## 0. Context
 
-- **배경**: RelayFiles는 아직 코드가 없다. 디자인 툴에서 만든 단일 HTML 프로토타입에 화면, 상호작용, 문구, 정책(14일 자동 삭제, 토큰 계정, 공유 링크, 다운로드 혼잡 제어 등)이 모두 들어 있다. 이것을 **Next.js 16.3 + React 19.3 + Tailwind CSS 4.3**으로 구현하고, 실제 Ubuntu 서버에서 동작하는 제품으로 만든다.
+- **배경**: 계획 작성 당시 RelayFiles에는 코드가 없었다. 디자인 툴에서 만든 단일 HTML 프로토타입에 화면, 상호작용, 문구, 정책(14일 자동 삭제, 토큰 계정, 공유 링크, 다운로드 혼잡 제어 등)이 모두 들어 있다. 이것을 **Next.js 16.3 + React 19.3 + Tailwind CSS 4.3**으로 구현하고, 실제 Ubuntu 서버에서 동작하는 제품으로 만든다.
 - **시안의 정체**: `<x-dc>` 템플릿(`{{ }}`, `<sc-if>`, `<sc-for>`, `style-hover`)과 `class Component extends DCLogic`. 데이터, 서버 지표, 업로드 진행률은 모두 클라이언트 목업과 시뮬레이션이다.
 - **목표**:
   1. 레이아웃, 색, 간격, 반경, 그림자, 문구(영문 원문), 상호작용 규칙은 시안과 동일하게 맞춘다.
@@ -68,31 +64,9 @@
 
 ---
 
-## 2. 기술 스택 & 버전 (2026-10-05 npm 확인)
+## 2. 기술 스택
 
-| 영역 | 패키지 | 버전 | 비고 |
-|---|---|---|---|
-| 런타임 | Node.js | 24 LTS | `.nvmrc`, Docker `node:24-bookworm-slim` |
-| 프레임워크 | `next` | **16.3.8** | App Router, Turbopack, `output: 'standalone'`, `typedRoutes` |
-| UI | `react`, `react-dom` | **19.3.0** | |
-| 스타일 | `tailwindcss`, `@tailwindcss/postcss` | **4.3.3** | CSS-first `@theme` |
-| 언어 | `typescript` | **6.0.3** (`~6.0.3` 고정) | M0 검증: Next 16.3은 TS 7을 지원하지만 `typescript-eslint` 8.71이 TS 7을 지원하지 않는다(peer `<6.1`). 지원되면 TS 7로 올린다 |
-| 아이콘 | `@phosphor-icons/react` | **2.1.10** | SVG 컴포넌트, `/ssr` 엔트리, 트리셰이킹. 이모지 금지 |
-| 폰트 | `next/font/google`(Figtree, JetBrains Mono), `pretendard` npm(로컬) | — | §3.1 |
-| 클라이언트 상태 | `zustand` | 5.0.15 | UI 상태만 담당 |
-| 서버 상태 | `@tanstack/react-query` | 최신 5.x | 캐시, 무효화, 낙관적 업데이트 |
-| 검증 | `zod` | 4.6.5 | env, API 입력/출력 스키마 공유 |
-| ORM | `prisma`, `@prisma/client` | **7.10.0** | `latest` 태그가 8.0 RC라서 stable로 고정 |
-| 큐/캐시 | `bullmq` 6.3.11, `ioredis` 6.0.0 | | |
-| 업로드 | `@tus/server` 2.4.5, `@tus/file-store` 2.1.1, `tus-js-client` 4.3.1 | | 재개 가능 청크 업로드 |
-| zip | `archiver` 8.0.0 | | 스트리밍 zip |
-| 서버 지표 | `systeminformation` 5.33.15 | | |
-| 비밀번호 해시 | `@node-rs/argon2` | 최신 | 공유 링크 비밀번호(ARM64 prebuilt 있음) |
-| 로깅 | `winston` 3.19.0 | | |
-| 테스트 | `vitest` 5.0.3, `@playwright/test` 1.63.0, `@testcontainers/postgresql`(선택) | | |
-| 린트 | `eslint` **9.39.x**, `eslint-config-next` 16.3.8, `eslint-plugin-boundaries` 7.x, `eslint-import-resolver-typescript` 4.x | | M0 검증: `eslint-config-next`에 포함된 react/import/jsx-a11y 플러그인이 ESLint 10을 지원하지 않아 9로 고정. 레이어 의존 규칙 강제 |
-
-npm으로 고정하고 `package-lock.json`을 커밋한다. native 모듈은 ARM64 호환을 확인한다(Pi 배포 가능성 대비).
+버전과 스택은 `package.json`과 `CLAUDE.md`의 스택 표가 기준이다. 별도 상태 관리 라이브러리는 쓰지 않는다(§11). 폰트는 `@fontsource-variable/figtree`, `@fontsource-variable/jetbrains-mono`, `pretendard`(npm, CSS import, §3.1).
 
 ---
 
@@ -102,12 +76,12 @@ npm으로 고정하고 `package-lock.json`을 커밋한다. native 모듈은 ARM
 
 | 용도 | 폰트 | 이유 |
 |---|---|---|
-| 본문/UI(라틴) | **Figtree** (`next/font/google`, variable, 400–800) | 시안의 크기, 행간, 굵기 체계가 Figtree 기준이라 레이아웃이 그대로 맞는다. 둥근 지오메트릭 산세리프가 다크 UI와 잘 어울린다. 400–800 전 범위를 불러와 시안이 의도한 800 배지를 실제 800으로 렌더링한다 |
-| 한글 폴백 | **Pretendard Variable** (npm `pretendard`, `next/font/local`, dynamic subset) | 파일명, 폴더명, 노트에 한글이 들어가는데 Figtree에는 한글이 없다. Pretendard는 x-height와 굵기 대비가 Figtree와 잘 맞는다 |
-| 고정폭(토큰, ID, URL, 경로, 단축키, 초대코드) | **JetBrains Mono** (`next/font/google`, 400/600) | 시안의 `ui-monospace`는 OS마다 다르게 보인다. 토큰 판독성(0/O, l/1 구분)이 중요하다 |
+| 본문/UI(라틴) | **Figtree** (`@fontsource-variable/figtree`, variable) | 시안의 크기, 행간, 굵기 체계가 Figtree 기준이라 레이아웃이 그대로 맞는다. 둥근 지오메트릭 산세리프가 다크 UI와 잘 어울린다. 400–800 전 범위를 불러와 시안이 의도한 800 배지를 실제 800으로 렌더링한다 |
+| 한글 폴백 | **Pretendard Variable** (`pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css`) | 파일명, 폴더명, 노트에 한글이 들어가는데 Figtree에는 한글이 없다. Pretendard는 x-height와 굵기 대비가 Figtree와 잘 맞는다 |
+| 고정폭(토큰, ID, URL, 경로, 단축키, 초대코드) | **JetBrains Mono** (`@fontsource-variable/jetbrains-mono`, variable) | 시안의 `ui-monospace`는 OS마다 다르게 보인다. 토큰 판독성(0/O, l/1 구분)이 중요하다 |
 
-- CSS 변수: `--font-sans: var(--font-figtree), var(--font-pretendard), system-ui, sans-serif`, `--font-mono: var(--font-jetbrains), ui-monospace, monospace`.
-- 모든 폰트는 빌드 시 셀프호스팅된다. 런타임 외부 CDN 요청이 없다.
+- CSS 변수(`globals.css`): `--font-sans: "Figtree Variable", "Pretendard Variable", system-ui, sans-serif`, `--font-mono: "JetBrains Mono Variable", ui-monospace, monospace`.
+- `src/app/layout.tsx`가 세 폰트 CSS를 import한다(unicode-range 분할, 셀프호스팅). 런타임 외부 CDN 요청이 없다.
 
 ### 3.2 아이콘 — SVG 컴포넌트만, 이모지 금지
 
@@ -151,7 +125,7 @@ npm으로 고정하고 `package-lock.json`을 커밋한다. native 모듈은 ARM
 - **단방향 레이어**: `app`(라우팅) → `features`(UI·훅·클라이언트 API) → `shared`(공용 UI·유틸) / 서버 측은 `app/api`(얇은 핸들러) → `server/services`(업무 규칙) → `server/repositories`(Prisma) → DB. 역방향 import는 `eslint-plugin-boundaries`로 금지한다.
 - **도메인 규칙은 순수 함수**: `src/domain/`은 React, Next, Prisma에 의존하지 않는다. 클라이언트와 서버가 같은 규칙(이름 검증, 가시성 상속, 혼잡도, 만료 계산)을 공유하므로 규칙이 한곳에만 있다.
 - **계약 우선**: API 요청/응답 zod 스키마를 `src/contracts/`에 두고 클라이언트와 서버가 함께 import한다. 타입이 어긋나면 컴파일 에러가 난다.
-- **인터페이스로 교체 가능하게**: `StorageDriver`(로컬 디스크 → 추후 S3/MinIO), `MetricsSource`, `GeoLookup`, `Clock`(테스트용 시간 주입).
+- **인터페이스로 교체 가능하게**: `StorageDriver`(로컬 디스크 → 추후 S3/MinIO). 시각은 `now` 인자로 넘겨 테스트에서 고정한다.
 - **서버 전용 보호**: `src/server/**`는 `import 'server-only'`로 클라이언트 번들 유입을 막는다.
 - **설정 단일화**: 매직 넘버(14일, 10분 창, 5/10회 임계값, 잠금 시간, 청크 크기, 폴링 주기)는 `src/config/policy.ts` 한곳에 이름을 붙여 둔다. 배포마다 바뀌는 값은 env로 뺀다.
 
@@ -159,60 +133,36 @@ npm으로 고정하고 `package-lock.json`을 커밋한다. native 모듈은 ARM
 
 ```
 RelayFiles/
-├─ CLAUDE.md                         # 프로젝트 규칙 (M0에서 가장 먼저 작성)
-├─ docs/
-│  ├─ design/spec.md                 # 화면별 수치 스펙(§8 확장)
-│  ├─ architecture.md · api.md · deploy-ubuntu.md · security.md · runbook.md
+├─ CLAUDE.md · AGENTS.md            # 프로젝트 규칙
+├─ Dockerfile                        # app·tools 타깃 (tini ENTRYPOINT, exec 형식 HEALTHCHECK)
+├─ docs/                             # plan · architecture · api · security · deploy-ubuntu · deploy-systemd · runbook · design/spec
 ├─ src/
-│  ├─ app/                           # 라우팅 전용 (로직 없음, feature 컴포넌트 조립)
-│  │  ├─ layout.tsx                  # html[data-theme], 폰트, Providers
-│  │  ├─ (app)/layout.tsx            # AppShell
-│  │  ├─ (app)/page.tsx · files/[[...folderId]]/page.tsx · settings/page.tsx
-│  │  ├─ (app)/admin/layout.tsx      # admin 가드 → forbidden()
-│  │  ├─ (app)/admin/accounts/page.tsx · admin/server/page.tsx
-│  │  ├─ (app)/status/page.tsx · (app)/loading.tsx
-│  │  ├─ d/[linkId]/page.tsx         # 공개 공유 페이지
-│  │  ├─ not-found.tsx · forbidden.tsx · unauthorized.tsx · error.tsx · global-error.tsx
-│  │  ├─ error/[code]/page.tsx       # 400/410/413/429/503 등 명시적 에러 화면
-│  │  └─ api/**/route.ts             # 얇은 핸들러: 인증 → zod 파싱 → service 호출 → 응답
-│  ├─ features/
-│  │  ├─ shell/       (Sidebar, Drawer, AppHeader, AppFooter, BannerStack, toasts)
-│  │  ├─ files/       (components/, hooks/, api.ts, store.ts, menu.ts)
-│  │  ├─ upload/      (tus 클라이언트, 중복 처리, 드롭 재귀 파서)
-│  │  ├─ transfers/   (패널, 진행 상태 store)
-│  │  ├─ viewer/      (MediaViewer, InlineVideo, resume)
-│  │  ├─ share/       (SharePage, 상태 카드들, 설정 대화상자)
-│  │  ├─ tags/ · search/ · activity/
-│  │  ├─ account/     (로그인, 새 토큰, 프로필, 기기, 다중 계정 전환)
-│  │  ├─ admin/       (accounts, manage, invites, announcement)
-│  │  ├─ server-monitor/ · status/ · incidents/
-│  │  ├─ errors/      (ErrorScreen, WarningScreen, 코드별 프리셋)
-│  │  └─ shortcuts/
+│  ├─ app/                           # 라우팅 전용 (페이지, layout, error 화면, api/**/route.ts)
+│  ├─ features/  account · admin · errors · files · home · profile · search · share · shell ·
+│  │             shortcuts · status · transfers(업로드 실행·중복·드롭 파서·패널) · ui-catalog · viewer
 │  ├─ shared/
-│  │  ├─ ui/          (Button, IconButton, Card, ListCard, OptionChip, OptionCard, CheckRow,
-│  │  │                Pill, Tag, Banner, Menu, Modal, ConfirmDialog, PromptDialog, TextInput,
-│  │  │                TextArea, Avatar, Skeleton, StatTile, Meter, BarChart, Kbd, Logo, icon/)
-│  │  ├─ hooks/       (useViewport, useMenuPlacement, useHotkeys, useInterval, useClipboard)
-│  │  ├─ lib/         (cn, http client(fetchJson + 에러 매핑), date/size 포맷 래퍼)
-│  │  └─ styles/      (globals.css, themes.css, palette.ts)
+│  │  ├─ ui/          # 프리미티브(design/spec.md), icon/
+│  │  ├─ hooks/       # useMounted, useNotice, useNow, useOnline, useViewport
+│  │  ├─ lib/         # cn, api-client(apiFetch), local-setting
+│  │  └─ styles/      # globals.css, themes.css, palette.ts
 │  ├─ domain/         # 순수 규칙 (+ *.test.ts) — §10
 │  ├─ contracts/      # zod 스키마 (API DTO, 에러 코드)
 │  ├─ config/         # policy.ts, env.ts(zod), theme.ts
 │  └─ server/
-│     ├─ db.ts · redis.ts · logger.ts · queue.ts
-│     ├─ auth/ (session, token, guards, rate-limit)
-│     ├─ services/ (accounts, nodes, uploads, downloads, share, admin, metrics, health, incidents)
-│     ├─ repositories/ (Prisma 접근만)
-│     ├─ storage/ (StorageDriver 인터페이스, LocalVolumeDriver, volume-registry, safe-path,
-│     │            storage-transaction, volume-watch) — §13.5
-│     ├─ cache/ (cached() 헬퍼, 키 규칙, 무효화)
-│     └─ http/ (apiHandler 래퍼, ApiError, 응답 헬퍼)
-├─ worker/            # BullMQ 워커 진입점 + jobs/
-├─ scripts/           # admin-create.ts, rotate-keys.ts, volume-*.ts
-│  └─ migrations/      # data/<ts>-<name>.ts (DB 데이터 백필), storage/<n>-<name>.ts (디스크 레이아웃) — §13.8
-├─ prisma/ schema.prisma · migrations/
-├─ e2e/               # Playwright
-├─ deploy/            # docker-compose.yml, Dockerfile, nginx/, systemd/, error-pages/
+│     ├─ db/client.ts · redis.ts · logger.ts
+│     ├─ auth/ (device-session, session-cookie, token-crypto, login-limiter, rotate-keys, current)
+│     ├─ services/ (*.service.ts) · repositories/ (*.repo.ts, Prisma 접근만)
+│     ├─ cache/ · http/ (apiHandler) · share/ · upload/ (tus) · files/ (send-file, send-thumb)
+│     ├─ media/ (썸네일, 제거본, 미리보기, 영상 변환) · metrics/ · process/ (runCommand)
+│     ├─ jobs/ (queue, media.worker, maintenance, health-probe)   # 워커 진입점: scripts/worker.mts
+│     ├─ migrations/ (DATA_MIGRATIONS 데이터 마이그레이션)
+│     └─ storage/ (driver, local-volume, layout, layout-migrations, registry, safe-path,
+│                  storage-transaction, volume, tree) — §13.5
+├─ scripts/           # *.mts: admin-create, keys-rotate, volume-*, storage-*, data-migrate, worker, build-error-pages …
+├─ prisma/            # schema.prisma · migrations/
+├─ test/ · e2e/       # 통합 테스트 픽스처 · Playwright
+├─ deploy/            # docker-compose*.yml, healthcheck.mjs, docker-entrypoint.sh, nginx/{templates,host,volumes},
+│                     # systemd/, scripts/, error-pages/, maintenance/
 └─ .env.example
 ```
 
@@ -226,57 +176,17 @@ RelayFiles/
 
 ---
 
-## 5. 디자인 토큰 (`src/shared/styles/globals.css`)
+## 5. 디자인 토큰
 
-```css
-@import "tailwindcss";
-@import "./themes.css";          /* 시안 11행의 10개 테마 블록을 그대로 옮김 */
-
-@theme {
-  --breakpoint-sm: 45rem;   /* 720px  mobile/tablet 경계 */
-  --breakpoint-lg: 64rem;   /* 1024px tablet/desktop 경계 */
-  --font-sans: var(--font-figtree), var(--font-pretendard), system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
-  --color-bg: var(--bg); --color-header: var(--header); --color-sunk: var(--sunk);
-  --color-card: var(--card); --color-elev: var(--elev); --color-btn: var(--btn);
-  --color-btn-h: var(--btnH); --color-line: var(--line); --color-card-line: var(--cardLine);
-  --color-ctrl: var(--ctrl); /* t1..t5, accent 계열 7종, on-accent 동일하게 매핑 */
-  --animate-skel: skel 1.4s ease-in-out infinite;
-  @keyframes skel { 0%,100% { opacity:.45 } 50% { opacity:.9 } }
-}
-body { margin:0; background:var(--bg); color:var(--t1); font-family:var(--font-sans); }
-a { color:var(--accentIcon) } a:hover { color:var(--accentText) }
-```
-
+- 토큰은 `src/shared/styles/globals.css`(`@theme`: 브레이크포인트 `sm` 720px · `lg` 1024px, 폰트, 색 이름)와 `themes.css`(테마 10종 × 22개 변수)에 있다. 수치 표는 [`design/spec.md`](design/spec.md).
 - 테마 10종: blue(`:root`), lime, coral, amber, teal, mono, plum, crimson, forest, sky. 기본은 시안 default **Slate Sky(`sky`)**. 서버 설정(`ServerConfig.theme`, admin이 Server 페이지에서 변경) 또는 env `DEFAULT_THEME`을 SSR로 `<html data-theme>`에 반영하므로 깜빡임이 없다.
-- sky 값: bg `#0f1419`, header `#12181e`, sunk `#141b21`, card `#182028`, elev `#1e2730`, btn `#232d37`, btnH `#2b3641`, line `#212a33`, cardLine `#27313b`, ctrl `#36424e`, t1 `#eef3f7`, t2 `#cdd8e1`, t3 `#a4b2bf`, t4 `#8695a2`, t5 `#677683`, accent `#38bdf8`, accentHi `#5ccbfa`, accentIcon `#4cc4f9`, accentText `#bae6fd`, accentSoft `#0f3347`, accentSoftLine `#1f5d80`, onAccent `#06141c`
 - 안전 영역: `padding-bottom: env(safe-area-inset-bottom)`(전송 패널, 뷰어, 드로어), `viewport-fit=cover`. 풀스크린 요소는 `100dvh`를 쓴다(모바일 주소창 대응).
 
 ---
 
-## 6. 공용 UI 프리미티브 (`src/shared/ui/`)
+## 6. 공용 UI 프리미티브
 
-| 컴포넌트 | 스펙 (시안 값) |
-|---|---|
-| `Button` primary | bg accent, 1px accent, onAccent, 700, radius 10, `hoverable` 시 accentHi |
-| `Button` secondary | bg btn, 1px ctrl, t1, 700, radius 10, `hoverable` 시 btnH |
-| `Button` danger-outline / danger-solid | transparent, 1px `#6b2d39`, `#ff8a94` / bg `#e5484d`, white |
-| `Button` size | h 28·30·32·34·36·38·40·44 × px 10·12·14·16 × 12·13·14·15px. `labelHiddenOnMobile` prop(라벨 sm 미만 숨김, 아이콘만) |
-| `IconButton` | transparent, t3, radius 8, 28–44, hover btn/btnH, **필수 `aria-label`** |
-| `Card` / `ListCard` | card bg, 1px cardLine, radius 16 / bg cardLine + gap 1px 구분선 |
-| `OptionChip` / `OptionCard` | on: accentSoft·accentHi·accentText / off: btn·ctrl·t2. h34 px14 / p12 radius 12 |
-| `CheckRow` | Square ↔ CheckSquare(fill) 22px accentHi + 14px 600 라벨, `role="checkbox" aria-checked` |
-| `Pill` / `Tag` | 2px 7px r999 10px 800 ls .04em / 3px 8px r6 btn·ctrl 11px 600 t2 |
-| `Banner` | p `14px 10px 14px 16px`, r14, 아이콘 20–22, 닫기 30–32 |
-| `Menu` | fixed, min-w 200, elev, 1px ctrl, r12, p6, shadow `0 12px 30px rgba(0,0,0,.4)`, 항목 h 36/44, 14px 600, r8, hover btnH, 구분선 `margin:4px 6px`. **mobile에서는 하단 시트**로 표시(§7) |
-| `Modal` | backdrop + 패널(card, 1px ctrl, r16, shadow `0 24px 60px rgba(0,0,0,.5)`, `min(Npx, calc(100vw - 24px))`, max-h `calc(100dvh - 24px)`), Header(p `16px 20px`), Footer(p `14px 20px`, 오른쪽 정렬 gap 8). focus trap, Esc, 이전 포커스 복원, `role="dialog" aria-modal` |
-| `ConfirmDialog` / `PromptDialog` | 시안 삭제 확인 모달(w400) 스타일. 네이티브 confirm/prompt 대체 |
-| `TextInput` / `TextArea` | h40/44, px 12–14, r10, 1px ctrl, bg bg/sunk, 15/14px, outline none, focus-visible 링 |
-| `Avatar` | identicon(§10 `avatarOf`) `image-rendering:pixelated`, 활성 점 12px `#3a8bff` |
-| `Skeleton` · `StatTile` · `Meter` · `BarChart` · `Kbd` · `Logo` | 시안 값 그대로(막대 r `2px 2px 0 0`, transition .4s/.6s, Kbd 하단 2px 테두리) |
-| `EmptyState` / `NoData` | 시안 empty(56 아이콘 박스) / 차트용 "No data yet" (t4, 막대 영역 높이 유지) |
-
-데이터로 계산되는 색은 `style={{ '--c': value }}` + `bg-(--c)`로 넘긴다. 클래스 문자열을 조합하지 않는다.
+`src/shared/ui/`의 프리미티브(Button, IconButton, Card, OptionChip/Card, CheckRow, Pill, Tag, Banner, Menu(mobile은 하단 시트), Modal, ConfirmDialog/PromptDialog, TextInput, Avatar, Skeleton, StatTile, Meter, BarChart, Kbd, Logo, EmptyState/NoData)의 수치는 [`design/spec.md`](design/spec.md)에 있다. 데이터로 계산되는 색은 `style={{ '--c': value }}` + `bg-(--c)`로 넘긴다. 클래스 문자열을 조합하지 않는다.
 
 ---
 
@@ -309,7 +219,7 @@ a { color:var(--accentIcon) } a:hover { color:var(--accentText) }
 ## 8. 화면별 구현 스펙
 
 ### 8.1 AppShell
-- 숨김 file input 2개(일반 `multiple`, 폴더 `webkitdirectory`). 업로드 대상(home 또는 폴더id)은 upload store가 관리한다.
+- 숨김 file input 2개(일반 `multiple`, 폴더 `webkitdirectory`). 업로드 대상(home 또는 폴더id)은 `TransfersProvider`가 관리한다.
 - **사이드바/드로어**: 로고 바 h60 · 계정 목록(활성 accentSoft/accentSoftLine, 아바타 38, 이름 14px 700, 역할 12px t4 `Admin · never expires`/`Never expires`/`Deletes Oct 19`, 메뉴 Profile/Copy token/Sign out) · "Add account"(1px dashed `#3a4666`) · 내비(h44 r10 15px 600, 활성 accentSoft/accentText, hover `#222b45`, File Manager 배지 `#f5a142`) · 하단 Storage(12px, 미터 h4, ≥90% `#ff6b7d`, ≥70% `#f5a142`).
 - **헤더**: sticky h60, 햄버거 40, 타이틀 20px 700, 전역 검색 버튼(files 페이지).
 - **배너 스택 순서**: 자동 계정 → 공지(files) → 24h 내 만료(files/home, 최대 3행, "+7 days" `#f5b400`) → 용량 경고(80%/95%) → **오프라인 경고**(신규, §9.3) → 본문.
@@ -325,26 +235,26 @@ a { color:var(--accentIcon) } a:hover { color:var(--accentText) }
 ### 8.3 File Manager (`/files/[[...folderId]]`)
 - **경로 표시줄**: MAX(3/6)를 넘으면 `[root, …, 마지막 MAX−2개]`로 접는다. 드래그 드롭으로 이동, 경로 복사(mono 12px).
 - **폴더 헤더 카드**: Up(드롭으로 상위 이동), 아이콘 박스 48, 이름 20px, 날짜·개수, 가시성 태그(`Public`/`Public · inherited`/`Private`/`Private · inherited`/`root folder`), [Share page][Share][더보기 → `nodeMenu`], 노트.
-- **툴바**: 전체 선택 | 선택 시 Download / Zip / Tags / Copy / Move / Delete, 미선택 시 Upload / Upload folder / New folder | 보기 전환 · 검색 · 정렬(7종, "SORT BY") · 새로고침(쿼리 무효화 후 "Up to date").
+- **툴바**: 전체 선택 | 선택 시 Download / Zip / Tags / Copy / Move / Delete, 미선택 시 Upload / Upload folder / New folder | 보기 전환 · 검색 · 정렬(7종, "SORT BY") · 새로고침(`router.refresh()` 후 "Up to date").
 - **필터 칩**(All, Folders, Videos, Audio, Images, Other + 개수), **폴더 내 검색**(`/`), **태그 모드**(`#a #b` → 계정 전체 AND 검색, 서버 GIN 인덱스).
 - **리스트 행 / 그리드 카드**: 시안 스펙 그대로(체크박스, 종류 아이콘과 폴더 개수 배지, 이름, 잠금 아이콘, 혼잡 배지, 메타 + 다운로드 수 + 이어보기, 태그, 버튼, 썸네일, 인라인 재생, 이어보기 바 4px, 드롭 대상 표시).
 - **썸네일**: 원본을 내려받지 않도록 서버가 만든 썸네일을 쓴다. 이미지는 리사이즈 webp, 영상은 ffmpeg로 1초 지점 프레임(`/api/files/:id/thumb`, 워커가 생성). 생성 전에는 종류 아이콘을 보여 준다.
 - **메뉴** `nodeMenu`: 4그룹(열기/다운로드 · 공유/태그/링크/활동/설정/다운로드 일시정지(admin) · 이름 변경/복사/이동/삭제 · 속성). 위치는 `menuPlace`(아래, 위, 끼워 넣기)이고 스크롤하면 닫힌다. mobile에서는 하단 시트.
 - **DnD**: 선택 전체를 이동한다. "Moving N items" 알약, 하위로 이동 금지, 이름 충돌은 서버가 `uniqName`으로 처리하고 응답에 바뀐 이름 수를 담는다. OS 파일 드롭은 재귀 탐색 후 업로드한다.
-- **업로드**: 이름 검증 → `prepare`(중복 목록, 용량) → 중복 모달(Replace/Keep both/Skip) → tus 업로드 → 완료 후 쿼리 무효화. 실패 응답 413/507은 토스트와 용량 배너로 연결한다.
+- **업로드**: 이름 검증 → `prepare`(중복 목록, 용량) → 중복 모달(Replace/Keep both/Skip) → tus 업로드 → 완료 후 `router.refresh()`. 실패 응답 413/507은 토스트와 용량 배너로 연결한다.
 - **빈 상태**: 문구 5종 원문 그대로.
 
 ### 8.4 My Profile / Settings (`/settings`)
 - 프로필 카드, 보존 정책 안내(3종 원문), Storage / **Traffic(실측: 계정 다운로드 바이트 30일, `TrafficDaily`)** / Content(실제 파일·폴더 수), Access & recovery(토큰 마스킹 `앞4+•×28+뒤4`, 보기, 복사, 재발급 → ConfirmDialog → 새 토큰 모달), Signed-in devices(실제 세션, UA 파싱, 위치는 Cloudflare `CF-IPCountry`/`CF-IPCity` 헤더가 있으면 사용, 없으면 국가만, IP 마스킹 `a.b.•••.•••`), Preferences(Purge now → 실제 만료 항목 정리 API, **Strip metadata on public links** 토글(신규, CheckRow 스타일, 기본 ON)), Delete account.
 
 ### 8.5 Admin · Accounts (`/admin/accounts`)
-- 통계 4장, 정책 안내 + Run cleanup now(정리 job을 즉시 실행), 필터 알약 + 검색, 계정 행(배지 ADMIN/ACTIVE/EXPIRING/PENDING DELETE, YOU, this device, 정보 4칸, Manage, 삭제), Manage 모달(Role, Deletion date 7종, Storage limit 6종 + Custom, Restart 14 days, 미리보기, 마지막 admin 보호). 서버 페이지네이션 50개 단위(무한 스크롤).
+- 통계 4장, 정책 안내 + Run cleanup now(정리 job을 즉시 실행), 필터 알약 + 검색, 계정 행(배지 ADMIN/ACTIVE/EXPIRING/PENDING DELETE, YOU, this device, 정보 4칸, Manage, 삭제), Manage 모달(Role, Deletion date 7종, Storage limit 6종 + Custom, Restart 14 days, 미리보기, 마지막 admin 보호). 계정 목록은 한 번에 전부 받는다(페이지네이션 없음).
 
 ### 8.6 Admin · Server (`/admin/server`)
 - 공지 편집(레벨 info/warn/maint, Publish/Take down). 지표 카드 4장(Disk/CPU/Memory/Network out)은 **systeminformation 실측**이다. "of 2 TB", "8 cores", "16 GB", "1 Gbps link" 같은 값도 실제 하드웨어에서 읽는다.
 - 대역폭 60분 막대(워커가 1분마다 샘플링해 Redis 링 버퍼에 저장, SSE 1.5초 갱신). 데이터가 60개 미만이면 빈 막대를 `var(--btn)`으로 채운다.
 - 실시간 타일(ACTIVE STREAMS = 열린 Range 스트림 수, TRANSFERS = 진행 중 tus 업로드, ACCOUNTS, UPTIME = `os.uptime`).
-- Services 4행: Web server(자체 HTTPS probe), Media streaming(Range probe), Cleanup job(BullMQ 마지막 실행 결과), Disk health(SMART 상태와 온도. 권한이 없으면 "Unavailable").
+- Services 4행: Web server(Node 버전과 PUBLIC_URL), Media streaming(볼륨 표시 파일 확인, 꺼진 볼륨 수), Cleanup job(BullMQ 마지막 실행 결과, 워커 heartbeat), Disk health(`smartctl -j -H -A -i $DISK_DEVICE`, 권한이 없으면 "Unavailable").
 - New accounts(Open/Invite only/Closed) + 초대코드. **테마 선택**(10종, 신규 항목. OptionChip 스타일).
 
 ### 8.7 Status (`/status`, 공개)
@@ -358,7 +268,7 @@ a { color:var(--accentIcon) } a:hover { color:var(--accentText) }
 - 상태: Download limit reached / This link has expired / This link is private / Password protected(Unlock) / 열림(경로, 헤더 카드, 노트, 항목 행 View/Play/Download, 혼잡 배지, "Shared privately with RelayFiles").
 - 서버가 상태를 판정한다(만료, 한도, 비공개, 비밀번호, burn, Stream only, 혼잡도). 이벤트(open/play/view/download)를 로그로 남긴다. 존재하지 않는 linkId는 §9의 링크 전용 404 화면으로 보낸다.
 
-### 8.9 대화상자 (`features/*/components/*Dialog.tsx`)
+### 8.9 대화상자 (`features/*/*Dialog.tsx`)
 ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue 활성), ManageAccount, LinkActivity, DuplicateUpload, ConfirmDelete, Incident, Shortcuts, GlobalSearch(최근 파일 8 / 결과 30, ↑↓ Enter), Properties, Tags(칩 입력, 제안, 다중 선택), Rename(확장자 앞까지 선택, 서버 중복이면 "Suggested:"), MoveCopy(폴더 트리, 들여쓰기 `12+d×18`), MediaViewer, TransfersPanel, NewFolder(PromptDialog), Confirm(공용). 스펙과 문구는 시안 원문 그대로 따른다.
 
 ---
@@ -369,7 +279,7 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 시안 공유 페이지의 상태 카드 언어를 확장한다.
 - 레이아웃: 헤더(h60, 로고 + RelayFiles) → 가운데 카드(`min(440px,100%)`, card, 1px cardLine, r16, p `28px 24px`, 가운데 정렬, gap 12) → 하단 푸터(상태 점 + "v0.x").
 - 카드 구성: 아이콘 박스 56(r14) → 상태 코드 배지(mono 600 12px, Pill) → 제목 19px 700 → 설명 14px lh1.5 t3 `text-pretty` → 버튼 행(primary + secondary, h40) → 보조 정보(요청 ID `X-Request-Id`, mono 12px t5, 복사 버튼).
-- 색 규칙(CLAUDE.md 규칙과 일치): **4xx는 위험 계열**(`#3a1d24` 박스, `#ff6b7d` 아이콘, 배지 `#ff8a94`), **5xx와 점검은 경고 계열**(`#3a2e12`, `#f5b400`), **안내성 상태**(오프라인, 세션 만료)는 accent 계열(accentSoft, accentIcon).
+- 색 규칙(`features/errors/presets.ts`의 tone): **4xx는 위험 계열**(`#3a1d24` 박스, `#ff6b7d` 아이콘, 배지 `#ff8a94`), **5xx와 점검은 경고 계열**(`#3a2e12`, `#f5b400`), **안내성 상태**(오프라인, 세션 만료)는 accent 계열(accentSoft, accentIcon).
 - 반응형: mobile에서는 카드 좌우 16px 여백, 버튼은 세로로 쌓아 풀 폭.
 
 ### 9.2 코드별 화면
@@ -386,12 +296,12 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 | 429 | `/error/429`(로그인 잠금, API 레이트 리밋) | Timer | Too many requests / Try again in {mm:ss}. 카운트다운 | Retry(카운트다운이 끝나면 활성) |
 | 500 | `error.tsx`(세그먼트), `global-error.tsx`(루트, 자체 html/body와 인라인 토큰) | Bug | Something went wrong / An unexpected error occurred. It has been logged. | Try again(`reset()`), Go home |
 | 502/504 | **Nginx 정적 페이지**(`deploy/error-pages/`, 앱 다운 시) | 인라인 SVG | Server unreachable / The app server is not responding. | Retry, Status |
-| 503 | `/error/503` + Nginx 점검 페이지(`maintenance.flag` 파일이 있으면 Nginx가 반환) | Wrench | Under maintenance / {공지 maint 메시지 또는 기본 문구} | Status |
+| 503 | `/error/503` + Nginx 점검 페이지(`deploy/maintenance/on` 파일이 있으면 Nginx가 503 점검 페이지를 반환) | Wrench | Under maintenance / {공지 maint 메시지 또는 기본 문구} | Status |
 | 503(스토리지) | `/error/storage-offline`(볼륨 OFFLINE, §13.5) | HardDrives | Storage offline / Files are temporarily unavailable. Browsing still works; uploads and downloads resume when storage is back. | Status, Retry |
 | 507 | 업로드 응답 → 토스트 + 용량 배너 | — | Not enough space on the server | — |
 
-- Nginx 정적 페이지는 Next 빌드 산출물에 의존하지 않도록 순수 HTML + 인라인 CSS(같은 토큰 값, 폰트 폴백 system-ui) + 인라인 SVG 아이콘으로 만든다. `scripts/build-error-pages.ts`가 `ErrorScreen`을 정적 HTML로 렌더링해 생성하므로 디자인이 한곳에서 관리된다.
-- `proxy.ts`(Next 16에서 `middleware.ts`가 이름 변경됨)와 `apiHandler`는 에러 코드 enum(`contracts/errors.ts`)을 쓴다. 클라이언트 `fetchJson`은 401/403/410/429를 해당 화면이나 모달로 매핑한다.
+- Nginx 정적 페이지는 Next 빌드 산출물에 의존하지 않도록 순수 HTML + 인라인 CSS(같은 토큰 값, 폰트 폴백 system-ui) + 인라인 SVG 아이콘으로 만든다. `npm run deploy:error-pages`(`scripts/build-error-pages.mts` → `scripts/error-pages.ts`)가 `ERROR_PRESETS`와 팔레트로 ErrorScreen과 같은 모양의 정적 HTML을 만든다(`error-pages.test.ts`가 동기화 검사).
+- `proxy.ts`(Next 16에서 `middleware.ts`가 이름 변경됨)와 `apiHandler`는 에러 코드 enum(`contracts/errors.ts`)을 쓴다. 클라이언트 `apiFetch`(`shared/lib/api-client.ts`)는 실패를 `ApiClientError(code, status, retryAfter)`로 던지고 호출부가 화면·모달로 연결한다.
 
 ### 9.3 경고 화면·배너 (페이지 전체를 막지 않는 상태)
 
@@ -410,26 +320,28 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 
 ## 10. 도메인 규칙 (`src/domain/`, 각 파일에 `*.test.ts`)
 
-| 파일 | 함수 | 비고 |
-|---|---|---|
-| `format.ts` | `fmtSize`(1000진법), `fmtDate`(en-US), `fmtLeft`, `fmtT`, `fmtAgo` | 시간대는 브라우저 기준이라 클라이언트 렌더링 |
-| `avatar.ts` | `avatarOf(seed)` FNV-1a + xorshift identicon | 결정적 |
-| `names.ts` | `nameError`, `nameTaken`, `uniqName` | 서버와 클라이언트가 공유 |
-| `tags.ts` | `parseTags`, `hasAllTags`, `normalizeTag`(24자, 공백→`-`) | |
-| `tree.ts` | `sortNodes`(7종), `effectiveVisibility`, `isInside`, `collapseCrumbs` | |
-| `policy.ts` | `deletionDate`, `quotaLevel`, `busyLevel`(10분, 5/10회), `limitHit`, `settingTags`, `expiringSoon` | 임계값은 `config/policy.ts` |
-| `menu.ts` | `menuPlace(rect, count, viewport)`, `buildNodeMenu(node, ctx)` | DOM 분리 |
-| `status.ts` | `rateLatency`, `jitter`, `lossRate`, `overallLevel` | |
-| `ids.ts` | id/name/token/linkId/invite 생성 규칙(문자 집합) | 서버에서 `crypto` 사용 |
+| 파일 | 주요 함수 |
+|---|---|
+| `format.ts` | `formatSize`(1000진법), `formatShortDate`/`formatLongDate`/`formatDateTime`, `formatLeft`, `formatClock`, `formatCountdown`, `formatAgo`, `formatSeen` |
+| `avatar.ts` | `avatarOf(seed)` FNV-1a + xorshift identicon(결정적, 시안 함수와 출력 동일) |
+| `names.ts` | `nameError`, `splitExtension`, `uniqName` |
+| `tags.ts` | `parseTags`, `hasAllTags`, `normalizeTag`(24자, 공백→`-`) |
+| `tree.ts` | `sortNodes`(7종), `matchesFilter`, `collapseCrumbs`, `effectiveVisibility`, `settingTags`, `visibilityTag` |
+| `account.ts` · `quota.ts` · `share.ts` | `deletionDate`, `daysLeft`, `isExpired`, `maskToken` · `quotaLevel`, `usedPercent` · `busyOf`, `busyBadge`, `limitHit`, `shareStatus`, `nextExpiry` |
+| `menu.ts` | `menuPlace` (메뉴 항목 구성은 `features/files/node-menu.ts`의 `buildNodeMenu`) |
+| `status.ts` | `latencyRating`, `jitterRating`, `connectionStats`, `connectionLevel`, `componentState`, `dayLevel` |
+| `ids.ts` | id/name/token/linkId/invite 생성 규칙(문자 집합) |
+
+그 밖에 `device`, `image-metadata`, `import`, `lockout`, `media`, `network`, `search`, `server`, `serving`, `upload`가 있다. 임계값은 `config/policy.ts`.
 
 ---
 
 ## 11. 상태 관리 & 데이터 흐름
 
-- **서버 상태**: TanStack Query. 키는 `['folder', id]`, `['me']`, `['admin','accounts',filter]` 형태다. 변경은 mutation 후 관련 키를 무효화하고, 이름 변경, 이동, 태그, 선택 삭제에는 낙관적 업데이트를 적용한다.
-- **UI 상태**: zustand slice 단위로 나눈다(`ui`(메뉴, 모달, 토스트), `files`(cwd 외 보기 상태: 선택, 정렬, 필터, 보기 모드, DnD), `transfers`, `session`(서명된 계정 목록, 활성 계정)). 보기 설정(정렬, 보기 모드, 사이드바 접힘)은 localStorage에 저장한다.
+- **서버 상태**: 페이지 데이터는 서버 컴포넌트가 읽고, 변경 후에는 `router.refresh()`로 다시 받는다. 클라이언트 호출은 `shared/lib/api-client.ts`의 `apiFetch`.
+- **UI 상태**: 컴포넌트 state와 React Context(`ShellProvider`, `TransfersProvider`). 보기 설정(`relay.filesView`, `relay.sidebarCollapsed`)은 `shared/lib/local-setting.ts`로 localStorage에 저장한다.
 - **현재 폴더**는 URL(`/files/<id>`)이 원천이다. 뒤로가기, 공유, 새로고침에 안전하다.
-- **실시간성**: 만료 남은 시간은 30초 틱으로 다시 렌더링한다. 만료 삭제는 서버 워커가 하고, 클라이언트는 focus/interval 시 무효화한다. Server 페이지는 SSE를 쓴다.
+- **실시간성**: 만료 남은 시간은 30초 틱으로 다시 렌더링한다. 만료 삭제는 서버 워커가 한다. Server 페이지는 SSE를 쓴다.
 - **이어보기**: localStorage `relay.resume`(시안 규칙: 3초 이후 저장, 끝 5초 이내면 삭제, 800ms 디바운스, "Resumed from").
 - **전송**: tus 진행 이벤트로 시안 상태 모델(`active|paused|complete`, `auto`)과 문구를 갱신한다. `offline`이면 자동 일시정지, `online`이면 자동 재개, 수동 일시정지/재개를 지원한다. 다운로드는 브라우저 다운로드로 처리하고 패널에는 시작 기록만 남긴다(fetch 스트림 진행률은 선택 구현).
 
@@ -446,8 +358,9 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 - `Account { id(12), name @unique, tokenLookup @unique(HMAC-SHA256), tokenEnc Bytes(AES-256-GCM), volumeId, color, isAdmin, neverExpire, expiresAt?, quotaBytes BigInt?, stripMetadataOnShare Bool @default(true), createdAt, lastLoginAt }`. 계정을 만들 때 `/mnt/relayfilesDB/users/<id>/`를 함께 생성하고, 실패하면 DB 생성도 롤백한다
 - `Session { id, accountId, os, browser, country?, city?, ipMasked, createdAt, lastSeenAt, revokedAt? }`
 - `StorageVolume { id, driver(local|s3), mountPath, status(ACTIVE|READONLY|DRAINING|OFFLINE), layoutVersion, reservePct, createdAt }`, `Account.volumeId`, `Account.migrating Bool` → §13.5, §13.8
-- `DataMigration { id, name, startedAt, finishedAt?, cursor? }` — 데이터 마이그레이션 진행 기록(§13.8)
-- `Node { id, accountId, parentId?, type, name, kind?, mime?, size BigInt, sha256?, hasThumb Bool, hasDerived Bool, missing Bool, linkId @unique, visibility, expiryLabel, expAt?, burn, downloadLimit?, passwordHash?, access, note, dlPaused, downloads, tags String[], createdAt }`, `@@unique([parentId,name])`, `@@index([accountId,parentId])`, GIN(tags), trigram(name)
+- `DataMigration { id, startedAt, finishedAt?, cursor? }` — 데이터 마이그레이션 진행 기록(§13.8)
+- `LinkTombstone { linkId, endedAt }` — 만료로 지워진 링크를 90일 동안 "expired"로 안내
+- `Node { id, accountId, parentId?, type, name, kind?, mime?, size BigInt, sha256?, hasThumb Bool, hasDerived Bool, missing Bool, linkId @unique, visibility, expiryLabel, expAt?, burn, downloadLimit?, passwordHash?, access, note, dlPaused, downloads, tags String[], createdAt }`, `@@unique([parentId,name])`, `@@index([accountId,type])`, `@@index([expAt])`, GIN(tags) (이름 검색은 ILIKE, trigram 인덱스 없음)
 - `LinkEvent { id, nodeId, kind, fileName, device, ipMasked, country, at }`(노드당 200개 유지), `TrafficDaily { accountId, day, bytes }`
 - `Invite`, `ServerConfig { signupMode, theme }`, `Announcement`, `Incident`, `HealthSample`(분) → `HealthHourly`/`HealthDaily`(집계)
 - `PlaybackPosition`은 서버에 두지 않는다(localStorage 유지).
@@ -455,27 +368,22 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 ### 13.2 인증·세션 (다중 계정)
 - 첫 방문 시 signup이 open이면 익명 계정을 자동 생성하고 배너를 띄운다. invite/closed면 로그인 모달을 띄운다.
 - 토큰 로그인: Redis 실패 카운터(IP 기준). 시안 문구대로 5회마다 30s → 120s → 600s 잠금(`config/policy.ts`, 변경 가능). 잠금 상태는 429 화면/모달 카운트다운으로 보여 준다.
-- 쿠키 `rf_s`(httpOnly, Secure, SameSite=Lax, 서명)에 기기의 세션 id 목록과 활성 계정을 담는다. 세션 폐기는 Redis nonce로 즉시 반영한다.
-- `src/proxy.ts`(Next 16 규약, 구 `middleware.ts`): 인증이 필요한 경로는 401, admin 경로는 403, 공개 경로는 `/d/*`, `/status`, `/api/share/*`, `/api/health`, `/error/*`.
+- 쿠키 `rf_s`(httpOnly, Secure, SameSite=Lax, 서명)에 기기의 세션 id 목록과 활성 계정을 담는다. 세션 폐기는 DB `Session.revokedAt`으로 기록하고 요청마다 조회하므로 즉시 반영된다.
+- `src/proxy.ts`(Next 16 규약, 구 `middleware.ts`): 요청 ID 부여, `ADMIN_ALLOWED_CIDRS`가 설정되면 admin 페이지·API를 그 대역으로 제한(403), 교차 사이트 API 쓰기 거부. 인증·권한은 각 route handler와 페이지(`requireActive`/`requireAdmin`, admin layout의 `forbidden()`)가 검사한다.
 
 ### 13.3 API (`{ success, data | error, code }`, zod 계약)
-- me: `GET /api/me`, `GET|POST /api/me/token`, `DELETE /api/me`, `GET|DELETE /api/me/sessions[/:id]`, `GET /api/me/traffic`
-- nodes: `GET /api/nodes/:id`, `POST /api/nodes`, `PATCH /api/nodes/:id`, `POST /api/nodes/{delete,move,copy}`, `POST /api/nodes/:id/link`, `GET /api/nodes/:id/activity`, `GET /api/nodes/expiring`, `GET /api/search`, `POST /api/nodes/purge-expired`
-- uploads: `POST /api/uploads/prepare` → tus `/api/uploads/tus/*`(청크 50MB, Cloudflare 100MB 제한 아래) → 완료 훅(노드 생성, `media.process` job)
-- files: `GET /api/files/:id/{stream,download,thumb}`(Range 206), `POST /api/zip`
-- share: `GET /api/share/:linkId`, `POST /api/share/:linkId/unlock`, 공유 stream/download/zip
-- admin: accounts(목록, PATCH, DELETE), cleanup, invites, signup, theme, announcement, `GET /api/admin/server/stream`(SSE)
-- status: `HEAD|GET /api/health`, `GET /api/status`, incidents CRUD(admin)
+
+엔드포인트 목록과 응답 형식은 [`api.md`](api.md)가 기준이다. 요약: auth(`/api/auth/*`), me(`/api/me/*`), folders·nodes·search·tags, uploads(`POST /api/uploads` → tus `/api/uploads/tus/*`, 계획한 크기 선언 필수), files(`stream`·`download`·`preview`·`thumb`, `GET /api/zip?ids=`), share(`/api/share/:linkId/*`), admin(`/api/admin/*`, Server 페이지 SSE), status(`/api/health`, `/api/status`). 재생·썸네일·미리보기는 `private, max-age=1년, immutable`, 다운로드는 `no-cache`.
 
 ### 13.4 데이터 저장소 역할 분담
 
 | 저장소 | 위치 | 담는 것 |
 |---|---|---|
-| **PostgreSQL 16** | 서버 내장 디스크(`/srv/relayfiles/pg`). 외장 SSD가 분리돼도 메타데이터는 남는다 | 계정, 세션, 노드 인덱스(트리, 설정, 태그, 링크), 이벤트 로그, 집계, 설정 |
-| **Redis 7** | 내장 디스크(AOF everysec) | 세션 nonce, 로그인 실패/잠금 카운터(TTL), 레이트 리밋, 다운로드 혼잡도 ZSET, **캐시**(폴더 크기·개수 집계, 경로 해석 결과, admin 통계, 서버 지표 링 버퍼), BullMQ 큐 |
+| **PostgreSQL 16** | `DATA_DIR/pg`(기본 `/srv/relayfiles`, 운영은 저장 디스크에 두는 것을 권장) | 계정, 세션, 노드 인덱스(트리, 설정, 태그, 링크), 이벤트 로그, 집계, 설정 |
+| **Redis 7** | `DATA_DIR/redis`(AOF everysec) | 로그인 실패/잠금·가입·비밀번호 시도 카운터(TTL), 다운로드 혼잡도 ZSET, 업로드 배치, **캐시**(테마, Server 페이지 서비스 상태, Status 페이지 집계), 서버 지표 링 버퍼, BullMQ 큐 |
 | **외장 SSD** `/mnt/relayfilesDB` | USB/NVMe 외장 SSD(ext4) | **사용자 원본 파일**(사용자별 루트 폴더) + 시스템 작업 공간(업로드 임시, 썸네일, 휴지통) |
 
-- 캐시 원칙: Redis는 언제 비워져도 되는 파생 데이터만 둔다(원천은 PostgreSQL과 디스크). 키는 `rf:{도메인}:{id}`이고 TTL과 이벤트 기반 무효화(노드 변경 시 조상 폴더의 크기 캐시 삭제)를 함께 쓴다. 캐시 접근은 `server/cache/`의 `cached(key, ttl, loader)` 헬퍼로 통일한다.
+- 캐시 원칙: Redis는 언제 비워져도 되는 파생 데이터만 둔다(원천은 PostgreSQL과 디스크). 키는 `REDIS_KEY_PREFIX`(`rf:v1:`) + `cache:<이름>`이고 TTL과 변경 시 무효화를 함께 쓴다. 캐시 접근은 `server/cache/`의 `cached(key, ttl, loader)` 헬퍼로 통일한다.
 
 ### 13.5 파일 스토리지 — `/mnt/relayfilesDB` (사용자별 루트 폴더, 원본 저장)
 
@@ -492,15 +400,16 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 │  └─ <accountId>/…
 └─ system/                             # 사용자 영역과 완전히 분리 (사용자 이름과 충돌 불가)
    ├─ tmp/uploads/                     # tus 업로드 조각 (같은 파일시스템 → 완료 시 원자적 rename)
-   ├─ thumbs/<accountId>/<nodeId>.webp # 썸네일 (파생물, 언제든 재생성 가능)
-   ├─ derived/<accountId>/<nodeId>     # (옵션) 공개 공유용 메타데이터 제거본
-   └─ trash/<timestamp>-<accountId>/   # 삭제 대기 (계정 삭제, Replace 업로드의 기존 파일)
+   ├─ thumbs/<accountId>/<nodeId>      # 썸네일 WebP (파생물, 언제든 재생성 가능)
+   ├─ derived/<accountId>/<nodeId>     # 공개 공유용 메타데이터 제거본
+   ├─ previews/<accountId>/<nodeId>    # 뷰어용 화면 크기 WebP 미리보기 (MEDIA.preview*)
+   └─ trash/<ISO시각>-<accountId>-<이름> # 삭제 대기 (24시간 뒤 정리)
 ```
 
 - **사용자 1명 = 디렉터리 1개 = 앱의 root 폴더**. 앱의 폴더 트리가 디스크 디렉터리 트리와 1:1로 대응한다. 파일은 업로드한 **원본 그대로** 저장되며, 다운로드하면 바이트 단위로 같은 파일을 받는다.
 - 디렉터리 이름은 계정 이름(`anon-xxxx`)이 아니라 **불변 accountId**를 쓴다. 이름이 바뀌어도 경로가 유지된다.
-- **PostgreSQL은 인덱스, 디스크는 원천**: `Node`에 이름과 부모 관계가 있으므로, 물리 경로는 `volume.root + /users/ + accountId + 조상 이름들`로 계산한다(Redis 캐시). 이름 변경과 이동은 `fs.rename` 한 번이다(같은 파일시스템이라 원자적이고, 폴더면 하위 전체가 따라온다).
-- **DB와 디스크 일관성**: 모든 파일 조작은 `StorageTransaction`으로 감싼다. ① DB 트랜잭션에서 상태 변경을 준비하고 ② 파일시스템 작업을 하고 ③ 커밋한다. ② 실패 시 DB를 롤백하고, ③ 실패 시 보상 작업(되돌리는 rename)을 한다. 그래도 남는 불일치는 `storage.reconcile` 작업이 찾는다(§13.7).
+- **PostgreSQL은 인덱스, 디스크는 원천**: `Node`에 이름과 부모 관계가 있으므로, 물리 경로는 `volume.root + /users/ + accountId + 조상 이름들`로 계산한다. 이름 변경과 이동은 `fs.rename` 한 번이다(같은 파일시스템이라 원자적이고, 폴더면 하위 전체가 따라온다).
+- **DB와 디스크 일관성**: 모든 파일 조작은 `StorageTransaction`으로 감싼다. ① DB 트랜잭션에서 상태 변경을 준비하고 ② 파일시스템 작업을 하고 ③ 커밋한다. ② 실패 시 DB를 롤백하고, ③ 실패 시 보상 작업(되돌리는 rename)을 한다. 되돌리기도 실패하면 에러 로그(`storage rollback step failed`)로 남는다(자동 대조 작업은 없다).
 
 **보안**
 
@@ -517,28 +426,28 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 | 무결성 | 업로드 완료 시 SHA-256을 계산해 `Node.sha256`에 저장한다. 다운로드 ETag와 재조정 작업의 손상 탐지에 쓴다 |
 
 - **메타데이터 처리**: 원본을 보존해야 하므로 원본 파일은 수정하지 않는다. 공개 공유 링크로 이미지가 나갈 때만 EXIF/GPS를 지운 사본(`system/derived/`)을 만들어 보낸다(계정 설정 "Strip metadata on public links", 기본 ON). 소유자 다운로드는 항상 원본이다.
-- **다운로드 성능**: 앱 레벨 암호화가 없으므로 Node가 인증·권한·혼잡도를 판정한 뒤 **Nginx `X-Accel-Redirect`**로 넘긴다. Nginx가 Range, sendfile, 대역폭 제한(`X-Accel-Limit-Rate`로 Busy 단계 스로틀)을 처리하므로 Node 프로세스가 대용량 전송을 맡지 않는다. Nginx의 `internal` location이 `/mnt/relayfilesDB/users/`를 alias로 가리킨다. 경로는 percent-encoding해서 한글·공백 파일명을 처리한다.
-- **zip**: 디스크에서 바로 읽어 `archiver` 스트림으로 보낸다(store 모드: 이미 압축된 미디어는 재압축하지 않음).
-- **복사**: `fs.copyFile(src, dst, COPYFILE_FICLONE)`(reflink를 지원하는 파일시스템이면 즉시, 아니면 일반 복사). 큰 폴더 복사는 BullMQ 작업으로 돌리고 전송 패널에 진행률을 보여 준다.
+- **다운로드 성능**: 앱 레벨 암호화가 없으므로 Node가 인증·권한·혼잡도를 판정한 뒤 **Nginx `X-Accel-Redirect`**로 넘긴다. Nginx가 Range, sendfile, 대역폭 제한(`X-Accel-Limit-Rate`로 Busy 단계 스로틀)을 처리하므로 Node 프로세스가 대용량 전송을 맡지 않는다. Nginx의 `internal` location(`~ ^${STORAGE_ACCEL_PREFIX}[a-z0-9-]+/(.+)$`, 추가 볼륨은 `deploy/nginx/volumes/*.conf`)이 `${STORAGE_ROOT}/users/`를 alias로 가리킨다. Docker 배포에서만 쓰고, systemd 배포(호스트 Nginx)는 앱이 직접 보낸다(`STORAGE_ACCEL_ENABLED=false`). 경로는 percent-encoding해서 한글·공백 파일명을 처리한다.
+- **zip**: 디스크에서 바로 읽어 `archiver` 스트림으로 보낸다(store 모드: 이미 압축된 미디어는 재압축하지 않음). 항목은 하나씩 이어 붙여 파일을 한 번에 하나만 연다.
+- **복사**: 요청 안에서 바로 실행한다(폴더는 `fs.cp` 재귀, 파일은 `copyFile(..., COPYFILE_EXCL | COPYFILE_FICLONE)`: reflink를 지원하면 즉시). 한 번에 최대 `FILES.maxBatchItems`개.
 
 **확장성**
 
-- `StorageDriver` 인터페이스: `resolve`, `createReadStream`, `writeFromTemp`, `rename`, `copy`, `remove`, `stat`, `statfs`, `ensureUserRoot`, `moveToTrash`. 구현체는 `LocalVolumeDriver`이고, 추후 `S3Driver`(MinIO, R2)를 같은 인터페이스로 추가한다. 서비스 레이어는 구현체를 모른다.
-- **다중 볼륨**: `StorageVolume { id, mountPath, status(ACTIVE|READONLY|DRAINING|OFFLINE), reservePct, createdAt }` 테이블을 두고 `Account.volumeId`로 배정한다. 새 계정은 여유 공간이 가장 큰 ACTIVE 볼륨에 배정된다. 두 번째 SSD는 `/mnt/relayfilesDB2`에 마운트하고 `npm run volume:add`로 등록하면 즉시 쓸 수 있다. 계정 이전은 `volume:migrate <accountId> <volumeId>`(rsync → 검증 → 전환 → 정리)로 한다.
+- `StorageDriver` 인터페이스(`server/storage/driver.ts`): `ensureUserRoot`, `localPath`, `stat`, `createReadStream`, `createFolder`, `moveIntoPlace`, `rename`, `copy`, `moveToTrash`, `restoreFromTrash`, `space`, `writeAsset`/`readAsset`/`assetSource`/`removeAssets`/`removeAccountAssets`(썸네일·제거본·미리보기), `purgeSystem`, `canWrite`. 구현체는 `LocalVolumeDriver`이고, 추후 `S3Driver`(MinIO, R2)를 같은 인터페이스로 추가한다. 서비스 레이어는 구현체를 모른다.
+- **다중 볼륨**: `StorageVolume { id, mountPath, status(ACTIVE|READONLY|DRAINING|OFFLINE), reservePct, createdAt }` 테이블을 두고 `Account.volumeId`로 배정한다. 새 계정은 여유 공간이 가장 큰 ACTIVE 볼륨에 배정된다. 두 번째 SSD는 `/mnt/relayfilesDB2`에 마운트하고 `npm run volume:init -- /mnt/relayfilesDB2`로 등록하면 즉시 쓸 수 있다. 계정 이전은 `npm run volume:migrate -- --account <id> --to <volumeId>`(복사 → SHA-256 전수 대조 → 전환 → 옛 사본 trash)로 한다.
 - DB에는 **볼륨 기준 상대 경로 정보만** 저장한다(절대경로 없음). 마운트 지점이 바뀌어도 `StorageVolume.mountPath` 한 줄만 고치면 된다.
 - 업그레이드 계획(MS-01 DB 서버, 10GbE)으로 옮길 때도 PostgreSQL은 `DATABASE_URL`, 파일은 볼륨 재등록 또는 S3 드라이버로 옮기면 되고 애플리케이션 코드는 바뀌지 않는다.
 
-**마운트 상태 감시**
+**마운트 상태 확인**
 
-- 앱과 워커는 시작할 때, 그리고 30초마다 `.relayfiles-volume`의 volumeId를 확인한다. 이 파일이 없으면(SSD 분리, 마운트 실패) 볼륨을 `OFFLINE`으로 바꾸고 업로드와 다운로드를 503으로 막는다. 이때 경고 페이지 **"Storage offline"**(§9.2)과 Status 페이지 Storage 구성요소 DOWN을 표시한다. 빈 마운트 지점(내장 디스크)에 잘못 쓰는 사고를 막는 것이 목적이다.
-- Server 페이지 Disk 카드는 볼륨별 용량(`statfs`)을 보여 준다. Disk health는 외장 SSD의 SMART 정보(`smartctl -d sat` 경유, 권한이 없으면 Unavailable)다.
+- 볼륨 표시 파일(`.relayfiles-volume`)은 필요할 때 확인한다: 새 계정 볼륨 선택(마운트 안 됐거나 layoutVersion이 다르면 제외), Server 페이지 Media streaming 행, `/api/health`의 storage 구성요소(Status 페이지 Storage DOWN), `npm run volume:list`. 빈 마운트 지점(내장 디스크)에 잘못 쓰는 사고를 막는 것이 목적이다. 상태를 자동으로 `OFFLINE`으로 바꾸는 주기 감시는 아직 없다(`VOLUME_WATCH_INTERVAL_SEC`는 예약된 키).
+- Server 페이지 Disk 카드는 볼륨별 용량(`statfs`)을 보여 준다. Disk health는 `smartctl -j -H -A -i $DISK_DEVICE`(권한이 없으면 Unavailable)다.
 
 ### 13.6 기타 보안
-- 혼잡도: Redis ZSET `rf:dl:{nodeId}`(10분 창). Busy면 `X-Accel-Limit-Rate`로 속도 제한, Server busy면 429 + `Retry-After`.
-- 보안 헤더(CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy), 업로드 MIME은 확장자와 매직 바이트(`file-type`)로 판정, 공유 비밀번호는 argon2, 계정 토큰은 HMAC lookup + AES-256-GCM 암호화 보관(`TOKEN_ENC_KEY`), IP는 마스킹해서 저장, 로그에 토큰과 IP를 남기지 않는다.
+- 혼잡도: Redis ZSET `rf:v1:dl:{nodeId}`(10분 창). Busy면 `X-Accel-Limit-Rate`로 속도 제한, Server busy면 429 + `Retry-After`.
+- 보안 헤더(`next.config.ts`: `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`. HSTS는 TLS를 끝내는 Cloudflare/certbot 쪽에서 설정), 업로드 MIME은 확장자와 매직 바이트(`file-type`)로 판정, 공유 비밀번호는 argon2, 계정 토큰은 HMAC lookup + AES-256-GCM 암호화 보관(`TOKEN_ENC_KEY`), IP는 마스킹해서 저장, 로그에 토큰과 IP를 남기지 않는다.
 
-### 13.7 워커 (`worker/`, BullMQ, 앱과 별도 프로세스)
-`cleanup`(매일 04:00: 만료 계정 → 사용자 루트를 `system/trash`로 rename 후 DB 삭제, 만료 노드, burn) · `trash.purge`(trash 항목 24시간 후 실제 삭제) · `tmp.purge`(6시간 넘은 미완료 tus 조각) · `expiry-sweep`(1분) · `media.process`(SHA-256, 썸네일, 공유용 메타데이터 제거본) · `storage.reconcile`(매일: DB에만 있는 노드는 missing으로 표시, 디스크에만 있는 파일은 리포트, 관리자가 옵션으로 import 가능) · `volume.watch`(30초) · `metrics.sample`(1분) · `health.probe`(1분 → 시간·일 집계) · `traffic.rollup`(10분).
+### 13.7 워커 (`npm run worker`, `src/server/jobs/`, BullMQ, 앱과 별도 프로세스)
+`media` 큐(`process`: 썸네일, 공개 링크용 메타데이터 제거본, 큰 이미지의 뷰어 미리보기, 동시 `MEDIA_WORKER_CONCURRENCY`) · `maintenance` 큐: `cleanup`(`CLEANUP_CRON`/`JOBS_TIMEZONE`: 만료 계정·항목 삭제, `ACTIVE`·`DRAINING` 볼륨의 24시간 지난 trash와 `UPLOAD_TMP_TTL_HOURS` 지난 업로드 조각 정리, 오래된 링크 tombstone 정리), `metrics`(`METRICS_SAMPLE_INTERVAL_SEC`, heartbeat 겸), `health`(`HEALTH_PROBE_INTERVAL_SEC` → 시간·일 집계). SHA-256은 업로드 완료 시 계산하고, 트래픽은 전송 시점에 `TrafficDaily`에 더한다.
 
 ### 13.8 마이그레이션 전략
 
@@ -547,233 +456,61 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 **① DB 스키마 (Prisma)**
 - 개발: `npx prisma migrate dev --name <설명>` → `prisma/migrations/`를 커밋한다. 운영: 배포 스크립트에서 `npx prisma migrate deploy`만 실행한다. `db push`는 쓰지 않는다(CLAUDE.md 규칙).
 - **Expand → Migrate → Contract** 3단계로 무중단 변경을 한다. 예를 들어 컬럼 이름을 바꿀 때: 새 컬럼 추가(expand, 구버전 코드와 호환) → 앱이 양쪽에 쓰고 백필 작업 실행 → 다음 릴리스에서 옛 컬럼 삭제(contract). 한 릴리스 안에 파괴적 변경을 넣지 않는다.
-- **데이터 마이그레이션**(백필, 값 변환)은 SQL 마이그레이션과 분리해 `scripts/migrations/data/<timestamp>-<name>.ts`에 두고, `DataMigration { id, name, startedAt, finishedAt, cursor }` 테이블로 진행 상황을 기록한다. 대량 데이터는 배치(1,000행) + 커서로 처리해서 중단해도 이어서 실행할 수 있다.
-- 배포 순서(`deploy/scripts/release.sh`): `pg_dump` 스냅샷 → `migrate deploy` → 데이터 마이그레이션 → 앱/워커 롤링 재시작 → 헬스체크. 실패하면 이전 이미지 태그와 스냅샷으로 되돌린다.
-- CI 검사: `prisma migrate diff --from-migrations --to-schema-datamodel`로 커밋되지 않은 스키마 변경을 막는다. 마이그레이션 SQL에 `DROP COLUMN`/`DROP TABLE`이 있으면 PR 라벨 `breaking-migration`을 요구하는 검사를 둔다.
-- 메이저 업그레이드(Prisma 8 stable, PostgreSQL 16 → 17)는 CLAUDE.md 정책대로 별도 브랜치에서 진행한다. PostgreSQL 메이저는 `pg_upgrade --link` 또는 dump/restore로 한다.
+- **데이터 마이그레이션**(백필, 값 변환)은 SQL 마이그레이션과 분리해 `src/server/migrations/`에 두고 `registry.ts`의 `DATA_MIGRATIONS`에 등록한다(`npm run data:migrate`). `DataMigration { id, startedAt, finishedAt, cursor }` 테이블로 진행 상황을 기록한다. 대량 데이터는 배치(1,000행) + 커서로 처리해서 중단해도 이어서 실행할 수 있다.
+- 배포 순서(`deploy/scripts/release.sh`, systemd는 `deploy/scripts/systemd/release.sh`): DB 백업 → 이미지 빌드 → 점검 모드 → `db:deploy` → `data:migrate` → `storage:migrate` → app·worker·nginx 재시작 → 점검 해제 → `/api/health` 확인 → `DATA_DIR/releases.log` 기록. 실패하면 이전 태그로 되돌린다(`runbook.md` "롤백").
+- CI 검사: 통합 테스트 잡의 `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code`가 커밋되지 않은 스키마 변경을 막는다. 파괴적 SQL(DROP, 타입 변경, TRUNCATE, DELETE, RENAME)은 `-- relayfiles: contract <이유>` 주석이 있어야 `npm run check:migrations`를 통과한다.
+- 메이저 업그레이드(Prisma 8 stable, PostgreSQL 16 → 17)는 별도 브랜치에서 진행한다. PostgreSQL 메이저는 `pg_upgrade --link` 또는 dump/restore로 한다.
 
 **② 파일 스토리지 레이아웃**
-- `.relayfiles-volume`에 `layoutVersion`을 기록한다(최초 1). 디렉터리 구조를 바꿔야 할 때(예: `system/` 하위 재배치, 사용자 폴더를 `users/<앞2자리>/<accountId>`로 샤딩)는 `scripts/migrations/storage/<n>-<name>.ts`를 작성한다.
-- 실행기 `npm run storage:migrate`: 볼륨을 `READONLY`로 전환(업로드와 변경 차단, 다운로드는 유지) → 저널 파일(`system/migration.journal`)에 단계별 기록 → rename 위주로 수행(같은 파일시스템이라 빠르고 원자적) → 검증(노드 수, 파일 수, 샘플 SHA-256) → `layoutVersion` 갱신 → `ACTIVE` 복귀. 중간에 멈춰도 저널을 보고 이어서 하거나 되돌린다.
-- 앱은 시작할 때 볼륨의 `layoutVersion`이 코드가 기대하는 값과 다르면 해당 볼륨을 OFFLINE으로 두고 "마이그레이션 필요" 로그와 Server 페이지 경고를 띄운다(잘못된 구조에 쓰는 사고 방지).
+- `.relayfiles-volume`에 `layoutVersion`을 기록한다(최초 1). 디렉터리 구조를 바꿔야 할 때(예: `system/` 하위 재배치, 사용자 폴더를 `users/<앞2자리>/<accountId>`로 샤딩)는 `src/server/storage/layout-migrations.ts`의 `LAYOUT_MIGRATIONS`에 단계를 추가한다.
+- 실행기 `npm run storage:migrate`: 볼륨을 `READONLY`로 전환(업로드와 변경 차단, 다운로드는 유지) → 저널 파일(`system/migration.journal`)에 단계별 기록 → rename 위주로 수행(같은 파일시스템이라 빠르고 원자적) → 단계마다 `layoutVersion` 갱신 → 원래 상태로 복귀. 중간에 실패하면 볼륨은 `READONLY`로 남고, 다시 실행하면 이어서 진행한다.
+- 볼륨의 `layoutVersion`이 코드가 기대하는 값과 다르면 그 볼륨에는 새 계정을 배정하지 않고 Server 페이지와 Status 페이지 Storage에 실패로 표시한다(잘못된 구조에 쓰는 사고 방지).
 
 **③ 계정·볼륨 간 이동 (SSD 증설, 교체)**
 - `npm run volume:migrate -- --account <id> --to <volumeId>` 또는 `--volume <from> --to <to>`(볼륨 전체 비우기):
   1. 대상 계정을 `migrating` 상태로 표시한다. 업로드, 이름 변경, 이동은 잠시 막고(UI는 경고 배너 "Your files are being moved to new storage", 읽기와 다운로드는 유지) 진행한다.
-  2. `rsync -aHAX --checksum`으로 1차 복사 → 변경분 2차 복사 → 파일 수와 SHA-256(`Node.sha256`) 전수 대조.
-  3. 트랜잭션으로 `Account.volumeId`를 전환하고 경로 캐시를 무효화한 뒤 잠금을 해제한다.
+  2. 앱 안에서 파일을 복사한 뒤 파일 수와 SHA-256을 전수 대조한다.
+  3. 트랜잭션으로 `Account.volumeId`를 전환하고 잠금을 해제한다.
   4. 원본 볼륨의 사본은 `system/trash`로 옮기고 24시간 뒤 삭제한다(그동안 롤백 가능).
-- 볼륨 상태 `DRAINING`: 새 계정 배정에서 빠지고, 워커가 계정을 하나씩 다른 볼륨으로 옮긴다(SSD 교체 절차).
+- 볼륨 상태 `DRAINING`: 새 계정 배정에서 빠지고, `npm run volume:migrate -- --volume <id> [--to <id>]`가 계정을 하나씩 다른 볼륨으로 옮긴다(SSD 교체 절차).
 
 **④ 서버 이전 (현재 N95 → 업그레이드 계획의 MS-A2 앱 + MS-01 DB)**
 - 앱이 서버 위치에 의존하지 않도록 모든 주소와 경로는 env로 둔다(`DATABASE_URL`, `REDIS_URL`, `STORAGE_ROOT`, `PUBLIC_URL`, 허용 IP 대역). VLAN과 IP가 바뀌어도 코드는 바뀌지 않는다.
-- 절차(`docs/runbook.md#server-migration`):
-  1. 새 서버에 compose 배포(빈 상태) → `maintenance.flag`로 기존 서버를 점검 모드로 전환(503 점검 페이지).
+- 절차(`docs/runbook.md` "서버 이전" 절):
+  1. 새 서버에 compose 배포(빈 상태) → `deploy/maintenance/on`으로 기존 서버를 점검 모드로 전환(503 점검 페이지).
   2. PostgreSQL: `pg_dump -Fc` → `pg_restore`(짧은 중단). 무중단이 필요하면 logical replication(publication/subscription)으로 동기화한 뒤 전환한다.
-  3. Redis: 영구 데이터가 아니므로 옮기지 않는다(세션 nonce만 재발급된다. 사용자는 쿠키로 다시 인증됨). BullMQ 반복 작업은 워커가 시작할 때 다시 등록한다.
-  4. 파일: 외장 SSD를 물리적으로 옮겨 같은 경로(`/mnt/relayfilesDB`)에 마운트한다. `.relayfiles-volume`의 volumeId로 같은 볼륨인지 확인하므로 재등록 없이 인식된다. 네트워크로 복사할 때는 ③과 같은 rsync와 검증 절차를 쓴다.
+  3. Redis: 영구 데이터가 아니므로 옮기지 않는다(로그인 잠금 카운터·캐시만 초기화된다). BullMQ 반복 작업은 워커가 시작할 때 다시 등록한다.
+  4. 파일: 외장 SSD를 물리적으로 옮겨 같은 경로(`/mnt/relayfilesDB`)에 마운트한다. `.relayfiles-volume`의 volumeId로 같은 볼륨인지 확인하므로 재등록 없이 인식된다. 네트워크로 복사할 때는 `rsync -aHAX` 후 검증한다.
   5. DNS와 Cloudflare Tunnel 대상을 바꾸고 헬스체크한 뒤 점검 모드를 해제한다. 기존 서버는 1주일 동안 읽기 전용으로 남겨 둔다(롤백용).
 
 **⑤ 스토리지 백엔드 전환 (로컬 → S3/MinIO, 선택)**
 - 볼륨에 `driver`(local|s3) 필드를 두고, ③과 같은 계정 단위 이동 작업으로 옮긴다(복사 → 해시 검증 → 전환). 로컬과 S3 볼륨을 함께 운영할 수 있다.
 
 **⑥ 키·비밀값 교체**
-- `TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, `COOKIE_SECRET`은 교체 기간에 `*_PREVIOUS` 키를 함께 둔다(§19). 암호문 앞에 키 식별자(현재/이전)를 붙여 저장하므로 새 키로 바꿔도 기존 데이터를 읽을 수 있다. `scripts/rotate-keys.ts`가 배치로 재암호화하고, 끝나면 옛 키를 제거한다. 토큰 값 자체는 바뀌지 않는다.
+- `TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, `COOKIE_SECRET`은 교체 기간에 `*_PREVIOUS` 키를 함께 둔다(§19). 암호문 앞에 키 식별자(현재/이전)를 붙여 저장하므로 새 키로 바꿔도 기존 데이터를 읽을 수 있다. `npm run keys:rotate`가 배치로 재암호화하고, 끝나면 옛 키를 제거한다. 토큰 값 자체는 바뀌지 않는다.
 
 **⑦ 캐시·계약·클라이언트 데이터 버전**
 - Redis 키에 버전 접두사(`rf:v1:`)를 붙인다. 캐시 형식이 바뀌면 버전을 올려 옛 키를 자연 만료시킨다(별도 삭제 작업 불필요).
 - API 계약(`src/contracts/`)은 하위 호환으로만 변경한다(필드 추가 OK, 삭제/의미 변경은 새 필드로). 배포 중에 구버전 클라이언트가 남아 있어도 동작해야 한다.
-- 클라이언트 localStorage(`relay.resume`, 보기 설정)는 `{ v: 1, data }` 형태로 저장하고, 로드할 때 버전별 변환 함수(`migrateLocal(v)`)를 거친다. 알 수 없는 형식이면 버린다.
+- 클라이언트 localStorage(`relay.resume`, 보기 설정)는 `{ v: 1, data }` 형태로 저장하고, 버전이 다르거나 형식이 맞지 않으면 버린다(`shared/lib/local-setting.ts`). 형식을 바꿀 때 변환이 필요하면 그때 추가한다.
 - 공유 링크 URL 형식(`/d/<linkId>`)은 고정한다. 경로 구조가 바뀌어도 옛 URL은 `proxy.ts`에서 301로 연결한다.
 
 ---
 
-## 14. Ubuntu 서버 배포·테스트 (현재 하드웨어: N95 `192.168.0.100`, Ubuntu)
+## 14. Ubuntu 서버 배포
 
-- **외장 SSD 준비**(`docs/deploy-ubuntu.md`, `deploy/scripts/setup-ssd.sh`):
-  1. `lsblk`/`blkid`로 장치 확인 → (필수) `cryptsetup luksFormat --type luks2` → 키파일 `/etc/relayfiles/ssd.key`(0400) 등록 → `/etc/crypttab`
-  2. `mkfs.ext4 -L relayfilesDB -m 0` → `/etc/fstab`에 **UUID로** 등록: `/mnt/relayfilesDB ext4 defaults,noatime,nodev,nosuid,noexec,nofail,x-systemd.device-timeout=10s 0 2`
-  3. `useradd --system --uid 10001 relayfiles` → `install -d -o relayfiles -m 0700 /mnt/relayfilesDB/{users,system}` → `npm run volume:init`(`.relayfiles-volume` 생성, DB에 볼륨 등록)
-  4. USB SSD 절전 해제(`hdparm`/udev rule로 autosuspend off), SMART 확인(`smartctl -d sat -a`)
-- `deploy/docker-compose.yml`: `app`(Next standalone, `user: 10001`), `worker`, `postgres:16`, `redis:7`. PostgreSQL과 Redis 데이터는 내장 디스크 `/srv/relayfiles/{pg,redis}`, 파일은 `/mnt/relayfilesDB`를 **같은 경로로 bind mount**(`/mnt/relayfilesDB:/mnt/relayfilesDB:rw`, `bind.propagation: rslave`. SSD를 다시 마운트해도 컨테이너에 반영됨). DB와 Redis 포트는 외부에 공개하지 않는다(내부 네트워크만). 헬스체크와 `restart: unless-stopped`.
-- `deploy/nginx/relayfiles.conf`: 리버스 프록시, `client_max_body_size 60m`, tus 경로 `proxy_request_buffering off`, `X-Accel-Redirect` 대상 `location /_protected/ { internal; alias /mnt/relayfilesDB/users/; sendfile on; }`, `error_page 502 503 504`를 정적 에러 페이지로, 점검 플래그 파일 분기. Nginx 워커가 파일을 읽어야 하므로 `www-data`를 `relayfiles` 그룹에 넣고 해당 경로만 `0750`으로 둔다(또는 Nginx를 같은 uid로 실행). 둘 중 하나를 문서에 명시한다.
-- 백업: `pg_dump` 매일(내장 디스크 + 외부 사본), 파일은 `rsync -aHAX`로 2차 디스크 또는 NAS(선택). 복구 절차는 `docs/runbook.md`.
-- 외부 노출은 Cloudflare Tunnel, 내부 테스트는 LAN.
-- `docs/deploy-ubuntu.md`: 패키지(ffmpeg, docker, nginx, smartmontools), `.env.production` 작성, `prisma migrate deploy`, `npm run admin:create`, 백업(`pg_dump` + 데이터 디렉터리 rsync), 로그 위치 `/var/log/relayfiles/`.
-- **실서버 검증 시나리오**: 업로드 후 `/mnt/relayfilesDB/users/<id>/…`에 원본이 같은 이름으로 생기는지, `sha256sum` 원본과 다운로드 결과가 같은지, 권한(0700/0600)과 다른 계정 접근 차단, SSD를 분리했을 때 Storage offline 표시와 재연결 후 복구, 이름 변경·이동 후 디스크 트리가 따라오는지, 대용량 업로드(2GB+) 중 네트워크 끊김 후 재개, 영상 Range 탐색, 휴대폰(iOS Safari, Android Chrome)과 데스크톱 반응형 확인, 공유 링크 비밀번호·한도·burn, 만료 job 실행, 서버 지표값을 `htop`/`df`와 대조, 앱을 내렸을 때 Nginx 502 페이지 표시.
+배포 절차와 실서버 확인 목록은 [`deploy-ubuntu.md`](deploy-ubuntu.md)(Docker Compose)와 [`deploy-systemd.md`](deploy-systemd.md)(systemd + 호스트 Nginx), 운영 절차는 [`runbook.md`](runbook.md)에 있다.
 
 ---
 
-## 15. 단계별 실행 순서 (기능 단위 수직 슬라이스)
-
-> 각 단계 끝에 `npm run typecheck · lint · test · build`를 통과시키고 커밋한다(Conventional Commits). 브랜치는 `claude/eager-bell-lrz3vc`, PR base는 `main`.
-
-| # | 범위 | 완료 기준 |
-|---|---|---|
-| M0 | 스캐폴딩(create-next-app 16.3, TS strict, Tailwind 4.3, ESLint flat + boundaries, Vitest, Playwright), `CLAUDE.md`, `docs/`, 시안을 `docs/design/`에, `.env.example`, `config/env.ts` | 빈 앱 빌드 |
-| M1 | 디자인 시스템: 토큰, 테마 10종, 폰트 3종, 아이콘 레지스트리, §6 프리미티브, `/dev/ui` 카탈로그(dev 전용) | 카탈로그 스크린샷 |
-| M2 | 인프라: docker-compose(dev), Prisma 스키마 + 마이그레이션, Redis + 캐시 헬퍼, logger, `apiHandler`, 에러 코드 계약, **스토리지 계층**(StorageDriver, LocalVolumeDriver, safe-path, StorageTransaction, 볼륨 등록·감시. 개발 환경에서는 `STORAGE_ROOT=./.data/relayfilesDB`), **에러 페이지 전부(§9)** | `/error/*`, 404, 403 렌더링. 경로 탈출 테스트 통과 |
-| M3 | 인증: 익명 계정, 토큰 로그인과 잠금, 다중 계정 쿠키, `proxy.ts`, admin:create, 로그인/새 토큰 모달 | e2e 로그인 |
-| M4 | AppShell(사이드바, 드로어, 헤더, 푸터, 배너, 토스트, 로딩) + 반응형 3단계 | 375/768/1280 확인 |
-| M5 | File Manager 조회: 폴더, 경로, 헤더, 툴바, 필터, 검색, 태그 모드, 리스트/그리드, 빈 상태, 메뉴(팝오버/시트) | |
-| M6 | 파일 조작: 새 폴더, 이름 변경, 이동/복사(DnD 포함), 삭제, 태그, 속성, 공유 설정, 링크 재발급, 활동 로그 | |
-| M7 | 업로드: prepare, 중복 처리, tus, 전송 패널, 오프라인 자동정지, Home 업로드 | 2GB 재개 테스트 |
-| M8 | 다운로드·스트리밍: Range(Nginx X-Accel), zip, 미디어 뷰어, 인라인 재생, 이어보기, 썸네일, 메타데이터 제거 워커 | |
-| M9 | 공유 페이지(`/d/[linkId]` + 미리보기), 비밀번호, 한도, burn, Stream only, 혼잡도 | |
-| M10 | 프로필/설정(토큰, 기기, 트래픽, 계정 삭제), 만료 배너, 용량 경고 | |
-| M11 | Admin Accounts + Manage, 정리 job, 초대, signup 모드 | |
-| M12 | Server 모니터(실측 SSE), 공지, 테마 선택 | |
-| M13 | Status(health probe 집계, 클라이언트 핑), Incidents | |
-| M14 | 단축키, 전역 검색, 접근성 점검, 성능(가상 스크롤: 항목 500개 이상) | |
-| M15 | 배포: Dockerfile, compose(prod), Nginx와 정적 에러 페이지, Cloudflare Tunnel, `docs/deploy-ubuntu.md`, 릴리스 스크립트(백업 → `migrate deploy` → 데이터 마이그레이션 → 재시작 → 헬스체크), N95 실서버 검증(§14) | 실서버 체크리스트 통과 |
-| M16 | 마이그레이션 도구(§13.8): `storage:migrate` 실행기와 저널, `volume:migrate`, 키 회전, 서버 이전 runbook, CI 마이그레이션 검사. 리허설: 두 번째 볼륨(테스트 SSD 또는 디렉터리)으로 계정 이동, 덤프/복원 리허설 | 리허설 기록을 `docs/runbook.md`에 남김 |
-
----
-
-## 16. 검증 계획
-
-1. **매 단계**: `npm run typecheck`, `lint`, `test`, `build`. CI(GitHub Actions)에서 Postgres/Redis 서비스 컨테이너와 함께 실행한다.
-2. **단위 테스트(Vitest)**: `src/domain/*` 전 함수. 시안 원본 함수를 픽스처로 복사해 같은 입력에 같은 출력을 내는지 확인한다(fmtSize 경계, uniqName, nameError 255B, menuPlace 3분기, busyLevel, effectiveVisibility, sortNodes 7종, collapseCrumbs). 서비스 레이어는 테스트 DB로 검증한다.
-3. **API 통합 테스트**: 인증, 권한(타 계정 리소스는 404), 업로드 재개, Range 206, 공유 상태 판정, 잠금 TTL, 정리 job.
-4. **마이그레이션 테스트**: 빈 DB에 `migrate deploy` 전체 적용과 직전 릴리스 스냅샷에서 업그레이드 둘 다 CI에서 검증, 데이터 마이그레이션 중단 후 재실행(idempotent), 스토리지 레이아웃 마이그레이션 중단 → 저널로 재개·롤백, `volume:migrate` 후 SHA-256 전수 일치와 공유 링크 유지, 키 회전 후 기존 토큰 로그인, localStorage 구버전 데이터 변환.
-5. **스토리지 테스트**(임시 디렉터리를 볼륨으로 사용): 경로 탈출(`..`, 절대경로, NUL, 심볼릭 링크를 심어 둔 경우) 전부 거부, 원본 SHA-256 보존, rename/move 시 디스크 트리 동기화, StorageTransaction 실패 주입 시 DB 롤백과 보상, 볼륨 식별 파일이 없으면 OFFLINE, 여유 공간 예약에 걸리면 507, reconcile 리포트.
-6. **E2E(Playwright, Chromium `/opt/pw-browsers`)**: 업로드 → 중복 → Keep both, DnD 이동, 메뉴 위치(하단 행 위쪽으로 열림), 모바일 하단 시트, 단축키, 계정 전환 토스트, 공유 4개 상태, 잠금 카운트다운, `setOffline`으로 자동정지/재개, 에러 페이지 7종.
-7. **반응형 회귀**: 모든 페이지·오버레이를 360×800 / 768×1024 / 1280×800에서 스크린샷 비교(`toHaveScreenshot`). 가로 스크롤이 없는지(`scrollWidth ≤ clientWidth`) 단언한다.
-8. **시안 대조**: 핵심 요소의 `getComputedStyle`(높이, 패딩, 반경, 색, 굵기)을 `docs/design/spec.md` 수치와 비교하는 e2e를 둔다. 수동 대조는 시안 HTML과 나란히 띄워서 한다.
-9. **이모지 검사**: CI에서 `src/`, `deploy/`에 Extended_Pictographic 문자가 있으면 실패한다.
-10. **실서버(Ubuntu N95)**: §14 시나리오 체크리스트.
-
----
-
-## 17. 확인 필요 사항 (기본값으로 진행)
-
-> 암호화 방식과 이미지 메타데이터 처리는 §0 "확정된 결정"으로 옮겼다.
-
-1. **TypeScript 7**: `typescript-eslint`가 TS 7을 지원하면 6.0.3에서 올린다(M0에서 확인한 제약).
-2. **로그인 잠금 정책**: 기본은 시안 문구(5회마다 30s/120s/600s). CLAUDE.md 기준(3회)으로 바꿀 경우 `config/policy.ts` 값과 문구를 함께 바꾼다.
-3. **위치 정보**: Cloudflare Tunnel 뒤에서는 `CF-IPCountry`/`CF-IPCity`를 쓴다. 터널 없이 LAN으로 접속하면 "Local network"으로 표시한다.
-4. **테마 선택 UI**: Server 페이지에 admin 전역 설정으로 추가한다(시안에는 편집기 prop으로만 있음).
-
----
-
-## 18. M1 상세 계획 (디자인 시스템)
-
-### 18.1 M1 목표
-디자인 시스템 기반을 만든다: 토큰, 테마 10종, 폰트 3종, 아이콘 레지스트리, 공용 UI 프리미티브(§6), 개발용 카탈로그, 수치 스펙 문서. 이후 화면(M3+)은 이 프리미티브만 조립한다.
-
-### 18.2 의존성 추가
-- `@phosphor-icons/react@2.1.10`(SSR 엔트리 `@phosphor-icons/react/ssr` 사용: context가 없어 서버·클라이언트 컴포넌트 양쪽에서 동작), `pretendard@1.3.9`, `clsx`, `tailwind-merge@3`(Tailwind 4 지원, `className` 덮어쓰기 충돌 해결).
-- 테스트: `@testing-library/react`, `jsdom`(프리미티브 동작 테스트용, `vitest` 환경을 파일별 `// @vitest-environment jsdom`으로 지정).
-
-### 18.3 파일 계획
-
-| 파일 | 내용 |
-|---|---|
-| `src/shared/styles/themes.css` | 시안 11행의 10개 테마 블록을 값 그대로 옮김(`:root` = blue, `:root[data-theme="…"]` 9개) |
-| `src/shared/styles/globals.css` | `src/app/globals.css`를 대체. `@import "tailwindcss"` + themes.css + `@theme`(색 토큰 매핑, `--breakpoint-sm: 45rem`, `--breakpoint-lg: 64rem`, 폰트 변수, `--animate-skel`, `--animate-spin`) + **고정 팔레트**(`--color-ok`, `--color-ok-text`, `--color-ok-bg`, `--color-warn*`, `--color-danger*`, `--color-info*`, `--color-kind-folder/video/audio/image` 등 §3.5 값을 이름 붙여 정의) + **z-index 변수**(§1.2 값: `--z-header: 10` … `--z-account-toast: 72`) + 기본 스타일 + `:focus-visible` 링 |
-| `src/shared/styles/palette.ts` | 데이터로 색을 고르는 곳용 TS 상수: 이름 → `var(--color-…)` 문자열. **값의 원천은 CSS 하나**(TS는 참조만 하므로 값이 어긋날 수 없음) |
-| `src/shared/styles/fonts.ts` | `next/font/google` Figtree(variable, `--font-figtree`, display swap), JetBrains Mono(400/600, `--font-jetbrains`). Pretendard는 `pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css`를 layout에서 import(unicode-range 분할로 한글이 있을 때만 필요한 조각만 로드, 셀프호스팅) |
-| `src/shared/ui/icon/registry.ts`, `Icon.tsx` | 시안의 아이콘 101개 + 에러 페이지용(WarningOctagon, ShieldWarning, FileX, LinkBreak, Bug, WifiSlash)을 kebab 이름 → 컴포넌트로 매핑. `IconName` 유니온 타입, `<Icon name weight size className />`(기본 `1em`, `flex:none`, `aria-hidden`, `label`을 주면 `role="img"`+`aria-label`) |
-| `src/shared/lib/cn.ts` | `clsx` + `tailwind-merge` |
-| `src/shared/ui/*` | §6 프리미티브 전부: Button, IconButton, Card, ListCard, OptionChip, OptionCard, CheckRow, Pill, Tag, Banner, Menu/MenuItem/MenuSeparator, BottomSheet(모바일 메뉴용), Modal(+ModalHeader/ModalFooter, focus trap, Esc, 포커스 복원, `zLayer` prop), ConfirmDialog, PromptDialog, TextInput, TextArea, Avatar, Skeleton, StatTile, Meter, BarChart(빈 칸은 NoData 막대), Kbd, Logo, EmptyState, NoData. 대화형(Modal, Menu, BottomSheet, Confirm/Prompt)만 `"use client"` |
-| `src/domain/avatar.ts` (+test) | 시안 `avatarOf` 이식(FNV-1a + xorshift, 6×6 대칭 SVG data URI). 테스트는 시안 원본 함수로 만든 기대값과 비교 |
-| `src/app/layout.tsx` | 폰트 변수 클래스, Pretendard CSS, `globals.css` 경로 변경, `<html data-theme>` 유지 |
-| `src/app/icon.svg` | 로고(accent 둥근 사각 + arrow-up-right) 파비콘 |
-| `src/app/dev/ui/page.tsx` | **UI 카탈로그**: 모든 프리미티브 × 변형 × 크기를 그리고 테마 10종 전환 버튼을 둔다. env `ENABLE_UI_CATALOG=true`일 때만 열리고 아니면 `notFound()`(운영 기본값 false). 표시 텍스트는 컴포넌트 견본이며 앱 데이터가 아니다 |
-| `src/config/env.ts` (+test) | `ENABLE_UI_CATALOG`(boolean, 기본 false) 추가 |
-| `docs/design/spec.md` | 토큰 표(테마 22개 변수 × 10, 고정 팔레트, z-index), 프리미티브별 수치 표(§6 확장), 반응형 표(§7) |
-
-### 18.4 테스트
-- 단위(Vitest): `avatarOf` 결정성·시안 동일 출력, **아이콘 레지스트리가 시안의 모든 `ph-*` 이름을 포함**(시안 HTML을 읽어 대조), themes.css에 10개 테마와 22개 변수가 모두 있는지, palette.ts가 참조하는 변수가 globals.css에 모두 정의되어 있는지, `cn` 병합 규칙, Modal(Esc로 닫힘, 포커스 트랩·복원), CheckRow `aria-checked`, `ENABLE_UI_CATALOG` 파싱.
-- E2E(Playwright, `ENABLE_UI_CATALOG=true`로 서버 실행): `/dev/ui`에서 핵심 프리미티브의 계산 스타일을 시안 수치와 비교(primary 버튼 h34·radius 10·weight 700·bg accent, Card radius 16·border cardLine, Pill 10px/800, Modal 폭과 shadow, Menu 항목 높이 36/44), 테마 전환 시 `--accent`가 바뀌는지, 360/768/1280 가로 스크롤 없음, 카탈로그 스크린샷 기준 이미지 생성.
-- 이모지 검사, `npm run check` 전체 통과 후 커밋·푸시·PR.
-
-### 18.5 완료 기준
-- `npm run check` + `npm run test:e2e` 통과, CI 녹색.
-- `/dev/ui` 스크린샷에서 sky 테마 기준 토큰과 프리미티브가 시안 수치와 일치.
-- 운영 빌드에서 `/dev/ui`는 404.
-
-### 18.6 실행 방식 (사용자 지시: "PR & merge를 계속 진행하면서 끝까지")
-- M1 → M16을 순서대로 진행한다. 마일스톤마다 다음을 반복한다.
-  1. `claude/eager-bell-lrz3vc`를 최신 `origin/main`에서 다시 시작한다(머지된 이력만 있으므로 `--force-with-lease` 푸시).
-  2. 구현 → `npm run check` + `npm run test:e2e`(+ M2부터 DB·Redis 통합 테스트)를 로컬에서 통과시킨다.
-  3. 커밋(Conventional Commits) → 푸시 → PR(`## Changes / ## How to Test / ## Related Issues`) → PR 구독.
-  4. CI가 녹색이고 리뷰 지적이 없으면 **merge commit 방식**(squash/rebase 아님, 사용자 Git 규칙)으로 머지하고 다음 마일스톤으로 간다. CI가 빨간색이면 원인을 고쳐 다시 푸시한 뒤 머지한다.
-- 마일스톤이 크면(M5–M9 등) 리뷰하기 쉽게 PR을 2~3개로 나눌 수 있다. 각 PR은 단독으로 `npm run check`를 통과해야 한다.
-- **클라우드 컨테이너의 한계**: 실제 N95 서버, 외장 SSD(LUKS2 설정), Cloudflare Tunnel, 실기기 모바일 확인은 여기서 실행할 수 없다. 해당 부분은 스크립트, 설정 파일, `docs/deploy-ubuntu.md`, `docs/runbook.md`, 체크리스트로 제공하고, 동작은 컨테이너 안의 로컬 디렉터리 볼륨과 PostgreSQL·Redis(로컬 설치 또는 CI 서비스 컨테이너)로 검증한다. 실서버 검증 항목(§14)은 마지막에 사용자가 실행할 목록으로 정리한다.
-- 각 마일스톤이 끝날 때 짧게 보고한다(무엇을 했는지, 검증 결과, 다음 단계). 결정이 꼭 필요한 경우가 아니면 멈추지 않는다.
-
----
-
-## 19. 환경 변수 정책 (사용자 요청: 필요한 설정 값과 포트는 전부 `.env.example`에, `.env`는 사용자가 직접 작성)
+## 19. 환경 변수 정책
 
 ### 19.1 원칙
-- 레포에 커밋되는 env 파일은 **`.env.example` 하나**다. 실제 값이 든 `.env`(개발은 `.env` 또는 `.env.local`, 운영은 compose 옆의 `.env`)는 **사용자가 `.env.example`을 복사해 직접 만든다**. `.gitignore`가 모든 `.env*`를 제외하고 `.env.example`만 허용한다(M0에서 적용됨).
-- 포트, 호스트, 경로, 도메인, 비밀값, 배포마다 다른 정책값은 **코드·compose·nginx 설정에 하드코딩하지 않는다**. 앱은 `src/config/env.ts`만 통해 읽고, `docker-compose.yml`은 `${VAR}`로, Nginx 설정은 `.env`로 렌더링하는 템플릿(`deploy/nginx/relayfiles.conf.template` → `npm run deploy:nginx`, `envsubst`)으로 같은 값을 쓴다.
+- 레포에 커밋되는 env 파일은 **`.env.example` 하나**다. 실제 값이 든 `.env`(개발은 `.env` 또는 `.env.local`, 운영은 compose 옆의 `.env`)는 **사용자가 `.env.example`을 복사해 직접 만든다**. `.gitignore`가 모든 `.env*`를 제외하고 `.env.example`만 허용한다.
+- 포트, 호스트, 경로, 도메인, 비밀값, 배포마다 다른 정책값은 **코드·compose·nginx 설정에 하드코딩하지 않는다**. 앱은 `src/config/env.ts`만 통해 읽고, `docker-compose.yml`은 `${VAR}`로, Nginx 설정은 템플릿(`deploy/nginx/templates/default.conf.template`은 nginx 이미지의 envsubst, `deploy/nginx/host/relayfiles.conf.template`은 `scripts/render-template.mjs`)으로 같은 값을 쓴다.
 - `.env.example`의 모든 키에는 그룹 제목, 설명, 필수/선택, 기본값, 예시를 주석으로 단다. 비밀값은 비워 두고 생성 방법을 적는다.
-- **env 그룹별 지연 검증**: `env.ts`를 `app`, `database`, `redis`, `storage`, `secrets`, `uploads`, `jobs`, `observability` 그룹 스키마로 나누고 `getAppEnv()`, `getDatabaseEnv()` 등은 그 서브시스템이 처음 쓰일 때 검증한다. 빌드(CI)는 DB 비밀번호 없이도 통과하고, 실행 시 빠진 키는 "어떤 키가 왜 잘못됐는지" 목록으로 즉시 실패한다.
+- **env 그룹별 지연 검증**: `env.ts`를 `app`, `database`, `redis`, `storage`, `uploads`, `secrets`, `policy`, `jobs`, `observability`, `deploy`, `testing` 그룹 스키마로 나누고 `getAppEnv()`, `getEnv("database")` 등은 그 서브시스템이 처음 쓰일 때 검증한다. 빌드(CI)는 DB 비밀번호 없이도 통과하고, 실행 시 빠진 키는 "어떤 키가 왜 잘못됐는지" 목록으로 즉시 실패한다.
 - **누락 방지 테스트**: 모든 그룹 스키마의 키 집합 = `.env.example`의 키 집합임을 단위 테스트로 검사한다. 새 설정을 추가하는 PR은 `.env.example`과 스키마를 함께 바꿔야 CI를 통과한다.
 - 보조 명령: `npm run env:check`(작성한 `.env`를 앱 실행 없이 검증하고 문제를 목록으로 출력), `npm run env:secrets`(비밀값 무작위 생성 결과를 출력만 함, 파일을 쓰지 않음. 사용자가 `.env`에 붙여 넣음).
 - `.env` 값은 Next(`@next/env`)와 Docker Compose 모두 `${VAR}` 확장을 지원하므로 `DATABASE_URL`, `REDIS_URL`은 개별 키로 조합한다. Prisma 7 CLI는 `prisma.config.ts`에서 같은 `.env`를 읽는다.
-
-### 19.2 키 목록 (M1 PR에서 `.env.example`을 이 목록 전체로 교체)
-
-| 그룹 | 키 | 기본값(예시) | 비고 |
-|---|---|---|---|
-| app | `NODE_ENV` | `development` | `production`이면 로그 최소화, 에러 마스킹 |
-| app | `APP_HOST` | `127.0.0.1` | standalone 서버 바인드 주소(`HOSTNAME`으로 전달). Nginx만 앱에 접속하도록 루프백 기본, compose는 자체 값 사용 |
-| app | `APP_PORT` | `3000` | 앱 포트(`PORT`로 전달), compose·nginx가 같은 값 사용 |
-| app | `PUBLIC_URL` | `http://localhost:3000` | 공유 링크 origin(운영: `https://files.example.com`) |
-| app | `DEFAULT_THEME` | `sky` | 10종 중 기본 테마(관리자가 Server 페이지에서 바꾸면 DB 값 우선) |
-| app | `SERVER_LOCATION` | `Seoul, KR` | Status 페이지 표기 |
-| app | `ENABLE_UI_CATALOG` | `false` | `/dev/ui` 컴포넌트 카탈로그 노출(운영은 false) |
-| app | (M3에서 제거) `TRUSTED_PROXY_CIDRS` | — | Next route handler에서는 소켓 주소를 알 수 없어 검사할 수 없다. 대신 앱 포트를 Nginx만 접근할 수 있게 묶고 `CF-Connecting-IP`/`X-Real-IP`를 신뢰한다 |
-| app | `ADMIN_ALLOWED_CIDRS` | (빈 값 = 제한 없음) | admin 페이지·API를 내부망(예 `192.168.0.0/24`)으로 제한 |
-| database | `POSTGRES_HOST` | `localhost`(compose 내부: `postgres`) | |
-| database | `POSTGRES_PORT` | `5432` | |
-| database | `POSTGRES_DB` | `relayfiles` | |
-| database | `POSTGRES_USER` | `relayfiles` | |
-| database | `POSTGRES_PASSWORD` | (필수, 비움) | `npm run env:secrets`로 생성 |
-| database | `POSTGRES_PUBLISH` | `127.0.0.1:5432` | compose가 호스트에 여는 주소:포트(외부 비공개 기본) |
-| database | `DATABASE_URL` | `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public` | 조합값, 보통 수정 불필요 |
-| redis | `REDIS_HOST` | `localhost`(compose 내부: `redis`) | |
-| redis | `REDIS_PORT` | `6379` | |
-| redis | `REDIS_PASSWORD` | (필수, 비움) | |
-| redis | `REDIS_DB` | `0` | |
-| redis | `REDIS_PUBLISH` | `127.0.0.1:6379` | |
-| redis | `REDIS_URL` | `redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}` | 조합값 |
-| redis | `REDIS_KEY_PREFIX` | `rf:v1:` | 캐시 형식 버전(§13.8 ⑦) |
-| storage | `STORAGE_ROOT` | 개발 `./.data/relayfilesDB`, 운영 `/mnt/relayfilesDB` | 외장 SSD 마운트 지점 |
-| storage | `STORAGE_RESERVE_PERCENT` | `5` | 볼륨 여유 공간 예약 |
-| storage | `STORAGE_UID` / `STORAGE_GID` | `10001` / `10001` | 컨테이너 실행 계정, 파일 소유자 |
-| storage | `STORAGE_ACCEL_ENABLED` | 개발 `false`, 운영 `true` | Nginx `X-Accel-Redirect` 사용 여부(false면 앱이 직접 전송) |
-| storage | `STORAGE_ACCEL_PREFIX` | `/_protected/` | Nginx internal location |
-| storage | `VOLUME_WATCH_INTERVAL_SEC` | `30` | 마운트 감시 주기 |
-| uploads | `UPLOAD_CHUNK_SIZE_MB` | `50` | tus 청크(Cloudflare 100MB 제한 아래) |
-| uploads | `UPLOAD_MAX_FILE_SIZE_GB` | (빈 값 = 무제한) | 파일당 최대 크기 |
-| uploads | `UPLOAD_TMP_TTL_HOURS` | `6` | 미완료 업로드 조각 정리 |
-| secrets | `TOKEN_ENC_KEY` | (필수, 32바이트 base64) | 계정 토큰 암호화 |
-| secrets | `TOKEN_HMAC_KEY` | (필수) | 토큰 조회용 HMAC |
-| secrets | `COOKIE_SECRET` | (필수) | 세션 쿠키 서명 |
-| secrets | `TOKEN_ENC_KEY_PREVIOUS` 외 `*_PREVIOUS` | (선택) | 키 교체 기간에만 설정(§13.8 ⑥의 키 교체는 이 방식으로 한다) |
-| policy | `ACCOUNT_TTL_DAYS` | `14` | 회원 계정 자동 삭제 기간 |
-| policy | `DEFAULT_QUOTA_GB` | `5` | 신규 계정 기본 용량 |
-| policy | `LOGIN_MAX_ATTEMPTS` | `5` | 잠금 전 실패 허용 횟수 |
-| policy | `LOGIN_LOCK_SECONDS` | `30,120,600` | 단계별 잠금 시간 |
-| jobs | `CLEANUP_CRON` | `0 4 * * *` | 정리 작업 시각 |
-| jobs | `JOBS_TIMEZONE` | `Asia/Seoul` | cron 기준 시간대 |
-| jobs | `METRICS_SAMPLE_INTERVAL_SEC` | `60` | 서버 지표 샘플링 |
-| jobs | `HEALTH_PROBE_INTERVAL_SEC` | `60` | 상태 점검 주기 |
-| observability | `LOG_LEVEL` | (빈 값 = 운영 warn, 개발 debug) | |
-| observability | `LOG_DIR` | `/var/log/relayfiles` | 운영 파일 로그 위치(개발은 콘솔만) |
-| observability | `DISK_DEVICE` | `/dev/sda` | Disk health(SMART) 대상 장치 |
-| observability | `TLS_CERT_PATH` | (선택) | Status 페이지 인증서 만료일 표시 |
-| deploy | `SERVER_NAME` | `files.example.com` | Nginx `server_name` |
-| deploy | `NGINX_LISTEN_PORT` | `80` | Nginx 수신 포트(TLS는 Cloudflare Tunnel 또는 certbot) |
-| deploy | `CLOUDFLARE_TUNNEL_TOKEN` | (선택) | compose의 `cloudflared` 서비스 사용 시 |
-| testing | `E2E_PORT` / `E2E_BASE_URL` / `PLAYWRIGHT_CHROMIUM_PATH` | `3100` / (빈 값) / (빈 값) | 테스트 전용, 운영 `.env`에는 불필요 |
-
-- 위 기본값은 `src/config/policy.ts`의 상수에서 오며, env는 덮어쓰기만 한다(정책 값의 원천은 한곳).
-- 적용 시점: **M1 PR**에서 `.env.example` 전체 목록과 `env.ts` 그룹 스키마·`env:check`·`env:secrets`·누락 방지 테스트를 함께 넣는다. 이후 마일스톤은 이미 정의된 키를 사용하고, 새 키가 생기면 같은 PR에서 `.env.example`과 스키마를 함께 갱신한다.
-- `docs/deploy-ubuntu.md`에 "`.env.example` → `.env` 작성 → `npm run env:secrets` → `npm run env:check`" 절차를 첫 단계로 둔다.
-
+- 키 목록과 기본값은 `.env.example`이 기준이다(`env.test.ts`가 스키마와 같은지 검사). 기본값의 원천은 `src/config/policy.ts`이고 env는 덮어쓰기만 한다.

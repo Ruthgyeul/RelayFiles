@@ -91,7 +91,7 @@ sudo mount /mnt/relayfilesDB
 $C restart app worker nginx
 ```
 
-앱은 SSD의 `.relayfiles-volume` 표시 파일이 보이면 30초 안에(`VOLUME_WATCH_INTERVAL_SEC`) 정상으로 돌아온다. 빈 마운트 지점(내장 디스크)에는 쓰지 않는다.
+컨테이너를 재시작하면 앱이 SSD의 `.relayfiles-volume` 표시 파일을 다시 확인하고(Status 페이지 Storage가 정상으로 돌아온다) 정상으로 동작한다. 빈 마운트 지점(내장 디스크)에는 쓰지 않는다.
 
 ## 관리자 토큰을 잃었을 때
 
