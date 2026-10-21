@@ -27,7 +27,9 @@ nextEnv.loadEnvConfig(ROOT, false);
 
 const env = process.env;
 env.PORT ??= env.APP_PORT;
-env.HOSTNAME ??= env.APP_HOST;
+// Loopback unless APP_HOST says otherwise (the env.ts default): an empty value would make the
+// standalone server listen on every interface.
+env.HOSTNAME ||= env.APP_HOST || "127.0.0.1";
 if (env.STORAGE_ROOT && !isAbsolute(env.STORAGE_ROOT)) env.STORAGE_ROOT = resolve(ROOT, env.STORAGE_ROOT);
 
 await import(pathToFileURL(server).href);
