@@ -17,7 +17,7 @@ $C logs -f --tail 100 app worker nginx
 sudo tail -f /var/log/relayfiles/error.log
 ```
 
-앱 로그(`LOG_DIR`)와 Nginx 로그에는 토큰, 비밀번호, 클라이언트 IP가 남지 않는다. 문제를 찾을 때는 에러 화면의 요청 ID로 `combined.log`를 검색한다.
+앱 로그(`LOG_DIR`)와 Nginx 접근 로그에는 토큰, 비밀번호, 클라이언트 IP가 남지 않는다. Nginx 에러 로그(`client: …`)에는 주소가 남으므로 공유하지 않는다. 문제를 찾을 때는 에러 화면의 요청 ID로 `combined.log`를 검색한다.
 
 로그 파일은 크기로 순환한다. `LOG_DIR`의 `error.log`·`combined.log`는 20MB × 5개(`src/config/policy.ts`의 `LOGS`), 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10MB × 5)까지만 남는다.
 
@@ -67,7 +67,7 @@ $C up -d app worker
 rm deploy/maintenance/on
 ```
 
-복구한 DB가 SSD의 파일보다 오래됐으면, 그 사이에 올린 파일은 디스크에만 있고 목록에는 없다. 반대로 지운 파일은 목록에 남지만 열 때 "missing"으로 처리된다.
+복구한 DB가 SSD의 파일보다 오래됐으면, 그 사이에 올린 파일은 디스크에만 있고 목록에는 없다. 반대로 지운 파일은 목록에 남고, 열거나 내려받으면 실패한다(Docker는 Nginx 404, systemd는 500). 디스크와 목록을 대조해 표시하는 작업은 아직 없다.
 
 ## 롤백
 
@@ -91,7 +91,7 @@ sudo mount /mnt/relayfilesDB
 $C restart app worker nginx
 ```
 
-앱은 SSD의 `.relayfiles-volume` 표시 파일이 보이면 30초 안에(`VOLUME_WATCH_INTERVAL_SEC`) 정상으로 돌아온다. 빈 마운트 지점(내장 디스크)에는 쓰지 않는다.
+컨테이너를 재시작하면 앱이 SSD의 `.relayfiles-volume` 표시 파일을 다시 확인하고(Status 페이지 Storage가 정상으로 돌아온다) 정상으로 동작한다. 빈 마운트 지점(내장 디스크)에는 쓰지 않는다.
 
 ## 관리자 토큰을 잃었을 때
 
@@ -133,6 +133,8 @@ SSD 안의 디렉터리 구조(`users/`, `system/…`)는 `.relayfiles-volume`�
 
 구조를 바꾸는 릴리스는 `src/server/storage/layout-migrations.ts`의 `LAYOUT_MIGRATIONS`에 단계(`from → to`, `up(root)`)를 추가한다. 단계는 같은 파일시스템 안의 `rename` 위주로 쓰고, 다시 실행해도 안전해야 한다(옮기기 전에 이미 옮겨졌는지 확인).
 
+`release.sh`가 데이터 마이그레이션 다음에 자동으로 실행한다(바꿀 것이 없으면 `layout N is up to date.`만 출력). 수동 실행:
+
 ```bash
 $C run --rm tools npm run storage:migrate
 ```
@@ -142,6 +144,15 @@ $C run --rm tools npm run storage:migrate
 3. 모든 단계가 끝나면 볼륨을 원래 상태로 되돌린다.
 
 중간에 실패하면 볼륨은 `READONLY`로 남는다. 원인을 고친 뒤 같은 명령을 다시 실행하면 기록된 버전 다음 단계부터 이어 간다. 되돌려야 하면 `migration.journal`의 마지막 `started` 단계를 보고 그 단계의 `rename`을 거꾸로 실행한 뒤 표시 파일의 `layoutVersion`을 이전 값으로 고친다.
+
+## 썸네일·미리보기 다시 만들기
+
+```bash
+$C run --rm tools npm run media:backfill               # 썸네일이 없는 이미지·영상 (워커·Redis 장애 뒤)
+$C run --rm tools npm run media:backfill -- --previews # 뷰어 미리보기 도입 전에 올린 큰 이미지 (한 번)
+```
+
+큐에 넣기만 하고, 워커(`$C ps worker`)가 처리한다.
 
 ## 볼륨 추가·교체
 
@@ -166,6 +177,8 @@ $C run --rm tools npm run volume:list      # id, 경로, 상태, layout, 마운�
    ```
 4. `volume:list`에서 `ACTIVE … online`을 확인한다. 이후 새 계정은 여유 공간이 큰 쪽에 생긴다.
 
+이전 릴리스에서 만든 `deploy/nginx/volumes/*.conf`에 `add_header Cache-Control` 줄이 있으면 지우고(또는 `volume:init -- <경로>`를 다시 실행해 새로 쓴다) `$C up -d nginx`. 앱이 보내는 `Cache-Control`이 X-Accel로 그대로 전달되어야 브라우저의 재생 캐시가 동작한다.
+
 ### 계정 하나 옮기기
 
 ```bash
@@ -184,7 +197,7 @@ $C run --rm tools npm run volume:migrate -- --account <accountId> --to <volumeId
 ```bash
 $C run --rm tools npm run volume:migrate -- --volume <옛 volumeId> --to <새 volumeId>   # --to를 빼면 여유 공간이 큰 볼륨으로
 $C run --rm tools npm run volume:list       # 옛 볼륨: DRAINING, 0 accounts
-# 24시간 뒤(휴지통 정리 후) 또는 옛 SSD의 system/trash를 확인한 뒤
+# 24시간 뒤(매일 정리 작업이 DRAINING 볼륨의 휴지통도 비운다) 또는 옛 SSD의 system/trash를 확인한 뒤
 $C run --rm tools npm run volume:remove -- <옛 volumeId>
 rm deploy/nginx/volumes/<옛 volumeId>.conf   # 있으면. 오버레이에서 마운트도 지운다
 $C up -d app worker nginx

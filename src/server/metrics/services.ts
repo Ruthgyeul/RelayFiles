@@ -55,7 +55,7 @@ export async function serviceRows(now: Date): Promise<ServiceRow[]> {
     { name: "Web server", detail: `Node.js ${process.version} · ${getAppEnv().PUBLIC_URL.replace(/^https?:\/\//, "")}`, status: "running" },
     {
       name: "Media streaming",
-      detail: offline === 0 ? "HTTP range requests · no transcoding" : `${offline} storage volume${offline === 1 ? "" : "s"} offline`,
+      detail: offline === 0 ? `HTTP range requests · ${jobs.VIDEO_TRANSCODE_MAX > 0 ? "live conversion for unplayable formats" : "no transcoding"}` : `${offline} storage volume${offline === 1 ? "" : "s"} offline`,
       status: volumes.length > 0 && offline === 0 ? "running" : "offline",
     },
     { name: "Cleanup job", detail: cleanupDetail.join(" · "), status: alive ? "scheduled" : "stopped" },

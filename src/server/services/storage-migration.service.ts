@@ -129,6 +129,6 @@ export async function drainVolume(sourceVolumeId: string, targetVolumeId: string
     const report = await moveAccountToVolume(id, target, log);
     if (report) reports.push(report);
   }
-  log(`${sourceVolumeId}: ${reports.length} account(s) moved; the volume can be removed once its trash is purged.`);
+  log(`${sourceVolumeId}: ${reports.length} account(s) moved; the daily job purges its trash after STORAGE.trashRetentionHours, then remove the volume.`);
   return reports;
 }

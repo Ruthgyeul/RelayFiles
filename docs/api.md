@@ -1,6 +1,6 @@
 # API
 
-모든 API는 `src/app/api/**/route.ts`에 있고, `apiHandler()`(`src/server/http/api-handler.ts`)를 거친다.
+모든 API는 `src/app/api/**/route.ts`에 있고, `apiHandler()`(`src/server/http/api-handler.ts`)를 거친다(예외: tus 업로드 경로와 `HEAD /api/health`).
 
 ## 응답 형식
 
@@ -16,6 +16,9 @@
 - zod 검증 실패는 `400 BAD_REQUEST` + `fields`(필드 경로 → 메시지).
 - 그 밖의 예외는 로그에만 전체를 남기고, 응답은 항상 `500 INTERNAL "Something went wrong."`(스택, 쿼리, 내부 경로 노출 없음).
 - 429 응답은 `retry-after` 헤더와 `retryAfter` 필드를 함께 보낸다.
+- 실패 응답은 항상 `cache-control: no-store`(아직 없는 썸네일의 404가 캐시되지 않게).
+- 모든 페이지·API 응답에 보안 헤더(`next.config.ts`): `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`.
+- 캐시: 파일 바이트는 URL이 같으면 바뀌지 않으므로 재생(`stream`)·썸네일·미리보기·변환 영상은 `private, max-age=1년, immutable`, 다운로드는 `private, no-cache`(한도·횟수 집계를 위해 매번 요청).
 
 ## 에러 코드 (`src/contracts/errors.ts`)
 
@@ -32,6 +35,7 @@
 | `ALREADY_SIGNED_IN` | 409 | 로그인 모달에 메시지 표시 |
 | `GONE` | 410 | `/error/410`(삭제된 계정·링크) |
 | `PAYLOAD_TOO_LARGE` | 413 | 토스트 |
+| `UNSUPPORTED_MEDIA` | 415 | 공개 링크에서 위치 정보를 지울 수 없는 사진(HEIC 등). 메시지 표시 |
 | `RATE_LIMITED` | 429 | `/error/429?retry=<초>&from=<경로>` 또는 모달 카운트다운 |
 | `INTERNAL` | 500 | `error.tsx` |
 | `MAINTENANCE` | 503 | `/error/503` |
@@ -45,6 +49,7 @@
 |---|---|---|
 | `HEAD` | `/api/health` | 생존 확인(204, 백엔드 작업 없음). Status 페이지가 2.5초마다 지연 시간을 잰다 |
 | `GET` | `/api/health` | 준비 상태: `{ status, version, time, components: { database, redis, storage } }`. DB가 죽으면 503 |
+| `GET` | `/api/status` | 공개 Status 페이지 데이터: `{ latency, components, server, incidents }` |
 | `GET` | `/api/auth/session` | 이 기기에 로그인한 계정 목록, 활성 계정 id, 가입 모드, 활성 계정 사용량 `usage { usedBytes, rootItems, storageBusy }`(`SessionState`). `storageBusy`가 true면 파일을 새 저장소로 옮기는 중이라 변경이 잠시 막힌다(배너 표시). 무효 세션이 있으면 쿠키를 정리한다 |
 | `POST` | `/api/auth/anonymous` | `{ inviteCode? }` → 201 `{ account, token, session }`. 익명 계정을 만들고 이 기기를 로그인시킨다. 토큰은 이 응답에서만 평문으로 나온다 |
 | `POST` | `/api/auth/token` | `{ token }` → `SessionState`. 실패 시 401 `INVALID_TOKEN`, 잠금 시 429 `retryAfter` |
@@ -68,7 +73,8 @@
 | tus | `/api/uploads/tus/:volumeId[/:uploadId]` | 재개 가능한 업로드(tus 1.0, 청크 `UPLOAD_CHUNK_SIZE_MB`). 메타데이터 `batch`, `index`, `filename`. 업로드한 기기의 계정만 이어 올리거나 조회할 수 있다. 완료되면 `{ success, data: { nodeId, name, folderId } }`. `proxy.ts`를 거치지 않는다(본문 버퍼링 방지) |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
 | `GET`·`HEAD` | `/api/files/:id/download` | 원본 그대로 첨부 파일로 받기. SHA-256 ETag(304), Range(206/416), RFC 6266 파일명(한글). `STORAGE_ACCEL_ENABLED`면 Nginx `X-Accel-Redirect`로 넘긴다. 받은 바이트는 `TrafficDaily`에 기록 |
-| `GET`·`HEAD` | `/api/files/:id/stream` | 뷰어·인라인 재생용. 영상·음악·이미지만 inline, SVG·HTML은 항상 첨부(`nosniff`) |
+| `GET`·`HEAD` | `/api/files/:id/stream` | 뷰어·인라인 재생용. 영상·음악·이미지만 inline, SVG·HTML은 항상 첨부(`nosniff`). `?transcode=1`: 브라우저가 못 여는 영상을 ffmpeg로 720p H.264/AAC fragmented MP4로 변환하며 전송(동시 `VIDEO_TRANSCODE_MAX`개, 꽉 차면 429 + `Retry-After`, 0이면 404) |
+| `GET`·`HEAD` | `/api/files/:id/preview` | 뷰어용 이미지: 워커가 만든 WebP 미리보기(최대 2560px, 메타데이터 없음). 없으면(작은 파일, GIF, 처리 전) `stream`과 같은 원본 |
 | `GET` | `/api/files/:id/thumb` | 워커가 만든 WebP 썸네일(최대 576px, 메타데이터 없음). 아직 없으면 404 |
 | `GET` | `/api/zip?ids=a,b` | 파일·폴더를 하나의 zip으로(store 모드, 폴더 구조와 빈 폴더 유지). 이름은 `폴더.zip` / `파일.zip` / `상위 · N items.zip` |
 
@@ -97,6 +103,9 @@
 | `POST` | `/api/admin/invites` | 일회용 초대 코드 `XXXX-XXXX` 생성 |
 | `DELETE` | `/api/admin/invites/:code` | 사용 전 코드 취소(사용된 코드는 404) |
 | `POST` | `/api/admin/cleanup` | "Run cleanup now": 삭제일이 지난 계정과 만료 항목 삭제 → `{ accounts, items }` |
+| `GET` | `/api/admin/server/stream` | Server 페이지 실측 지표 SSE(1.5초마다 스냅샷, 느린 스냅샷은 겹치지 않고 건너뜀) |
+| `POST` | `/api/admin/incidents` | Status 페이지 Incident 등록 `{ title, text, severity, date, duration, resolved }` |
+| `PUT`·`DELETE` | `/api/admin/incidents/:id` | Incident 수정 / 삭제 |
 
 ### 공유 링크 (공개, 로그인 불필요)
 
@@ -105,12 +114,11 @@
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | `POST` | `/api/share/:linkId/unlock` | `{ password }` argon2 확인. 맞으면 서명된 `rf_sh` 쿠키(12시간)에 링크를 기록. 틀리면 403 `Wrong password`, 주소당 10분에 10회를 넘기면 429 |
-| `GET`·`HEAD` | `/api/share/:linkId/files/:id/stream` | 방문자 재생·보기. 처음 요청만 "Played/Viewed"로 기록(30분 중복 제거) |
+| `GET`·`HEAD` | `/api/share/:linkId/files/:id/stream` | 방문자 재생·보기. 처음 요청만 "Played/Viewed"로 기록(30분 중복 제거). `?transcode=1`은 소유자 `stream`과 같은 변환 |
+| `GET`·`HEAD` | `/api/share/:linkId/files/:id/preview` | 뷰어용 이미지(WebP 미리보기, 메타데이터 없음, 없으면 `stream`과 같은 응답). "Viewed" 기록, 다음 사진 미리 받기(`x-relayfiles-prefetch` 헤더)는 세지 않는다 |
 | — | 만료로 지워진 링크 | 만료(자체 만료일, 첫 다운로드 후 삭제, 계정 삭제일)로 항목이 정리되면 그 링크와 하위 항목의 링크를 `LinkTombstone`에 `SHARE.tombstoneDays`(90일) 동안 남긴다. 그동안 `/d/<linkId>`는 "This link has expired" 카드, 파일 요청은 410. 존재한 적 없는 링크나 새 링크로 바뀐 옛 링크는 계속 404 |
 | `GET` | `/api/share/:linkId/files/:id/thumb` | 목록 미리보기(WebP, 메타데이터 없음). 재생과 같은 접근 검사(만료 410, 잠김 401, 비공개 404)이고 Stream only 링크에서도 허용. 세거나 기록하지 않는다. 썸네일이 아직 없으면 404 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일과 링크의 다운로드 수 +1, "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
 | `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만 |
 
 - 이미지는 계정 설정 "Strip metadata on public links"(기본 켬)일 때 위치·카메라 정보를 지운 사본으로 나간다(워커가 만든 사본, 없으면 요청 시 생성). 지울 수 없는 형식(HEIC 등)은 415로 거절하고, zip에서는 빼고 `Not included.txt`에 이름을 적는다.
-
-이후 마일스톤에서 추가되는 엔드포인트는 [plan.md](plan.md) §13.3을 따른다.

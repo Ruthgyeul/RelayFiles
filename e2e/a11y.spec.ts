@@ -9,7 +9,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 
 /**
  * Serious and critical WCAG 2.1 A/AA problems fail the test. Colour contrast is reported as an
- * annotation instead: the palette is the design's (docs/design), changed only with the design.
+ * annotation instead: the palette is the design's (docs/design/spec.md), changed only with the design.
  */
 async function audit(page: Page) {
   const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();

@@ -1,5 +1,5 @@
 /**
- * Color themes from the design prototype (docs/design/Relay_App.dc.html, `applyTheme`).
+ * Color themes from the design prototype (`applyTheme`).
  * The key is written to `<html data-theme>`; `blue` is the unscoped `:root` palette.
  */
 export const THEMES = {

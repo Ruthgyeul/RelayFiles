@@ -5,7 +5,7 @@
 셀프호스팅 파일 공유·스트리밍 서비스. 디자인 시안을 Next.js로 구현하고 Ubuntu 서버(N95)에서 실제로 운영한다.
 
 - 구현 계획(단일 기준): [`docs/plan.md`](docs/plan.md)
-- 디자인 시안 원본: [`docs/design/Relay_App.dc.html`](docs/design/Relay_App.dc.html)
+- 디자인 수치·토큰: [`docs/design/spec.md`](docs/design/spec.md) (구현이 끝나 시안 원본 `Relay_App.dc.html`은 삭제했다. 필요하면 `git show 056195d:docs/design/Relay_App.dc.html`)
 - 아키텍처와 레이어 규칙: [`docs/architecture.md`](docs/architecture.md)
 
 ## 스택 (버전은 `package.json`이 기준)
@@ -34,7 +34,7 @@
 ```bash
 npm run dev          # 개발 서버
 npm run build        # next build + standalone 번들 준비
-npm run start        # node .next/standalone/server.js
+npm run start        # scripts/start-server.mjs: .env 로드 후 .next/standalone/server.js 실행
 npm run typecheck    # next typegen && tsc --noEmit
 npm run lint         # eslint (경고 0개 허용)
 npm run test         # 단위 테스트 (외부 서비스 없음)
@@ -45,8 +45,8 @@ npm run volume:init  # STORAGE_ROOT(또는 인자로 준 경로) 볼륨 초기�
 npm run admin:create # 관리자 계정 생성, 토큰을 한 번만 출력
 npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지정 가능)
 npm run check:emoji  # 이모지 사용 검사
-npm run check        # typecheck · lint · emoji · test · build 전체
-npm run worker       # 백그라운드 워커(썸네일, 공개 링크용 메타데이터 제거본). ffmpeg 필요
+npm run check        # typecheck · lint · emoji · migrations · test · build 전체
+npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기 (-- --previews: 큰 이미지의 뷰어 미리보기)
 npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 다시 생성
 npm run data:migrate     # 데이터 마이그레이션(src/server/migrations) 실행, 중단 지점부터 재개
@@ -77,7 +77,7 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 
 ## 디자인 구현 규칙
 
-- 시안의 px, 색, 반경, 그림자, 문구(영문 원문)를 그대로 옮긴다. 반올림 금지.
+- 시안 값(`docs/design/spec.md`, 토큰·프리미티브 코드)의 px, 색, 반경, 그림자, 문구(영문 원문)를 그대로 쓴다. 반올림 금지.
 - 테마 의존 색은 CSS 변수 토큰, 시안의 하드코딩 색은 이름 붙인 고정 팔레트를 쓴다.
 - hover는 시안에 지정된 곳에만 단다. 키보드 포커스(`focus-visible`)에만 포커스 링을 추가한다.
 - **아이콘은 `@phosphor-icons/react` SVG만 쓴다. 이모지 금지**(`npm run check:emoji`가 검사).

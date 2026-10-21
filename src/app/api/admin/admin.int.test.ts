@@ -1,4 +1,6 @@
-import { mkdir, stat, utimes, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { DELETE as deleteAccount, PATCH as manage } from "@/app/api/admin/accounts/[id]/route";
@@ -11,6 +13,7 @@ import { runMaintenance } from "@/server/jobs/maintenance";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
+import { initVolume } from "@/server/storage/volume";
 import { callRoute } from "../../../../test/route-call";
 import { fileFixtures, randomTestIp } from "../../../../test/file-fixtures";
 
@@ -118,5 +121,21 @@ describe("cleanup", () => {
     expect(result.trash).toBeGreaterThanOrEqual(1);
     expect(result.uploads).toBeGreaterThanOrEqual(1);
     expect([await exists(oldTrash), await exists(newTrash), await exists(oldUpload)]).toEqual([false, true, false]);
+  });
+
+  it("also empties the trash of a volume being drained (the moved accounts' originals)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "relay-volume-"));
+    const id = randomUUID();
+    try {
+      await initVolume(root, id);
+      await prisma.storageVolume.create({ data: { id, mountPath: root, status: "DRAINING" } });
+      const oldTrash = join(layoutOf(root).trash, "2020-01-01T00-00-00-000Z-acct-moved");
+      await mkdir(oldTrash);
+      await runMaintenance(new Date());
+      expect(await exists(oldTrash)).toBe(false);
+    } finally {
+      await prisma.storageVolume.deleteMany({ where: { id } });
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

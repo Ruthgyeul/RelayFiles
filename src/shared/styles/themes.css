@@ -1,7 +1,6 @@
 /*
- * Color themes, copied verbatim from the design prototype (docs/design/Relay_App.dc.html line 11).
+ * Color themes, copied verbatim from the design prototype; this file is now their source of truth.
  * `:root` is "Midnight Blue"; the others apply via <html data-theme="…">. Default theme: sky.
- * Do not edit values here without updating the design source.
  */
 
 /* Midnight Blue */

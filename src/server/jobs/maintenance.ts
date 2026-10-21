@@ -4,7 +4,7 @@ import { getEnv } from "@/config/env";
 import { MS, STORAGE } from "@/config/policy";
 import { db } from "../db/client";
 import { logger } from "../logger";
-import { listActiveVolumes } from "../repositories/volume.repo";
+import { listPurgeableVolumes } from "../repositories/volume.repo";
 import { recordCleanup, recordSample } from "../metrics/history";
 import { runHealthProbe } from "./health-probe";
 import { networkRates } from "../metrics/system";
@@ -19,7 +19,7 @@ const HEALTH_PROBE = "health-probe";
 
 /**
  * The daily job: expired accounts and items, then trash entries older than the retention
- * and unfinished uploads older than UPLOAD_TMP_TTL_HOURS on every volume.
+ * and unfinished uploads older than UPLOAD_TMP_TTL_HOURS on every ACTIVE or DRAINING volume.
  */
 export async function runMaintenance(now: Date) {
   const cleanup = await runCleanup(now);
@@ -28,7 +28,7 @@ export async function runMaintenance(now: Date) {
   const uploadsBefore = new Date(now.getTime() - getEnv("uploads").UPLOAD_TMP_TTL_HOURS * MS.hour);
   let trash = 0;
   let uploads = 0;
-  for (const volume of await listActiveVolumes(db())) {
+  for (const volume of await listPurgeableVolumes(db())) {
     const purged = await driverFor(volume).purgeSystem(trashBefore, uploadsBefore);
     trash += purged.trash;
     uploads += purged.uploads;
