@@ -22,7 +22,7 @@
     "db:generate": "prisma generate",
     "volume:init": "tsx --conditions=react-server scripts/volume-init.mts",
     "admin:create": "tsx --conditions=react-server scripts/admin-create.mts",
-    "worker": "tsx --conditions=react-server scripts/worker.mts",
+    "worker": "node --import tsx --conditions=react-server scripts/worker.mts",
     "media:backfill": "tsx --conditions=react-server scripts/media-backfill.mts",
     "deploy:error-pages": "tsx scripts/build-error-pages.mts",
     "data:migrate": "tsx --conditions=react-server scripts/data-migrate.mts",

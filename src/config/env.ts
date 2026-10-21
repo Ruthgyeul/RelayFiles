@@ -40,7 +40,7 @@ const secondsList = z
 export const ENV_GROUPS = {
   app: z.object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-    APP_HOST: z.string().default("0.0.0.0"),
+    APP_HOST: z.string().default("127.0.0.1"),
     APP_PORT: port.default(3000),
     PUBLIC_URL: z.url().default("http://localhost:3000"),
     DEFAULT_THEME: z.enum(THEME_KEYS).default(DEFAULT_THEME),
@@ -126,6 +126,9 @@ export const ENV_GROUPS = {
     CLOUDFLARED_IP: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("172.28.0.250"),
     /** Peer address of a proxy on the host (the DOCKER_SUBNET gateway); Nginx trusts its X-Real-IP. */
     TRUSTED_PROXY_IP: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).optional(),
+    /** Container log rotation (docker compose json-file driver): size per file and files kept. */
+    DOCKER_LOG_MAX_SIZE: z.string().regex(/^\d+[kmg]$/).default("10m"),
+    DOCKER_LOG_MAX_FILE: positiveInt.default(5),
   }),
   testing: z.object({
     E2E_PORT: port.default(3100),

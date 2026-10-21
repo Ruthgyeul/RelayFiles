@@ -11,7 +11,19 @@
 # of writing to the empty mount point (deploy/scripts/setup-docker.sh creates them once).
 # Extra SSDs are mounted by deploy/docker-compose.volumes.yml (see docker-compose.volumes.example.yml).
 # cloudflared        optional Cloudflare Tunnel (profile "tunnel")
+# Every service rotates its container log (DOCKER_LOG_MAX_SIZE x DOCKER_LOG_MAX_FILE). The app
+# and tools images start under tini (Dockerfile ENTRYPOINT), which reaps orphaned processes, so
+# `init: true` is not set here: one init, the same in Compose, k3s and plain docker run.
 name: relayfiles
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+
+# The worker's own command: one Node process (no npm or tsx launcher in between).
+x-worker-command: &worker-command ["node", "--import", "tsx", "--conditions=react-server", "scripts/worker.mts"]
 
 x-app-env: &app-env
   env_file: ${ENV_FILE:-../.env}
@@ -54,6 +66,7 @@ services:
   postgres:
     image: postgres:16
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-relayfiles}
       POSTGRES_USER: ${POSTGRES_USER:-relayfiles}
@@ -72,6 +85,7 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
+    logging: *logging
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--appendonly", "yes", "--appendfsync", "everysec"]
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD}
@@ -93,6 +107,8 @@ services:
       target: app
     image: relayfiles-app:${RELEASE_TAG:-latest}
     restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
     volumes: *storage
     networks: [relay]
@@ -107,8 +123,12 @@ services:
       target: tools
     image: relayfiles-tools:${RELEASE_TAG:-latest}
     restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    # Running jobs (thumbnails, cleanup) finish before the worker exits (systemd: TimeoutStopSec=60).
+    stop_grace_period: 60s
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
-    command: ["npm", "run", "worker"]
+    command: *worker-command
     volumes: *storage
     networks: [relay]
     depends_on:
@@ -119,6 +139,8 @@ services:
     <<: *app-env
     image: relayfiles-tools:${RELEASE_TAG:-latest}
     profiles: [tools]
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
     volumes:
       - *storage-mount
@@ -131,8 +153,11 @@ services:
       redis: { condition: service_healthy }
 
   nginx:
-    image: nginxinc/nginx-unprivileged:1.29-alpine
+    # 1.30 is the maintained stable branch (1.29 mainline no longer gets updates).
+    image: nginxinc/nginx-unprivileged:1.30-alpine
     restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
     # Same account as the files on the SSD (0600), group 0 for the image's writable dirs.
     user: "${STORAGE_UID:-10001}:0"
     environment:
@@ -156,9 +181,12 @@ services:
     depends_on: [app]
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # Pinned: `latest` would change the tunnel client on any pull. Bump it with the other images.
+    image: cloudflare/cloudflared:2026.10.0
     profiles: [tunnel]
     restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
     command: ["tunnel", "--no-autoupdate", "run"]
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}

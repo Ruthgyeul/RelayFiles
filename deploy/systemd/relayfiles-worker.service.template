@@ -12,7 +12,8 @@ User=${STORAGE_USER}
 Group=${STORAGE_USER}
 WorkingDirectory=${APP_DIR}
 Environment=HOME=${STORAGE_HOME}
-ExecStart=${NODE_BIN} ${APP_DIR}/node_modules/tsx/dist/cli.mjs --conditions=react-server scripts/worker.mts
+# One Node process: tsx is loaded as a hook (the tsx CLI would start a second Node process).
+ExecStart=${NODE_BIN} --import tsx --conditions=react-server scripts/worker.mts
 UMask=0077
 Restart=on-failure
 RestartSec=5

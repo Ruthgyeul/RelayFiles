@@ -722,7 +722,7 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 | 그룹 | 키 | 기본값(예시) | 비고 |
 |---|---|---|---|
 | app | `NODE_ENV` | `development` | `production`이면 로그 최소화, 에러 마스킹 |
-| app | `APP_HOST` | `0.0.0.0` | standalone 서버 바인드 주소(`HOSTNAME`으로 전달) |
+| app | `APP_HOST` | `127.0.0.1` | standalone 서버 바인드 주소(`HOSTNAME`으로 전달). Nginx만 앱에 접속하도록 루프백 기본, compose는 자체 값 사용 |
 | app | `APP_PORT` | `3000` | 앱 포트(`PORT`로 전달), compose·nginx가 같은 값 사용 |
 | app | `PUBLIC_URL` | `http://localhost:3000` | 공유 링크 origin(운영: `https://files.example.com`) |
 | app | `DEFAULT_THEME` | `sky` | 10종 중 기본 테마(관리자가 Server 페이지에서 바꾸면 DB 값 우선) |
