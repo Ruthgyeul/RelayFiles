@@ -16,6 +16,18 @@ upstream relayfiles_app {
 set_real_ip_from ${CLOUDFLARED_IP};
 real_ip_header CF-Connecting-IP;
 
+# A proxy on the host (host Nginx → NGINX_LISTEN_HOST:NGINX_LISTEN_PORT) reaches this container
+# from the Docker gateway. Only that peer (TRUSTED_PROXY_IP) may name the client through
+# X-Real-IP; the header from any other peer is ignored.
+geo $realip_remote_addr $relay_from_host_proxy {
+    default 0;
+    ${TRUSTED_PROXY_IP} 1;
+}
+map "$relay_from_host_proxy|$http_x_real_ip" $relay_client_ip {
+    "~^1\|(?<client>[0-9A-Fa-f.:]+)$" $client;
+    default $remote_addr;
+}
+
 # No client addresses in Nginx logs (same rule as the app's logs).
 log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
 
@@ -60,9 +72,9 @@ server {
         proxy_request_buffering off;
         proxy_buffering off;
         proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Real-IP $relay_client_ip;
         proxy_set_header CF-Connecting-IP "";
-        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-For $relay_client_ip;
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
         proxy_set_header Connection "";
         proxy_read_timeout 1h;
@@ -75,9 +87,9 @@ server {
         proxy_pass http://relayfiles_app;
         proxy_http_version 1.1;
         proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Real-IP $relay_client_ip;
         proxy_set_header CF-Connecting-IP "";
-        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-For $relay_client_ip;
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
         proxy_set_header Connection "";
         # Streams, zips and the Server page's live updates can run long.

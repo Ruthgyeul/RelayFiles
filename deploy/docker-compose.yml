@@ -141,6 +141,8 @@ services:
       STORAGE_ROOT: ${STORAGE_ROOT}
       STORAGE_ACCEL_PREFIX: ${STORAGE_ACCEL_PREFIX:-/_protected/}
       CLOUDFLARED_IP: ${CLOUDFLARED_IP:-172.28.0.250}
+      # Unset: the broadcast address, which is never a TCP peer, so no host proxy is trusted.
+      TRUSTED_PROXY_IP: ${TRUSTED_PROXY_IP:-255.255.255.255}
     ports:
       - "${NGINX_LISTEN_HOST:-0.0.0.0}:${NGINX_LISTEN_PORT:-80}:8080"
     volumes:
