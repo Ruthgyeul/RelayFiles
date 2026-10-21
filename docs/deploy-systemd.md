@@ -10,7 +10,7 @@
                       nginx :80 (server_name relayfiles.io, systemd)
                                                     │  127.0.0.1:6000
                                                     ▼
-             relayfiles-app (Next.js, systemd) ── relayfiles-worker (썸네일·정리·지표·헬스 프로브, systemd)
+             relayfiles-app (Next.js, systemd) ── relayfiles-worker (썸네일·미리보기·메타데이터 제거본·정리·지표·헬스 프로브, systemd)
                    │            │                        │
                    ▼            ▼                        ▼
          postgresql (16)   redis-server        /mnt/relayfilesDB (외장 SSD, LUKS2)
@@ -65,7 +65,7 @@ nano .env
 | 키 | 값 | 이유 |
 |---|---|---|
 | `NODE_ENV` | `production` | |
-| `APP_HOST` | `127.0.0.1` | Nginx만 앱에 접속한다 |
+| `APP_HOST` | `127.0.0.1` (기본값, 그대로 둔다) | Nginx만 앱에 접속한다. `0.0.0.0`으로 바꾸지 않는다 |
 | `APP_PORT` | `6000` | |
 | `PUBLIC_URL` | `https://relayfiles.io` | 공유 링크 주소 |
 | `SERVER_NAME` | `relayfiles.io` | Nginx `server_name` |
@@ -79,7 +79,7 @@ nano .env
 | `ADMIN_ALLOWED_CIDRS` | `192.168.0.0/24` (선택) | 관리자 페이지를 집 LAN에서만 연다 |
 | `HEALTH_PROBE_URL` | 비워 둔다 | 기본값 `http://127.0.0.1:6000` |
 
-`POSTGRES_PUBLISH`, `REDIS_PUBLISH`, `DOCKER_SUBNET`, `CLOUDFLARED_IP`, `CLOUDFLARE_TUNNEL_TOKEN`은 Docker 배포에서만 쓴다. 그대로 둬도 된다.
+`NGINX_LISTEN_HOST`, `DOCKER_DATA_ROOT`, `DOCKER_SUBNET`, `CLOUDFLARED_IP`, `TRUSTED_PROXY_IP`, `CLOUDFLARE_TUNNEL_TOKEN`, `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`은 Docker 배포에서만, `POSTGRES_PUBLISH`, `REDIS_PUBLISH`는 개발용 compose에서만 쓴다. 그대로 둬도 된다.
 
 ```bash
 npm run env:check            # 빠지거나 잘못된 키를 목록으로 보여 준다
@@ -158,7 +158,7 @@ deploy/scripts/systemd/release.sh               # 빌드 → .app/<릴리스> �
 deploy/scripts/systemd/rf.sh admin:create       # 첫 관리자. 토큰은 한 번만 출력된다
 ```
 
-`rf.sh <npm 스크립트>`는 명령을 서비스와 같은 `relayfiles` 계정으로 실행한다. umask 077로 실행하므로 SSD에 만드는 파일의 소유자와 권한(`0600`/`0700`)이 서비스와 같다. 이렇게 실행할 명령은 `admin:create`, `volume:*`, `storage:migrate`, `data:migrate`, `keys:rotate`, `media:backfill`이다.
+`rf.sh <npm 스크립트>`는 명령을 서비스와 같은 `relayfiles` 계정으로 실행한다. umask 077로 실행하므로 SSD에 만드는 파일의 소유자와 권한(`0600`/`0700`)이 서비스와 같다. 이렇게 실행할 명령은 `admin:create`, `volume:*`, `storage:migrate`, `storage:import`(stdin의 tar: `tar -C <폴더> -cf - . | deploy/scripts/systemd/rf.sh storage:import -- --account <id>`), `data:migrate`, `keys:rotate`, `media:backfill`이다.
 
 ```bash
 curl -fsS http://127.0.0.1:6000/api/health                          # 앱 직접
@@ -246,6 +246,8 @@ deploy/scripts/systemd/release.sh
 5. `.app/current`를 새 번들로 바꾸고 app과 worker를 재시작한 뒤 점검 모드를 끈다.
 6. `127.0.0.1:6000/api/health`를 확인하고 `DATA_DIR/releases.log`에 기록한다. 번들은 최근 3개만 남긴다.
 
+뷰어 미리보기가 들어간 릴리스로 처음 올릴 때는 한 번 `deploy/scripts/systemd/rf.sh media:backfill -- --previews`를 실행한다.
+
 롤백:
 
 ```bash
@@ -272,7 +274,7 @@ deploy/scripts/systemd/rollback.sh <번들 이름>    # ls .app
 |---|---|
 | X-Accel | 해당 없음. 영상 탐색(Range)이 되는지만 확인한다 |
 | 앱 중단 | `sudo systemctl stop relayfiles-app` → Nginx의 "Server unreachable" 페이지 → `start`로 복구 |
-| 로그 | `docker compose logs` 대신 `journalctl -u relayfiles-app` |
+| 로그 | `$C logs` 대신 `journalctl -u relayfiles-app` |
 | Status 페이지 | 워커가 1분마다 `127.0.0.1:6000`을 확인한다. Website·Storage가 초록색인지 본다 |
 
 ## 11. 참고
