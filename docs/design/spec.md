@@ -13,7 +13,7 @@
 | z-index | `globals.css` `:root` `--z-*` (헤더 10 … 계정 토스트 72) | `z-(--z-modal)` |
 | 브레이크포인트 | `sm` = 720px, `lg` = 1024px (다른 기본값은 제거) | `max-sm:hidden`, `lg:flex` |
 | 행간 | `html { line-height: normal }` (시안은 브라우저 기본값) | |
-| 폰트 | Figtree(`--font-figtree`) → Pretendard Variable → system-ui / JetBrains Mono(`--font-jetbrains`) | `font-sans`, `font-mono` |
+| 폰트 | Figtree Variable(`@fontsource-variable/figtree`) → Pretendard Variable → system-ui / JetBrains Mono Variable(`@fontsource-variable/jetbrains-mono`), `globals.css`의 `--font-sans`·`--font-mono` | `font-sans`, `font-mono` |
 
 ### 기본 테마 Slate Sky (`data-theme="sky"`)
 
@@ -62,7 +62,7 @@
 
 ## 3. 아이콘
 
-`src/shared/ui/icon/registry.ts`에 107개(시안 101개 + 에러 페이지 6개). 아이콘 이름은 `IconName` 타입으로 검사한다. 굵기: `ph` → `regular`, `ph-bold` → `bold`, `ph-fill` → `fill`. 이모지는 쓰지 않는다(`npm run check:emoji`).
+`src/shared/ui/icon/registry.ts`에 109개(시안 101개 + 에러 페이지 6개 + 테마 설정 `palette`·배포 `plugs`). 아이콘 이름은 `IconName` 타입으로 검사한다. 굵기: `ph` → `regular`, `ph-bold` → `bold`, `ph-fill` → `fill`. 이모지는 쓰지 않는다(`npm run check:emoji`).
 
 ## 4. 검증
 
