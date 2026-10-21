@@ -60,8 +60,8 @@ export function fileFixtures() {
     return id;
   }
 
-  async function get(handler: RouteHandler, m: Member, id: string, headers: Record<string, string> = {}) {
-    const req = new NextRequest(`http://localhost/api/files/${id}`, { headers: { cookie: `${SESSION_COOKIE}=${m.cookie}`, ...headers } });
+  async function get(handler: RouteHandler, m: Member, id: string, headers: Record<string, string> = {}, query = "") {
+    const req = new NextRequest(`http://localhost/api/files/${id}${query}`, { headers: { cookie: `${SESSION_COOKIE}=${m.cookie}`, ...headers } });
     return handler(req, { params: Promise.resolve({ id }) });
   }
 

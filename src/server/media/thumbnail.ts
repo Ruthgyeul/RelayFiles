@@ -16,6 +16,23 @@ export async function imageThumbnail(input: string | Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
+const PREVIEW_TYPES: ReadonlySet<string> = new Set(MEDIA.previewTypes);
+
+/** Whether an image is worth a viewer preview: a type sharp rewrites, large enough to matter. */
+export const wantsPreview = (mime: string, size: number) => PREVIEW_TYPES.has(mime) && size >= MEDIA.previewMinBytes;
+
+/**
+ * Screen-sized WebP of an image for the viewer (upright, no metadata), so a multi-megabyte
+ * photo opens with a fraction of the bytes. The original is only read.
+ */
+export async function imagePreview(path: string): Promise<Buffer> {
+  return sharp(path, { limitInputPixels: MEDIA.maxInputPixels, failOn: "error" })
+    .rotate()
+    .resize(MEDIA.previewSizePx, MEDIA.previewSizePx, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: MEDIA.previewQuality })
+    .toBuffer();
+}
+
 /** One PNG frame from a video at `seconds`, or an empty buffer when the clip is shorter. */
 async function videoFrame(path: string, seconds: number): Promise<Buffer> {
   // The path is passed as an argument (no shell); "-nostdin" keeps ffmpeg from reading the terminal.

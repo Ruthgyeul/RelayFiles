@@ -8,7 +8,7 @@ import { logger } from "../logger";
 import { findAccountById } from "../repositories/account.repo";
 import { ancestorChain, findNodeForJob, updateNode } from "../repositories/node.repo";
 import { driverForAccount } from "../services/volume.service";
-import { imageThumbnail, videoThumbnail } from "./thumbnail";
+import { imagePreview, imageThumbnail, videoThumbnail, wantsPreview } from "./thumbnail";
 
 /** Image types sharp can rewrite in the same format (metadata is dropped on output). */
 const REENCODE: Readonly<Record<string, "gif" | "avif" | "tiff">> = { "image/gif": "gif", "image/avif": "avif", "image/tiff": "tiff" };
@@ -32,6 +32,8 @@ export async function strippedCopy(path: string, mime: string, size: number): Pr
 export interface MediaResult {
   thumb: boolean;
   derived: boolean;
+  /** A viewer preview was stored (only when it is smaller than the original). */
+  preview: boolean;
 }
 
 /** Runs one step; a file that cannot be decoded is logged and skipped, not retried. */
@@ -64,6 +66,11 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
   if (thumb) await driver.writeAsset({ ...asset, kind: "thumb" }, thumb);
   const derived = row.kind === "IMAGE" ? await attempt("strip metadata", row.id, () => strippedCopy(path, mime, Number(row.size))) : null;
   if (derived) await driver.writeAsset({ ...asset, kind: "derived" }, derived);
+  const size = Number(row.size);
+  const preview = row.kind === "IMAGE" && wantsPreview(mime, size) ? await attempt("preview", row.id, () => imagePreview(path)) : null;
+  // Not smaller than the original (an already small or well-compressed file): show the original.
+  const keepPreview = preview !== null && preview.length < size;
+  if (keepPreview) await driver.writeAsset({ ...asset, kind: "preview" }, preview);
 
   // The file may have been deleted while it was processed; then its assets go too.
   const current = await findNodeForJob(db(), row.id);
@@ -71,7 +78,7 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
     if (!current) await driver.removeAssets(row.accountId, [row.id]);
     return null;
   }
-  const result = { thumb: thumb !== null, derived: derived !== null };
+  const result = { thumb: thumb !== null, derived: derived !== null, preview: keepPreview };
   await updateNode(db(), row.id, { hasThumb: result.thumb, hasDerived: result.derived });
   return result;
 }

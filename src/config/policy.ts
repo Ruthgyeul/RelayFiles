@@ -94,6 +94,17 @@ export const MEDIA = {
   /** Longest side of generated thumbnails (2x the 288px list preview). */
   thumbSizePx: 576,
   thumbQuality: 72,
+  /**
+   * Viewer previews: images are shown as a WebP fitting this box (sharp on any screen up to
+   * 2560 px) instead of the original; the original stays one click away (Download).
+   */
+  previewSizePx: 2560,
+  /** High enough to look identical to the original at the preview size. */
+  previewQuality: 92,
+  /** Smaller originals already open fast, so they are shown as they are. */
+  previewMinBytes: 512 * 1024,
+  /** Types sharp rewrites for the preview (GIF is left as is: it may be animated). */
+  previewTypes: ["image/jpeg", "image/png", "image/webp", "image/avif", "image/tiff"],
   /** Video thumbnails use the frame at this time (or the first frame of shorter clips). */
   videoFrameSeconds: 1,
   /** Images larger than this get no metadata-stripped copy (held in memory while stripping). */
@@ -207,4 +218,23 @@ export const PROCESS = {
   maxOutputBytes: 1024 * 1024,
   /** Error output kept for messages and logs (the rest is dropped, not buffered). */
   maxStderrBytes: 4_096,
+} as const;
+
+/**
+ * Videos in containers browsers cannot play (AVI, WMV, MPEG-TS, ...) are converted while they
+ * play: ffmpeg writes fragmented MP4 (H.264/AAC) that starts before the conversion ends.
+ */
+export const TRANSCODE = {
+  /** Default for VIDEO_TRANSCODE_MAX: conversions running at once (CPU-heavy). */
+  maxConcurrent: 2,
+  /** Output height limit: 720p converts faster than real time on a small server. */
+  maxHeightPx: 720,
+  /** x264 speed/size trade-off and quality (lower CRF = better and larger). */
+  preset: "veryfast",
+  crf: 23,
+  audioBitrate: "128k",
+  /** One conversion stops after this much output (bounds a single request). */
+  maxOutputBytes: 4 * 1024 * 1024 * 1024,
+  /** Retry-After sent while every conversion slot is in use. */
+  busyRetrySec: 10,
 } as const;

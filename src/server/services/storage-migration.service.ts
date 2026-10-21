@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { STORAGE } from "@/config/policy";
 import { db } from "../db/client";
 import { findVolume } from "../repositories/volume.repo";
-import { DIR_MODE, layoutOf } from "../storage/layout";
+import { ASSET_DIRS, DIR_MODE, layoutOf } from "../storage/layout";
 import { LAYOUT_MIGRATIONS, layoutPlan, type LayoutMigration } from "../storage/layout-migrations";
 import { availableAboveReserve, driverFor } from "../storage/registry";
 import { userRootOf } from "../storage/safe-path";
@@ -91,7 +91,7 @@ export async function moveAccountToVolume(accountId: string, targetVolumeId: str
     await rm(to, { recursive: true, force: true });
     log(`${accountId}: copying ${files.size} files (${bytes} bytes) ${source.id} → ${target.id}`);
     await copyTree(from, to);
-    for (const dir of ["thumbs", "derived"] as const) {
+    for (const dir of Object.values(ASSET_DIRS)) {
       const assets = join(layoutOf(source.mountPath)[dir], accountId);
       const copy = join(layoutOf(target.mountPath)[dir], accountId);
       if (await exists(assets)) {

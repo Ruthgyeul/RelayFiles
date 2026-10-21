@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { cp, copyFile, lstat, mkdir, open, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { Readable } from "node:stream";
-import { DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
+import { ASSET_DIRS, DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
 import type { AssetKind, AssetRef, ByteSource, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path";
 
@@ -108,10 +108,10 @@ export class LocalVolumeDriver implements StorageDriver {
     await rename(trashPath, await this.pathOf(location));
   }
 
-  /** `system/<thumbs|derived>/<accountId>/<nodeId>`; ids are generated, never user input. */
+  /** `system/<thumbs|derived|previews>/<accountId>/<nodeId>`; ids are generated, never user input. */
   private assetPath(kind: AssetKind, accountId: string, nodeId: string): string {
     if (!ASSET_ID.test(accountId) || !ASSET_ID.test(nodeId)) throw new Error("Invalid asset id.");
-    return join(kind === "thumb" ? this.layout.thumbs : this.layout.derived, accountId, nodeId);
+    return join(this.layout[ASSET_DIRS[kind]], accountId, nodeId);
   }
 
   async writeAsset({ kind, accountId, nodeId }: AssetRef, data: Uint8Array): Promise<void> {
@@ -157,7 +157,7 @@ export class LocalVolumeDriver implements StorageDriver {
   }
 
   async removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void> {
-    const kinds: AssetKind[] = ["thumb", "derived"];
+    const kinds = Object.keys(ASSET_DIRS) as AssetKind[];
     await Promise.all(nodeIds.flatMap((nodeId) => kinds.map((kind) => rm(this.assetPath(kind, accountId, nodeId), { force: true }))));
   }
 
@@ -184,7 +184,7 @@ export class LocalVolumeDriver implements StorageDriver {
 
   async removeAccountAssets(accountId: string): Promise<void> {
     if (!ASSET_ID.test(accountId)) throw new Error("Invalid asset id.");
-    await Promise.all([this.layout.thumbs, this.layout.derived].map((dir) => rm(join(dir, accountId), { recursive: true, force: true })));
+    await Promise.all(Object.values(ASSET_DIRS).map((dir) => rm(join(this.layout[dir], accountId), { recursive: true, force: true })));
   }
 
   async canWrite(): Promise<boolean> {
