@@ -192,6 +192,13 @@ export const AUTH = {
   touchIntervalSec: 5 * 60,
 } as const;
 
+/** Production log files (LOG_DIR): rotated by size so a busy server cannot fill the disk. */
+export const LOGS = {
+  maxFileBytes: 20 * 1024 * 1024,
+  /** Rotated files kept per log (error.log, combined.log). */
+  maxFiles: 5,
+} as const;
+
 /** Child processes (ffmpeg, smartctl) started through runCommand. */
 export const PROCESS = {
   /** After a timeout the child gets SIGTERM, then SIGKILL if it is still running this much later. */

@@ -11,6 +11,8 @@ export const GET = apiHandler<Response>(async ({ req }) => {
   const encoder = new TextEncoder();
   let timer: ReturnType<typeof setInterval> | undefined;
   let closed = false;
+  // One snapshot at a time: a slow one (smartctl, a busy disk) skips ticks instead of piling up.
+  let sending = false;
   const stop = () => {
     closed = true;
     clearInterval(timer);
@@ -18,19 +20,33 @@ export const GET = apiHandler<Response>(async ({ req }) => {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const send = async () => {
+        if (closed || sending) return;
+        sending = true;
         try {
           const snapshot = await serverSnapshot();
           if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(snapshot)}\n\n`));
         } catch (error) {
           logger.warn("server metrics not sent", { error });
+        } finally {
+          sending = false;
         }
       };
       void send();
       timer = setInterval(() => void send(), METRICS.streamIntervalMs);
-      req.signal.addEventListener("abort", () => {
-        stop();
-        controller.close();
-      });
+      req.signal.addEventListener(
+        "abort",
+        () => {
+          if (closed) return;
+          stop();
+          // The stream may already be cancelled; closing it again must not throw from the listener.
+          try {
+            controller.close();
+          } catch {
+            // Already closed.
+          }
+        },
+        { once: true },
+      );
     },
     cancel: stop,
   });

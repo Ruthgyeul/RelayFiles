@@ -34,6 +34,24 @@ async function ownerOf(link: LoadedLink): Promise<AccountRow> {
 const stripsImage = (owner: AccountRow, row: Pick<SharedRow, "kind">) => owner.stripMetadataOnShare && row.kind === "IMAGE";
 
 /**
+ * Copies being made now, by file and content. Visitors who open the same image before the
+ * worker's copy exists share one copy instead of each holding the whole image in memory.
+ */
+const stripping = new Map<string, Promise<Uint8Array | null>>();
+
+function sharedStrippedCopy(row: SharedRow, path: string, mime: string): Promise<Uint8Array | null> {
+  const key = `${row.id}:${row.sha256 ?? ""}`;
+  let pending = stripping.get(key);
+  if (!pending) {
+    pending = strippedCopy(path, mime, Number(row.size))
+      .catch(() => null)
+      .finally(() => stripping.delete(key));
+    stripping.set(key, pending);
+  }
+  return pending;
+}
+
+/**
  * Bytes of an image as visitors get it: the worker's metadata-stripped copy, or a copy
  * made now (and queued for the worker so the next request is instant). Types that cannot
  * be cleaned are refused rather than sent with their location data.
@@ -45,7 +63,7 @@ async function publicImage(driver: StorageDriver, location: StorageLocation, row
   }
   const mime = row.mime ?? mimeFromName(row.name);
   const path = await driver.localPath(location);
-  const copy = path && canStripType(mime) ? await strippedCopy(path, mime, Number(row.size)).catch(() => null) : null;
+  const copy = path && canStripType(mime) ? await sharedStrippedCopy(row, path, mime) : null;
   if (!copy) throw new ApiError("UNSUPPORTED_MEDIA");
   void enqueueMedia([row.id]);
   return copy;

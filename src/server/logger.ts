@@ -2,6 +2,7 @@ import "server-only";
 import { mkdirSync } from "node:fs";
 import winston from "winston";
 import { getAppEnv, getEnv, logLevelOf } from "@/config/env";
+import { LOGS } from "@/config/policy";
 
 /** Keys whose values must never reach the logs (CLAUDE.md: no tokens, passwords or real IPs). */
 const SENSITIVE_KEY = /token|password|secret|authorization|cookie|^ip$|ipaddress|x-forwarded-for|cf-connecting-ip/i;
@@ -34,9 +35,11 @@ function createLogger(): winston.Logger {
   if (production) {
     try {
       mkdirSync(observability.LOG_DIR, { recursive: true });
+      // Size-rotated; `tailable` keeps the newest lines in the plain file name (error.log, error1.log, ...).
+      const rotation = { maxsize: LOGS.maxFileBytes, maxFiles: LOGS.maxFiles, tailable: true };
       transports.push(
-        new winston.transports.File({ filename: `${observability.LOG_DIR}/error.log`, level: "error" }),
-        new winston.transports.File({ filename: `${observability.LOG_DIR}/combined.log` }),
+        new winston.transports.File({ filename: `${observability.LOG_DIR}/error.log`, level: "error", ...rotation }),
+        new winston.transports.File({ filename: `${observability.LOG_DIR}/combined.log`, ...rotation }),
       );
     } catch {
       // The log directory is not writable (e.g. read-only container): keep console output only.
