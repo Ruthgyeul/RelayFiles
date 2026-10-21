@@ -190,6 +190,8 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
           kind={preview}
           src={fileUrls.stream(item.id)}
           thumbSrc={item.hasThumb ? fileUrls.thumb(item.id) : null}
+          previewSrc={fileUrls.preview(item.id)}
+          transcodeSrc={fileUrls.transcode(item.id)}
           loadOriginal
           onOpen={onPreview}
           className="sm:pl-[92px]"

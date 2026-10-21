@@ -8,7 +8,9 @@ import { useViewport } from "@/shared/hooks/useViewport";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { Modal } from "@/shared/ui/Modal";
+import { prefetchImage } from "./prefetch";
 import { resumeStore } from "./resume";
+import { StageImage, StageVideo, type MediaHandlers } from "./StageMedia";
 
 export interface ViewerItem {
   id: string;
@@ -16,6 +18,12 @@ export interface ViewerItem {
   kind: "video" | "audio" | "image" | "other";
   /** URL of the media for inline playback. */
   src: string;
+  /** Worker thumbnail, shown at once while the picture or video loads. */
+  thumbSrc?: string | null;
+  /** Screen-sized picture of an image (the server sends the original when there is none). */
+  previewSrc?: string;
+  /** The video converted while it plays, for containers the browser cannot decode. */
+  transcodeSrc?: string;
 }
 
 interface MediaViewerProps {
@@ -47,10 +55,7 @@ function ViewerButton({ icon, label, onClick, large }: { icon: IconName; label: 
 
 /** Image, video, audio or a "no preview" card, with resume for audio and video. */
 function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: boolean; onDownload?: () => void; notify: (message: string) => void }) {
-  const mediaProps = {
-    src: item.src,
-    controls: true,
-    autoPlay: true,
+  const handlers: MediaHandlers = {
     "data-viewer-media": true,
     onTimeUpdate: (event: React.SyntheticEvent<HTMLMediaElement>) => resumeStore.track(item.id, event.currentTarget),
     onPause: (event: React.SyntheticEvent<HTMLMediaElement>) => resumeStore.track(item.id, event.currentTarget),
@@ -59,19 +64,19 @@ function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: b
       if (at !== null) notify(`Resumed from ${formatClock(at)}`);
     },
   };
+  const thumbSrc = item.thumbSrc ?? null;
   switch (item.kind) {
     case "video":
-      return <video key={item.id} {...mediaProps} playsInline className="size-full bg-black object-contain" />;
+      return <StageVideo key={item.id} name={item.name} src={item.src} thumbSrc={thumbSrc} transcodeSrc={item.transcodeSrc} handlers={handlers} />;
     case "image":
-      // eslint-disable-next-line @next/next/no-img-element -- user media is served by the app with auth cookies, not optimizable by next/image
-      return <img key={item.id} src={item.src} alt={item.name} className="max-h-full max-w-full object-contain" />;
+      return <StageImage key={item.id} name={item.name} src={item.previewSrc ?? item.src} thumbSrc={thumbSrc} />;
     case "audio":
       return (
         <div className={cn("flex flex-col items-center gap-5", large ? "w-[min(420px,90%)]" : "w-[90%]")}>
           <span className={cn("flex items-center justify-center rounded-2xl bg-card", large ? "size-40" : "size-[180px]")}>
             <Icon name="music-notes" size={large ? 56 : 64} className="text-kind-audio" />
           </span>
-          <audio key={item.id} {...mediaProps} className="w-full" />
+          <audio key={item.id} {...handlers} src={item.src} controls autoPlay className="w-full" />
         </div>
       );
     default:
@@ -140,6 +145,15 @@ export function MediaViewer({ items, currentId, onSelect, onClose, onDownload, n
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [item]);
+
+  // The previous and next pictures load in the background, so stepping shows them at once.
+  useEffect(() => {
+    if (index < 0 || items.length < 2) return;
+    for (const delta of [1, -1]) {
+      const neighbor = items[(index + delta + items.length) % items.length]!;
+      if (neighbor.kind === "image") prefetchImage(neighbor.previewSrc ?? neighbor.src);
+    }
+  }, [index, items]);
 
   if (!item || !mounted) return null;
   const position = `${index + 1} / ${items.length}`;

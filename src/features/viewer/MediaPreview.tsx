@@ -5,6 +5,7 @@ import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { resumeStore } from "./resume";
 import { useResume } from "./useResume";
+import { useVideoSource } from "./useVideoSource";
 
 const PERCENT = 100;
 
@@ -28,6 +29,10 @@ export interface MediaPreviewProps {
   src: string;
   /** The worker's WebP preview, when it exists. */
   thumbSrc: string | null;
+  /** Screen-sized picture of an image, used instead of the original when there is no thumbnail. */
+  previewSrc?: string;
+  /** The video converted while it plays, for containers the browser cannot decode. */
+  transcodeSrc?: string;
   /** `row` = square preview under a list row, `card` = 4:3 grid preview. */
   variant: "row" | "card";
   /**
@@ -42,8 +47,9 @@ export interface MediaPreviewProps {
  * Picture of an image or video (design list/grid thumbnails): videos show a frame and can
  * play right here; "Open viewer" continues in the viewer at the same position.
  */
-export function MediaPreview({ id, name, kind, src, thumbSrc, variant, loadOriginal, onOpen }: MediaPreviewProps) {
+export function MediaPreview({ id, name, kind, src, thumbSrc, previewSrc, transcodeSrc, variant, loadOriginal, onOpen }: MediaPreviewProps) {
   const [playing, setPlaying] = useState(false);
+  const video = useVideoSource(name, src, transcodeSrc);
   const fit = variant === "row" ? "object-contain" : "object-cover";
   const still = thumbSrc ? (
     // eslint-disable-next-line @next/next/no-img-element -- user media is served with auth cookies, not optimizable by next/image
@@ -54,13 +60,15 @@ export function MediaPreview({ id, name, kind, src, thumbSrc, variant, loadOrigi
   if (kind === "image") {
     if (still) return still;
     // eslint-disable-next-line @next/next/no-img-element -- see above
-    return loadOriginal ? <img src={src} alt="" loading="lazy" className="size-full object-cover" /> : placeholder;
+    return loadOriginal ? <img src={previewSrc ?? src} alt="" loading="lazy" className="size-full object-cover" /> : placeholder;
   }
   if (playing) {
     return (
       <>
         <video
-          src={src}
+          src={video.src}
+          onError={video.onError}
+          poster={thumbSrc ?? undefined}
           controls
           autoPlay
           playsInline

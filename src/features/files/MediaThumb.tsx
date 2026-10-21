@@ -16,6 +16,8 @@ export function MediaThumb({ item, onOpen }: { item: NodeItem; onOpen: () => voi
       kind={item.kind}
       src={fileUrls.stream(item.id)}
       thumbSrc={item.hasThumb ? fileUrls.thumb(item.id) : null}
+      previewSrc={fileUrls.preview(item.id)}
+      transcodeSrc={fileUrls.transcode(item.id)}
       variant="card"
       loadOriginal
       onOpen={onOpen}
