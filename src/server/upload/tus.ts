@@ -51,7 +51,7 @@ function createServer(volumeId: string, mountPath: string): Server {
       const { batchId, slot } = slotOf(upload);
       const batch = await loadBatch(batchId);
       const owner = await ownerOn(req, batch?.accountId ?? null);
-      await checkUploadStart(owner, batchId, slot, upload.size).catch(rethrow);
+      await checkUploadStart(owner, batchId, slot, upload.size, volumeId).catch(rethrow);
       await setUploadOwner(upload.id, owner.id);
       return {};
     },

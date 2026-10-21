@@ -1,12 +1,11 @@
 import "server-only";
 import { Readable } from "node:stream";
-import { buffer } from "node:stream/consumers";
 import { SHARE } from "@/config/policy";
 import { zipName } from "@/domain/serving";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { db } from "../db/client";
-import { sendFile } from "../files/send-file";
+import { bytesSource, sendFile } from "../files/send-file";
 import { sendThumb } from "../files/send-thumb";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
@@ -18,7 +17,7 @@ import { countDownload, type SharedRow } from "../repositories/share.repo";
 import { addTraffic } from "../repositories/traffic.repo";
 import { recordDownload } from "../share/busy";
 import { logLinkEvent } from "../share/events";
-import type { StorageDriver, StorageLocation } from "../storage/driver";
+import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driver";
 import { resolveSharedFile, resolveSharedTree, type LoadedLink, type ShareViewer } from "./share.service";
 import { driverForAccount } from "./volume.service";
 import { zipResponse, type ZipEntry } from "./zip.service";
@@ -56,17 +55,18 @@ function sharedStrippedCopy(row: SharedRow, path: string, mime: string): Promise
  * made now (and queued for the worker so the next request is instant). Types that cannot
  * be cleaned are refused rather than sent with their location data.
  */
-async function publicImage(driver: StorageDriver, location: StorageLocation, row: SharedRow): Promise<Uint8Array> {
+async function publicImage(driver: StorageDriver, location: StorageLocation, row: SharedRow): Promise<ByteSource> {
+  // The worker's copy is streamed from disk, only the requested range, never held in memory.
   if (row.hasDerived) {
-    const asset = await driver.readAsset({ kind: "derived", accountId: location.accountId, nodeId: row.id });
-    if (asset) return buffer(asset.stream);
+    const asset = await driver.assetSource({ kind: "derived", accountId: location.accountId, nodeId: row.id });
+    if (asset) return asset;
   }
   const mime = row.mime ?? mimeFromName(row.name);
   const path = await driver.localPath(location);
   const copy = path && canStripType(mime) ? await sharedStrippedCopy(row, path, mime) : null;
   if (!copy) throw new ApiError("UNSUPPORTED_MEDIA");
   void enqueueMedia([row.id]);
-  return copy;
+  return bytesSource(copy);
 }
 
 /** The first request of a playback or download (not a later Range request for seeking). */
@@ -149,7 +149,7 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
         const location = { accountId: owner.id, segments };
         entries.push({
           name,
-          open: stripsImage(owner, child) ? async () => Readable.from([Buffer.from(await publicImage(driver, location, child))]) : () => driver.createReadStream(location),
+          open: stripsImage(owner, child) ? async () => (await publicImage(driver, location, child)).open() : () => driver.createReadStream(location),
         });
       }
     }

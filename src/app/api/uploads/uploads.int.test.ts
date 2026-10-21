@@ -139,4 +139,22 @@ describe("uploads", () => {
     const wrongSize = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "9", "upload-metadata": `batch ${b64(plan.batchId)},index ${b64("0")}` });
     expect(wrongSize.status).toBe(400);
   });
+
+  it("refuses uploads whose size is sent later than the planned one (quota bypass)", async () => {
+    const s = await member();
+    await prisma.account.update({ where: { id: s.id }, data: { quotaBytes: 5n } });
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "small.txt", size: 1 }] } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+
+    const content = "far more than the five bytes this account may store";
+    const created = await tusCall("POST", plan.endpoint, s.cookie, { "upload-defer-length": "1", "upload-metadata": `batch ${b64(plan.batchId)},index ${b64("0")}` });
+    if (created.status === 201) {
+      const id = created.headers.get("location")!.split("/").pop()!;
+      await tusCall("PATCH", `${plan.endpoint}/${id}`, s.cookie, { "upload-offset": "0", "upload-length": String(content.length), "content-type": "application/offset+octet-stream" }, Buffer.from(content));
+    }
+
+    expect(created.status).toBe(400);
+    expect((await list(s)).children).toHaveLength(0);
+  });
 });

@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { NextRequest } from "next/server";
 import sharp from "sharp";
 import { afterAll, describe, expect, it } from "vitest";
@@ -18,6 +20,8 @@ import { purgeExpired } from "@/server/services/profile.service";
 import { findAccountById } from "@/server/repositories/account.repo";
 import { purgeRetiredLinks } from "@/server/repositories/link-tombstone.repo";
 import { UNLOCK_COOKIE } from "@/server/share/unlock-cookie";
+import { layoutOf } from "@/server/storage/layout";
+import { configuredVolumeRoot } from "@/server/storage/registry";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
 
 const { prisma, member, addFile, cleanup } = fileFixtures();
@@ -223,6 +227,22 @@ describe("share downloads", () => {
     await prisma.account.update({ where: { id: m.id }, data: { stripMetadataOnShare: false } });
     const original = Buffer.from(await (await visit(shareStream, path(trip.linkId, photo, "stream"), fileParams(trip.linkId, photo))).arrayBuffer());
     expect(original.includes(Buffer.from("RelayCam"))).toBe(true);
+  });
+
+  it("streams the worker's stripped copy from disk, range by range", async () => {
+    const { m, trip, photo } = await sharedTrip();
+    await processMedia(photo);
+    const copy = await readFile(join(layoutOf(configuredVolumeRoot()).derived, m.id, photo));
+    expect(copy.includes(Buffer.from("RelayCam"))).toBe(false);
+
+    const whole = await visit(shareStream, path(trip.linkId, photo, "stream"), fileParams(trip.linkId, photo));
+    expect(whole.headers.get("content-length")).toBe(String(copy.length));
+    expect(Buffer.from(await whole.arrayBuffer())).toEqual(copy);
+
+    const part = await visit(shareStream, path(trip.linkId, photo, "stream"), fileParams(trip.linkId, photo), { headers: { range: "bytes=2-9" } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get("content-range")).toBe(`bytes 2-9/${copy.length}`);
+    expect(Buffer.from(await part.arrayBuffer())).toEqual(copy.subarray(2, 10));
   });
 
   it("pauses downloads after 10 in 10 minutes and says when to retry", async () => {

@@ -22,6 +22,13 @@ export interface AssetRef {
   nodeId: string;
 }
 
+/** Bytes served from something other than the stored file: its size, and a reader for a range of it. */
+export interface ByteSource {
+  size: number;
+  /** Opens the bytes `start`..`end` (inclusive), or all of them. */
+  open(range?: { start: number; end: number }): Promise<Readable>;
+}
+
 export interface SpaceInfo {
   total: bigint;
   available: bigint;
@@ -53,6 +60,8 @@ export interface StorageDriver {
   writeAsset(asset: AssetRef, data: Uint8Array): Promise<void>;
   /** Reads a generated file, or null when it does not exist. */
   readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null>;
+  /** A generated file as a ranged source (nothing stays open until it is read), or null when missing. */
+  assetSource(asset: AssetRef): Promise<ByteSource | null>;
   /** Removes the generated files of these nodes (missing ones are ignored). */
   removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void>;
   /**

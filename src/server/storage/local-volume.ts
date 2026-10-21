@@ -5,7 +5,7 @@ import { cp, copyFile, lstat, mkdir, open, readdir, rename, rm, stat, statfs, wr
 import { basename, dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
-import type { AssetKind, AssetRef, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
+import type { AssetKind, AssetRef, ByteSource, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path";
 
 /** "2026-10-06T03-12-00-000Z": when an item was moved to the trash (filename-safe ISO time). */
@@ -125,6 +125,24 @@ export class LocalVolumeDriver implements StorageDriver {
       await rm(temp, { force: true });
       throw error;
     }
+  }
+
+  async assetSource({ kind, accountId, nodeId }: AssetRef): Promise<ByteSource | null> {
+    const path = this.assetPath(kind, accountId, nodeId);
+    const openAsset = () => open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    let size: number;
+    try {
+      const handle = await openAsset();
+      try {
+        size = (await handle.stat()).size;
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+    return { size, open: async (range) => (await openAsset()).createReadStream({ ...range, autoClose: true }) };
   }
 
   async readAsset({ kind, accountId, nodeId }: AssetRef): Promise<{ stream: Readable; size: number } | null> {

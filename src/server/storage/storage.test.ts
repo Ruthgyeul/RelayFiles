@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buffer } from "node:stream/consumers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../logger", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }));
@@ -120,6 +121,23 @@ describe("LocalVolumeDriver", () => {
     await symlink(join(root, "users", OTHER), join(root, "users", ACCOUNT, "link"));
     await expect(driver.stat(at("link", "secret.txt"))).rejects.toThrow(UnsafePathError);
     await expect(driver.createReadStream(at("link", "secret.txt"))).rejects.toThrow(UnsafePathError);
+  });
+
+  it("serves generated files as ranged sources and refuses symbolic links", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    const asset = { kind: "derived", accountId: ACCOUNT, nodeId: "nodeaaaaaaaa" } as const;
+    expect(await driver.assetSource(asset)).toBeNull();
+
+    await driver.writeAsset(asset, Buffer.from("0123456789"));
+    const source = (await driver.assetSource(asset))!;
+    expect(source.size).toBe(10);
+    expect((await buffer(await source.open({ start: 2, end: 5 }))).toString()).toBe("2345");
+    expect((await buffer(await source.open())).toString()).toBe("0123456789");
+
+    await writeFile(join(root, "secret.txt"), "private");
+    const planted = { ...asset, nodeId: "nodebbbbbbbb" };
+    await symlink(join(root, "secret.txt"), join(layoutOf(root).derived, ACCOUNT, "nodebbbbbbbb"));
+    await expect(driver.assetSource(planted)).rejects.toThrow();
   });
 
   it("moves items to the trash area", async () => {

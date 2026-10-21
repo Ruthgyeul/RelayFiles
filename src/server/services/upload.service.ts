@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { rm, stat, unlink } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
 import { STORAGE } from "@/config/policy";
 import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
@@ -117,11 +117,13 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
 }
 
 /** Validates a new tus upload against its batch; returns the batch entry. */
-export async function checkUploadStart(owner: Owner, batchId: string, slot: number, size: number | undefined): Promise<{ batch: UploadBatch; rel: string }> {
+export async function checkUploadStart(owner: Owner, batchId: string, slot: number, size: number | undefined, volumeId: string): Promise<{ batch: UploadBatch; rel: string }> {
   const batch = await loadBatch(batchId);
   const entry = batch?.files[slot];
-  if (!batch || !entry || batch.accountId !== owner.id) throw new ApiError("NOT_FOUND", "This upload has expired. Start it again.");
-  if (size !== undefined && size !== entry.size) throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
+  if (!batch || !entry || batch.accountId !== owner.id || batch.volumeId !== volumeId) throw new ApiError("NOT_FOUND", "This upload has expired. Start it again.");
+  // The size must be known now (no tus Upload-Defer-Length): quota and free space are checked
+  // against it, and tus then refuses any byte past it.
+  if (size !== entry.size) throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
   await assertAccountWritable(owner.id);
   const volume = await findVolume(db(), batch.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
@@ -185,6 +187,12 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
   const volume = await findVolume(db(), batch.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
   const tempPath = `${layoutOf(volume.mountPath).uploads}/${uploadId}`;
+  // The recorded size counts toward the quota, so it must be the size of the bytes received.
+  if ((await stat(tempPath)).size !== entry.size) {
+    await rm(tempPath, { force: true });
+    await rm(`${tempPath}.json`, { force: true });
+    throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
+  }
   const parts = rel.split("/");
   const fileName = parts.at(-1)!;
   const folder = await ensureFolders(owner, driver, batch.folderId, parts.slice(0, -1));
