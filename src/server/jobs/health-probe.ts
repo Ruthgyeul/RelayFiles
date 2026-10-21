@@ -5,6 +5,7 @@ import { MS, STATUS } from "@/config/policy";
 import { healthSchema } from "@/contracts/health";
 import { COMPONENTS, componentChecks, dayKeyIn, dayLevel, type ProbeResult } from "@/domain/status";
 import { invalidate, cacheKey } from "../cache/cached";
+import { getJson } from "../http/get-json";
 import { db } from "../db/client";
 import { insertSamples, pruneHealth, rollUpDays, rollUpHours } from "../repositories/health.repo";
 import { storageWritable } from "../metrics/storage";
@@ -28,9 +29,9 @@ export async function probeApp(url: string = probeUrl()): Promise<ProbeOutcome> 
   const writable = storageWritable().catch(() => false);
   const started = performance.now();
   try {
-    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(STATUS.probeTimeoutMs) });
+    const body = await getJson(url, STATUS.probeTimeoutMs);
     const ms = Math.round(performance.now() - started);
-    const { components } = envelope.parse(await res.json()).data;
+    const { components } = envelope.parse(body).data;
     const up = (status: string) => status === "ok";
     return { probe: { reachable: true, database: up(components.database), redis: up(components.redis), storage: up(components.storage), writable: await writable }, ms };
   } catch {

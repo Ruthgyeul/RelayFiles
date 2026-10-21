@@ -20,3 +20,16 @@ if [ -f "$ROOT/deploy/docker-compose.volumes.yml" ]; then
 fi
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*"; }
+
+# systemd deployment (docs/deploy-systemd.md): the account that owns the SSD files and runs
+# the services (created by setup-ssd.sh), and its home (npm cache for one-off commands).
+STORAGE_USER="relayfiles"
+STORAGE_HOME="/var/lib/relayfiles"
+APP_BUNDLES="$ROOT/.app"
+
+# keep_newest GLOB COUNT → removes all but the newest COUNT paths matching GLOB.
+keep_newest() {
+  local old
+  mapfile -t old < <(ls -1dt $1 2>/dev/null | tail -n +"$(($2 + 1))")
+  for path in "${old[@]}"; do rm -rf -- "$path"; done
+}

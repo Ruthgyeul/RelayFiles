@@ -11,6 +11,8 @@ node_modules/
 # next.js / build output
 /.next/
 /out/
+# app bundles of the systemd deployment (deploy/scripts/systemd/release.sh)
+/.app/
 /build/
 dist/
 next-env.d.ts

@@ -62,11 +62,22 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // Browser code also runs on plain-http LAN addresses, where secure-context APIs are missing.
+    files: ["src/features/**/*.{ts,tsx}", "src/shared/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        { object: "crypto", property: "randomUUID", message: "Not available over plain http (secure contexts only); use a counter or useId()." },
+      ],
+    },
+  },
+  {
     // Node scripts and tooling configs may log to the console.
     files: ["scripts/**/*.{mjs,mts,ts}", "*.config.{mjs,mts,ts}"],
     rules: { "no-console": "off" },
   },
-  globalIgnores(["src/server/db/generated/**", ".next/**", "out/**", "build/**", "coverage/**", "playwright-report/**", "test-results/**", "next-env.d.ts"]),
+  globalIgnores(["src/server/db/generated/**", ".next/**", ".app/**", "out/**", "build/**", "coverage/**", "playwright-report/**", "test-results/**", "next-env.d.ts"]),
 ]);
 
 export default eslintConfig;

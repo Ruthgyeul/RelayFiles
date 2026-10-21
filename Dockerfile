@@ -41,7 +41,7 @@ USER relayfiles
 ENTRYPOINT ["relayfiles-entrypoint"]
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health',{method:'HEAD'}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+  CMD node -e "require('http').request({host:'127.0.0.1',port:process.env.PORT||3000,path:'/api/health',method:'HEAD'},r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1)).end()"
 CMD ["node", "server.js"]
 
 FROM deps AS tools

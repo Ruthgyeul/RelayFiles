@@ -17,7 +17,5 @@ log "Backing up the database to $FILE"
 mv "$FILE.partial" "$FILE"
 chmod 600 "$FILE"
 
-# Oldest first; remove all but the newest KEEP.
-mapfile -t OLD < <(ls -1t "$DIR"/relayfiles-*.dump 2>/dev/null | tail -n +"$((KEEP + 1))")
-for old in "${OLD[@]}"; do rm -f -- "$old"; done
+keep_newest "$DIR/relayfiles-*.dump" "$KEEP"
 log "Backup done ($(du -h "$FILE" | cut -f1))."
