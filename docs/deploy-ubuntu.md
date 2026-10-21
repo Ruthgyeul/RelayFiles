@@ -22,7 +22,7 @@ LAN ─────────────── :NGINX_LISTEN_PORT ───�
 | nginx | `nginxinc/nginx-unprivileged` | `NGINX_LISTEN_PORT` 하나만 | 없음 (설정은 `deploy/nginx/templates`) |
 | app | `Dockerfile` `app` 타깃 | 없음 | SSD (`STORAGE_ROOT`), 로그 (`LOG_DIR`) |
 | worker | `Dockerfile` `tools` 타깃 | 없음 | SSD, 로그 |
-| postgres / redis | `postgres:16`, `redis:7` | 없음 | `DATA_DIR` (내장 디스크) |
+| postgres / redis | `postgres:16`, `redis:7` | 없음 | `DATA_DIR` (저장 디스크) |
 | tools | `tools` 타깃 (`--profile tools`) | 없음 | 마이그레이션, `volume:init`, `admin:create` 같은 일회성 명령 |
 | cloudflared | `cloudflare/cloudflared` (`--profile tunnel`) | 없음 (아웃바운드만) | 없음 |
 
@@ -39,6 +39,18 @@ cd ~/RelayFiles
 ```
 
 > Docker 공식 저장소의 `docker-ce`와 `docker-compose-plugin`을 써도 된다. `docker compose version`이 2.20 이상이면 된다.
+
+서비스가 쓰는 모든 것(파일, DB, Redis, 백업, 로그, Docker 이미지·컨테이너)은 저장 디스크의 한 폴더 아래에 둔다. 그래야 디스크만 옮겨 다른 서버에서 그대로 이어서 운영할 수 있다(§9 "디스크 이전"). 예: 외장 HDD `/mnt/RuthVault2T`
+
+```
+/mnt/RuthVault2T/relayfilesDB/
+├── storage/   STORAGE_ROOT      사용자 원본 파일 (uid 10001, 0700)
+├── logs/      LOG_DIR           앱·워커 파일 로그
+├── data/      DATA_DIR          pg/ (PostgreSQL), redis/, backups/ (pg_dump), releases.log
+└── docker/    DOCKER_DATA_ROOT  Docker data-root (이미지, 컨테이너, 빌드 캐시, 컨테이너 로그)
+```
+
+`.env`(§3)를 먼저 쓰고 `deploy/scripts/setup-docker.sh`를 한 번 실행한다(§4).
 
 ## 2. 외장 SSD (LUKS2 + ext4)
 
@@ -82,11 +94,13 @@ chmod 600 .env
 | `NODE_ENV` | `production` |
 | `PUBLIC_URL` | 공유 링크 주소, 예: `https://files.example.com` (LAN만 쓰면 `http://192.168.0.100`) |
 | `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, `COOKIE_SECRET` | `env:secrets` 출력 |
-| `STORAGE_ROOT` | `/mnt/relayfilesDB` (절대경로) |
-| `DATA_DIR` | `/srv/relayfiles` (PostgreSQL·Redis·백업, 내장 디스크) |
-| `LOG_DIR` | `/var/log/relayfiles` |
+| `STORAGE_ROOT` | `/mnt/relayfilesDB` (절대경로). 외장 HDD 예: `/mnt/RuthVault2T/relayfilesDB/storage` |
+| `DATA_DIR` | PostgreSQL·Redis·백업. 예: `/mnt/RuthVault2T/relayfilesDB/data` |
+| `LOG_DIR` | 예: `/mnt/RuthVault2T/relayfilesDB/logs` |
+| `DOCKER_DATA_ROOT` | Docker data-root. 예: `/mnt/RuthVault2T/relayfilesDB/docker` |
 | `SERVER_NAME` | 도메인 또는 `_` (모든 이름) |
-| `NGINX_LISTEN_PORT` | LAN에 여는 포트 (기본 80) |
+| `NGINX_LISTEN_HOST` | 호스트 Nginx가 앞에 있으면 `127.0.0.1`, 컨테이너 Nginx를 LAN에 바로 열면 `0.0.0.0` |
+| `NGINX_LISTEN_PORT` | 컨테이너 Nginx를 여는 포트 (기본 80. 호스트 Nginx가 80을 쓰면 다른 포트) |
 | `ADMIN_ALLOWED_CIDRS` | 관리자 페이지를 LAN에서만 열려면 `192.168.0.0/24` |
 | `CLOUDFLARE_TUNNEL_TOKEN` | 터널을 쓸 때만 |
 | `DISK_DEVICE` | Server 페이지 Disk health 대상 (예: `/dev/sda`) |
@@ -98,11 +112,18 @@ chmod 600 .env
 ## 4. 디렉터리
 
 ```bash
-sudo install -d -o 10001 -g 10001 -m 0750 /var/log/relayfiles
-sudo install -d -m 0700 /srv/relayfiles
+sudo deploy/scripts/setup-docker.sh --dry-run   # 실행할 명령만 출력
+sudo deploy/scripts/setup-docker.sh
 ```
 
-uid가 10001이 아니면 `.env`의 `STORAGE_UID`/`STORAGE_GID`와 같게 맞춘다.
+스크립트가 하는 일(다시 실행해도 안전하다):
+
+1. `/etc/docker/daemon.json`에 `data-root`(`DOCKER_DATA_ROOT`)와 `log-driver: local`을 쓴다. 다른 설정이 이미 있으면 멈추고 직접 넣으라고 안내한다.
+2. 경로가 외장 디스크에 있으면 `docker.service`에 `RequiresMountsFor`를 추가한다. 디스크가 마운트된 뒤에만 Docker가 켜지고, 디스크를 내리면 Docker도 멈춘다.
+3. `STORAGE_ROOT`(uid `STORAGE_UID`, `0700`), `LOG_DIR`, `DATA_DIR`, `DATA_DIR/pg`, `DATA_DIR/redis`, `DATA_DIR/backups`를 만든다. compose는 이 폴더들을 만들지 않는다(`create_host_path: false`). 디스크가 마운트되지 않았으면 빈 마운트 지점에 쓰지 않고 컨테이너가 시작을 거부한다.
+4. Docker가 없으면 설치하고, 실행한 사용자를 `docker` 그룹에 넣는다.
+
+`STORAGE_UID`/`STORAGE_GID`는 호스트 계정과 상관없는 고정 uid다(기본 10001). 컨테이너 안에서만 쓰므로 서버를 옮겨도 파일 소유자를 바꿀 필요가 없다.
 
 ## 5. 첫 실행
 
@@ -176,4 +197,5 @@ deploy/scripts/release.sh
 - **Server 페이지 지표**: app이 컨테이너 안에서 잰다. CPU 사용률과 메모리는 컨테이너도 호스트의 `/proc` 값을 보므로 호스트와 거의 같다. 네트워크는 컨테이너 인터페이스 기준이라 RelayFiles 트래픽만 잡힌다(대역폭 그래프의 목적에 맞다).
 - **Disk health**: `smartctl`은 장치 접근과 root 권한이 필요해서 컨테이너에서는 기본으로 "Unavailable"이 표시된다. SMART 상태는 호스트에서 `sudo smartctl -d sat -H /dev/sdX`로 확인한다. 앱에 보여야 한다면 app 서비스에 `devices`, `cap_add: [SYS_RAWIO]`, root 실행이 필요하므로 권장하지 않는다.
 - **두 번째 SSD**: `volume:init -- <경로>`가 Nginx location(`deploy/nginx/volumes/`)을 만들고, 마운트는 `deploy/docker-compose.volumes.yml` 오버레이로 추가한다. 절차와 계정 이동은 [runbook.md](runbook.md#볼륨-추가교체).
+- **디스크 이전**: §1의 폴더 하나가 서비스 전체다. 새 서버에서 디스크를 같은 경로(`vault-migrate enroll`의 기본값 `/mnt/<이름>`)에 마운트하고, 저장소와 `.env`를 옮긴 뒤 `sudo deploy/scripts/setup-docker.sh` → `deploy/scripts/release.sh`를 실행한다. DB에는 볼륨의 절대경로(`StorageVolume.mountPath`)가 저장되므로 경로가 바뀌면 안 된다. 옮기기 전에 `$C stop`으로 멈추고 `deploy/scripts/backup.sh`로 덤프를 남긴다. PostgreSQL 데이터 폴더는 같은 메이저 버전(16)과 같은 CPU 아키텍처에서만 그대로 열린다. 아키텍처가 다르면(예: Raspberry Pi arm64 → x86_64) `DATA_DIR/pg`를 비우고 `pg_restore`로 덤프를 복원한다([runbook.md](runbook.md)).
 - **TLS 인증서 만료일**: Cloudflare를 쓰면 앞단 인증서는 Cloudflare가 관리한다. 서버에서 직접 TLS를 쓰는 경우에만 `TLS_CERT_PATH`를 지정한다.

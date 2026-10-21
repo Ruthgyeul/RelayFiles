@@ -4,8 +4,11 @@
 # app      Next.js server (internal only; reached through nginx)
 # worker   thumbnails, metadata-stripped copies, cleanup, metrics and health probes
 # nginx    the only published port; serves files via X-Accel and the static error pages
-# postgres / redis   internal only, data under DATA_DIR on the internal disk
+# postgres / redis   internal only, data under DATA_DIR
 # tools    one-off commands (profile "tools"): migrations, volume:init, admin:create
+# Host directories (STORAGE_ROOT, LOG_DIR, DATA_DIR/pg, DATA_DIR/redis) are never created by
+# Docker: when the disk that holds them is not mounted, the containers refuse to start instead
+# of writing to the empty mount point (deploy/scripts/setup-docker.sh creates them once).
 # Extra SSDs are mounted by deploy/docker-compose.volumes.yml (see docker-compose.volumes.example.yml).
 # cloudflared        optional Cloudflare Tunnel (profile "tunnel")
 name: relayfiles
@@ -31,9 +34,21 @@ x-image-build: &image-build
     STORAGE_UID: ${STORAGE_UID:-10001}
     STORAGE_GID: ${STORAGE_GID:-10001}
 
+x-storage-mount: &storage-mount
+  type: bind
+  source: ${STORAGE_ROOT:?set STORAGE_ROOT in .env}
+  target: ${STORAGE_ROOT}
+  bind: { create_host_path: false }
+
+x-log-mount: &log-mount
+  type: bind
+  source: ${LOG_DIR:-/var/log/relayfiles}
+  target: ${LOG_DIR:-/var/log/relayfiles}
+  bind: { create_host_path: false }
+
 x-storage: &storage
-  - ${STORAGE_ROOT:?set STORAGE_ROOT in .env}:${STORAGE_ROOT}
-  - ${LOG_DIR:-/var/log/relayfiles}:${LOG_DIR:-/var/log/relayfiles}
+  - *storage-mount
+  - *log-mount
 
 services:
   postgres:
@@ -44,7 +59,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-relayfiles}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
-      - ${DATA_DIR:-/srv/relayfiles}/pg:/var/lib/postgresql/data
+      - type: bind
+        source: ${DATA_DIR:-/srv/relayfiles}/pg
+        target: /var/lib/postgresql/data
+        bind: { create_host_path: false }
     networks: [relay]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-relayfiles} -d ${POSTGRES_DB:-relayfiles}"]
@@ -58,7 +76,10 @@ services:
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD}
     volumes:
-      - ${DATA_DIR:-/srv/relayfiles}/redis:/data
+      - type: bind
+        source: ${DATA_DIR:-/srv/relayfiles}/redis
+        target: /data
+        bind: { create_host_path: false }
     networks: [relay]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
@@ -100,8 +121,8 @@ services:
     profiles: [tools]
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
     volumes:
-      - ${STORAGE_ROOT:?set STORAGE_ROOT in .env}:${STORAGE_ROOT}
-      - ${LOG_DIR:-/var/log/relayfiles}:${LOG_DIR:-/var/log/relayfiles}
+      - *storage-mount
+      - *log-mount
       # volume:init writes the Nginx location of an extra SSD here (or prints it when not allowed).
       - ./nginx/volumes:/app/deploy/nginx/volumes
     networks: [relay]
@@ -121,13 +142,14 @@ services:
       STORAGE_ACCEL_PREFIX: ${STORAGE_ACCEL_PREFIX:-/_protected/}
       CLOUDFLARED_IP: ${CLOUDFLARED_IP:-172.28.0.250}
     ports:
-      - "${NGINX_LISTEN_PORT:-80}:8080"
+      - "${NGINX_LISTEN_HOST:-0.0.0.0}:${NGINX_LISTEN_PORT:-80}:8080"
     volumes:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./error-pages:/usr/share/nginx/error:ro
       - ./maintenance:/etc/nginx/maintenance:ro
       - ./nginx/volumes:/etc/nginx/volumes:ro
-      - ${STORAGE_ROOT}:${STORAGE_ROOT}:ro
+      - <<: *storage-mount
+        read_only: true
     networks: [relay]
     depends_on: [app]
 
