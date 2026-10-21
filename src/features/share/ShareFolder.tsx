@@ -36,7 +36,11 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
     if (problem) notify(problem);
   };
   // Folders download as a zip of what visitors can see inside them.
-  const rowUrls = { stream: (id: string) => shareUrls.stream(linkId, id), thumb: (id: string) => shareUrls.thumb(linkId, id) };
+  const rowUrls = {
+    stream: (id: string) => shareUrls.stream(linkId, id),
+    thumb: (id: string) => shareUrls.thumb(linkId, id),
+    transcode: (id: string) => shareUrls.transcode(linkId, id),
+  };
   const downloadItem = (item: ShareItem) => void download(item.type === "folder" ? shareUrls.zip(linkId, item.id) : shareUrls.download(linkId, item.id));
   const downloadAll = () => {
     if (view.folderBusy?.level === 2) return notify("Server busy · try again later");
@@ -124,7 +128,15 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
       <span className="pt-2 text-center text-[12px] text-t5">Shared privately with RelayFiles</span>
 
       <MediaViewer
-        items={files.map((item) => ({ id: item.id, name: item.name, kind: item.kind ?? "other", src: shareUrls.stream(linkId, item.id) }))}
+        items={files.map((item) => ({
+          id: item.id,
+          name: item.name,
+          kind: item.kind ?? "other",
+          src: shareUrls.stream(linkId, item.id),
+          thumbSrc: item.hasThumb ? shareUrls.thumb(linkId, item.id) : null,
+          previewSrc: shareUrls.preview(linkId, item.id),
+          transcodeSrc: shareUrls.transcode(linkId, item.id),
+        }))}
         currentId={viewing}
         onSelect={setViewing}
         onClose={() => setViewing(null)}

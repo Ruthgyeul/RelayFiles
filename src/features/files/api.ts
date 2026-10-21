@@ -17,6 +17,10 @@ const node = (id: string) => `/api/nodes/${encodeURIComponent(id)}`;
 export const fileUrls = {
   stream: (id: string) => `/api/files/${encodeURIComponent(id)}/stream`,
   thumb: (id: string) => `/api/files/${encodeURIComponent(id)}/thumb`,
+  /** Screen-sized picture of an image (the original when there is none). */
+  preview: (id: string) => `/api/files/${encodeURIComponent(id)}/preview`,
+  /** A video converted while it plays (containers the browser cannot decode). */
+  transcode: (id: string) => `/api/files/${encodeURIComponent(id)}/stream?transcode=1`,
   download: (id: string) => `/api/files/${encodeURIComponent(id)}/download`,
   zip: (ids: string[]) => `/api/zip?ids=${ids.map(encodeURIComponent).join(",")}`,
 };

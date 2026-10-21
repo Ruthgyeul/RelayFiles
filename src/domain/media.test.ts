@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { previewKindOf } from "./media";
+import { previewKindOf, videoNeedsTranscode } from "./media";
 
 describe("previewKindOf", () => {
   it("previews images, videos and audio files", () => {
@@ -13,5 +13,15 @@ describe("previewKindOf", () => {
     expect(previewKindOf("file", null)).toBeNull();
     expect(previewKindOf("folder", null)).toBeNull();
     expect(previewKindOf("folder", "image")).toBeNull();
+  });
+});
+
+describe("videoNeedsTranscode", () => {
+  it("converts containers browsers cannot play", () => {
+    for (const name of ["clip.avi", "old.WMV", "camera.MTS", "disc.vob", "phone.3gp"]) expect(videoNeedsTranscode(name), name).toBe(true);
+  });
+
+  it("plays MP4, MOV, WebM and MKV as they are", () => {
+    for (const name of ["a.mp4", "b.MOV", "c.webm", "d.mkv", "e.m4v", "noext", ".avi"]) expect(videoNeedsTranscode(name), name).toBe(false);
   });
 });

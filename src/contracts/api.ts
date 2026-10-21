@@ -15,3 +15,6 @@ export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
 /** Header carrying the per-request id (shown on error pages for support). */
 export const REQUEST_ID_HEADER = "x-request-id";
+
+/** Marks a viewer's look-ahead request for the next image (not counted as a view). */
+export const PREFETCH_HEADER = "x-relayfiles-prefetch";

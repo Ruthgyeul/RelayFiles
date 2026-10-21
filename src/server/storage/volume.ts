@@ -2,7 +2,7 @@ import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { STORAGE } from "@/config/policy";
-import { DIR_MODE, FILE_MODE, layoutOf } from "./layout";
+import { ASSET_DIRS, DIR_MODE, FILE_MODE, layoutOf } from "./layout";
 
 const markerSchema = z.object({
   volumeId: z.string().min(1),
@@ -35,7 +35,7 @@ export async function initVolume(root: string, volumeId: string, now: Date = new
   const existing = await readVolumeMarker(root);
   if (existing) throw new Error(`Volume at ${root} is already initialised (id ${existing.volumeId}).`);
   const layout = layoutOf(root);
-  for (const dir of [layout.users, layout.uploads, layout.thumbs, layout.derived, layout.trash]) {
+  for (const dir of [layout.users, layout.uploads, ...Object.values(ASSET_DIRS).map((key) => layout[key]), layout.trash]) {
     await mkdir(dir, { recursive: true, mode: DIR_MODE });
   }
   const marker: VolumeMarker = { volumeId, layoutVersion: STORAGE.layoutVersion, createdAt: now.toISOString() };

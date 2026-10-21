@@ -8,9 +8,17 @@ import { useTransfers } from "@/features/transfers/TransfersProvider";
 import { MediaViewer, type ViewerItem } from "@/features/viewer/MediaViewer";
 import { fileUrls } from "./api";
 
-type Item = Pick<NodeItem, "id" | "type" | "name" | "kind" | "size" | "fileCount">;
+type Item = Pick<NodeItem, "id" | "type" | "name" | "kind" | "size" | "fileCount"> & Partial<Pick<NodeItem, "hasThumb">>;
 
-const toViewerItem = (item: Item): ViewerItem => ({ id: item.id, name: item.name, kind: item.kind ?? "other", src: fileUrls.stream(item.id) });
+const toViewerItem = (item: Item): ViewerItem => ({
+  id: item.id,
+  name: item.name,
+  kind: item.kind ?? "other",
+  src: fileUrls.stream(item.id),
+  thumbSrc: item.hasThumb ? fileUrls.thumb(item.id) : null,
+  previewSrc: fileUrls.preview(item.id),
+  transcodeSrc: fileUrls.transcode(item.id),
+});
 
 /**
  * Downloads (single file, folder or selection as zip, recorded in the transfers panel) and

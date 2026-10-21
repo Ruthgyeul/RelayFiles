@@ -11,6 +11,8 @@ interface ListPreviewProps {
   kind: PreviewKind;
   src: string;
   thumbSrc: string | null;
+  previewSrc?: string;
+  transcodeSrc?: string;
   loadOriginal: boolean;
   onOpen: () => void;
   /** Left padding that lines the preview up with the name (differs per list). */
@@ -21,7 +23,7 @@ interface ListPreviewProps {
  * The preview under a file name in a list: a square picture (full width on phones, 288px
  * above 720px) for images and videos, or an audio player.
  */
-export function ListPreview({ id, name, kind, src, thumbSrc, loadOriginal, onOpen, className }: ListPreviewProps) {
+export function ListPreview({ id, name, kind, src, thumbSrc, previewSrc, transcodeSrc, loadOriginal, onOpen, className }: ListPreviewProps) {
   if (kind === "audio") {
     return (
       <div data-preview="audio" className={className}>
@@ -38,7 +40,18 @@ export function ListPreview({ id, name, kind, src, thumbSrc, loadOriginal, onOpe
           "sm:w-[min(288px,100%)]",
         )}
       >
-        <MediaPreview id={id} name={name} kind={kind} src={src} thumbSrc={thumbSrc} variant="row" loadOriginal={loadOriginal} onOpen={onOpen} />
+        <MediaPreview
+          id={id}
+          name={name}
+          kind={kind}
+          src={src}
+          thumbSrc={thumbSrc}
+          previewSrc={previewSrc}
+          transcodeSrc={transcodeSrc}
+          variant="row"
+          loadOriginal={loadOriginal}
+          onOpen={onOpen}
+        />
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import "server-only";
+import { MEDIA } from "@/config/policy";
 import type { DbClient, Prisma } from "../db/client";
 
 /** Name of every account's root folder; it maps to users/<accountId>/ on the volume. */
@@ -60,6 +61,17 @@ export function findNodeForJob(db: DbClient, nodeId: string) {
 export function mediaWithoutThumbs(db: DbClient, take: number, afterId?: string) {
   return db.node.findMany({
     where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, hasThumb: false, missing: false },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take,
+    ...(afterId ? { cursor: { id: afterId }, skip: 1 } : {}),
+  });
+}
+
+/** Images large enough for a viewer preview, oldest first, for `media:backfill -- --previews`. */
+export function imagesForPreview(db: DbClient, take: number, afterId?: string) {
+  return db.node.findMany({
+    where: { type: "FILE", kind: "IMAGE", missing: false, size: { gte: MEDIA.previewMinBytes }, mime: { in: [...MEDIA.previewTypes] } },
     select: { id: true },
     orderBy: { id: "asc" },
     take,

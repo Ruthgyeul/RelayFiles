@@ -1,5 +1,6 @@
 import "server-only";
 import type { Readable } from "node:stream";
+import type { ASSET_DIRS } from "./layout";
 
 /** Location of a file or folder: account plus folder names from the account root down. */
 export interface StorageLocation {
@@ -14,7 +15,7 @@ export interface StorageStat {
 }
 
 /** Files generated from an original: a thumbnail, or the metadata-stripped copy for public links. */
-export type AssetKind = "thumb" | "derived";
+export type AssetKind = keyof typeof ASSET_DIRS;
 
 export interface AssetRef {
   kind: AssetKind;

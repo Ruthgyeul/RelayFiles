@@ -35,8 +35,9 @@ RUN npm run build
 FROM base AS app
 ARG STORAGE_UID=10001
 ARG STORAGE_GID=10001
-# smartctl for the Server page's Disk health (needs the disk passed into the container).
-ARG APP_PACKAGES="smartmontools"
+# smartctl for the Server page's Disk health (needs the disk passed into the container);
+# ffmpeg converts videos browsers cannot play while they stream (VIDEO_TRANSCODE_MAX).
+ARG APP_PACKAGES="smartmontools ffmpeg"
 ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000
 RUN groupadd --system --gid ${STORAGE_GID} relayfiles \
  && useradd --system --uid ${STORAGE_UID} --gid relayfiles --no-create-home relayfiles \

@@ -9,6 +9,8 @@ export const shareUrls = {
   stream: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/stream`,
   download: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/download`,
   thumb: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/thumb`,
+  preview: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/preview`,
+  transcode: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/stream?transcode=1`,
   zip: (linkId: string, folderId: string) => `${base(linkId)}/zip?folder=${encodeURIComponent(folderId)}`,
 };
 

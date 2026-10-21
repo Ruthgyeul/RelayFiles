@@ -1,6 +1,7 @@
 import "server-only";
 import { pipeline, Readable } from "node:stream";
 import { getEnv } from "@/config/env";
+import { IMMUTABLE_CACHE } from "@/config/policy";
 import { canShowInline, contentDisposition, parseRange } from "@/domain/serving";
 import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driver";
 import { Throttle } from "./throttle";
@@ -46,7 +47,9 @@ export async function sendFile(req: Request, options: SendFileOptions): Promise<
     "content-disposition": contentDisposition(inline ? "inline" : "attachment", name),
     "x-content-type-options": "nosniff",
     "accept-ranges": "bytes",
-    "cache-control": "private, no-cache",
+    // Playback is cached for good (the bytes of a URL never change); downloads are not, so
+    // download limits and counts see every request.
+    "cache-control": mode === "stream" ? IMMUTABLE_CACHE : "private, no-cache",
   });
   if (etag) {
     headers.set("etag", `"${etag}"`);

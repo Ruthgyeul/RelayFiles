@@ -36,7 +36,7 @@ function RowAction({ icon, label, onClick, href, accent, fill }: { icon: IconNam
 interface ShareRowsProps {
   items: ShareItem[];
   /** Playback and preview URLs of a file in this link. */
-  urls: { stream: (id: string) => string; thumb: (id: string) => string };
+  urls: { stream: (id: string) => string; thumb: (id: string) => string; transcode: (id: string) => string };
   folderHref: (folderId: string) => Route;
   onOpen: (item: ShareItem) => void;
   onDownload: (item: ShareItem) => void;
@@ -87,6 +87,7 @@ export function ShareRows({ items, urls, folderHref, onOpen, onDownload }: Share
                 kind={preview}
                 src={urls.stream(item.id)}
                 thumbSrc={item.hasThumb ? urls.thumb(item.id) : null}
+                transcodeSrc={urls.transcode(item.id)}
                 loadOriginal={false}
                 onOpen={() => onOpen(item)}
                 className="sm:pl-12"

@@ -60,8 +60,9 @@ server {
     location ~ ^${STORAGE_ACCEL_PREFIX}[a-z0-9-]+/(.+)$ {
         internal;
         alias ${STORAGE_ROOT}/users/$1;
+        # Cache-Control comes from the app (kept by X-Accel-Redirect): playback is cacheable,
+        # downloads are not. Adding one here would send two and disable the browser cache.
         add_header X-Content-Type-Options nosniff always;
-        add_header Cache-Control "private, no-cache" always;
     }
 
     # Resumable uploads stream straight to the app.

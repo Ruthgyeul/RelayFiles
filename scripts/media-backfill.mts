@@ -1,21 +1,24 @@
 /**
  * Queues thumbnails for images and videos that have none (files uploaded while the worker
  * or Redis was down): npm run media:backfill
+ * With `-- --previews`, queues every image large enough for a viewer preview instead (once,
+ * after upgrading: files uploaded before previews existed have none).
  */
 import nextEnv from "@next/env";
 
 nextEnv.loadEnvConfig(process.cwd());
 
 const { closeQueues, enqueueMedia } = await import("../src/server/jobs/queue");
-const { mediaWithoutThumbs } = await import("../src/server/repositories/node.repo");
+const { imagesForPreview, mediaWithoutThumbs } = await import("../src/server/repositories/node.repo");
 const { db } = await import("../src/server/db/client");
 
 const PAGE = 1_000;
+const pageOf = process.argv.includes("--previews") ? imagesForPreview : mediaWithoutThumbs;
 let queued = 0;
 let after: string | undefined;
 try {
   for (;;) {
-    const rows = await mediaWithoutThumbs(db(), PAGE, after);
+    const rows = await pageOf(db(), PAGE, after);
     if (rows.length === 0) break;
     await enqueueMedia(rows.map((row) => row.id));
     queued += rows.length;

@@ -1,16 +1,18 @@
 import "server-only";
 import { Readable } from "node:stream";
 import { SHARE } from "@/config/policy";
+import { PREFETCH_HEADER } from "@/contracts/api";
 import { zipName } from "@/domain/serving";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { db } from "../db/client";
 import { bytesSource, sendFile } from "../files/send-file";
-import { sendThumb } from "../files/send-thumb";
+import { sendAsset, sendThumb } from "../files/send-thumb";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
 import { canStripType, strippedCopy } from "../media/process";
+import { transcodeResponse } from "../media/transcode";
 import { findAccountById, type AccountRow } from "../repositories/account.repo";
 import { ancestorChain } from "../repositories/node.repo";
 import { countDownload, type SharedRow } from "../repositories/share.repo";
@@ -119,6 +121,37 @@ export async function serveSharedThumb(req: Request, linkId: string, nodeId: str
   if (!row.hasThumb) throw new ApiError("NOT_FOUND");
   const owner = await ownerOf(link);
   return sendThumb(req, await driverForAccount(owner), owner.id, row);
+}
+
+/**
+ * What the viewer shows a visitor for an image: the worker's screen-sized preview (re-encoded
+ * without metadata, so safe whatever the owner's setting), else the same bytes as playback.
+ * Counted as a view like playback, except the viewer's look-ahead for the next picture.
+ */
+export async function serveSharedPreview(req: Request, linkId: string, nodeId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
+  const { link, row } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
+  const owner = await ownerOf(link);
+  const preview = row.kind === "IMAGE" ? await sendAsset(req, await driverForAccount(owner), owner.id, row, "preview") : null;
+  if (!preview) return serveSharedFile(req, linkId, nodeId, "stream", viewer, client);
+  // The viewer's look-ahead for the next picture is not a view.
+  const prefetch = req.headers.get(PREFETCH_HEADER) !== null;
+  if (!link.isOwner && !prefetch && req.method === "GET") void logLinkEvent(row, "VIEW", client);
+  return preview;
+}
+
+/** A visitor's playback of a video the browser cannot decode, converted while it plays. */
+export async function serveSharedTranscode(req: Request, linkId: string, nodeId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
+  const file = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
+  const { link, row } = file;
+  if (row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
+  const owner = await ownerOf(link);
+  const path = await (await driverForAccount(owner)).localPath({ accountId: owner.id, segments: file.segments });
+  if (!path) throw new ApiError("NOT_FOUND");
+  if (req.method === "GET") {
+    if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
+    void markActive("stream", `${row.id}:${client.ipKey}`);
+  }
+  return transcodeResponse(req, path);
 }
 
 /** "Download all": a zip of a folder inside a share link, with images cleaned like single downloads. */

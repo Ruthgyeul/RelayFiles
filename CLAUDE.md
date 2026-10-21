@@ -47,7 +47,7 @@ npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지�
 npm run check:emoji  # 이모지 사용 검사
 npm run check        # typecheck · lint · emoji · test · build 전체
 npm run worker       # 백그라운드 워커(썸네일, 공개 링크용 메타데이터 제거본). ffmpeg 필요
-npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기
+npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기 (-- --previews: 큰 이미지의 뷰어 미리보기)
 npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 다시 생성
 npm run data:migrate     # 데이터 마이그레이션(src/server/migrations) 실행, 중단 지점부터 재개
 npm run keys:rotate      # *_PREVIOUS 키로 저장된 토큰을 현재 키로 다시 암호화
