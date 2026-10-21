@@ -19,6 +19,18 @@ sudo tail -f /var/log/relayfiles/error.log
 
 앱 로그(`LOG_DIR`)와 Nginx 로그에는 토큰, 비밀번호, 클라이언트 IP가 남지 않는다. 문제를 찾을 때는 에러 화면의 요청 ID로 `combined.log`를 검색한다.
 
+로그 파일은 크기로 순환한다. `LOG_DIR`의 `error.log`·`combined.log`는 20MB × 5개(`src/config/policy.ts`의 `LOGS`), 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10MB × 5)까지만 남는다.
+
+### 좀비 프로세스 점검
+
+app·tools 이미지는 tini를 PID 1로 실행한다(Dockerfile `ENTRYPOINT`). tini는 고아가 된 자식 프로세스(ffmpeg, smartctl, 헬스체크)를 회수한다. 이미지를 다시 빌드한 뒤 확인한다.
+
+```bash
+docker top relayfiles-app-1 | head -3          # 첫 프로세스가 /usr/bin/tini
+docker top relayfiles-worker-1 | head -3
+ps -eo stat | grep -c '^Z'                     # 10분 뒤에도 0
+```
+
 ## 점검 모드
 
 ```bash

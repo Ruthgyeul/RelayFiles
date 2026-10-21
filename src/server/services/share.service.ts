@@ -12,7 +12,7 @@ import { ApiError } from "../http/api-error";
 import { ancestorChain, type NodeRow } from "../repositories/node.repo";
 import { isRetiredLink } from "../repositories/link-tombstone.repo";
 import { findByLinkId, publicTree, type SharedRow } from "../repositories/share.repo";
-import { redis } from "../redis";
+import { countInWindow, redis } from "../redis";
 import { busyLevels } from "../share/busy";
 import { addUnlock, type Unlocks } from "../share/unlock-cookie";
 
@@ -265,8 +265,7 @@ export async function unlockShare(linkId: string, password: string, viewer: Shar
   if (!link.root.passwordHash) return addUnlock(viewer.unlocks, linkId, secret, now);
 
   const key = `unlock:${linkId}:${client.ipKey}`;
-  const attempts = await redis().incr(key);
-  if (attempts === 1) await redis().expire(key, SHARE.unlockWindowSec);
+  const attempts = await countInWindow(key, SHARE.unlockWindowSec);
   if (attempts > SHARE.unlockMaxAttempts) throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(key)) });
   if (!(await verify(link.root.passwordHash, password))) throw new ApiError("FORBIDDEN", "Wrong password");
   await redis().del(key);

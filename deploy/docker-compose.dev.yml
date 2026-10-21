@@ -3,10 +3,17 @@
 # The app itself runs on the host with `npm run dev`. Production: deploy/docker-compose.yml.
 name: relayfiles-dev
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+
 services:
   postgres:
     image: postgres:16
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-relayfiles}
       POSTGRES_USER: ${POSTGRES_USER:-relayfiles}
@@ -23,6 +30,7 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
+    logging: *logging
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--appendonly", "yes"]
     ports:
       - "${REDIS_PUBLISH:-127.0.0.1:6379}:6379"

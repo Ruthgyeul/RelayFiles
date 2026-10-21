@@ -3,7 +3,8 @@
 # RelayFiles images (docs/deploy-ubuntu.md):
 #   app   - the Next.js standalone server (no build tools, no dev dependencies)
 #   tools - worker, database migrations and admin scripts (npm run worker / db:deploy / admin:create)
-# Both run as the storage account (STORAGE_UID:STORAGE_GID) that owns /mnt/relayfilesDB.
+# Both run as the storage account (STORAGE_UID:STORAGE_GID) that owns /mnt/relayfilesDB, under
+# tini as PID 1 (reaps orphaned processes, forwards stop signals) in Compose, k3s or docker run.
 
 ARG NODE_IMAGE=node:24-bookworm-slim
 
@@ -12,7 +13,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 # Prisma picks its schema engine by the OpenSSL it finds: without it npm ci fetches the 1.1.x
 # engine, and the tools image (OpenSSL 3 via ffmpeg) then tries to download another at run time.
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+# tini (Debian package, amd64 and arm64) is PID 1 of both images: Node does not reap orphaned
+# processes it did not start itself, so without an init they pile up as zombies.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl tini && rm -rf /var/lib/apt/lists/*
 
 # All dependencies; postinstall generates the Prisma client from the schema.
 FROM base AS deps
@@ -40,11 +43,14 @@ RUN groupadd --system --gid ${STORAGE_GID} relayfiles \
  && if [ -n "${APP_PACKAGES}" ]; then apt-get update && apt-get install -y --no-install-recommends ${APP_PACKAGES} && rm -rf /var/lib/apt/lists/*; fi
 COPY --from=build --chown=relayfiles:relayfiles /app/.next/standalone ./
 COPY --chmod=0755 deploy/docker-entrypoint.sh /usr/local/bin/relayfiles-entrypoint
+COPY --chmod=0644 deploy/healthcheck.mjs /usr/local/lib/relayfiles/healthcheck.mjs
 USER relayfiles
-ENTRYPOINT ["relayfiles-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "--", "relayfiles-entrypoint"]
 EXPOSE 3000
+# Exec form (no `sh -c`): with a shell in between, a check Docker stops at --timeout would kill
+# only the shell and leave its node child to the container's PID 1.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "require('http').request({host:'127.0.0.1',port:process.env.PORT||3000,path:'/api/health',method:'HEAD'},r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1)).end()"
+  CMD ["node", "/usr/local/lib/relayfiles/healthcheck.mjs"]
 CMD ["node", "server.js"]
 
 FROM deps AS tools
@@ -59,5 +65,6 @@ RUN groupadd --system --gid ${STORAGE_GID} relayfiles \
 COPY --chown=relayfiles:relayfiles . .
 COPY --chmod=0755 deploy/docker-entrypoint.sh /usr/local/bin/relayfiles-entrypoint
 USER relayfiles
-ENTRYPOINT ["relayfiles-entrypoint"]
-CMD ["npm", "run", "worker"]
+ENTRYPOINT ["/usr/bin/tini", "--", "relayfiles-entrypoint"]
+# One Node process for the worker (npm and the tsx launcher would each add another).
+CMD ["node", "--import", "tsx", "--conditions=react-server", "scripts/worker.mts"]

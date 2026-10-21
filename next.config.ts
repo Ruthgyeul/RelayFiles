@@ -1,5 +1,17 @@
 import type { NextConfig } from "next";
 
+/**
+ * Sent with every page and API response. No page is meant to be framed (clickjacking on
+ * delete / share actions), and share-link URLs must not leak to other sites as a Referer.
+ */
+const SECURITY_HEADERS = [
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "same-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+];
+
 const nextConfig: NextConfig = {
   // Self-hosted on Ubuntu via Docker: emit a minimal standalone server bundle.
   output: "standalone",
@@ -10,6 +22,7 @@ const nextConfig: NextConfig = {
     // Enables forbidden() / unauthorized() and their 403 / 401 pages (docs/plan.md §9).
     authInterrupts: true,
   },
+  headers: async () => [{ source: "/:path*", headers: SECURITY_HEADERS }],
 };
 
 export default nextConfig;

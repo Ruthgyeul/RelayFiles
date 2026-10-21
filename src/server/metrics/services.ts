@@ -1,27 +1,25 @@
 import "server-only";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { getAppEnv, getEnv } from "@/config/env";
 import { METRICS, MS } from "@/config/policy";
 import type { ServiceRow } from "@/contracts/server-metrics";
 import { formatAgo, formatSize } from "@/domain/format";
 import { cronLabel } from "@/domain/server";
 import { db } from "../db/client";
+import { CommandError, runCommand } from "../process/run-command";
 import { listActiveVolumes } from "../repositories/volume.repo";
 import { checkVolume } from "../storage/volume";
 import { lastCleanup, workerAlive } from "./history";
-
-const run = promisify(execFile);
 
 /** SMART health of DISK_DEVICE via `smartctl -j` (needs read access to the device). */
 async function diskHealth(): Promise<ServiceRow> {
   const device = getEnv("observability").DISK_DEVICE;
   try {
-    const { stdout } = await run("smartctl", ["-j", "-H", "-A", "-i", device], { timeout: METRICS.smartTimeoutSec * MS.second });
-    return parseSmart(stdout, device);
+    // Not logged: in a container without the disk, "unavailable" is the normal answer.
+    const { stdout } = await runCommand("smartctl", ["-j", "-H", "-A", "-i", device], { timeoutMs: METRICS.smartTimeoutSec * MS.second, logFailures: false });
+    return parseSmart(stdout.toString(), device);
   } catch (error) {
     // smartctl exits non-zero for warnings but still prints JSON.
-    const stdout = (error as { stdout?: string }).stdout;
+    const stdout = error instanceof CommandError && error.reason === "exit" ? error.result.stdout.toString() : "";
     if (stdout) return parseSmart(stdout, device);
     return { name: "Disk health", detail: `SMART data unavailable for ${device} (install smartmontools and allow access)`, status: "unknown" };
   }

@@ -19,9 +19,16 @@ logger.info("worker started", { queues: ["media", "maintenance"] });
 
 async function stop(signal: string) {
   logger.info("worker stopping", { signal });
-  await Promise.all([media.close(), maintenance.worker.close(), maintenance.queue.close()]);
-  await db().$disconnect();
-  process.exit(0);
+  // Exit even when a close fails, so a supervisor never waits on a half-stopped worker.
+  try {
+    await Promise.all([media.close(), maintenance.worker.close(), maintenance.queue.close()]);
+    await db().$disconnect();
+  } catch (error) {
+    logger.error("worker did not stop cleanly", { error });
+    process.exitCode = 1;
+  } finally {
+    process.exit();
+  }
 }
 process.once("SIGINT", () => void stop("SIGINT"));
 process.once("SIGTERM", () => void stop("SIGTERM"));
