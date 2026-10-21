@@ -153,6 +153,15 @@ cloudflared는 compose 네트워크에서 고정 주소(`CLOUDFLARED_IP`)를 쓴
 
 Cloudflare 무료 요금제의 요청 크기 제한은 100MB다. 업로드는 `UPLOAD_CHUNK_SIZE_MB`(기본 50) 단위로 나뉘어 이 제한에 걸리지 않는다.
 
+### 호스트 Nginx 뒤
+
+호스트의 Nginx가 TLS를 맡고 `127.0.0.1:NGINX_LISTEN_PORT`로 넘기는 경우(`NGINX_LISTEN_HOST=127.0.0.1`), 컨테이너 Nginx가 보는 상대 주소는 모든 요청에서 Docker 게이트웨이(`DOCKER_SUBNET`의 첫 주소, 기본 `172.28.0.1`)다. 이대로면 모든 방문자가 같은 IP가 되어 로그인 잠금(`LOGIN_MAX_ATTEMPTS`)과 가입 제한(`SIGNUPS_PER_HOUR`)이 전체 사용자에게 한꺼번에 걸린다.
+
+1. 호스트 Nginx의 `location`에 `proxy_set_header X-Real-IP $remote_addr;`를 둔다.
+2. `.env`에 `TRUSTED_PROXY_IP=172.28.0.1`을 넣고(`DOCKER_SUBNET`을 바꿨다면 그 게이트웨이) `$C up -d nginx`.
+
+컨테이너 Nginx는 이 주소에서 온 요청의 `X-Real-IP`만 클라이언트 주소로 믿는다. cloudflared의 `CF-Connecting-IP` 처리는 그대로이고, 다른 출처의 `X-Real-IP`는 무시한다. 게이트웨이 주소는 `docker network inspect relayfiles_relay --format '{{(index .IPAM.Config 0).Gateway}}'`로 확인한다.
+
 ### LAN만
 
 `NGINX_LISTEN_PORT`로 바로 접속한다. 포트는 공유기에서 외부로 열지 않는다.

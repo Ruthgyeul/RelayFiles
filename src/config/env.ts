@@ -124,6 +124,8 @@ export const ENV_GROUPS = {
     /** Private network of the compose services; cloudflared gets a fixed address in it. */
     DOCKER_SUBNET: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/).default("172.28.0.0/24"),
     CLOUDFLARED_IP: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("172.28.0.250"),
+    /** Peer address of a proxy on the host (the DOCKER_SUBNET gateway); Nginx trusts its X-Real-IP. */
+    TRUSTED_PROXY_IP: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).optional(),
   }),
   testing: z.object({
     E2E_PORT: port.default(3100),
