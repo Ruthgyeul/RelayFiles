@@ -2,7 +2,7 @@ import "server-only";
 import { AUTH } from "@/config/policy";
 import { getEnv } from "@/config/env";
 import { lockSecondsAfter, type LockoutPolicy } from "@/domain/lockout";
-import { redis } from "../redis";
+import { countInWindow, redis } from "../redis";
 
 /**
  * Failed token sign-ins per client address (docs/plan.md §13.2). Counters live in Redis
@@ -44,6 +44,5 @@ export async function clearFailures(ipKey: string): Promise<void> {
 
 /** Counts an anonymous sign-up; false when the address exceeded the hourly limit. */
 export async function allowSignup(ipKey: string): Promise<boolean> {
-  const count = firstResult(await redis().multi().incr(signupKey(ipKey)).expire(signupKey(ipKey), AUTH.signupWindowSec, "NX").exec());
-  return count <= getEnv("policy").SIGNUPS_PER_HOUR;
+  return (await countInWindow(signupKey(ipKey), AUTH.signupWindowSec)) <= getEnv("policy").SIGNUPS_PER_HOUR;
 }
