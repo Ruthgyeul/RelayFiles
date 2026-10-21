@@ -22,6 +22,11 @@ export class LazyReadable extends Readable {
     this.opening = true;
     this.open().then(
       (source) => {
+        // Destroyed (archive aborted) while the file was opening: close it right away.
+        if (this.destroyed) {
+          source.destroy();
+          return;
+        }
         this.source = source;
         source.on("data", (chunk: Buffer) => {
           if (!this.push(chunk)) source.pause();

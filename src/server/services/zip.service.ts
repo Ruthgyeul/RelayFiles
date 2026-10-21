@@ -17,16 +17,36 @@ type Owner = Pick<AccountRow, "id" | "volumeId">;
 /** One archive entry: a folder (keeps empty folders) or a file opened when the zip reaches it. */
 export type ZipEntry = { name: string; folder: true } | { name: string; folder?: false; open: () => Promise<Readable> };
 
-/** Streams entries as one zip (store mode: media is already compressed). */
+/**
+ * Streams entries as one zip (store mode: media is already compressed). Entries are appended
+ * one at a time, after the previous one is written: archiver pipes every appended stream
+ * right away, so appending them all up front would open every file of the selection at once.
+ */
 export function zipResponse(entries: readonly ZipEntry[], fileName: string): Response {
   const archive = new ZipArchive({ store: true });
-  for (const entry of entries) {
-    if (entry.folder) archive.append(Buffer.alloc(0), { name: `${entry.name}/` });
-    else archive.append(new LazyReadable(entry.open), { name: entry.name });
-  }
+  let current: LazyReadable | null = null;
+  let next = 0;
+  const appendNext = () => {
+    if (archive.destroyed) return;
+    const entry = entries[next++];
+    current = null;
+    if (!entry) {
+      void archive.finalize();
+      return;
+    }
+    if (entry.folder) {
+      archive.append(Buffer.alloc(0), { name: `${entry.name}/` });
+      return;
+    }
+    current = new LazyReadable(entry.open);
+    archive.append(current, { name: entry.name });
+  };
+  archive.on("entry", appendNext);
   archive.on("warning", (error) => logger.warn("zip warning", { error }));
   archive.on("error", (error) => logger.error("zip failed", { error }));
-  void archive.finalize();
+  // A cancelled download destroys the archive but not the entry it was reading: close that file.
+  archive.once("close", () => current?.destroy());
+  appendNext();
   return new Response(Readable.toWeb(archive) as ReadableStream, {
     headers: {
       "content-type": "application/zip",

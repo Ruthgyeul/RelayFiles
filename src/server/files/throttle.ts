@@ -9,6 +9,7 @@ import { MS } from "@/config/policy";
 export class Throttle extends Transform {
   private readonly started = Date.now();
   private sent = 0;
+  private timer: NodeJS.Timeout | undefined;
 
   constructor(private readonly bytesPerSecond: number) {
     super();
@@ -18,6 +19,16 @@ export class Throttle extends Transform {
     this.sent += chunk.length;
     const due = this.started + (this.sent / this.bytesPerSecond) * MS.second;
     const wait = Math.max(0, due - Date.now());
-    setTimeout(() => done(null, chunk), wait);
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      done(null, chunk);
+    }, wait);
+  }
+
+  // A visitor who leaves mid-download must not keep a pending timer (and its chunk) alive.
+  override _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    callback(error);
   }
 }

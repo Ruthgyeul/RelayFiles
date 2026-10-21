@@ -1,5 +1,5 @@
 import "server-only";
-import { Readable } from "node:stream";
+import { pipeline, Readable } from "node:stream";
 import { getEnv } from "@/config/env";
 import { canShowInline, contentDisposition, parseRange } from "@/domain/serving";
 import type { StorageDriver, StorageLocation } from "../storage/driver";
@@ -68,6 +68,8 @@ export async function sendFile(req: Request, options: SendFileOptions): Promise<
   const source = body
     ? Readable.from([Buffer.from(body.buffer, body.byteOffset, body.byteLength).subarray(range?.start ?? 0, (range?.end ?? size - 1) + 1)])
     : await driver.createReadStream(location, range ?? undefined);
-  const stream = rateLimit ? source.pipe(new Throttle(rateLimit)) : source;
+  // pipeline (not pipe): when the client goes away and the response stream is destroyed, the
+  // file is closed too instead of waiting, paused and open, for garbage collection.
+  const stream = rateLimit ? pipeline(source, new Throttle(rateLimit), () => undefined) : source;
   return new Response(Readable.toWeb(stream) as ReadableStream, { status: range ? 206 : 200, headers });
 }
