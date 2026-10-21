@@ -102,6 +102,8 @@ export const MEDIA = {
   maxInputPixels: 268_402_689,
   /** ffmpeg gives up after this long. */
   ffmpegTimeoutSec: 60,
+  /** Largest PNG frame read back from ffmpeg (a 8K frame fits); more stops the command. */
+  maxFrameBytes: 256 * 1024 * 1024,
   /** Thumbnails change only when the file does; browsers may keep them for a day. */
   thumbMaxAgeSec: 86_400,
   workerConcurrency: 2,
@@ -188,4 +190,14 @@ export const AUTH = {
   signupWindowSec: 60 * 60,
   /** Session "last seen" is written at most this often. */
   touchIntervalSec: 5 * 60,
+} as const;
+
+/** Child processes (ffmpeg, smartctl) started through runCommand. */
+export const PROCESS = {
+  /** After a timeout the child gets SIGTERM, then SIGKILL if it is still running this much later. */
+  killGraceMs: 2_000,
+  /** Output kept per stream unless the caller sets its own limit; more stops the command. */
+  maxOutputBytes: 1024 * 1024,
+  /** Error output kept for messages and logs (the rest is dropped, not buffered). */
+  maxStderrBytes: 4_096,
 } as const;
