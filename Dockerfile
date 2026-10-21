@@ -10,6 +10,9 @@ ARG NODE_IMAGE=node:24-bookworm-slim
 FROM ${NODE_IMAGE} AS base
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
+# Prisma picks its schema engine by the OpenSSL it finds: without it npm ci fetches the 1.1.x
+# engine, and the tools image (OpenSSL 3 via ffmpeg) then tries to download another at run time.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 
 # All dependencies; postinstall generates the Prisma client from the schema.
 FROM base AS deps
