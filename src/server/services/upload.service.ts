@@ -44,7 +44,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 /** Rejects a path with an invalid segment, naming the first problem (design wording). */
-function checkRelPath(rel: string): void {
+export function checkRelPath(rel: string): void {
   for (const segment of rel.split("/")) {
     const error = nameError(segment);
     if (error) throw new ApiError("BAD_REQUEST", error, { fields: { files: error } });
@@ -52,7 +52,7 @@ function checkRelPath(rel: string): void {
 }
 
 /** Bytes still allowed by the account quota and the volume's free space. */
-async function assertSpace(owner: Owner, bytes: number, driver: StorageDriver, reservePct: number): Promise<void> {
+export async function assertSpace(owner: Owner, bytes: number, driver: StorageDriver, reservePct: number): Promise<void> {
   if (owner.quotaBytes !== null) {
     const { usedBytes } = await accountUsage(db(), owner.id);
     if (usedBytes + BigInt(bytes) > owner.quotaBytes) {

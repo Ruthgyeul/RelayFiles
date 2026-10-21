@@ -182,6 +182,24 @@ $C up -d app worker nginx
 
 `STORAGE_ROOT`의 SSD를 바꿀 때는 새 SSD를 다른 경로에 붙여 위처럼 비운 다음, 새 SSD를 `STORAGE_ROOT`에 다시 마운트하고 `volume:init`(인자 없이)을 실행한다. 표시 파일의 volumeId로 같은 볼륨임을 알아보고 경로만 갱신한다. 이때 `deploy/nginx/volumes/`의 그 볼륨 파일은 지운다(기본 location이 처리한다).
 
+## 서버에 있는 파일 가져오기
+
+서버 디스크에 이미 있는 파일(예: `/mnt/RuthVault2T/.private/Movies`)을 한 계정에 넣는다. 심볼릭 링크는 쓸 수 없으므로(경로 검사가 링크를 거부하고, DB에 기록되지 않으며, 계정이 지워질 때 원본까지 지워질 수 있다) 파일을 **복사**한다. 원본 폴더는 컨테이너에 마운트하지 않는다. 원본 소유자 권한으로 `tar`를 만들고 stdin으로 넘긴다.
+
+```bash
+tar -C /mnt/RuthVault2T/.private/Movies -cf - . | \
+  $C run --rm -T tools npm run -s storage:import -- --account <accountId> [--to "Movies/2026"] [--ignore-quota]
+```
+
+- **계정 id**: 관리자 화면 Accounts → 계정 Manage 창의 이름 아래 줄, 또는 `sudo ls <STORAGE_ROOT>/users/`, 또는 `$C exec postgres psql -U relayfiles -c 'SELECT id, name FROM "Account";'`.
+- `--to`: 계정 루트 아래의 대상 폴더. 없으면 만든다. 생략하면 루트에 바로 넣는다.
+- `--ignore-quota`: 계정 용량 제한을 무시한다. 볼륨의 예비 공간(`reservePct`)은 항상 지킨다.
+- 업로드와 같은 방식으로 기록한다. MIME 판별, SHA-256, 폴더 생성, DB 노드를 만들고 파일 권한은 `0600`이다. 이미지·영상 썸네일은 worker가 나중에 만든다(`$C ps worker` 확인).
+- **이어하기**: 중간에 멈추면(에러, Ctrl-C) 같은 명령을 다시 실행한다. 같은 경로에 같은 크기의 파일이 있으면 건너뛴다. 이름은 같은데 크기가 다르면 `name (2).ext`로 옆에 둔다. 그래서 내용을 바꾼 파일을 다시 가져오면 사본이 하나 더 생긴다.
+- 원본은 읽기만 하고 바꾸지 않는다. 일반 파일과 폴더만 가져오고, 링크·장치 파일은 `ignored`로 출력한 뒤 건너뛴다.
+- **멤버 계정**은 만료(TTL)되면 계정과 함께 파일도 지워진다. 명령이 시작할 때 만료일을 경고한다. 오래 둘 파일은 관리자 계정이나 만료 없는 계정에 넣는다.
+- 끝에 `Done: N imported (크기), N already there, N ignored.`를 출력한다. 실패하면 종료 코드 1이고, 그때까지 가져온 파일은 남아 있다.
+
 ## 서버 이전 (N95 → 새 서버)
 
 모든 주소·경로·포트는 `.env`에 있으므로 코드는 바뀌지 않는다. 앱 서버와 DB 서버를 나눌 때(MS-A2 + MS-01)도 `POSTGRES_HOST`·`REDIS_HOST`만 바꾼다.
