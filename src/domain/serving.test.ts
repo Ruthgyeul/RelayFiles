@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canShowInline, contentDisposition, parseRange, zipName } from "./serving";
+import { canShowInline, contentDisposition, contentRangeTotal, parseRange, zipName } from "./serving";
 
 describe("parseRange", () => {
   it("parses open, closed and suffix ranges", () => {
@@ -39,5 +39,17 @@ describe("zipName", () => {
     expect(zipName([{ name: "clip.final.mp4", folder: false }], "root")).toBe("clip.final.zip");
     expect(zipName([{ name: ".env", folder: false }], "root")).toBe(".env.zip");
     expect(zipName([{ name: "a", folder: false }, { name: "b", folder: true }], "Videos")).toBe("Videos · 2 items.zip");
+  });
+});
+
+describe("contentRangeTotal", () => {
+  it("reads the total size of a partial response", () => {
+    expect(contentRangeTotal("bytes 0-99/1234")).toBe(1234);
+    expect(contentRangeTotal("bytes */0")).toBe(0);
+  });
+
+  it("is null when the size is missing or unknown", () => {
+    expect(contentRangeTotal(null)).toBeNull();
+    expect(contentRangeTotal("bytes 0-99/*")).toBeNull();
   });
 });

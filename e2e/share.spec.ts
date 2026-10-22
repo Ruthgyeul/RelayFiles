@@ -42,7 +42,7 @@ test("the owner previews a private link and makes it public", async ({ page }) =
   await expect(card.getByText("You're previewing as a visitor.")).toBeVisible();
   await card.getByRole("button", { name: "Make public" }).click();
   await expect(page.getByText("Now public")).toBeVisible();
-  await expect(page.locator('[data-item="notes.txt"]')).toContainText("13 B · File");
+  await expect(page.locator('[data-item="notes.txt"]')).toContainText("13 B · Text");
   await expect(page.getByText("Shared privately with RelayFiles")).toBeVisible();
 
   await page.getByRole("link", { name: "Back to app" }).click();
@@ -66,7 +66,7 @@ test("visitors browse, download and view, and see the file manager's Share page"
   await visitor.getByRole("button", { name: "Copy link" }).click();
   await expect(visitor.getByText("Link copied")).toBeVisible();
   await visitor.locator('[data-item="notes.txt"]').getByText("notes.txt").click();
-  await expect(visitor.getByRole("dialog", { name: "notes.txt" }).getByText("No preview for this file type")).toBeVisible();
+  await expect(visitor.getByRole("dialog", { name: "notes.txt" }).getByText("Text · 1 line")).toBeVisible();
   const width = await visitor.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
   expect(width[0]).toBeLessThanOrEqual(width[1]!);
   await visitor.context().close();
