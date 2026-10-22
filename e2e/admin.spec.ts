@@ -75,12 +75,14 @@ test("shows live server measurements", async ({ page }) => {
   await page.goto("/admin/server");
   const main = page.getByRole("main");
   for (const card of ["Disk", "CPU", "Memory", "Network out"]) await expect(main.getByRole("region", { name: card, exact: true })).toBeVisible();
-  await expect(main.getByRole("region", { name: "CPU", exact: true }).getByText(/^\d+ cores · load \d+\.\d{2}$/)).toBeVisible();
+  await expect(main.getByRole("region", { name: "CPU", exact: true }).getByText(/^\d+ cores · load \d+(\.\d{1,2})?$/)).toBeVisible();
 
   const bandwidth = main.getByRole("region", { name: "Outbound bandwidth" });
-  await expect(bandwidth.getByRole("heading", { name: "Outbound bandwidth · last hour" })).toBeVisible();
+  await expect(bandwidth.getByRole("heading", { name: "Outbound bandwidth · last 48h" })).toBeVisible();
+  await expect(bandwidth.getByText("AVG 48H")).toBeVisible();
   await expect(bandwidth.getByText("UPTIME")).toBeVisible();
   await expect(bandwidth.getByText("ACCOUNTS")).toBeVisible();
+  await expect(main.getByRole("region", { name: "Disk activity" }).getByRole("heading", { name: "Disk read / write · last 48h" })).toBeVisible();
 
   const services = main.getByRole("region", { name: "Services" });
   for (const name of ["Web server", "Media streaming", "Cleanup job", "Disk health"]) await expect(services.getByText(name, { exact: true })).toBeVisible();
