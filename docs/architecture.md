@@ -60,8 +60,10 @@ route handler (src/app/api/**/route.ts): 인증(deviceOf/requireActive), zod 파
 - 문서(미디어가 아닌 파일): 형식은 이름으로 정한다(`src/domain/file-format.ts`, 목록 아이콘도 여기서 나온다). 뷰어는 같은 `stream` URL을 `fetch`로 읽어 브라우저 안에서 그린다. 서버는 이 파일들을 여전히 `attachment`·`nosniff`로만 보내므로(HTML·SVG가 앱 출처에서 실행되지 않음) 서버 쪽 변경이 없다.
   - 텍스트·코드·Markdown·CSV/TSV: Range 요청 하나로 앞 1MB만 받는다(`DOCUMENT_PREVIEW.textMaxBytes`). NUL 바이트가 있으면 바이너리로 보고 "No preview"를 보여 준다. UTF-8이 아니면 UTF-16(BOM), EUC-KR 순으로 해석한다. 코드는 highlight.js(필요한 언어만 지연 로드, Solidity는 `solidity.ts`), Markdown은 react-markdown + GFM으로 그리며 원시 HTML은 글자로 보이고 외부 이미지는 불러오지 않는다. 확장자가 없거나 모르는 파일은 앞 8KB를 먼저 보고 텍스트일 때만 이어 받는다.
   - PDF: pdf.js legacy 빌드(구형 브라우저용 폴리필 포함)를 Web Worker에서 돌리고, 화면 근처 페이지만 canvas에 그렸다가 멀어지면 비운다. Range 요청으로 필요한 부분만 받는다.
-  - SVG는 blob URL의 `<img>`(스크립트·네트워크 없음), 글꼴(TTF/OTF/WOFF/WOFF2)은 `FontFace`로 불러 예문을 보여 준다. 둘 다 20MB까지.
-  - 압축 파일, Office 문서, 디스크 이미지, 패키지 등은 형식 아이콘과 "No preview"만 보인다.
+  - SVG는 blob URL의 `<img>`(스크립트·네트워크 없음), 글꼴(TTF/OTF/WOFF/WOFF2)은 `FontFace`로 불러 예문을 보여 준다.
+  - Word(.docx)는 mammoth로 HTML(제목, 목록, 표, 링크, 내장 그림)로 바꾸고 DOMPurify로 정제해 넣는다. 페이지 레이아웃(글꼴, 단, 머리글·바닥글)은 없다. Excel(.xlsx, .xlsm)은 read-excel-file로 시트마다 표를 만들고 시트 탭으로 바꾼다. 수식은 저장된 결과값을 보여 준다.
+  - SVG·글꼴·docx·xlsx는 파일 전체가 필요해서 20MB(`DOCUMENT_PREVIEW.assetMaxBytes`)까지만 미리 본다. 표는 1,000행·100열까지.
+  - 압축 파일, 옛 Office 형식(.doc, .xls, .ppt)과 .pptx, .hwp, 디스크 이미지, 패키지 등은 형식 아이콘과 "No preview"만 보인다.
   - 공유 링크에서 문서를 여는 것은 `VIEW`로 기록된다(영상·오디오만 `PLAY`).
 
 ## 교체 가능한 인터페이스

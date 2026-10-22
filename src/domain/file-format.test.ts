@@ -28,6 +28,9 @@ describe("fileFormatOf", () => {
     expect(fileFormatOf("paper.pdf").preview).toBe("pdf");
     expect(fileFormatOf("logo.svg").preview).toBe("svg");
     expect(fileFormatOf("Inter.woff2")).toMatchObject({ preview: "font", label: "Font (WOFF2)" });
+    expect(fileFormatOf("Report.DOCX")).toEqual({ label: "Word document", icon: "doc", preview: "docx" });
+    expect(fileFormatOf("budget.xlsx")).toEqual({ label: "Excel workbook", icon: "sheet", preview: "spreadsheet" });
+    expect(fileFormatOf("macros.xlsm").preview).toBe("spreadsheet");
   });
 
   it("knows files by their whole name", () => {
@@ -40,8 +43,8 @@ describe("fileFormatOf", () => {
 
   it("gives binary formats an icon and no preview", () => {
     expect(fileFormatOf("photos.zip")).toEqual({ label: "Archive", icon: "archive", preview: null });
-    expect(fileFormatOf("report.docx").icon).toBe("doc");
-    expect(fileFormatOf("budget.xlsx").icon).toBe("sheet");
+    expect(fileFormatOf("report.doc")).toEqual({ label: "Document", icon: "doc", preview: null });
+    expect(fileFormatOf("budget.xls")).toEqual({ label: "Spreadsheet", icon: "sheet", preview: null });
     expect(fileFormatOf("deck.pptx").icon).toBe("slides");
     expect(fileFormatOf("ubuntu.iso").icon).toBe("disc");
     expect(fileFormatOf("setup.exe").icon).toBe("package");

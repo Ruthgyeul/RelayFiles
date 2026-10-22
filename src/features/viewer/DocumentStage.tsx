@@ -9,6 +9,8 @@ import { SvgView } from "./SvgView";
 import { TextDocument } from "./TextDocument";
 
 const PdfView = lazy(() => import("./PdfView"));
+const DocxView = lazy(() => import("./DocxView"));
+const SpreadsheetView = lazy(() => import("./SpreadsheetView"));
 
 interface DocumentStageProps {
   name: string;
@@ -38,7 +40,7 @@ function NoPreview({ format, reason, onDownload }: { format: FileFormat; reason:
   );
 }
 
-/** A file that is not media: text, code, Markdown, a table, a PDF, an SVG or a font. */
+/** A file that is not media: text, code, Markdown, a table, a PDF, an SVG, a font, a Word or Excel file. */
 export function DocumentStage({ name, src, format, onDownload, notify }: DocumentStageProps) {
   const noPreview = <NoPreview format={format} reason="No preview for this file type" onDownload={onDownload} />;
   const tooLarge = <NoPreview format={format} reason="Too large to preview" onDownload={onDownload} />;
@@ -52,6 +54,18 @@ export function DocumentStage({ name, src, format, onDownload, notify }: Documen
       return (
         <Suspense fallback={<LoadingPreview />}>
           <PdfView src={src} />
+        </Suspense>
+      );
+    case "docx":
+      return (
+        <Suspense fallback={<LoadingPreview />}>
+          <DocxView src={src} tooLarge={tooLarge} />
+        </Suspense>
+      );
+    case "spreadsheet":
+      return (
+        <Suspense fallback={<LoadingPreview />}>
+          <SpreadsheetView src={src} tooLarge={tooLarge} />
         </Suspense>
       );
     case "svg":

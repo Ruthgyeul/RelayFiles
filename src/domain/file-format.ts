@@ -1,11 +1,11 @@
 /**
  * File formats by name: the icon a file gets in lists and how the viewer previews files that
- * are not images, videos or audio (text, code, Markdown, tables, PDF, SVG, fonts).
+ * are not images, videos or audio (text, code, Markdown, tables, PDF, SVG, fonts, Word, Excel).
  */
 import type { NodeKind } from "./tree";
 
 /** How the viewer shows a non-media file. */
-export type DocumentPreview = "text" | "code" | "markdown" | "table" | "pdf" | "svg" | "font";
+export type DocumentPreview = "text" | "code" | "markdown" | "table" | "pdf" | "svg" | "font" | "docx" | "spreadsheet";
 
 /** Icon families; the UI maps each to an icon and a color. */
 export const FORMAT_ICONS = [
@@ -211,8 +211,11 @@ const BY_EXTENSION: Record<string, FileFormat> = {
 
   // No preview: icon only
   ...Object.fromEntries(["zip", "tar", "gz", "tgz", "bz2", "xz", "zst", "7z", "rar", "lz", "lzma", "cab", "z"].map((ext) => [ext, binary("Archive", "archive")])),
-  ...Object.fromEntries(["doc", "docx", "odt", "rtf", "pages", "hwp", "hwpx"].map((ext) => [ext, binary("Document", "doc")])),
-  ...Object.fromEntries(["xls", "xlsx", "xlsm", "ods", "numbers"].map((ext) => [ext, binary("Spreadsheet", "sheet")])),
+  docx: { label: "Word document", icon: "doc", preview: "docx" },
+  xlsx: { label: "Excel workbook", icon: "sheet", preview: "spreadsheet" },
+  xlsm: { label: "Excel workbook", icon: "sheet", preview: "spreadsheet" },
+  ...Object.fromEntries(["doc", "odt", "rtf", "pages", "hwp", "hwpx"].map((ext) => [ext, binary("Document", "doc")])),
+  ...Object.fromEntries(["xls", "ods", "numbers"].map((ext) => [ext, binary("Spreadsheet", "sheet")])),
   ...Object.fromEntries(["ppt", "pptx", "odp"].map((ext) => [ext, binary("Presentation", "slides")])),
   ...Object.fromEntries(["iso", "dmg", "img", "vhdx", "vmdk", "qcow2"].map((ext) => [ext, binary("Disk image", "disc")])),
   ...Object.fromEntries(["exe", "msi", "deb", "rpm", "apk", "aab", "ipa", "appimage", "pkg", "jar", "war", "whl", "snap", "flatpak"].map((ext) => [ext, binary("Package", "package")])),

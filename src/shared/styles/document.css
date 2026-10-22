@@ -163,9 +163,20 @@
     border: 1px solid var(--color-viewer-line);
   }
 
+  /* Word puts a paragraph in every table cell. */
+  .markdown-body :is(th, td) > :last-child {
+    margin-bottom: 0;
+  }
+
   .markdown-body th {
     color: var(--t1);
     font-weight: 700;
+  }
+
+  /* Pictures embedded in Word documents (data URLs). */
+  .markdown-body img {
+    max-width: 100%;
+    height: auto;
   }
 
   .markdown-body hr {

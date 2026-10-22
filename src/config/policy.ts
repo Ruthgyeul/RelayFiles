@@ -136,7 +136,7 @@ export const MEDIA = {
 /** Cache-Control of responses whose bytes never change for their URL (see MEDIA.cacheMaxAgeSec). */
 export const IMMUTABLE_CACHE = `private, max-age=${MEDIA.cacheMaxAgeSec}, immutable`;
 
-/** The viewer's previews of files that are not media (text, code, tables, PDF, SVG, fonts). */
+/** The viewer's previews of files that are not media (text, code, tables, PDF, SVG, fonts, Word, Excel). */
 export const DOCUMENT_PREVIEW = {
   /** Text files show at most this much from the start (one Range request, never the whole file). */
   textMaxBytes: 1024 * 1024,
@@ -144,9 +144,11 @@ export const DOCUMENT_PREVIEW = {
   highlightMaxChars: 256 * 1024,
   /** Bytes checked for NUL characters to tell binary files from text. */
   sniffBytes: 8 * 1024,
-  /** Rows of a CSV/TSV table shown. */
+  /** Rows of a table (CSV/TSV, a spreadsheet sheet) shown, not counting the header. */
   tableMaxRows: 1000,
-  /** SVGs and fonts larger than this are not loaded for a preview. */
+  /** Columns of a table shown. */
+  tableMaxColumns: 100,
+  /** SVGs, fonts, Word and Excel files larger than this are not loaded for a preview (read whole). */
   assetMaxBytes: 20 * 1024 * 1024,
   /** PDF pages start rendering this far before they scroll into view. */
   pdfPreloadMarginPx: 800,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeText, lineCount, looksBinary, parseDelimited, prettyJson } from "./document";
+import { decodeText, formatCell, lineCount, looksBinary, parseDelimited, prettyJson } from "./document";
 
 const SNIFF = 8;
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -75,5 +75,22 @@ describe("prettyJson", () => {
     expect(prettyJson('{\n"a": 1}')).toBeNull();
     expect(prettyJson("{not json}")).toBeNull();
     expect(prettyJson("")).toBeNull();
+  });
+});
+
+describe("formatCell", () => {
+  it("shows dates, with the time only when there is one", () => {
+    expect(formatCell(new Date(Date.UTC(2026, 9, 22)))).toBe("2026-10-22");
+    expect(formatCell(new Date(Date.UTC(2026, 9, 22, 14, 5)))).toBe("2026-10-22 14:05:00");
+    expect(formatCell(new Date(Number.NaN))).toBe("");
+  });
+
+  it("shows other values as Excel does", () => {
+    expect(formatCell(null)).toBe("");
+    expect(formatCell(true)).toBe("TRUE");
+    expect(formatCell(false)).toBe("FALSE");
+    expect(formatCell(0.1 + 0.2)).toBe("0.3");
+    expect(formatCell(1234567)).toBe("1234567");
+    expect(formatCell("Kim")).toBe("Kim");
   });
 });

@@ -1,6 +1,6 @@
 /**
  * Turning the first bytes of a file into something the viewer can show: text in the right
- * encoding (or "binary"), CSV/TSV rows, and formatted JSON.
+ * encoding (or "binary"), CSV/TSV rows, formatted JSON, and spreadsheet cell text.
  */
 
 const NUL = 0;
@@ -122,4 +122,29 @@ export function prettyJson(text: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** A spreadsheet cell as read from a workbook (dates already converted from Excel serials). */
+export type CellValue = string | number | boolean | Date | null;
+
+const ISO_DATE_LENGTH = 10;
+/** Excel keeps 15 significant digits; more only shows binary floating-point noise. */
+const EXCEL_DIGITS = 15;
+const ISO_DATETIME_LENGTH = 19;
+
+/**
+ * The text of a spreadsheet cell: dates as `2026-10-22` (or `2026-10-22 14:05:00` when they
+ * carry a time), booleans as Excel shows them, numbers to Excel's 15 significant digits.
+ */
+export function formatCell(value: CellValue): string {
+  if (value === null) return "";
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return "";
+    const iso = value.toISOString();
+    const midnight = value.getUTCHours() === 0 && value.getUTCMinutes() === 0 && value.getUTCSeconds() === 0;
+    return midnight ? iso.slice(0, ISO_DATE_LENGTH) : iso.slice(0, ISO_DATETIME_LENGTH).replace("T", " ");
+  }
+  if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+  if (typeof value === "number") return Number.isFinite(value) ? String(Number(value.toPrecision(EXCEL_DIGITS))) : String(value);
+  return value;
 }
