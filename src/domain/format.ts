@@ -1,3 +1,5 @@
+import { METRICS } from "@/config/policy";
+
 /**
  * Display formatting ported from the design prototype. Output strings must match the
  * design exactly, so each function mirrors its prototype counterpart.
@@ -22,13 +24,36 @@ const SIZE_STEP = 1000;
 
 /** Decimal sizes like the design (`fmtSize`): "512 B", "2.4 GB", "18 GB". */
 export function formatSize(bytes: number): string {
-  let value = bytes;
+  // Rates (bytes/s averages) are fractional; bytes are shown whole.
+  let value = Math.round(bytes);
   let unit = 0;
   while (value >= SIZE_STEP && unit < SIZE_UNITS.length - 1) {
     value /= SIZE_STEP;
     unit++;
   }
   return `${unit ? value.toFixed(value < 10 ? 1 : 0) : value} ${SIZE_UNITS[unit]}`;
+}
+
+/** Rounds to at most `places` decimals (10.2149 → 10.21, 3.5 → 3.5). */
+export function roundDecimals(value: number, places: number = METRICS.decimalPlaces): number {
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
+}
+
+/** Measured sizes and rates (Server page): decimal units with at most METRICS.decimalPlaces decimals, "10.21 MB". */
+export function formatMetricSize(bytes: number): string {
+  let value = bytes;
+  let unit = 0;
+  while (roundDecimals(value) >= SIZE_STEP && unit < SIZE_UNITS.length - 1) {
+    value /= SIZE_STEP;
+    unit++;
+  }
+  return `${roundDecimals(value)} ${SIZE_UNITS[unit]}`;
+}
+
+/** A measured percentage with at most METRICS.decimalPlaces decimals, "89.34%". */
+export function formatPercent(percent: number): string {
+  return `${roundDecimals(percent)}%`;
 }
 
 /** Remaining time like the design (`fmtLeft`): "2d 4h", "3h 12m", "5m", "now". */

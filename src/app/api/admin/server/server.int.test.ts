@@ -6,7 +6,7 @@ import type { SessionState } from "@/contracts/auth";
 import type { ServerSnapshot } from "@/contracts/server-metrics";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { activeCount, markActive } from "@/server/metrics/activity";
-import { readHistory, recordSample } from "@/server/metrics/history";
+import { readDiskHistory, readHistory, recordSample } from "@/server/metrics/history";
 import { parseSmart } from "@/server/metrics/services";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { serverSnapshot } from "@/server/services/server-metrics.service";
@@ -60,12 +60,18 @@ describe("server metrics", () => {
     expect(snapshot.services[1]!.status).toBe("running");
   });
 
-  it("keeps the bandwidth history oldest first", async () => {
+  it("keeps the bandwidth and disk history oldest first", async () => {
     const base = Date.now();
-    await recordSample(1_000, new Date(base));
-    await recordSample(2_000, new Date(base + 1));
-    const history = await readHistory();
-    expect(history.slice(-2).map((sample) => sample.outPerSec)).toEqual([1_000, 2_000]);
+    await recordSample({ outPerSec: 1_000, disks: [{ name: "sda", readPerSec: 10, writePerSec: 20 }] }, new Date(base));
+    await recordSample({ outPerSec: 2_000, disks: [{ name: "sda", readPerSec: 30, writePerSec: 40 }] }, new Date(base + 1));
+    expect((await readHistory()).slice(-2).map((sample) => sample.outPerSec)).toEqual([1_000, 2_000]);
+    expect((await readDiskHistory()).slice(-2).map((sample) => sample.disks[0]?.readPerSec)).toEqual([10, 30]);
+  });
+
+  it("skips the disk history while the counters are priming", async () => {
+    const before = (await readDiskHistory()).length;
+    await recordSample({ outPerSec: 0, disks: [] }, new Date());
+    expect((await readDiskHistory()).length).toBe(before);
   });
 
   it("counts streams active within the last minute", async () => {

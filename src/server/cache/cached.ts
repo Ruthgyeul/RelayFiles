@@ -41,6 +41,7 @@ export const cacheKey = {
   adminStats: () => "cache:admin-stats",
   status: () => "cache:status",
   serverServices: () => "cache:server-services",
+  serverHistory: () => "cache:server-history",
 } as const;
 
 // BigInt values (file sizes) survive the JSON round trip as tagged strings.

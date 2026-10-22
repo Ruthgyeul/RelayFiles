@@ -7,6 +7,7 @@ import { logger } from "../logger";
 import { listPurgeableVolumes } from "../repositories/volume.repo";
 import { recordCleanup, recordSample } from "../metrics/history";
 import { runHealthProbe } from "./health-probe";
+import { diskRates } from "../metrics/disks";
 import { networkRates } from "../metrics/system";
 import { runCleanup } from "../services/admin.service";
 import { driverFor } from "../storage/registry";
@@ -37,7 +38,7 @@ export async function runMaintenance(now: Date) {
 }
 
 /**
- * Registers the daily cleanup (CLEANUP_CRON in JOBS_TIMEZONE) and the bandwidth sampler
+ * Registers the daily cleanup (CLEANUP_CRON in JOBS_TIMEZONE) and the bandwidth and disk sampler
  * (every METRICS_SAMPLE_INTERVAL_SEC, which also keeps the worker heartbeat alive) and the
  * Status page probe (every HEALTH_PROBE_INTERVAL_SEC).
  */
@@ -48,13 +49,14 @@ export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue:
   await queue.upsertJobScheduler(METRICS_SAMPLE, { every: jobs.METRICS_SAMPLE_INTERVAL_SEC * MS.second }, { name: "metrics" });
   await queue.upsertJobScheduler(HEALTH_PROBE, { every: jobs.HEALTH_PROBE_INTERVAL_SEC * MS.second }, { name: "health" });
   // The first sample only starts the rate measurement.
-  await networkRates().catch(() => undefined);
+  await Promise.all([networkRates().catch(() => undefined), diskRates()]);
   const worker = new Worker(
     MAINTENANCE_QUEUE,
     async (job) => {
       if (job.name === "metrics") {
-        // Average outbound rate since the previous sample (one per interval).
-        await recordSample((await networkRates()).outPerSec, new Date());
+        // Average outbound and disk rates since the previous sample (one per interval).
+        const [network, disks] = await Promise.all([networkRates(), diskRates()]);
+        await recordSample({ outPerSec: network.outPerSec, disks }, new Date());
         return null;
       }
       if (job.name === "health") {

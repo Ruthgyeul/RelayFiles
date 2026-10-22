@@ -2,6 +2,7 @@ import "server-only";
 import os from "node:os";
 import si from "systeminformation";
 import { METRICS, MS } from "@/config/policy";
+import { roundDecimals } from "@/domain/format";
 
 /**
  * Host measurements. In a container these describe the container unless /proc and /sys
@@ -10,7 +11,7 @@ import { METRICS, MS } from "@/config/policy";
 export async function cpuMemory() {
   const [load, mem] = await Promise.all([si.currentLoad(), si.mem()]);
   return {
-    cpu: { percent: Math.round(load.currentLoad), cores: os.availableParallelism(), load: Number(os.loadavg()[0]!.toFixed(2)) },
+    cpu: { percent: roundDecimals(load.currentLoad), cores: os.availableParallelism(), load: roundDecimals(os.loadavg()[0]!) },
     // "available" counts reclaimable cache as free, like `free -h`.
     memory: { usedBytes: mem.total - mem.available, totalBytes: mem.total },
   };
@@ -25,8 +26,8 @@ export async function networkRates() {
   const external = stats.filter((stat) => stat.iface !== "lo");
   const rate = (value: number | null) => (value !== null && value > 0 ? value : 0);
   return {
-    outPerSec: external.reduce((sum, stat) => sum + rate(stat.tx_sec), 0),
-    inPerSec: external.reduce((sum, stat) => sum + rate(stat.rx_sec), 0),
+    outPerSec: roundDecimals(external.reduce((sum, stat) => sum + rate(stat.tx_sec), 0)),
+    inPerSec: roundDecimals(external.reduce((sum, stat) => sum + rate(stat.rx_sec), 0)),
   };
 }
 
