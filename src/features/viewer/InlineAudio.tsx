@@ -1,5 +1,6 @@
 "use client";
 
+import { playbackProps } from "./playback";
 import { resumeStore } from "./resume";
 
 /**
@@ -9,6 +10,7 @@ import { resumeStore } from "./resume";
 export function InlineAudio({ id, name, src }: { id: string; name: string; src: string }) {
   return (
     <audio
+      {...playbackProps}
       src={src}
       controls
       preload="none"

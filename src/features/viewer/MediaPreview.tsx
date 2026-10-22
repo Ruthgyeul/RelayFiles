@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
+import { playbackProps } from "./playback";
 import { resumeStore } from "./resume";
 import { useResume } from "./useResume";
 import { useVideoSource } from "./useVideoSource";
@@ -66,6 +67,7 @@ export function MediaPreview({ id, name, kind, src, thumbSrc, previewSrc, transc
     return (
       <>
         <video
+          {...playbackProps}
           src={video.src}
           onError={video.onError}
           poster={thumbSrc ?? undefined}

@@ -10,6 +10,7 @@ import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { Modal } from "@/shared/ui/Modal";
 import { DocumentStage } from "./DocumentStage";
+import { playbackProps } from "./playback";
 import { prefetchImage } from "./prefetch";
 import { resumeStore } from "./resume";
 import { StageImage, StageVideo, type MediaHandlers } from "./StageMedia";
@@ -80,7 +81,7 @@ function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: b
           <span className={cn("flex items-center justify-center rounded-2xl bg-card", large ? "size-40" : "size-[180px]")}>
             <Icon name="music-notes" size={large ? 56 : 64} className="text-kind-audio" />
           </span>
-          <audio key={item.id} {...handlers} src={item.src} controls autoPlay className="w-full" />
+          <audio key={item.id} {...handlers} {...playbackProps} src={item.src} controls autoPlay className="w-full" />
         </div>
       );
     default:

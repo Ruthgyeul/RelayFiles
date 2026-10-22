@@ -2,6 +2,7 @@
 
 import { useState, type SyntheticEvent } from "react";
 import { cn } from "@/shared/lib/cn";
+import { playbackProps } from "./playback";
 import { useVideoSource } from "./useVideoSource";
 
 /** Playback handlers the viewer attaches to its video (resume position, keyboard target). */
@@ -36,5 +37,5 @@ export function StageImage({ name, src, thumbSrc }: { name: string; src: string;
  */
 export function StageVideo({ name, src, thumbSrc, transcodeSrc, handlers }: { name: string; src: string; thumbSrc: string | null; transcodeSrc?: string; handlers: MediaHandlers }) {
   const video = useVideoSource(name, src, transcodeSrc);
-  return <video {...handlers} src={video.src} onError={video.onError} poster={thumbSrc ?? undefined} controls autoPlay playsInline className="size-full bg-black object-contain" />;
+  return <video {...handlers} {...playbackProps} src={video.src} onError={video.onError} poster={thumbSrc ?? undefined} controls autoPlay playsInline className="size-full bg-black object-contain" />;
 }
