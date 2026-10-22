@@ -1,11 +1,12 @@
 import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlOf, getEnv } from "@/config/env";
+import { MS, STORAGE } from "@/config/policy";
 import { PrismaClient, type Prisma } from "./generated/client";
 
 function createPrisma(): PrismaClient {
   const adapter = new PrismaPg({ connectionString: databaseUrlOf(getEnv("database")) });
-  return new PrismaClient({ adapter, errorFormat: "minimal" });
+  return new PrismaClient({ adapter, errorFormat: "minimal", transactionOptions: { timeout: STORAGE.transactionTimeoutSec * MS.second } });
 }
 
 const globalForPrisma = globalThis as unknown as { relayPrisma?: PrismaClient };

@@ -35,6 +35,12 @@ export const STORAGE = {
   maxNameBytes: 255,
   maxPathBytes: 4096,
   maxFolderDepth: 32,
+  /**
+   * Longest a DB transaction may stay open, in seconds. Storage transactions rename and create
+   * folders on the volume, which can stall for seconds while a busy USB disk flushes writes;
+   * Prisma's 5-second default then aborts the commit.
+   */
+  transactionTimeoutSec: 60,
 } as const;
 
 export const FILES = {
