@@ -139,8 +139,10 @@ export const IMMUTABLE_CACHE = `private, max-age=${MEDIA.cacheMaxAgeSec}, immuta
 export const METRICS = {
   /** The Server page stream sends a snapshot this often (design: 1.5 s). */
   streamIntervalMs: 1_500,
-  /** Bandwidth history length (one sample per METRICS_SAMPLE_INTERVAL_SEC). */
-  historySamples: 60,
+  /** Bandwidth and disk read/write history shown on the Server page, one bar per hour. */
+  historyHours: 48,
+  /** The hourly history changes once per sample, so the stream reuses it this long. */
+  historyCacheSec: 15,
   /** A stream or upload counts as active if it was used this recently. */
   activeWindowSec: 60,
   /** The worker heartbeat expires after this many missed samples. */

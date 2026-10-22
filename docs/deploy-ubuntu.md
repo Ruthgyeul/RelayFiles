@@ -216,7 +216,7 @@ deploy/scripts/release.sh
 
 ## 9. 참고
 
-- **Server 페이지 지표**: app이 컨테이너 안에서 잰다. CPU 사용률과 메모리는 컨테이너도 호스트의 `/proc` 값을 보므로 호스트와 거의 같다. 네트워크는 컨테이너 인터페이스 기준이라 RelayFiles 트래픽만 잡힌다(대역폭 그래프의 목적에 맞다).
+- **Server 페이지 지표**: app이 컨테이너 안에서 잰다. CPU 사용률과 메모리는 컨테이너도 호스트의 `/proc` 값을 보므로 호스트와 거의 같다. 네트워크는 컨테이너 인터페이스 기준이라 RelayFiles 트래픽만 잡힌다(대역폭 그래프의 목적에 맞다). 대역폭과 디스크 read/write 그래프는 worker가 `METRICS_SAMPLE_INTERVAL_SEC`마다 기록한 최근 48시간을 시간당 막대로 보여준다. 디스크 값은 `/proc/diskstats`(네임스페이스가 없어 컨테이너에서도 호스트 값)에서 `/sys/block/<이름>/device`가 있는 물리 디스크만 잡으므로 다른 프로그램의 I/O도 포함된다.
 - **Disk health**: `smartctl`은 장치 접근과 root 권한이 필요해서 컨테이너에서는 기본으로 "Unavailable"이 표시된다. SMART 상태는 호스트에서 `sudo smartctl -d sat -H /dev/sdX`로 확인한다. 앱에 보여야 한다면 app 서비스에 `devices`, `cap_add: [SYS_RAWIO]`, root 실행이 필요하므로 권장하지 않는다.
 - **두 번째 SSD**: `volume:init -- <경로>`가 Nginx location(`deploy/nginx/volumes/`)을 만들고, 마운트는 `deploy/docker-compose.volumes.yml` 오버레이로 추가한다. 절차와 계정 이동은 [runbook.md](runbook.md#볼륨-추가교체).
 - **디스크 이전**: §1의 폴더 하나가 서비스 전체다. 새 서버에서 디스크를 옛 서버와 같은 경로(예: `/mnt/RuthVault2T`)에 마운트하고, 저장소와 `.env`를 옮긴 뒤 `sudo deploy/scripts/setup-docker.sh` → `deploy/scripts/release.sh`를 실행한다. DB에는 볼륨의 절대경로(`StorageVolume.mountPath`)가 저장되므로 경로가 바뀌면 안 된다. 옮기기 전에 `deploy/scripts/backup.sh`로 덤프를 남기고 `$C stop`으로 멈춘다. PostgreSQL 데이터 폴더는 같은 메이저 버전(16)과 같은 CPU 아키텍처에서만 그대로 열린다. 아키텍처가 다르면(예: Raspberry Pi arm64 → x86_64) `DATA_DIR/pg`를 비우고 `pg_restore`로 덤프를 복원한다([runbook.md](runbook.md)).

@@ -22,7 +22,8 @@ const SIZE_STEP = 1000;
 
 /** Decimal sizes like the design (`fmtSize`): "512 B", "2.4 GB", "18 GB". */
 export function formatSize(bytes: number): string {
-  let value = bytes;
+  // Rates (bytes/s averages) are fractional; bytes are shown whole.
+  let value = Math.round(bytes);
   let unit = 0;
   while (value >= SIZE_STEP && unit < SIZE_UNITS.length - 1) {
     value /= SIZE_STEP;

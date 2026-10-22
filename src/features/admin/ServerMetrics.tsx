@@ -3,18 +3,15 @@
 import { useEffect, useState } from "react";
 import type { ServerSnapshot, ServiceStatus } from "@/contracts/server-metrics";
 import { formatSize } from "@/domain/format";
-import { bandwidthStats, formatUptime, linkLabel } from "@/domain/server";
+import { formatUptime, linkLabel } from "@/domain/server";
 import { cn } from "@/shared/lib/cn";
-import { BarChart } from "@/shared/ui/Display";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
+import { DiskActivity } from "./DiskActivity";
+import { RateBars } from "./RateBars";
 
 const PERCENT = 100;
 const BITS_PER_BYTE = 8;
 const BYTES_PER_MBPS = 1_000_000 / BITS_PER_BYTE;
-const SLOTS = 60;
-const SECONDS_PER_MINUTE = 60;
-/** Bars never shrink below this, so quiet minutes stay visible (design). */
-const MIN_BAR_PERCENT = 3;
 
 function MetricCard({ icon, box, color, bar, label, value, sub, percent }: { icon: IconName; box: string; color: string; bar: string; label: string; value: string; sub: string; percent: number }) {
   return (
@@ -53,7 +50,7 @@ const STATUS: Record<ServiceStatus, { label: string; pill: string; dot: string }
   unknown: { label: "UNAVAILABLE", pill: "bg-btn text-t3", dot: "bg-t4" },
 };
 
-/** Live server measurements (design Server page): resources, bandwidth, live tiles, services. */
+/** Live server measurements (design Server page): resources, bandwidth, live tiles, disk activity, services. */
 export function ServerMetrics({ initial }: { initial: ServerSnapshot }) {
   const [snapshot, setSnapshot] = useState(initial);
   useEffect(() => {
@@ -62,14 +59,9 @@ export function ServerMetrics({ initial }: { initial: ServerSnapshot }) {
     return () => source.close();
   }, []);
 
-  const { disk, cpu, memory, network, live } = snapshot;
+  const { disk, cpu, memory, network, bandwidth, live } = snapshot;
   const link = linkLabel(network.linkMbps);
-  const samples = snapshot.history.map((sample) => sample.outPerSec);
-  const shown = [...samples.slice(-(SLOTS - 1)), network.outPerSec];
-  const peak = Math.max(...shown, 1);
-  const padded: (number | null)[] = [...Array<null>(SLOTS - shown.length).fill(null), ...shown];
-  const minutesPerSlot = snapshot.sampleSeconds / SECONDS_PER_MINUTE;
-  const stats = bandwidthStats(samples, snapshot.sampleSeconds);
+  const hours = bandwidth.hours.length;
   const percentOf = (used: number, total: number) => (total > 0 ? (used / total) * PERCENT : 0);
 
   return (
@@ -110,36 +102,25 @@ export function ServerMetrics({ initial }: { initial: ServerSnapshot }) {
 
       <section aria-label="Outbound bandwidth" className="flex flex-col gap-3.5 rounded-2xl border border-card-line bg-card p-5">
         <div className="flex items-center gap-2.5">
-          <h2 className="m-0 flex-1 text-[17px] font-bold">Outbound bandwidth · last hour</h2>
+          <h2 className="m-0 flex-1 text-[17px] font-bold">Outbound bandwidth · last {hours}h</h2>
           <span className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-[.06em] text-ok-text">
             <span className="size-2 rounded-full bg-ok" />
             LIVE
           </span>
         </div>
-        <BarChart
-          height={120}
-          label="Outbound bandwidth, last hour"
-          bars={padded.map((value, index) => ({
-            value: value === null ? null : Math.max(MIN_BAR_PERCENT, (value / peak) * PERCENT),
-            opacity: index === SLOTS - 1 ? 1 : 0.55,
-            title: value === null ? "No data" : `${index === SLOTS - 1 ? "Now" : `${Math.round((SLOTS - 1 - index) * minutesPerSlot)} min ago`} · ${formatSize(value)}/s`,
-          }))}
-        />
-        <div className="flex justify-between text-[12px] text-t4">
-          <span>60 min ago</span>
-          <span>30 min ago</span>
-          <span>now</span>
-        </div>
+        <RateBars series={bandwidth} height={120} label={`Outbound bandwidth, last ${hours} hours`} />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2.5">
-          <Tile label="AVG 1H" value={`${formatSize(stats.avg)}/s`} />
-          <Tile label="PEAK 1H" value={`${formatSize(stats.peak)}/s`} />
-          <Tile label="SENT 1H" value={formatSize(stats.sent)} />
+          <Tile label={`AVG ${hours}H`} value={`${formatSize(bandwidth.avg)}/s`} />
+          <Tile label={`PEAK ${hours}H`} value={`${formatSize(bandwidth.peak)}/s`} />
+          <Tile label={`SENT ${hours}H`} value={formatSize(bandwidth.total)} />
           <Tile label="ACTIVE STREAMS" value={String(live.streams)} />
           <Tile label="TRANSFERS" value={String(live.transfers)} />
           <Tile label="ACCOUNTS" value={String(live.accounts)} />
           <Tile label="UPTIME" value={formatUptime(live.uptimeSec)} />
         </div>
       </section>
+
+      <DiskActivity disks={snapshot.disks} hours={hours} />
 
       <section aria-label="Services" className="flex flex-col gap-1.5 rounded-2xl border border-card-line bg-card p-5">
         <h2 className="m-0 mb-1.5 text-[17px] font-bold">Services</h2>

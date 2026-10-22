@@ -24,6 +24,7 @@ describe("formatSize (prototype fmtSize)", () => {
   it("uses decimal units with the design's precision", () => {
     expect(formatSize(0)).toBe("0 B");
     expect(formatSize(999)).toBe("999 B");
+    expect(formatSize(163.2197)).toBe("163 B");
     expect(formatSize(1000)).toBe("1.0 KB");
     expect(formatSize(2_400_000_000)).toBe("2.4 GB");
     expect(formatSize(18_700_000_000)).toBe("19 GB");
