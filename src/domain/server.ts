@@ -1,3 +1,5 @@
+import { roundDecimals } from "./format";
+
 /**
  * Server page rules (design `srv`): uptime, the cleanup schedule label, hourly bandwidth
  * and disk rates, and the network link label. Values come from real measurements, never generated.
@@ -53,7 +55,7 @@ export interface RateSeries {
 export function rateStats(samples: readonly number[], secondsPerSample: number): { avg: number; peak: number; total: number } {
   if (samples.length === 0) return { avg: 0, peak: 0, total: 0 };
   const total = samples.reduce((sum, value) => sum + value, 0);
-  return { avg: total / samples.length, peak: Math.max(...samples), total: total * secondsPerSample };
+  return { avg: roundDecimals(total / samples.length), peak: roundDecimals(Math.max(...samples)), total: roundDecimals(total * secondsPerSample) };
 }
 
 /**
@@ -74,7 +76,7 @@ export function rateSeries(samples: readonly RateSample[], now: number, hours: n
     inWindow.push(sample.perSec);
   }
   return {
-    hours: buckets.map((bucket) => (bucket.count > 0 ? { avg: bucket.sum / bucket.count, peak: bucket.peak } : null)),
+    hours: buckets.map((bucket) => (bucket.count > 0 ? { avg: roundDecimals(bucket.sum / bucket.count), peak: roundDecimals(bucket.peak) } : null)),
     ...rateStats(inWindow, secondsPerSample),
   };
 }
@@ -82,7 +84,7 @@ export function rateSeries(samples: readonly RateSample[], now: number, hours: n
 /** Per-second rate between two readings of a growing counter; null when it went back (reboot) or no time passed. */
 export function counterRate(before: number, after: number, seconds: number): number | null {
   if (seconds <= 0 || after < before) return null;
-  return (after - before) / seconds;
+  return roundDecimals((after - before) / seconds);
 }
 
 /** Bytes read and written so far by each block device listed in /proc/diskstats. */

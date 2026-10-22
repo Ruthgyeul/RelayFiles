@@ -143,6 +143,8 @@ export const METRICS = {
   historyHours: 48,
   /** The hourly history changes once per sample, so the stream reuses it this long. */
   historyCacheSec: 15,
+  /** Measured rates, sizes and percentages are stored and shown with at most this many decimals (10.21). */
+  decimalPlaces: 2,
   /** A stream or upload counts as active if it was used this recently. */
   activeWindowSec: 60,
   /** The worker heartbeat expires after this many missed samples. */

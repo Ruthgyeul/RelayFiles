@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { getEnv } from "@/config/env";
 import { METRICS, MS } from "@/config/policy";
+import { roundDecimals } from "@/domain/format";
 import { redis } from "../redis";
 
 /** Written by the worker; read by the Server page. Redis holds only what can be measured again. */
@@ -28,10 +29,13 @@ export async function recordSample(sample: { outPerSec: number; disks: DiskRate[
   const length = historyLength();
   const tx = redis()
     .multi()
-    .lpush(HISTORY_KEY, JSON.stringify({ at: at.toISOString(), outPerSec: sample.outPerSec }))
+    .lpush(HISTORY_KEY, JSON.stringify({ at: at.toISOString(), outPerSec: roundDecimals(sample.outPerSec) }))
     .ltrim(HISTORY_KEY, 0, length - 1);
   // The first sample after a worker start only primes the disk counters.
-  if (sample.disks.length > 0) tx.lpush(DISK_KEY, JSON.stringify({ at: at.toISOString(), disks: sample.disks })).ltrim(DISK_KEY, 0, length - 1);
+  if (sample.disks.length > 0) {
+    const disks = sample.disks.map((disk) => ({ name: disk.name, readPerSec: roundDecimals(disk.readPerSec), writePerSec: roundDecimals(disk.writePerSec) }));
+    tx.lpush(DISK_KEY, JSON.stringify({ at: at.toISOString(), disks })).ltrim(DISK_KEY, 0, length - 1);
+  }
   await tx.set(HEARTBEAT_KEY, at.toISOString(), "EX", interval * METRICS.heartbeatMisses).exec();
 }
 

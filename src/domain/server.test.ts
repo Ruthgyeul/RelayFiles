@@ -19,6 +19,7 @@ describe("server page rules", () => {
   it("summarizes rate samples", () => {
     expect(rateStats([10, 30, 20], 60)).toEqual({ avg: 20, peak: 30, total: 3_600 });
     expect(rateStats([], 60)).toEqual({ avg: 0, peak: 0, total: 0 });
+    expect(rateStats([1, 2, 2], 1)).toEqual({ avg: 1.67, peak: 2, total: 5 });
   });
 
   it("groups samples into wall-clock hours, the current hour last", () => {
@@ -47,6 +48,7 @@ describe("server page rules", () => {
     expect(counterRate(1_000, 7_000, 60)).toBe(100);
     expect(counterRate(7_000, 1_000, 60)).toBeNull();
     expect(counterRate(1_000, 1_000, 0)).toBeNull();
+    expect(counterRate(0, 1_000, 3)).toBe(333.33);
   });
 
   it("reads bytes from /proc/diskstats sectors", () => {

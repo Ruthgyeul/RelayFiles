@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ServerSnapshot, ServiceStatus } from "@/contracts/server-metrics";
-import { formatSize } from "@/domain/format";
+import { formatMetricSize, formatPercent, roundDecimals } from "@/domain/format";
 import { formatUptime, linkLabel } from "@/domain/server";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
@@ -23,7 +23,7 @@ function MetricCard({ icon, box, color, bar, label, value, sub, percent }: { ico
         {label}
       </span>
       <span className="text-[24px] font-bold">{value}</span>
-      <div className="h-1.5 overflow-hidden rounded-[3px] bg-line" role="meter" aria-label={`${label} used`} aria-valuemin={0} aria-valuemax={PERCENT} aria-valuenow={Math.round(percent)}>
+      <div className="h-1.5 overflow-hidden rounded-[3px] bg-line" role="meter" aria-label={`${label} used`} aria-valuemin={0} aria-valuemax={PERCENT} aria-valuenow={roundDecimals(percent)}>
         <div className={cn("h-1.5 rounded-[3px] transition-[width] duration-[600ms]", bar)} style={{ width: `${Math.min(PERCENT, Math.max(0, percent)).toFixed(1)}%` }} />
       </div>
       <span className="text-[12px] text-t4">{sub}</span>
@@ -73,19 +73,19 @@ export function ServerMetrics({ initial }: { initial: ServerSnapshot }) {
           color="text-warn-orange"
           bar="bg-warn-orange"
           label="Disk"
-          value={disk ? formatSize(disk.usedBytes) : "—"}
-          sub={disk ? `of ${formatSize(disk.totalBytes)} · ${Math.round(percentOf(disk.usedBytes, disk.totalBytes))}% used` : "No storage volume mounted"}
+          value={disk ? formatMetricSize(disk.usedBytes) : "—"}
+          sub={disk ? `of ${formatMetricSize(disk.totalBytes)} · ${formatPercent(percentOf(disk.usedBytes, disk.totalBytes))} used` : "No storage volume mounted"}
           percent={disk ? percentOf(disk.usedBytes, disk.totalBytes) : 0}
         />
-        <MetricCard icon="cpu" box="bg-accent-soft" color="text-accent-icon" bar="bg-accent-icon" label="CPU" value={`${cpu.percent}%`} sub={`${cpu.cores} cores · load ${cpu.load.toFixed(2)}`} percent={cpu.percent} />
+        <MetricCard icon="cpu" box="bg-accent-soft" color="text-accent-icon" bar="bg-accent-icon" label="CPU" value={formatPercent(cpu.percent)} sub={`${cpu.cores} cores · load ${roundDecimals(cpu.load)}`} percent={cpu.percent} />
         <MetricCard
           icon="memory"
           box="bg-memory-bg"
           color="text-kind-audio"
           bar="bg-kind-audio"
           label="Memory"
-          value={formatSize(memory.usedBytes)}
-          sub={`of ${formatSize(memory.totalBytes)} · ${Math.round(percentOf(memory.usedBytes, memory.totalBytes))}%`}
+          value={formatMetricSize(memory.usedBytes)}
+          sub={`of ${formatMetricSize(memory.totalBytes)} · ${formatPercent(percentOf(memory.usedBytes, memory.totalBytes))}`}
           percent={percentOf(memory.usedBytes, memory.totalBytes)}
         />
         <MetricCard
@@ -94,8 +94,8 @@ export function ServerMetrics({ initial }: { initial: ServerSnapshot }) {
           color="text-kind-image"
           bar="bg-kind-image"
           label="Network out"
-          value={`${formatSize(network.outPerSec)}/s`}
-          sub={`In ${formatSize(network.inPerSec)}/s${link ? ` · ${link}` : ""}`}
+          value={`${formatMetricSize(network.outPerSec)}/s`}
+          sub={`In ${formatMetricSize(network.inPerSec)}/s${link ? ` · ${link}` : ""}`}
           percent={network.linkMbps ? percentOf(network.outPerSec, network.linkMbps * BYTES_PER_MBPS) : 0}
         />
       </div>
@@ -110,9 +110,9 @@ export function ServerMetrics({ initial }: { initial: ServerSnapshot }) {
         </div>
         <RateBars series={bandwidth} height={120} label={`Outbound bandwidth, last ${hours} hours`} />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2.5">
-          <Tile label={`AVG ${hours}H`} value={`${formatSize(bandwidth.avg)}/s`} />
-          <Tile label={`PEAK ${hours}H`} value={`${formatSize(bandwidth.peak)}/s`} />
-          <Tile label={`SENT ${hours}H`} value={formatSize(bandwidth.total)} />
+          <Tile label={`AVG ${hours}H`} value={`${formatMetricSize(bandwidth.avg)}/s`} />
+          <Tile label={`PEAK ${hours}H`} value={`${formatMetricSize(bandwidth.peak)}/s`} />
+          <Tile label={`SENT ${hours}H`} value={formatMetricSize(bandwidth.total)} />
           <Tile label="ACTIVE STREAMS" value={String(live.streams)} />
           <Tile label="TRANSFERS" value={String(live.transfers)} />
           <Tile label="ACCOUNTS" value={String(live.accounts)} />

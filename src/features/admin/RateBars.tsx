@@ -1,4 +1,4 @@
-import { formatSize } from "@/domain/format";
+import { formatMetricSize } from "@/domain/format";
 import type { RateSeries } from "@/domain/server";
 import { BarChart } from "@/shared/ui/Display";
 
@@ -25,7 +25,7 @@ export function RateBars({ series, height, label, color, gap }: { series: RateSe
           return {
             value: Math.max(MIN_BAR_PERCENT, top > 0 ? (hour.avg / top) * PERCENT : 0),
             opacity: index === last ? 1 : PAST_OPACITY,
-            title: `${when} · avg ${formatSize(hour.avg)}/s · peak ${formatSize(hour.peak)}/s`,
+            title: `${when} · avg ${formatMetricSize(hour.avg)}/s · peak ${formatMetricSize(hour.peak)}/s`,
           };
         })}
       />

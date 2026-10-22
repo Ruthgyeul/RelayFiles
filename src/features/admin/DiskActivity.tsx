@@ -1,5 +1,5 @@
 import type { DiskActivity as DiskActivityDto } from "@/contracts/server-metrics";
-import { formatSize } from "@/domain/format";
+import { formatMetricSize } from "@/domain/format";
 import type { RateSeries } from "@/domain/server";
 import { NoData } from "@/shared/ui/Display";
 import { RateBars } from "./RateBars";
@@ -17,7 +17,7 @@ function DiskRate({ disk, label, done, series, color }: { disk: string; label: s
           {label}
         </span>
         <span className="text-t4">
-          avg {formatSize(series.avg)}/s · peak {formatSize(series.peak)}/s · {formatSize(series.total)} {done}
+          avg {formatMetricSize(series.avg)}/s · peak {formatMetricSize(series.peak)}/s · {formatMetricSize(series.total)} {done}
         </span>
       </div>
       <RateBars series={series} height={CHART_HEIGHT} gap={2} color={color} label={`${disk} ${label.toLowerCase()} rate, last ${series.hours.length} hours`} />

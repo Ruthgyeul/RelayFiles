@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAgo, formatClock, formatCountdown, formatDateTime, formatLeft, formatShortDate, formatSize , formatSeen } from "./format";
+import { formatAgo, formatClock, formatCountdown, formatDateTime, formatLeft, formatShortDate, formatSize , formatSeen, formatMetricSize, formatPercent, roundDecimals } from "./format";
 
 describe("formatClock (prototype fmtT)", () => {
   it("formats minutes and hours", () => {
@@ -25,6 +25,18 @@ describe("formatSize (prototype fmtSize)", () => {
     expect(formatSize(0)).toBe("0 B");
     expect(formatSize(999)).toBe("999 B");
     expect(formatSize(163.2197)).toBe("163 B");
+  });
+
+  it("formats measured sizes and percentages with at most two decimals", () => {
+    expect(roundDecimals(10.2149)).toBe(10.21);
+    expect(roundDecimals(3.5)).toBe(3.5);
+    expect(formatMetricSize(0)).toBe("0 B");
+    expect(formatMetricSize(163.2197)).toBe("163.22 B");
+    expect(formatMetricSize(10_214_900)).toBe("10.21 MB");
+    expect(formatMetricSize(2_000_000_000)).toBe("2 GB");
+    expect(formatMetricSize(999.999)).toBe("1 KB");
+    expect(formatPercent(89.3456)).toBe("89.35%");
+    expect(formatPercent(7)).toBe("7%");
     expect(formatSize(1000)).toBe("1.0 KB");
     expect(formatSize(2_400_000_000)).toBe("2.4 GB");
     expect(formatSize(18_700_000_000)).toBe("19 GB");
