@@ -52,3 +52,9 @@ export function zipName(items: { name: string; folder: boolean }[], parentName: 
   if (items.length === 1 && first) return `${first.folder ? first.name : first.name.replace(/\.[^.]+$/, "") || first.name}.zip`;
   return `${parentName} · ${items.length} items.zip`;
 }
+
+/** Total size from a `Content-Range: bytes 0-99/1234` response header (null when absent or unknown). */
+export function contentRangeTotal(header: string | null): number | null {
+  const total = header ? /\/(\d+)\s*$/.exec(header)?.[1] : undefined;
+  return total === undefined ? null : Number(total);
+}

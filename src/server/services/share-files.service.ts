@@ -90,7 +90,8 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
       await recordDownload(file.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
       void logLinkEvent(row, "DOWNLOAD", client);
     } else {
-      void logLinkEvent(row, row.kind === "IMAGE" ? "VIEW" : "PLAY", client);
+      // Videos and audio are played; pictures and documents are looked at.
+      void logLinkEvent(row, row.kind === "VIDEO" || row.kind === "AUDIO" ? "PLAY" : "VIEW", client);
     }
   }
   if (mode === "stream" && req.method === "GET") void markActive("stream", `${row.id}:${client.ipKey}`);

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./themes.css";
+@import "./document.css";
 
 /*
  * Design tokens (docs/plan.md §5, docs/design/spec.md).
@@ -91,6 +92,23 @@
   --color-kind-video: #f2667a;
   --color-kind-audio: #b18cff;
   --color-kind-image: #3fc1a5;
+  --color-kind-code: #4fb3e8;
+  --color-kind-text: #9fb0cf;
+  --color-kind-pdf: #ef5b5b;
+  --color-kind-doc: #4f8ef7;
+  --color-kind-sheet: #2fb36b;
+  --color-kind-slides: #f08a3c;
+  --color-kind-archive: #d6a23a;
+
+  /* Fixed palette: syntax colors of the viewer's code previews (always on black) */
+  --color-syntax-keyword: #f472b6;
+  --color-syntax-string: #a3e635;
+  --color-syntax-number: #fbbf24;
+  --color-syntax-comment: #6b7590;
+  --color-syntax-title: #38bdf8;
+  --color-syntax-type: #c4a5ff;
+  --color-syntax-attr: #34d399;
+  --color-syntax-deleted: #f87171;
 
   /* Fixed palette: misc */
   --color-nav-hover: #222b45;

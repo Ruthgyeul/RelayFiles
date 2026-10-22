@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import type { ShareItem } from "@/contracts/share";
+import { fileFormatOf } from "@/domain/file-format";
 import { formatSize } from "@/domain/format";
 import { previewKindOf } from "@/domain/media";
 import { KIND_LABEL } from "@/domain/share";
@@ -48,9 +49,11 @@ export function ShareRows({ items, urls, folderHref, onOpen, onDownload }: Share
     <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-card-line bg-card-line">
       {items.map((item) => {
         const folder = item.type === "folder";
-        const kind = kindOf({ type: item.type, kind: item.kind });
-        const meta = folder ? itemCount(item.itemCount) : `${formatSize(Number(item.size))} · ${KIND_LABEL[item.kind ?? "other"]}`;
-        const playable = !folder && item.kind !== null && item.kind !== "other";
+        const kind = kindOf(item);
+        const meta = folder ? itemCount(item.itemCount) : `${formatSize(Number(item.size))} · ${item.kind && item.kind !== "other" ? KIND_LABEL[item.kind] : fileFormatOf(item.name).label}`;
+        const playable = item.kind === "video" || item.kind === "audio";
+        // Pictures and documents with a preview (text, code, PDF, ...) open in the viewer.
+        const viewable = !folder && !playable && (item.kind === "image" || fileFormatOf(item.name).preview !== null);
         const preview = previewKindOf(item.type, item.kind);
         const nameBlock = (
           <>
@@ -77,7 +80,7 @@ export function ShareRows({ items, urls, folderHref, onOpen, onDownload }: Share
                 </div>
               )}
               {folder && <RowAction icon="folder-open" label="Open" href={folderHref(item.id)} />}
-              {playable && <RowAction icon={item.kind === "image" ? "eye" : "play"} label={item.kind === "image" ? "View" : "Play"} onClick={() => onOpen(item)} accent fill />}
+              {(playable || viewable) && <RowAction icon={playable ? "play" : "eye"} label={playable ? "Play" : "View"} onClick={() => onOpen(item)} accent fill />}
               {item.canDownload && <RowAction icon="download-simple" label="Download" onClick={() => onDownload(item)} />}
             </div>
             {preview && (

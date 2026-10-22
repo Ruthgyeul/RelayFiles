@@ -70,6 +70,13 @@ export const KIND_COLOR = {
   audio: cssVar("color-kind-audio"),
   image: cssVar("color-kind-image"),
   other: cssVar("color-kind-other"),
+  code: cssVar("color-kind-code"),
+  text: cssVar("color-kind-text"),
+  pdf: cssVar("color-kind-pdf"),
+  doc: cssVar("color-kind-doc"),
+  sheet: cssVar("color-kind-sheet"),
+  slides: cssVar("color-kind-slides"),
+  archive: cssVar("color-kind-archive"),
 } as const;
 
 /** A status level used by banners, pills and status cards. */

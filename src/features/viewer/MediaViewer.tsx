@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { documentPreviewOf } from "@/domain/file-format";
 import { formatClock } from "@/domain/format";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { useViewport } from "@/shared/hooks/useViewport";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { Modal } from "@/shared/ui/Modal";
+import { DocumentStage } from "./DocumentStage";
 import { prefetchImage } from "./prefetch";
 import { resumeStore } from "./resume";
 import { StageImage, StageVideo, type MediaHandlers } from "./StageMedia";
@@ -53,7 +55,7 @@ function ViewerButton({ icon, label, onClick, large }: { icon: IconName; label: 
   );
 }
 
-/** Image, video, audio or a "no preview" card, with resume for audio and video. */
+/** Image, video, audio or a document (text, code, PDF, ...), with resume for audio and video. */
 function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: boolean; onDownload?: () => void; notify: (message: string) => void }) {
   const handlers: MediaHandlers = {
     "data-viewer-media": true,
@@ -65,6 +67,8 @@ function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: b
     },
   };
   const thumbSrc = item.thumbSrc ?? null;
+  const docFormat = documentPreviewOf(item.name, item.kind);
+  if (docFormat) return <DocumentStage key={item.id} name={item.name} src={item.src} format={docFormat} onDownload={large ? onDownload : undefined} notify={notify} />;
   switch (item.kind) {
     case "video":
       return <StageVideo key={item.id} name={item.name} src={item.src} thumbSrc={thumbSrc} transcodeSrc={item.transcodeSrc} handlers={handlers} />;
@@ -80,17 +84,7 @@ function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: b
         </div>
       );
     default:
-      return (
-        <div className="flex flex-col items-center gap-3 text-t4">
-          <Icon name="file-zip" size={56} />
-          No preview for this file type
-          {large && onDownload && (
-            <button type="button" onClick={onDownload} className="h-9 rounded-[10px] border-0 bg-accent px-4 text-[14px] font-bold text-on-accent">
-              Download
-            </button>
-          )}
-        </div>
-      );
+      return null;
   }
 }
 

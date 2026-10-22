@@ -29,7 +29,7 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
   const folderHref = (folderId: string) => (folderId === root.id ? `/d/${linkId}` : `/d/${linkId}?f=${folderId}`) as Route;
   const files = view.items.filter((item) => item.type === "file");
   const fileLink = root.type === "file";
-  const headerIcon = fileLink ? kindOf({ type: "file", kind: root.kind }) : null;
+  const headerIcon = fileLink ? kindOf({ type: "file", kind: root.kind, name: folder.name }) : null;
 
   const download = async (target: string) => {
     const problem = await shareApi.download(target);
