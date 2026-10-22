@@ -59,7 +59,7 @@ npm run volume:migrate   # -- --account <id> --to <vol> | --volume <vol> [--to <
 npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해제
 ```
 
-운영 배포는 두 가지다. Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃, 컨테이너 Nginx `deploy/nginx/templates`) — 절차 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 업데이트 `git pull && deploy/scripts/release.sh`. 또는 systemd 서비스 + 호스트 Nginx(`deploy/systemd/`, `deploy/nginx/host/`, `deploy/scripts/systemd/`) — 절차 [`docs/deploy-systemd.md`](docs/deploy-systemd.md), 업데이트 `git pull && deploy/scripts/systemd/release.sh`. 운영 작업은 [`docs/runbook.md`](docs/runbook.md).
+운영 배포는 두 가지다. Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃, 컨테이너 Nginx `deploy/nginx/templates`) — 절차 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 업데이트 `git pull && deploy/scripts/release.sh`(끝나면 `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시 정리). 또는 systemd 서비스 + 호스트 Nginx(`deploy/systemd/`, `deploy/nginx/host/`, `deploy/scripts/systemd/`) — 절차 [`docs/deploy-systemd.md`](docs/deploy-systemd.md), 업데이트 `git pull && deploy/scripts/systemd/release.sh`. 운영 작업은 [`docs/runbook.md`](docs/runbook.md).
 
 결과물을 전달하기 전에 `npm run check`를 통과시킨다. DB나 스토리지를 건드리면 `npm run test:integration`도 통과시킨다.
 

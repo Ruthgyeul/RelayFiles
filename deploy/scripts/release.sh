@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Releases the checked-out version: backup → build → maintenance on → migrate (schema and
-# data) → restart → health check → maintenance off. Run on the server from the repository:
+# data) → restart → health check → maintenance off → tag :latest → clean up old images
+# (autoclean.sh, AUTOCLEAN=0 skips it). Run on the server from the repository:
 #   git pull && deploy/scripts/release.sh
 # Rollback: docs/deploy-ubuntu.md ("롤백").
 set -euo pipefail
@@ -38,7 +39,13 @@ log "Health check"
 for _ in $(seq 1 "$HEALTH_TRIES"); do
   if curl -fsS "http://127.0.0.1:$PORT/api/health" > /dev/null; then
     echo "$(date -u +%FT%TZ) $RELEASE_TAG" >> "$RELEASES"
+    # One-off commands without RELEASE_TAG ($C run --rm tools ...) use :latest, the live release.
+    mapfile -t BUILT < <(compose_images | sed -n "s/:$RELEASE_PROBE\$//p")
+    for repo in "${BUILT[@]}"; do docker tag "$repo:$RELEASE_TAG" "$repo:latest"; done
     log "Release $RELEASE_TAG is live."
+    if [ "${AUTOCLEAN:-1}" != 0 ]; then
+      "$ROOT/deploy/scripts/autoclean.sh" || echo "Cleanup failed; the release itself is live. Retry: deploy/scripts/autoclean.sh" >&2
+    fi
     exit 0
   fi
   sleep 2

@@ -189,6 +189,8 @@ deploy/scripts/release.sh
 4. `prisma migrate deploy`, 데이터 마이그레이션(`data:migrate`), 스토리지 레이아웃(`storage:migrate`)
 5. app·worker·nginx 재시작, 점검 모드 끄기
 6. `/api/health` 확인, `DATA_DIR/releases.log`에 기록
+7. 새 이미지에 `latest` 태그도 붙인다. `RELEASE_TAG` 없이 실행하는 `$C run --rm tools …`가 지금 릴리스 이미지를 쓴다.
+8. `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시를 정리한다([runbook.md](runbook.md#디스크-정리-autoclean)). 정리가 실패해도 릴리스는 그대로 살아 있다. 건너뛰려면 `AUTOCLEAN=0 deploy/scripts/release.sh`.
 
 실패하면 [runbook.md](runbook.md#롤백)의 롤백 절차를 따른다.
 

@@ -71,7 +71,7 @@ rm deploy/maintenance/on
 
 ## 롤백
 
-릴리스마다 이미지가 git 커밋 태그로 남는다(`DATA_DIR/releases.log`에 기록).
+릴리스마다 이미지가 git 커밋 태그로 남는다(`DATA_DIR/releases.log`에 기록). `autoclean.sh`가 최근 `IMAGE_KEEP`(기본 3)개 릴리스만 남기므로 그 안에서 되돌린다.
 
 ```bash
 tail -5 /srv/relayfiles/releases.log           # 이전 태그 확인
@@ -79,6 +79,26 @@ RELEASE_TAG=<이전 태그> $C up -d --no-build app worker
 ```
 
 이전 버전으로 되돌릴 때 DB 스키마는 그대로 둔다. 스키마 변경은 expand → migrate → contract 순서로 나눠서 넣기 때문에(CLAUDE.md), 바로 이전 릴리스는 새 스키마에서도 동작한다. 파괴적 변경이 들어간 릴리스를 되돌려야 하면 그 릴리스 직전의 DB 백업을 복구한다(위 "DB 복구").
+
+## 디스크 정리 (autoclean)
+
+`release.sh`가 헬스 체크를 통과한 뒤 자동으로 실행한다. 따로 실행할 때는 `--dry-run`으로 먼저 지울 목록을 본다.
+
+```bash
+deploy/scripts/autoclean.sh --dry-run
+deploy/scripts/autoclean.sh
+IMAGE_KEEP=5 BUILD_CACHE_MAX_AGE=6h deploy/scripts/autoclean.sh
+```
+
+| 대상 | 기준 |
+|---|---|
+| 이 프로젝트의 멈춘 컨테이너 | compose 프로젝트 라벨이 같은 것 (`--rm` 없이 실행한 `run` 등) |
+| `relayfiles-app`·`relayfiles-tools` 옛 태그 | `releases.log`의 최근 `IMAGE_KEEP`개, `latest`, 컨테이너가 쓰는 태그는 남긴다. `releases.log`가 없으면 건드리지 않는다 |
+| 예전에 고정했던 외부 이미지 | `docker-compose.yml`의 git 기록에 있었지만 지금은 없는 것(예: nginx 1.29). 다른 프로젝트 이미지는 건드리지 않는다 |
+| 이름 없는(dangling) 이미지 | 태그도 컨테이너도 없는 것 |
+| 빌드 캐시 | `BUILD_CACHE_MAX_AGE`(기본 `24h`) 동안 쓰지 않은 것. `docker buildx ls`의 실행 중인 빌더마다 `buildx prune`을 실행하고(`docker builder prune`은 기본 빌더만 비운다) 전후 크기(`buildx du`)를 출력한다. 멈춘 빌더는 깨우지 않고 건너뛴다. 최근 캐시는 남겨 다음 빌드를 빠르게 한다 |
+
+볼륨, 네트워크, `DATA_DIR`(DB, 백업), SSD는 건드리지 않는다. DB 백업은 `backup.sh`가 최근 `BACKUP_KEEP`개만 남기고, 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE`·`DOCKER_LOG_MAX_FILE`로 회전한다. 마지막에 `docker system df`로 남은 사용량을 보여 준다.
 
 ## SSD가 빠졌을 때
 

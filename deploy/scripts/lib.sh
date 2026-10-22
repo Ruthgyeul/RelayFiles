@@ -19,6 +19,11 @@ if [ -f "$ROOT/deploy/docker-compose.volumes.yml" ]; then
   COMPOSE+=(-f "$ROOT/deploy/docker-compose.volumes.yml")
 fi
 
+# compose_images → every image in docker-compose.yml (all profiles). The per-release tag reads
+# RELEASE_PROBE, which tells the images built here (relayfiles-*) apart from the pinned ones.
+RELEASE_PROBE="release-probe"
+compose_images() { RELEASE_TAG="$RELEASE_PROBE" "${COMPOSE[@]}" --profile "*" config --images | sort -u; }
+
 log() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 
 # systemd deployment (docs/deploy-systemd.md): the account that owns the SSD files and runs
