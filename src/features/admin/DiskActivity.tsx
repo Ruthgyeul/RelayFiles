@@ -2,7 +2,7 @@ import type { DiskActivity as DiskActivityDto } from "@/contracts/server-metrics
 import { formatMetricSize } from "@/domain/format";
 import type { RateSeries } from "@/domain/server";
 import { NoData } from "@/shared/ui/Display";
-import { RateBars } from "./RateBars";
+import { RateChart } from "./RateChart";
 
 const CHART_HEIGHT = 80;
 const READ_COLOR = "var(--accent)";
@@ -20,12 +20,12 @@ function DiskRate({ disk, label, done, series, color }: { disk: string; label: s
           avg {formatMetricSize(series.avg)}/s · peak {formatMetricSize(series.peak)}/s · {formatMetricSize(series.total)} {done}
         </span>
       </div>
-      <RateBars series={series} height={CHART_HEIGHT} gap={2} color={color} label={`${disk} ${label.toLowerCase()} rate, last ${series.hours.length} hours`} />
+      <RateChart series={series} height={CHART_HEIGHT} color={color} label={`${disk} ${label.toLowerCase()} rate, last ${series.hours.length} hours`} />
     </div>
   );
 }
 
-/** Read and write rate of each physical disk, one bar per hour (measured by the worker). */
+/** Read and write rate of each physical disk, one line point per hour (measured by the worker). */
 export function DiskActivity({ disks, hours }: { disks: DiskActivityDto[]; hours: number }) {
   return (
     <section aria-label="Disk activity" className="flex flex-col gap-3.5 rounded-2xl border border-card-line bg-card p-5">

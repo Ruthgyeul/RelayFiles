@@ -3,8 +3,8 @@ import { formatSize } from "@/domain/format";
 import { quotaMeter } from "@/domain/quota";
 import { METER_COLOR } from "@/features/shell/StorageMeter";
 import { THEME_COLOR } from "@/shared/styles/palette";
-import { BarChart } from "@/shared/ui/Display";
 import { Icon } from "@/shared/ui/icon/Icon";
+import { LineChart } from "@/shared/ui/LineChart";
 import { CardTitle } from "./Section";
 
 const card = "flex flex-col gap-3 rounded-2xl border border-card-line bg-card p-[18px]";
@@ -47,12 +47,11 @@ export function UsageCards({ data }: { data: ProfileData }) {
           Traffic<span className="text-[12px] font-medium text-t4">last 30 days</span>
         </CardTitle>
         <span className="text-[26px] font-bold">{formatSize(Number(data.traffic.total))}</span>
-        <BarChart
+        <LineChart
           height={44}
-          gap={2}
           color={THEME_COLOR.accentHi}
           label="Bytes downloaded per day, last 30 days"
-          bars={days.map((bytes) => ({ value: peak > 0 ? (bytes / peak) * PERCENT : null, title: formatSize(bytes) }))}
+          points={days.map((bytes) => ({ value: peak > 0 ? (bytes / peak) * PERCENT : null, title: formatSize(bytes) }))}
         />
       </section>
       <section aria-label="Content" className={card}>

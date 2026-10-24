@@ -186,7 +186,7 @@ RelayFiles/
 
 ## 6. 공용 UI 프리미티브
 
-`src/shared/ui/`의 프리미티브(Button, IconButton, Card, OptionChip/Card, CheckRow, Pill, Tag, Banner, Menu(mobile은 하단 시트), Modal, ConfirmDialog/PromptDialog, TextInput, Avatar, Skeleton, StatTile, Meter, BarChart, Kbd, Logo, EmptyState/NoData)의 수치는 [`design/spec.md`](design/spec.md)에 있다. 데이터로 계산되는 색은 `style={{ '--c': value }}` + `bg-(--c)`로 넘긴다. 클래스 문자열을 조합하지 않는다.
+`src/shared/ui/`의 프리미티브(Button, IconButton, Card, OptionChip/Card, CheckRow, Pill, Tag, Banner, Menu(mobile은 하단 시트), Modal, ConfirmDialog/PromptDialog, TextInput, Avatar, Skeleton, StatTile, Meter, BarChart, LineChart, Kbd, Logo, EmptyState/NoData)의 수치는 [`design/spec.md`](design/spec.md)에 있다. 데이터로 계산되는 색은 `style={{ '--c': value }}` + `bg-(--c)`로 넘긴다. 클래스 문자열을 조합하지 않는다.
 
 ---
 

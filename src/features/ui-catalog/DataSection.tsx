@@ -1,11 +1,14 @@
 import { Avatar } from "@/shared/ui/Avatar";
 import { BarChart, Meter, StatTile, type Bar } from "@/shared/ui/Display";
+import { LineChart, type LinePoint } from "@/shared/ui/LineChart";
 import { Row, Section } from "./Section";
 
 /** Fixed specimen series for visual review of the chart primitive (not application data). */
 const SPECIMEN_BARS: Bar[] = Array.from({ length: 30 }, (_, i) => ({ value: 20 + ((i * 37) % 70) }));
 const PARTIAL_BARS: Bar[] = Array.from({ length: 30 }, (_, i) => ({ value: i < 18 ? null : 30 + ((i * 23) % 60) }));
 const EMPTY_BARS: Bar[] = Array.from({ length: 30 }, () => ({ value: null }));
+const SPECIMEN_LINE: LinePoint[] = SPECIMEN_BARS.map((bar) => ({ value: bar.value }));
+const GAPPED_LINE: LinePoint[] = Array.from({ length: 24 }, (_, i) => ({ value: i < 6 || i === 12 ? null : 15 + ((i * 29) % 75) }));
 
 export function DataSection() {
   return (
@@ -34,6 +37,8 @@ export function DataSection() {
         <BarChart bars={SPECIMEN_BARS} height={44} gap={2} color="var(--accentHi)" label="Specimen chart" />
         <BarChart bars={PARTIAL_BARS} height={90} emptyHeight="8%" label="Partial history" className="rounded-xl bg-sunk p-2" />
         <BarChart bars={EMPTY_BARS} height={22} gap={2} shape="cell" label="No history" />
+        <LineChart points={SPECIMEN_LINE} height={44} color="var(--accentHi)" label="Specimen line chart" />
+        <LineChart points={GAPPED_LINE} height={120} markLast label="Line with gaps" />
       </Section>
     </>
   );
