@@ -56,6 +56,7 @@
 | `StatTile` | sunk, 반경 12, p12, 라벨 11/700/.04em t4, 값 15·18·20 |
 | `Meter` | 높이 4(반경 2) · 6(반경 3), line 트랙 |
 | `BarChart` | 막대 위 반경 2, 간격 2·3px, 데이터 없는 칸은 btn 색(가짜 값 없음), 전부 비면 "No data yet" |
+| `LineChart` | 트래픽 차트(서버 대역폭·디스크 read/write·계정 30일 트래픽). 선 2px, 아래 영역은 같은 색 0.28 → 0 그라데이션, 기준선 1px line. 데이터 없는 칸은 선을 끊고(가짜 값 없음), 고립된 값과 `markLast`의 최신 값은 7px 점(card 2px 링), 전부 비면 "No data yet" |
 | `Kbd` | key: 22px, btn, 1px ctrl + 아래 2px, 11px/600 mono · hint: 투명 |
 | `Logo` | 22(반경 6, 아이콘 12) · 28(반경 8, 15) · 64(반경 18, 32, logo 그림자, 흰 화살표) |
 | `EmptyState` | 패딩 48px 16px, 아이콘 박스 56(반경 14), 제목 16/700, 설명 13 t4 |

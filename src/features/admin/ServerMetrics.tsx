@@ -7,7 +7,7 @@ import { formatUptime, linkLabel } from "@/domain/server";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { DiskActivity } from "./DiskActivity";
-import { RateBars } from "./RateBars";
+import { RateChart } from "./RateChart";
 
 const PERCENT = 100;
 const BITS_PER_BYTE = 8;
@@ -108,7 +108,7 @@ export function ServerMetrics({ initial }: { initial: ServerSnapshot }) {
             LIVE
           </span>
         </div>
-        <RateBars series={bandwidth} height={120} label={`Outbound bandwidth, last ${hours} hours`} />
+        <RateChart series={bandwidth} height={120} label={`Outbound bandwidth, last ${hours} hours`} />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2.5">
           <Tile label={`AVG ${hours}H`} value={`${formatMetricSize(bandwidth.avg)}/s`} />
           <Tile label={`PEAK ${hours}H`} value={`${formatMetricSize(bandwidth.peak)}/s`} />
