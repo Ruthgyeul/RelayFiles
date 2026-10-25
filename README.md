@@ -6,7 +6,7 @@ Fast and easy file sharing system. A private file drop for sharing and streaming
 
 ## Stack
 
-Next.js 16.3 (App Router) · React 19.3 · Tailwind CSS 4.3 · TypeScript 6 · PostgreSQL 16 + Prisma · Redis 7 + BullMQ · Vitest · Playwright
+Next.js 16.4 (App Router) · React 19.3 · Tailwind CSS 4.3 · TypeScript 6 · PostgreSQL 16 + Prisma · Redis 7 + BullMQ · Vitest · Playwright
 
 ## Getting started
 

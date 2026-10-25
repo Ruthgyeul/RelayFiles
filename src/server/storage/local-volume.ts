@@ -5,6 +5,7 @@ import { cp, copyFile, lstat, mkdir, open, readdir, rename, rm, stat, statfs, wr
 import { basename, dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { ASSET_DIRS, DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
+import type { DiskEntry } from "@/domain/fsck";
 import type { AssetKind, AssetRef, ByteSource, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path";
 
@@ -197,6 +198,30 @@ export class LocalVolumeDriver implements StorageDriver {
     } finally {
       await rm(probe, { force: true });
     }
+  }
+
+  async listTree(accountId: string): Promise<Map<string, DiskEntry>> {
+    const root = userRootOf(this.layout.root, accountId);
+    const found = new Map<string, DiskEntry>();
+    const walk = async (dir: string, prefix: string): Promise<void> => {
+      for (const name of await readdir(dir)) {
+        const path = prefix ? `${prefix}/${name}` : name;
+        const info = await lstat(join(dir, name), { bigint: true });
+        if (info.isDirectory()) {
+          found.set(path, { type: "folder", size: 0n });
+          await walk(join(dir, name), path);
+        } else {
+          found.set(path, { type: info.isFile() ? "file" : "other", size: info.isFile() ? info.size : 0n });
+        }
+      }
+    };
+    await walk(root, "");
+    return found;
+  }
+
+  async listAccountRoots(): Promise<string[]> {
+    const names = await readdir(this.layout.users).catch(() => [] as string[]);
+    return names.filter((name) => ASSET_ID.test(name));
   }
 
   async space(): Promise<SpaceInfo> {

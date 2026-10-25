@@ -12,7 +12,7 @@
 | 업로드 경로 | 완료된 업로드는 볼륨의 `system/tmp/uploads` 아래에서만 `rename`으로 옮긴다 |
 | 권한 | 디렉터리 `0700`, 마커 파일 `0600`. 운영에서는 전용 계정(uid 10001)이 소유한다 |
 | SSD 미마운트 | `.relayfiles-volume` 마커가 없으면 볼륨을 offline으로 판단하고 쓰지 않는다. 마커가 다른 볼륨이거나 레이아웃 버전이 다르면 사용하지 않는다 |
-| DB·디스크 불일치 | `withStorageTransaction`이 DB 트랜잭션 실패 시 파일 변경을 역순으로 되돌린다. 되돌리기 실패는 `storage rollback step failed` 에러 로그로 남는다(자동으로 찾아 고치는 작업은 없다. 로그를 보고 수동으로 정리한다) |
+| DB·디스크 불일치 | `withStorageTransaction`이 DB 트랜잭션 실패 시 파일 변경을 역순으로 되돌린다. 되돌리기 실패는 `storage rollback step failed` 에러 로그로 남는다. `npm run storage:fsck`가 DB와 디스크를 대조해 디스크에만 있는 항목(휴지통으로 이동), DB에만 있는 파일(`missing` 표시), 크기가 다른 파일을 찾는다(기본은 보고만, `--fix`로 정리) |
 | 볼륨 이동 | 이동 중인 계정(`migrating`)과 레이아웃 마이그레이션 중인 볼륨(`READONLY`)은 쓰기를 503 `STORAGE_BUSY`로 막는다. 복사본은 모든 파일의 SHA-256이 원본과 같을 때만 사용하고, 원본은 휴지통에 24시간 남긴다 |
 | 분실·도난 | SSD 전체를 LUKS2로 암호화한다(앱은 파일을 따로 암호화하지 않으며, 디스크의 파일은 업로드한 원본과 같다) |
 

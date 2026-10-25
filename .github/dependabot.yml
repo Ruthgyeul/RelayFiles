@@ -1,0 +1,45 @@
+# Dependency updates. Security fixes are opened as soon as an
+# advisory appears; routine updates come weekly, grouped so one PR carries the minor and patch
+# bumps of an ecosystem. Major versions get their own PRs (reviewed one by one).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 10
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # typescript-eslint does not support TypeScript 7 yet (CLAUDE.md).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Seoul
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Base image of the app and tools images (Dockerfile NODE_IMAGE).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Seoul
+
+  # postgres, redis, nginx and cloudflared in the production stack.
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Seoul

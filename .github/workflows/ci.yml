@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -30,6 +30,21 @@ jobs:
       - run: npm run check:migrations
       - run: npm run test
       - run: npm run build
+
+  security:
+    name: Security (npm audit · secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # gitleaks scans the commits of the push or pull request.
+          fetch-depth: 0
+      # Runtime dependencies only: a high or critical advisory in what ships fails the build.
+      - run: npm audit --omit=dev --audit-level=high
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   e2e:
     name: E2E (360 / 768 / 1280)
@@ -59,8 +74,8 @@ jobs:
       TOKEN_HMAC_KEY: ci-only-token-lookup-hmac-key-0123456789
       COOKIE_SECRET: ci-only-cookie-signing-secret-0123456789
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -100,8 +115,8 @@ jobs:
       TOKEN_HMAC_KEY: ci-only-token-lookup-hmac-key-0123456789
       COOKIE_SECRET: ci-only-cookie-signing-secret-0123456789
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -126,11 +141,29 @@ jobs:
     timeout-minutes: 25
     needs: check
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Build the app and tools images
         run: |
           docker build --target app -t relayfiles-app:ci .
           docker build --target tools -t relayfiles-tools:ci .
+      # Known vulnerabilities in the images (OS packages and npm), failing only on critical ones
+      # that already have a fix, so a new base image or package update clears them.
+      - name: Scan the app image
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+        with:
+          image: relayfiles-app:ci
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
+      - name: Scan the tools image
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+        with:
+          image: relayfiles-tools:ci
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
       - name: Validate the production compose file
         run: |
           cp .env.example .env

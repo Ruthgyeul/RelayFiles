@@ -439,7 +439,7 @@ ShareSettings, SignIn(잠금 카운트다운), NewToken(체크해야 Continue �
 
 **마운트 상태 확인**
 
-- 볼륨 표시 파일(`.relayfiles-volume`)은 필요할 때 확인한다: 새 계정 볼륨 선택(마운트 안 됐거나 layoutVersion이 다르면 제외), Server 페이지 Media streaming 행, `/api/health`의 storage 구성요소(Status 페이지 Storage DOWN), `npm run volume:list`. 빈 마운트 지점(내장 디스크)에 잘못 쓰는 사고를 막는 것이 목적이다. 상태를 자동으로 `OFFLINE`으로 바꾸는 주기 감시는 아직 없다(`VOLUME_WATCH_INTERVAL_SEC`는 예약된 키).
+- 볼륨 표시 파일(`.relayfiles-volume`)은 필요할 때 확인한다: 새 계정 볼륨 선택(마운트 안 됐거나 layoutVersion이 다르면 제외), Server 페이지 Media streaming 행, `/api/health`의 storage 구성요소(Status 페이지 Storage DOWN), `npm run volume:list`. 빈 마운트 지점(내장 디스크)에 잘못 쓰는 사고를 막는 것이 목적이다. 워커의 볼륨 감시(`VOLUME_WATCH_INTERVAL_SEC`마다, `jobs/volume-watch.ts`)가 표시 파일이 없거나 다른 ACTIVE 볼륨을 `OFFLINE`으로 바꾸고, 다시 보이면 `ACTIVE`로 되돌린다.
 - Server 페이지 Disk 카드는 볼륨별 용량(`statfs`)을 보여 준다. Disk health는 `smartctl -j -H -A -i $DISK_DEVICE`(권한이 없으면 Unavailable)다.
 
 ### 13.6 기타 보안

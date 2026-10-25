@@ -13,11 +13,13 @@ import { runCleanup } from "../services/admin.service";
 import { purgeOldAuditEvents } from "../services/audit.service";
 import { driverFor } from "../storage/registry";
 import { queueConnection } from "./queue";
+import { watchVolumes } from "./volume-watch";
 
 export const MAINTENANCE_QUEUE = "maintenance";
 const DAILY_CLEANUP = "daily-cleanup";
 const METRICS_SAMPLE = "metrics-sample";
 const HEALTH_PROBE = "health-probe";
+const VOLUME_WATCH = "volume-watch";
 
 /**
  * The daily job: expired accounts and items, then trash entries older than the retention
@@ -43,7 +45,8 @@ export async function runMaintenance(now: Date) {
 /**
  * Registers the daily cleanup (CLEANUP_CRON in JOBS_TIMEZONE) and the bandwidth and disk sampler
  * (every METRICS_SAMPLE_INTERVAL_SEC, which also keeps the worker heartbeat alive) and the
- * Status page probe (every HEALTH_PROBE_INTERVAL_SEC).
+ * Status page probe (every HEALTH_PROBE_INTERVAL_SEC), and the volume watch (every
+ * VOLUME_WATCH_INTERVAL_SEC: a volume whose SSD came off goes OFFLINE).
  */
 export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue: Queue }> {
   const jobs = getEnv("jobs");
@@ -51,6 +54,7 @@ export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue:
   await queue.upsertJobScheduler(DAILY_CLEANUP, { pattern: jobs.CLEANUP_CRON, tz: jobs.JOBS_TIMEZONE }, { name: "cleanup" });
   await queue.upsertJobScheduler(METRICS_SAMPLE, { every: jobs.METRICS_SAMPLE_INTERVAL_SEC * MS.second }, { name: "metrics" });
   await queue.upsertJobScheduler(HEALTH_PROBE, { every: jobs.HEALTH_PROBE_INTERVAL_SEC * MS.second }, { name: "health" });
+  await queue.upsertJobScheduler(VOLUME_WATCH, { every: getEnv("storage").VOLUME_WATCH_INTERVAL_SEC * MS.second }, { name: "volumes" });
   // The first sample only starts the rate measurement.
   await Promise.all([networkRates().catch(() => undefined), diskRates()]);
   const worker = new Worker(
@@ -62,6 +66,7 @@ export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue:
         await recordSample({ outPerSec: network.outPerSec, disks }, new Date());
         return null;
       }
+      if (job.name === "volumes") return watchVolumes();
       if (job.name === "health") {
         const { probe } = await runHealthProbe(new Date());
         return probe;

@@ -113,6 +113,18 @@ $C restart app worker nginx
 
 컨테이너를 재시작하면 앱이 SSD의 `.relayfiles-volume` 표시 파일을 다시 확인하고(Status 페이지 Storage가 정상으로 돌아온다) 정상으로 동작한다. 빈 마운트 지점(내장 디스크)에는 쓰지 않는다.
 
+워커는 `VOLUME_WATCH_INTERVAL_SEC`(기본 30초)마다 ACTIVE 볼륨의 표시 파일을 확인한다. 없거나 다른 볼륨이면 그 볼륨을 `OFFLINE`으로 바꾸고 `storage volume went offline` 에러 로그를 남긴다. 다시 마운트되면 다음 확인에서 `ACTIVE`로 돌아온다(`READONLY`·`DRAINING`은 건드리지 않는다).
+
+## DB와 디스크 대조 (storage:fsck)
+
+```bash
+$C run --rm tools npm run storage:fsck                 # 보고만(종료 코드 1 = 차이 있음)
+$C run --rm tools npm run storage:fsck -- --fix        # 디스크에만 있는 항목 → 휴지통, 없어진 파일 → missing 표시
+$C run --rm tools npm run storage:fsck -- --account <id>
+```
+
+DB 행은 지우지 않는다. 휴지통은 24시간 뒤 비워지므로 그 전에는 되살릴 수 있다. 심볼릭 링크는 옮기지 않고 "not moved"로 보고하니 직접 지운다.
+
 ## 관리자 토큰을 잃었을 때
 
 ```bash
@@ -347,3 +359,7 @@ $C exec postgres psql -U relayfiles -c "ALTER USER relayfiles PASSWORD '<새 비
 # .env의 POSTGRES_PASSWORD를 바꾼 뒤
 $C up -d app worker
 ```
+
+## 의존성 업데이트
+
+Dependabot(`.github/dependabot.yml`)이 보안 수정은 바로, 나머지는 매주 월요일에 PR로 올린다. npm은 minor·patch를 한 PR로 묶고, 메이저 버전은 따로 올린다. 대상은 npm, GitHub Actions(커밋 SHA로 고정), Dockerfile 베이스 이미지, `deploy/docker-compose.yml` 이미지다. CI `Security` 잡은 런타임 의존성의 high 이상 advisory(`npm audit --omit=dev --audit-level=high`)와 커밋에 들어간 비밀값(gitleaks)을 막고, `docker` 잡은 이미지의 수정판이 있는 critical CVE(grype)를 막는다. CodeQL은 저장소의 기본 코드 스캐닝 설정으로 돈다.

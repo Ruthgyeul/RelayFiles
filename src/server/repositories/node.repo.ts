@@ -264,6 +264,23 @@ export async function relativePaths(db: DbClient, folderId: string): Promise<Map
   return new Map(rows.map((row) => [row.path, { id: row.id, type: row.type }]));
 }
 
+/** Every item below a folder with its path, size and "missing" flag (npm run storage:fsck). */
+export function treeEntries(db: DbClient, folderId: string) {
+  return db.$queryRaw<{ id: string; path: string; type: "FILE" | "FOLDER"; size: bigint; missing: boolean }[]>`
+    WITH RECURSIVE sub AS (
+      SELECT id, name::text AS path FROM "Node" WHERE "parentId" = ${folderId}
+      UNION ALL
+      SELECT n.id, s.path || '/' || n.name FROM "Node" n JOIN sub s ON n."parentId" = s.id
+    )
+    SELECT n.id, sub.path, n.type::text AS type, n.size, n.missing FROM sub JOIN "Node" n ON n.id = sub.id`;
+}
+
+/** Marks files found missing on disk (or found again). */
+export async function setMissing(db: DbClient, ids: readonly string[], missing: boolean): Promise<void> {
+  if (ids.length === 0) return;
+  await db.node.updateMany({ where: { id: { in: [...ids] }, type: "FILE" }, data: { missing } });
+}
+
 export interface NewFile {
   id: string;
   accountId: string;
