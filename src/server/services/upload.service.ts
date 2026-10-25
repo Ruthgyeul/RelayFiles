@@ -5,15 +5,12 @@ import { rm, stat, unlink } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
 import { STORAGE } from "@/config/policy";
 import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
-import { formatSize } from "@/domain/format";
 import { randomString, ID_ALPHABET, newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { homeUploadPlan, kindFromMime, mimeFromName, uploadFallbackName } from "@/domain/upload";
 import { db, Prisma } from "../db/client";
 import { ApiError } from "../http/api-error";
-import type { AccountRow } from "../repositories/account.repo";
 import {
-  accountUsage,
   ancestorChain,
   createFileNode,
   createFolderNode,
@@ -27,15 +24,16 @@ import {
 } from "../repositories/node.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { layoutOf } from "../storage/layout";
-import { availableAboveReserve, driverFor } from "../storage/registry";
+import { driverFor } from "../storage/registry";
 import type { StorageDriver } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { loadBatch, saveBatch, type UploadBatch } from "../upload/batches";
 import { createFolder } from "./node.service";
+import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
 import { assertAccountWritable, driverForAccount } from "./volume.service";
 import { enqueueMedia } from "../jobs/queue";
 
-type Owner = Pick<AccountRow, "id" | "volumeId" | "quotaBytes">;
+type Owner = SpaceOwner;
 
 const BATCH_ID_LENGTH = 24;
 
@@ -51,19 +49,6 @@ export function checkRelPath(rel: string): void {
   }
 }
 
-/** Bytes still allowed by the account quota and the volume's free space. */
-export async function assertSpace(owner: Owner, bytes: number, driver: StorageDriver, reservePct: number): Promise<void> {
-  if (owner.quotaBytes !== null) {
-    const { usedBytes } = await accountUsage(db(), owner.id);
-    if (usedBytes + BigInt(bytes) > owner.quotaBytes) {
-      const left = owner.quotaBytes > usedBytes ? owner.quotaBytes - usedBytes : 0n;
-      throw new ApiError("INSUFFICIENT_STORAGE", `Not enough space: ${formatSize(Number(left))} left of ${formatSize(Number(owner.quotaBytes))}`);
-    }
-  }
-  const space = await driver.space();
-  if (availableAboveReserve(space.total, space.available, reservePct) < BigInt(bytes)) throw new ApiError("INSUFFICIENT_STORAGE");
-}
-
 /**
  * Plans an upload (design `startUpload`): validates names, reports duplicates for the
  * dialog, checks quota and disk space, creates the Home upload folder, and stores the batch
@@ -75,7 +60,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
   const volume = await findVolume(db(), owner.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
   const driver = driverFor(volume);
-  const reservePct = volume.reservePct;
+  const space = { id: volume.id, reservePct: volume.reservePct, driver };
 
   let files = input.files.map((file, index) => ({ ...file, index }));
   let folder: Pick<NodeRow, "id" | "name">;
@@ -87,7 +72,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
       input.fallbackName && !nameError(input.fallbackName) ? input.fallbackName : uploadFallbackName(new Date()),
     );
     files = files.map((file, position) => ({ ...file, rel: plan.rels[position]! }));
-    await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), driver, reservePct);
+    await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space);
     folder = (await createFolder(owner, "root", plan.name)).folder;
   } else {
     const target = input.target === "root" ? await findRootFolder(db(), owner.id) : await findNode(db(), owner.id, input.target);
@@ -100,7 +85,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
     if (duplicates.length > 0 && !input.dup) return { kind: "duplicates", names: duplicates.map((file) => file.rel) };
     if (input.dup === "skip") files = files.filter((file) => !isDuplicate(file.rel));
     if (files.length === 0) return { kind: "nothing" };
-    await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), driver, reservePct);
+    await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space);
     folder = target;
   }
 
@@ -116,8 +101,8 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
   };
 }
 
-/** Validates a new tus upload against its batch; returns the batch entry. */
-export async function checkUploadStart(owner: Owner, batchId: string, slot: number, size: number | undefined, volumeId: string): Promise<{ batch: UploadBatch; rel: string }> {
+/** Validates a new tus upload against its batch and reserves its space; returns the batch entry. */
+export async function checkUploadStart(owner: Owner, batchId: string, slot: number, size: number | undefined, volumeId: string, uploadId: string): Promise<{ batch: UploadBatch; rel: string }> {
   const batch = await loadBatch(batchId);
   const entry = batch?.files[slot];
   if (!batch || !entry || batch.accountId !== owner.id || batch.volumeId !== volumeId) throw new ApiError("NOT_FOUND", "This upload has expired. Start it again.");
@@ -127,7 +112,7 @@ export async function checkUploadStart(owner: Owner, batchId: string, slot: numb
   await assertAccountWritable(owner.id);
   const volume = await findVolume(db(), batch.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
-  await assertSpace(owner, entry.size, driverFor(volume), volume.reservePct);
+  await reserveSpace(owner, uploadId, entry.size, { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
   return { batch, rel: entry.rel };
 }
 

@@ -6,7 +6,8 @@
 # Both run as the storage account (STORAGE_UID:STORAGE_GID) that owns /mnt/relayfilesDB, under
 # tini as PID 1 (reaps orphaned processes, forwards stop signals) in Compose, k3s or docker run.
 
-ARG NODE_IMAGE=node:24-bookworm-slim
+# Debian 13 (trixie): ffmpeg 7.1 instead of bookworm's 5.1 (demuxers are where ffmpeg CVEs land).
+ARG NODE_IMAGE=node:24-trixie-slim
 
 FROM ${NODE_IMAGE} AS base
 ENV NEXT_TELEMETRY_DISABLED=1

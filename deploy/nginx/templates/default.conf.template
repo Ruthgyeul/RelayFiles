@@ -28,6 +28,33 @@ map "$relay_from_host_proxy|$http_x_real_ip" $relay_client_ip {
     default $remote_addr;
 }
 
+# The scheme the visitor used: only cloudflared and the trusted host proxy may say it through
+# X-Forwarded-Proto (the app and tus build URLs from it); anyone else gets this hop's scheme.
+geo $realip_remote_addr $relay_trusted_peer {
+    default 0;
+    ${CLOUDFLARED_IP} 1;
+    ${TRUSTED_PROXY_IP} 1;
+}
+map "$relay_trusted_peer|$http_x_forwarded_proto" $relay_proto {
+    "~^1\|(?<proto>https?)$" $proto;
+    default $scheme;
+}
+
+# First line of defense before the app's own Redis limits (and before argon2 checks link
+# passwords): sign-in, sign-up, account switching, link unlocks and new upload batches, per
+# client address. Requests whose key is empty (everything else) are not limited.
+map "$request_method $uri" $relay_auth_limit {
+    "~^POST /api/auth/"                $relay_client_ip;
+    "~^POST /api/share/[^/]+/unlock$"  $relay_client_ip;
+    default "";
+}
+map "$request_method $uri" $relay_upload_limit {
+    "POST /api/uploads" $relay_client_ip;
+    default "";
+}
+limit_req_zone $relay_auth_limit zone=relay_auth:10m rate=20r/m;
+limit_req_zone $relay_upload_limit zone=relay_uploads:10m rate=60r/m;
+
 # No client addresses in Nginx logs (same rule as the app's logs).
 log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
 
@@ -42,6 +69,15 @@ server {
 
     sendfile on;
     tcp_nopush on;
+
+    # Over the limits above: the API's own error format, so the app shows its usual message.
+    limit_req_status 429;
+    error_page 429 = @relay_rate_limited;
+    location @relay_rate_limited {
+        default_type application/json;
+        add_header Retry-After 60 always;
+        return 429 '{"success":false,"error":"Too many requests. Try again later.","code":"RATE_LIMITED"}';
+    }
 
     # When the app is down or the server is in maintenance, Nginx answers with static pages.
     error_page 502 /_errors/502.html;
@@ -60,6 +96,9 @@ server {
     location ~ ^${STORAGE_ACCEL_PREFIX}[a-z0-9-]+/(.+)$ {
         internal;
         alias ${STORAGE_ROOT}/users/$1;
+        # The app checked the path with lstat, but Nginx opens it again: refuse a symlink that
+        # appeared in between (below STORAGE_ROOT; the mount point itself may be one).
+        disable_symlinks on from=${STORAGE_ROOT};
         # Cache-Control comes from the app (kept by X-Accel-Redirect): playback is cacheable,
         # downloads are not. Adding one here would send two and disable the browser cache.
         add_header X-Content-Type-Options nosniff always;
@@ -76,7 +115,8 @@ server {
         proxy_set_header X-Real-IP $relay_client_ip;
         proxy_set_header CF-Connecting-IP "";
         proxy_set_header X-Forwarded-For $relay_client_ip;
-        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Proto $relay_proto;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header Connection "";
         proxy_read_timeout 1h;
         proxy_send_timeout 1h;
@@ -85,13 +125,16 @@ server {
     location / {
         # Maintenance mode: touch deploy/maintenance/on (remove it to come back).
         if (-f /etc/nginx/maintenance/on) { return 503; }
+        limit_req zone=relay_auth burst=20 nodelay;
+        limit_req zone=relay_uploads burst=30 nodelay;
         proxy_pass http://relayfiles_app;
         proxy_http_version 1.1;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $relay_client_ip;
         proxy_set_header CF-Connecting-IP "";
         proxy_set_header X-Forwarded-For $relay_client_ip;
-        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Proto $relay_proto;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header Connection "";
         # Streams, zips and the Server page's live updates can run long.
         proxy_read_timeout 1h;

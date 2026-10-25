@@ -10,3 +10,7 @@ app and needs no location file.
 A location must not add its own `Cache-Control`: the app's header passes through X-Accel and
 lets browsers keep playback; a second one (`private, no-cache` in files written before this
 release) disables that cache. Delete that line from older `<volumeId>.conf` files.
+
+Each location also needs `disable_symlinks on from=<volume root>;` (Nginx opens the file again
+after the app checked it; this refuses a symlink placed in between). `volume:init` writes it;
+add it by hand to `<volumeId>.conf` files written before this release.
