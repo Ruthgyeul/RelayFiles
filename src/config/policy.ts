@@ -245,8 +245,8 @@ export const AUTH = {
    * A device session ends this long after sign-in, whatever the account's own lifetime (admin
    * accounts never expire, so their sessions would otherwise last for good).
    */
-  adminSessionDays: 14,
-  memberSessionDays: 90,
+  adminSessionDays: 7,
+  memberSessionDays: 14,
   /** Admin actions that expose or change accounts need the token entered again within this window. */
   reauthWindowMin: 10,
   /** Admin audit entries are kept this long. */
