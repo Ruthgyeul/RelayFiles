@@ -51,6 +51,46 @@ export function ipInCidrs(ip: string, cidrs: readonly string[]): boolean {
   });
 }
 
+const IPV6_GROUPS = 8;
+/** Groups in the /64 prefix most providers hand to one customer. */
+const IPV6_SUBJECT_GROUPS = 4;
+const IPV4_MAPPED = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i;
+
+/** The 8 groups of an IPv6 address (`::` expanded, zone id and an IPv4 tail handled), or null. */
+function ipv6Groups(ip: string): number[] | null {
+  let text = ip.replace(/%.*$/, "").toLowerCase();
+  const v4Tail = /(\d{1,3}(?:\.\d{1,3}){3})$/.exec(text);
+  if (v4Tail) {
+    const value = ipv4ToInt(v4Tail[1]!);
+    if (value === null) return null;
+    text = `${text.slice(0, -v4Tail[1]!.length)}${Math.floor(value / 65_536).toString(16)}:${(value % 65_536).toString(16)}`;
+  }
+  const halves = text.split("::");
+  if (halves.length > 2) return null;
+  const parse = (part: string | undefined) => (part ? part.split(":") : []);
+  const head = parse(halves[0]);
+  const tail = parse(halves[1]);
+  const missing = IPV6_GROUPS - head.length - tail.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null;
+  const groups = [...head, ...Array<string>(halves.length === 2 ? missing : 0).fill("0"), ...tail];
+  if (!groups.every((group) => /^[0-9a-f]{1,4}$/.test(group))) return null;
+  return groups.map((group) => Number.parseInt(group, 16));
+}
+
+/**
+ * What per-address limits (sign-in lockouts, sign-ups, password guesses) are keyed on. An
+ * IPv6 user usually gets a whole /64 and can pick any address in it, so IPv6 addresses count
+ * as their /64; IPv4 (also written as an IPv4-mapped IPv6 address) counts as itself.
+ */
+export function rateLimitSubject(ip: string): string {
+  const mapped = IPV4_MAPPED.exec(ip);
+  if (mapped) return mapped[1]!;
+  if (!ip.includes(":")) return ip;
+  const groups = ipv6Groups(ip);
+  if (!groups) return ip;
+  return `${groups.slice(0, IPV6_SUBJECT_GROUPS).map((group) => group.toString(16)).join(":")}::/64`;
+}
+
 /** Longest address accepted from a header (IPv6 with zone id fits easily). */
 const MAX_IP_LENGTH = 64;
 

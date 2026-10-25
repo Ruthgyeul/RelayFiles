@@ -175,6 +175,14 @@ describe("lockout", () => {
     expect(blocked.status).toBe(429);
     expect(blocked.json.retryAfter).toBeGreaterThan(0);
   });
+
+  it("locks out the whole IPv6 /64, not just one address in it", async () => {
+    const prefix = `2001:db8:${runId.toString(16)}:${Math.floor(Math.random() * 0xffff).toString(16)}`;
+    for (let attempt = 1; attempt <= 5; attempt++) await call(tokenSignIn, { body: { token: "short" }, ip: `${prefix}::${attempt}` });
+    const other = await call(tokenSignIn, { body: { token: "short" }, ip: `${prefix}:aaaa:bbbb:cccc:dddd` });
+    expect(other.status).toBe(429);
+    await clearFailures(ipKeyOf(`${prefix}::1`));
+  });
 });
 
 describe("sign-up modes", () => {

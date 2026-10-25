@@ -31,7 +31,7 @@
 - **키 교체**: `*_PREVIOUS`를 설정하면 옛 키로 만든 값도 읽힌다. 다음 로그인 때 새 키로 다시 암호화·해시한다. `npm run keys:rotate`가 모든 계정을 새 키로 다시 저장하면 `*_PREVIOUS`를 지운다(절차: [runbook.md](runbook.md#비밀값-교체)).
 - **기기 쿠키** `rf_s`: 이 기기에 로그인한 세션 id 목록(최대 10)과 활성 세션만 담고 HMAC으로 서명한다(`COOKIE_SECRET`, 교체 시 `COOKIE_SECRET_PREVIOUS`). `HttpOnly`, `SameSite=Lax`, `PUBLIC_URL`이 https면 `Secure`. 토큰은 쿠키에 넣지 않는다.
 - **세션 폐기**: 요청마다 DB에서 `Session.revokedAt`과 계정 만료를 확인하므로 다른 기기에서 로그아웃하거나 만료되면 즉시 무효가 된다. 무효 세션은 쿠키에서 지운다.
-- **로그인 잠금**: 클라이언트 주소(HMAC으로 가린 키)마다 Redis에 실패 횟수를 센다. 5회마다 30초 → 120초 → 600초 잠금(`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_SECONDS`). 잠긴 동안에는 올바른 토큰도 429로 거부한다.
+- **로그인 잠금**: 클라이언트 주소(HMAC으로 가린 키, IPv6는 `/64` 단위 — `rateLimitSubject`)마다 Redis에 실패 횟수를 센다. 5회마다 30초 → 120초 → 600초 잠금(`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_SECONDS`). 잠긴 동안에는 올바른 토큰도 429로 거부한다.
 - **익명 가입 제한**: 같은 주소에서 시간당 10개(`SIGNUPS_PER_HOUR`, 기본값은 `config/policy.ts`). 크롤러가 디스크에 계정 폴더를 채우는 것을 막는다. 가입 모드(Open/Invite only/Closed)는 `ServerConfig.signupMode`, 초대 코드는 한 번만 쓸 수 있다.
 - **계정 생성의 원자성**: 계정 행, 루트 폴더 노드, 기기 세션, 볼륨의 `users/<accountId>/` 디렉터리를 `withStorageTransaction`으로 함께 만든다. 중간에 실패하면 DB는 롤백되고 디렉터리는 휴지통으로 옮긴다.
 - **클라이언트 주소**: `CF-Connecting-IP` → `X-Real-IP` 순으로 읽는다. 앱 포트는 Nginx를 통해서만 접근 가능해야 한다(직접 노출하면 헤더 위조로 잠금을 우회할 수 있음). systemd 배포는 `APP_HOST`(기본 `127.0.0.1`, 비어 있어도 루프백)로 루프백에만 열고, Docker 배포의 app 컨테이너는 포트를 공개하지 않는다. 앞단 Nginx는 방문자가 보낸 `CF-Connecting-IP`를 비워서 넘긴다. 세션에는 마스킹한 주소(`a.b.•••.•••`)와 Cloudflare 국가·도시 헤더만 저장한다.

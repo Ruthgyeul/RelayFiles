@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientIp, ipInCidrs, isPrivateIp, maskIp } from "./network";
+import { clientIp, ipInCidrs, isPrivateIp, maskIp, rateLimitSubject } from "./network";
 
 describe("maskIp", () => {
   it("hides the last two IPv4 octets and most of IPv6", () => {
@@ -40,5 +40,29 @@ describe("clientIp", () => {
     expect(clientIp(new Headers({ "cf-connecting-ip": "1.2.3.4", "x-real-ip": "10.0.0.1" }))).toBe("1.2.3.4");
     expect(clientIp(new Headers({ "x-real-ip": " 10.0.0.1 " }))).toBe("10.0.0.1");
     expect(clientIp(new Headers())).toBe("");
+  });
+});
+
+describe("rateLimitSubject", () => {
+  it("keys IPv6 addresses on their /64", () => {
+    expect(rateLimitSubject("2001:db8:1:2:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1:2::/64");
+    expect(rateLimitSubject("2001:db8:1:2::1")).toBe("2001:db8:1:2::/64");
+    expect(rateLimitSubject("2001:0DB8:0001:0002:0:0:0:9")).toBe("2001:db8:1:2::/64");
+    expect(rateLimitSubject("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(rateLimitSubject("fe80::1%eth0")).toBe("fe80:0:0:0::/64");
+    expect(rateLimitSubject("::1")).toBe("0:0:0:0::/64");
+    expect(rateLimitSubject("64:ff9b::192.0.2.33")).toBe("64:ff9b:0:0::/64");
+  });
+
+  it("keeps IPv4 addresses whole, also when IPv4-mapped", () => {
+    expect(rateLimitSubject("211.36.12.7")).toBe("211.36.12.7");
+    expect(rateLimitSubject("::ffff:211.36.12.7")).toBe("211.36.12.7");
+    expect(rateLimitSubject("")).toBe("");
+  });
+
+  it("leaves text that is not an address as it is", () => {
+    expect(rateLimitSubject("1:2:3")).toBe("1:2:3");
+    expect(rateLimitSubject("1::2::3")).toBe("1::2::3");
+    expect(rateLimitSubject("zz::1")).toBe("zz::1");
   });
 });
