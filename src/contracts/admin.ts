@@ -37,3 +37,28 @@ export interface CleanupResult {
   accounts: number;
   items: number;
 }
+
+/** Admin actions written to the audit log. */
+export const AUDIT_ACTIONS = [
+  "account.manage",
+  "account.delete",
+  "signup.mode",
+  "cleanup.run",
+  "invite.create",
+  "invite.revoke",
+  "token.reveal",
+  "token.regenerate",
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+/** One audit log entry (GET /api/admin/audit). */
+export interface AuditEntry {
+  id: string;
+  actorId: string;
+  actorName: string;
+  action: AuditAction;
+  targetId: string | null;
+  detail: string | null;
+  ipMasked: string;
+  at: string;
+}

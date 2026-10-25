@@ -30,6 +30,7 @@
 | `INVALID_INVITE` | 400 | 로그인 모달에 메시지 표시 |
 | `SIGNUP_CLOSED` | 403 | 로그인 모달의 Closed 안내 |
 | `FORBIDDEN` | 403 | `forbidden.tsx` |
+| `REAUTH_REQUIRED` | 403 | 관리자 세션이 최근 `AUTH.reauthWindowMin`분 안에 토큰을 입력하지 않았다. `apiFetch`가 "Confirm it's you" 대화상자를 열고, 토큰을 입력하면 같은 요청을 한 번 더 보낸다 |
 | `NOT_FOUND` | 404 | 다른 계정 리소스도 404(존재 여부 비공개) |
 | `CONFLICT` | 409 | 이름 중복 등, 대화상자에 메시지 표시 |
 | `ALREADY_SIGNED_IN` | 409 | 로그인 모달에 메시지 표시 |
@@ -53,9 +54,10 @@
 | `GET` | `/api/auth/session` | 이 기기에 로그인한 계정 목록, 활성 계정 id, 가입 모드, 활성 계정 사용량 `usage { usedBytes, rootItems, storageBusy }`(`SessionState`). `storageBusy`가 true면 파일을 새 저장소로 옮기는 중이라 변경이 잠시 막힌다(배너 표시). 무효 세션이 있으면 쿠키를 정리한다 |
 | `POST` | `/api/auth/anonymous` | `{ inviteCode? }` → 201 `{ account, token, session }`. 익명 계정을 만들고 이 기기를 로그인시킨다. 토큰은 이 응답에서만 평문으로 나온다 |
 | `POST` | `/api/auth/token` | `{ token }` → `SessionState`. 실패 시 401 `INVALID_TOKEN`, 잠금 시 429 `retryAfter` |
+| `POST` | `/api/auth/reauth` | `{ token }` → `{ confirmed: true }`. 활성 계정의 토큰을 다시 입력해 이 세션의 관리자 작업을 `AUTH.reauthWindowMin`분 동안 허용한다. 틀리면 401 `INVALID_TOKEN`(로그인과 같은 잠금) |
 | `POST` | `/api/auth/switch` | `{ accountId }` → `SessionState`. 이 기기에 로그인한 다른 계정을 활성화 |
 | `POST` | `/api/auth/signout` | `{ accountId? }`(기본: 활성 계정) → `SessionState`. 세션을 DB에서 폐기 |
-| `GET` | `/api/me/token?accountId=` | 이 기기에 로그인한 계정(기본: 활성 계정)의 전체 토큰(`cache-control: no-store`). 다른 기기의 계정은 404 |
+| `GET` | `/api/me/token?accountId=` | 이 기기에 로그인한 계정(기본: 활성 계정)의 전체 토큰(`cache-control: no-store`). 다른 기기의 계정은 404. 관리자 계정 토큰은 최근 재인증이 필요하고(`REAUTH_REQUIRED`) 감사 로그에 남는다 |
 | `GET` | `/api/folders/:id` | `id` = `root` 또는 폴더 id. `FolderView { folder, isRoot, path, effectiveVisibility, children }`. 폴더 항목은 하위 전체 크기(`size`)와 직계 항목 수(`itemCount`)를 담는다. 각 항목의 `busy`는 공유 링크 다운로드 혼잡도 배지(`Busy`/`Server busy`/`Downloads paused`, 없으면 null). 다른 계정 폴더는 404 |
 | `POST` | `/api/folders` | `{ parentId, name }` → 201 `{ folder, requestedName, renamed }`. DB와 볼륨에 함께 만든다. 이름이 겹치면 `Name (2)`로 만들고 `renamed: true` |
 | `GET` | `/api/nodes/:id` | Properties 대화상자 정보: 항목, 위치(루트→부모 이름), 실제 공개 범위, 폴더면 하위 파일·폴더 수 |
@@ -103,6 +105,7 @@
 | `POST` | `/api/admin/invites` | 일회용 초대 코드 `XXXX-XXXX` 생성 |
 | `DELETE` | `/api/admin/invites/:code` | 사용 전 코드 취소(사용된 코드는 404) |
 | `POST` | `/api/admin/cleanup` | "Run cleanup now": 삭제일이 지난 계정과 만료 항목 삭제 → `{ accounts, items }` |
+| `GET` | `/api/admin/audit` | 감사 로그 최신 200건 `{ events: AuditEntry[] }`(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대 생성·취소, 관리자 토큰 보기·재발급) |
 | `GET` | `/api/admin/server/stream` | Server 페이지 실측 지표 SSE(1.5초마다 스냅샷, 느린 스냅샷은 겹치지 않고 건너뜀) |
 | `POST` | `/api/admin/incidents` | Status 페이지 Incident 등록 `{ title, text, severity, date, duration, resolved }` |
 | `PUT`·`DELETE` | `/api/admin/incidents/:id` | Incident 수정 / 삭제 |

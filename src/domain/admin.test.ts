@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountStatus, applyManage, managePreview, matchesFilter, quotaNote, scheduledDeletion, type AdminLifecycle } from "./admin";
+import { accountStatus, applyManage, managePreview, maskInvite, matchesFilter, quotaNote, scheduledDeletion, type AdminLifecycle } from "./admin";
 
 const DAY = 86_400_000;
 const now = Date.UTC(2026, 9, 6);
@@ -55,5 +55,11 @@ describe("manage", () => {
     expect(quotaNote(2e9, 5, size)).toBe("Using 2 GB.");
     expect(quotaNote(6e9, 5, size)).toBe("Using 6 GB. Over the new limit: existing files stay, new uploads are blocked.");
     expect(quotaNote(6e9, null, size)).toBe("Using 6 GB.");
+  });
+});
+
+describe("maskInvite", () => {
+  it("keeps only the first group of an invite code", () => {
+    expect(maskInvite("ABCD-EFGH")).toBe("ABCD-••••");
   });
 });

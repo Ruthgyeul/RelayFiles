@@ -88,8 +88,29 @@ model Session {
   createdAt  DateTime  @default(now())
   lastSeenAt DateTime  @default(now())
   revokedAt  DateTime?
+  /// When the account token was last entered on this session (re-authentication for admin
+  /// actions); null = only at sign-in (createdAt).
+  reauthAt   DateTime?
 
   @@index([accountId])
+}
+
+/// Admin actions, for "who changed what": roles, deletions, sign-up mode, cleanups, invites.
+/// The actor's name is copied so the entry stays readable after the account is deleted.
+model AuditEvent {
+  id        String   @id
+  actorId   String
+  actorName String
+  action    String
+  /// The account, invite code or setting the action was about.
+  targetId  String?
+  /// Short client-safe detail, e.g. the new sign-up mode.
+  detail    String?
+  /// IP with the last two octets masked; the real IP is never stored.
+  ipMasked  String
+  at        DateTime @default(now())
+
+  @@index([at])
 }
 
 // ---------------------------------------------------------------------------

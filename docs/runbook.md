@@ -119,6 +119,17 @@ $C restart app worker nginx
 $C run --rm tools npm run admin:create   # 새 관리자 계정. 이전 관리자 계정은 Accounts에서 정리한다
 ```
 
+관리자 세션은 로그인 후 14일이 지나면 끝나고, 토큰 보기·계정 관리·가입 모드 변경 전에는 토큰을 다시 묻는다("Confirm it's you"). 토큰을 잃었다면 위처럼 새 관리자를 만든다.
+
+## 감사 로그 보기
+
+관리자 작업(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대, 관리자 토큰 보기·재발급)은 `AuditEvent`에 1년간 남는다.
+
+```bash
+curl -s -b "rf_s=<관리자 쿠키>" https://<도메인>/api/admin/audit | jq '.data.events[:20]'
+$C exec postgres psql -U relayfiles -c 'SELECT at, "actorName", action, "targetId", detail FROM "AuditEvent" ORDER BY at DESC LIMIT 50;'
+```
+
 ## 마이그레이션
 
 ### DB 스키마 (Prisma)

@@ -99,3 +99,9 @@ export function quotaNote(usedBytes: number, quotaGb: number | null, formatSize:
   const over = quotaGb !== null && usedBytes > quotaGb * BYTES_PER_GB;
   return `Using ${formatSize(usedBytes)}${over ? ". Over the new limit: existing files stay, new uploads are blocked." : "."}`;
 }
+
+/** An invite code as the audit log shows it: the first group only ("ABCD-••••"), since an unused code still signs up. */
+export function maskInvite(code: string): string {
+  const [first = ""] = code.split("-");
+  return `${first}-••••`;
+}

@@ -241,6 +241,16 @@ export const AUTH = {
   signupWindowSec: 60 * 60,
   /** Session "last seen" is written at most this often. */
   touchIntervalSec: 5 * 60,
+  /**
+   * A device session ends this long after sign-in, whatever the account's own lifetime (admin
+   * accounts never expire, so their sessions would otherwise last for good).
+   */
+  adminSessionDays: 14,
+  memberSessionDays: 90,
+  /** Admin actions that expose or change accounts need the token entered again within this window. */
+  reauthWindowMin: 10,
+  /** Admin audit entries are kept this long. */
+  auditRetentionDays: 365,
 } as const;
 
 /** Production log files (LOG_DIR): rotated by size so a busy server cannot fill the disk. */

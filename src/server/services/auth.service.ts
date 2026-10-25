@@ -15,7 +15,7 @@ import { logger } from "../logger";
 import { createAccount, findAccountByLookups, findAccountToken, touchAccountLogin, updateAccountToken, type AccountRow } from "../repositories/account.repo";
 import { createRootFolder } from "../repositories/node.repo";
 import { consumeInvite, getServerConfig } from "../repositories/server-config.repo";
-import { createSession, revokeOtherSessions, revokeSession } from "../repositories/session.repo";
+import { createSession, markReauthenticated, revokeOtherSessions, revokeSession } from "../repositories/session.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { volumeForNewAccount } from "./volume.service";
 
@@ -119,25 +119,32 @@ export function createAdminAccount(): Promise<ProvisionedAccount> {
   return provisionAccount({ isAdmin: true });
 }
 
+/** Refuses while this address is locked out of token entry. */
+async function assertNotLocked(client: ClientInfo): Promise<void> {
+  const locked = await lockRemaining(client.ipKey);
+  if (locked > 0) throw new ApiError("RATE_LIMITED", `Too many failed attempts. Try again in ${locked} s.`, { retryAfter: locked });
+}
+
+/** Counts a wrong token toward the lockout ladder; returns the error to throw. */
+async function failedTokenEntry(token: string, client: ClientInfo): Promise<ApiError> {
+  const policy = lockoutPolicy();
+  const { failures, lockSeconds } = await recordFailure(client.ipKey, policy);
+  if (lockSeconds > 0) return new ApiError("RATE_LIMITED", "Too many failed attempts.", { retryAfter: lockSeconds });
+  return new ApiError("INVALID_TOKEN", failureMessage(token, failures, policy, ID_LENGTH.token));
+}
+
 /**
  * Signs in with a pasted token. Failures are counted per client address and lock sign-in
  * on the design's ladder (5 attempts → 30 s, 120 s, 600 s).
  */
 export async function signInWithToken(token: string, client: ClientInfo, signedInAccountIds: readonly string[]): Promise<SignedIn> {
-  const locked = await lockRemaining(client.ipKey);
-  if (locked > 0) throw new ApiError("RATE_LIMITED", `Too many failed attempts. Try again in ${locked} s.`, { retryAfter: locked });
-
+  await assertNotLocked(client);
   const keys = tokenKeys();
   const found = token.length === ID_LENGTH.token ? await findAccountByLookups(db(), tokenLookups(token, keys)) : null;
   const ttlDays = getEnv("policy").ACCOUNT_TTL_DAYS;
   const now = new Date();
 
-  if (!found || isExpired(found, ttlDays, now)) {
-    const policy = lockoutPolicy();
-    const { failures, lockSeconds } = await recordFailure(client.ipKey, policy);
-    if (lockSeconds > 0) throw new ApiError("RATE_LIMITED", "Too many failed attempts.", { retryAfter: lockSeconds });
-    throw new ApiError("INVALID_TOKEN", failureMessage(token, failures, policy, ID_LENGTH.token));
-  }
+  if (!found || isExpired(found, ttlDays, now)) throw await failedTokenEntry(token, client);
   if (signedInAccountIds.includes(found.id)) throw new ApiError("ALREADY_SIGNED_IN");
 
   await clearFailures(client.ipKey);
@@ -152,6 +159,19 @@ export async function signInWithToken(token: string, client: ClientInfo, signedI
   });
   const { tokenEnc: _enc, tokenLookup: _lookup, ...account } = found;
   return { account, sessionId };
+}
+
+/**
+ * Admin re-authentication: the signed-in account's own token, entered again on this session,
+ * unlocks admin actions for AUTH.reauthWindowMin. Wrong tokens count toward the same lockout
+ * as sign-in.
+ */
+export async function reauthenticate(sessionId: string, accountId: string, token: string, client: ClientInfo): Promise<void> {
+  await assertNotLocked(client);
+  const found = token.length === ID_LENGTH.token ? await findAccountByLookups(db(), tokenLookups(token, tokenKeys())) : null;
+  if (found?.id !== accountId) throw await failedTokenEntry(token, client);
+  await clearFailures(client.ipKey);
+  await markReauthenticated(db(), sessionId, new Date());
 }
 
 /** Ends one device session; the database flag makes it invalid everywhere immediately. */
