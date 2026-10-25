@@ -15,6 +15,9 @@ type Source = Record<string, string | undefined>;
 const port = z.coerce.number().int().min(1).max(65_535);
 const positiveInt = z.coerce.number().int().positive();
 const bool = z.stringbool();
+/** A memory size Docker and systemd both read: "512M", "2G". */
+const memorySize = z.string().regex(/^\d+[KMG]$/);
+const cpus = z.coerce.number().positive().max(256);
 const CIDR = /^(\d{1,3})(\.\d{1,3}){3}\/(\d|[12]\d|3[0-2])$/;
 const cidrList = z
   .string()
@@ -131,6 +134,11 @@ export const ENV_GROUPS = {
     /** Container log rotation (docker compose json-file driver): size per file and files kept. */
     DOCKER_LOG_MAX_SIZE: z.string().regex(/^\d+[kmg]$/).default("10m"),
     DOCKER_LOG_MAX_FILE: positiveInt.default(5),
+    /** Memory (K/M/G) and CPU cores the app and the worker may use (compose limits, systemd MemoryMax/CPUQuota). */
+    APP_MEMORY_MAX: memorySize.default("2G"),
+    APP_CPUS: cpus.default(3),
+    WORKER_MEMORY_MAX: memorySize.default("2G"),
+    WORKER_CPUS: cpus.default(2),
   }),
   testing: z.object({
     E2E_PORT: port.default(3100),

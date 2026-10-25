@@ -119,6 +119,15 @@ export const MEDIA = {
   maxInputPixels: 268_402_689,
   /** ffmpeg gives up after this long. */
   ffmpegTimeoutSec: 60,
+  /**
+   * What ffmpeg may open for an uploaded file: the file itself, and only container formats of
+   * real videos. Playlists (HLS), concat lists and other formats that point at further files are
+   * refused, so a crafted upload cannot make ffmpeg read (and the transcoder stream back) other
+   * files on the server. Names are ffmpeg demuxers (`ffmpeg -demuxers`); "mov" covers MP4, M4V
+   * and 3GP, "matroska" covers WebM.
+   */
+  ffmpegProtocols: ["file"],
+  ffmpegDemuxers: ["mov", "matroska", "avi", "asf", "mpegts", "mpeg", "flv", "ogg", "wav", "mp3"],
   /** Largest PNG frame read back from ffmpeg (a 8K frame fits); more stops the command. */
   maxFrameBytes: 256 * 1024 * 1024,
   /**
