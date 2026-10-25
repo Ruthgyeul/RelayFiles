@@ -1,5 +1,6 @@
 import "server-only";
 import type { Readable } from "node:stream";
+import type { DiskEntry } from "@/domain/fsck";
 import type { ASSET_DIRS } from "./layout";
 
 /** Location of a file or folder: account plus folder names from the account root down. */
@@ -74,4 +75,11 @@ export interface StorageDriver {
   removeAccountAssets(accountId: string): Promise<void>;
   /** True when the upload staging area accepts a write (Status page probe). */
   canWrite(): Promise<boolean>;
+  /**
+   * Everything below an account root, by path ("Trip/a.txt"), for npm run storage:fsck.
+   * Symbolic links and other special files are reported as "other" and never followed.
+   */
+  listTree(accountId: string): Promise<Map<string, DiskEntry>>;
+  /** Account ids that have a root folder on this volume. */
+  listAccountRoots(): Promise<string[]>;
 }

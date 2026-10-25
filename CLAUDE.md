@@ -13,7 +13,7 @@
 | 영역 | 사용 |
 |---|---|
 | 런타임 | Node.js 24 LTS (`.nvmrc`) |
-| 프레임워크 | Next.js 16.3 App Router, React 19.3, `output: "standalone"`, `typedRoutes` |
+| 프레임워크 | Next.js 16.4 App Router, React 19.3, `output: "standalone"`, `typedRoutes` |
 | 스타일 | Tailwind CSS 4.3 (CSS-first `@theme`), 디자인 토큰은 CSS 변수 |
 | 언어 | TypeScript 6.0 strict (`typescript-eslint`가 TS 7을 지원할 때까지 `~6.0.3` 고정) |
 | 검증 | zod 4 (env, API 계약) |
@@ -54,6 +54,7 @@ npm run keys:rotate      # *_PREVIOUS 키로 저장된 토큰을 현재 키로 �
 npm run check:migrations # 파괴적 SQL 마이그레이션에 contract 표시가 있는지 검사
 npm run storage:migrate  # 볼륨 디렉터리 레이아웃을 코드 버전으로 올림(READONLY + 저널, 재개 가능)
 npm run storage:import   # -- --account <id> [--to <폴더>] [--ignore-quota], stdin의 tar를 계정에 복사(재실행 = 이어하기)
+npm run storage:fsck     # DB와 볼륨 대조(보고만). -- --fix: 디스크에만 있는 항목 휴지통, 없어진 파일 missing 표시
 npm run volume:list      # 볼륨 상태·계정 수·여유 공간
 npm run volume:migrate   # -- --account <id> --to <vol> | --volume <vol> [--to <vol>] (복사 → SHA-256 대조 → 전환)
 npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해제
