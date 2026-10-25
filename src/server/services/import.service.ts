@@ -12,9 +12,10 @@ import { findVolume } from "../repositories/volume.repo";
 import { DIR_MODE, FILE_MODE, layoutOf } from "../storage/layout";
 import { driverFor } from "../storage/registry";
 import type { UploadBatch } from "../upload/batches";
-import { assertSpace, checkRelPath, finalizeUpload } from "./upload.service";
+import { assertSpace } from "./space.service";
+import { checkRelPath, finalizeUpload } from "./upload.service";
 
-type Owner = Pick<AccountRow, "id" | "volumeId" | "quotaBytes">;
+type Owner = Pick<AccountRow, "id" | "volumeId" | "quotaBytes" | "isAdmin">;
 
 export interface ImportTarget {
   owner: Owner;
@@ -51,8 +52,7 @@ export async function importFile(target: ImportTarget, rel: string, size: number
 
   const volume = await findVolume(db(), target.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
-  const quotaOwner = target.ignoreQuota ? { ...target.owner, quotaBytes: null } : target.owner;
-  await assertSpace(quotaOwner, size, driverFor(volume), volume.reservePct);
+  await assertSpace(target.owner, size, { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) }, { quotas: !target.ignoreQuota });
 
   const uploads = layoutOf(volume.mountPath).uploads;
   await mkdir(uploads, { recursive: true, mode: DIR_MODE });
