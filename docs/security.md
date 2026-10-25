@@ -41,6 +41,7 @@
 ## 업로드 (M7 구현)
 
 - 업로드는 `POST /api/uploads`로 배치를 만든 뒤 tus로 보낸다. 배치(계정, 볼륨, 대상 폴더, 파일 목록, 중복 처리 방식)는 Redis에 `UPLOAD_TMP_TTL_HOURS` 동안 저장되고, tus 업로드는 시작할 때 크기를 밝혀야 하고(`Upload-Defer-Length` 불가) 배치에 적힌 크기와 같아야 시작된다. 그 크기로 용량·여유 공간을 검사하고, 완료 시 받은 바이트 수를 다시 대조한다.
+- **진행 중인 업로드 예약**(`server/upload/reservations.ts`, `space.service.ts`): 확정된 파일만 보면 동시에 시작한 업로드가 각각 검사를 통과해 쿼터나 디스크를 넘는다. tus 업로드를 시작할 때 계정·볼륨·익명 계정 전체(`ANON_TOTAL_QUOTA_GB`) 범위마다 남은 공간과 진행 중 예약 합계를 Lua 스크립트 하나로 확인하고 예약한다. 완료(파일이 사용량에 들어감)·거부·취소(tus DELETE) 때 풀고, 남은 예약은 `UPLOAD_TMP_TTL_HOURS` 뒤 저절로 소멸한다(그때 조각도 정리된다). 배치 준비(`POST /api/uploads`)도 예약을 포함해 검사한다.
 - tus 업로드 id마다 소유 계정을 Redis에 기록하고, 이어 올리기·조회·취소 요청은 같은 기기에 그 계정이 로그인해 있을 때만 허용한다(다른 계정은 404).
 - 조각은 볼륨의 `system/tmp/uploads/`에 쌓이고, 완료되면 같은 파일시스템 안에서 `rename`으로 사용자 폴더에 들어간다(복사 없음). 파일 종류는 내용(매직 바이트)으로 판정하고, SHA-256을 기록한다.
 - tus 경로(`/api/uploads/tus/*`)는 `proxy.ts` matcher에서 제외한다. 프록시는 요청 본문을 메모리에 복사(기본 10MB 제한)하기 때문이다. 이 경로는 쿠키(SameSite=Lax)와 배치 소유권으로 보호된다. 배치를 만드는 `POST /api/uploads`는 프록시의 Origin 검사를 거친다.

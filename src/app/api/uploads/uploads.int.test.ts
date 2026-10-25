@@ -31,7 +31,7 @@ async function member() {
 type Session = Awaited<ReturnType<typeof member>>;
 const b64 = (value: string) => Buffer.from(value).toString("base64");
 
-async function tusCall(method: "POST" | "PATCH" | "HEAD", url: string, cookie: string, headers: Record<string, string>, body?: Buffer) {
+async function tusCall(method: "POST" | "PATCH" | "HEAD" | "DELETE", url: string, cookie: string, headers: Record<string, string>, body?: Buffer) {
   const req = new NextRequest(`http://localhost${url}`, {
     method,
     headers: { "tus-resumable": "1.0.0", cookie: `${SESSION_COOKIE}=${cookie}`, ...headers },
@@ -156,5 +156,42 @@ describe("uploads", () => {
 
     expect(created.status).toBe(400);
     expect((await list(s)).children).toHaveLength(0);
+  });
+
+  it("reserves the space of started uploads so parallel ones cannot overrun the quota", async () => {
+    const s = await member();
+    await prisma.account.update({ where: { id: s.id }, data: { quotaBytes: 10n } });
+    // Two batches planned at once both fit on their own.
+    type ReadyPlan = Extract<PrepareUploadResult, { kind: "ready" }>;
+    const plans: ReadyPlan[] = [];
+    for (const rel of ["one.txt", "two.txt"]) {
+      const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel, size: 6 }] } });
+      if (res.json.data.kind !== "ready") throw new Error("expected a ready plan");
+      plans.push(res.json.data);
+    }
+    const start = (plan: ReadyPlan) => tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "6", "upload-metadata": `batch ${b64(plan.batchId)},index ${b64("0")}` });
+    const [first, second] = plans as [ReadyPlan, ReadyPlan];
+
+    const started = await start(first);
+    expect(started.status).toBe(201);
+    const refused = await start(second);
+    expect([refused.status, await refused.text()]).toEqual([507, "Not enough space: 4 B left of 10 B"]);
+    // Planning another upload also counts the one in progress.
+    const planned = await callRoute(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "three.txt", size: 6 }] } });
+    expect(planned.status).toBe(507);
+
+    // Cancelling gives the space back.
+    const id = started.headers.get("location")!.split("/").pop()!;
+    expect((await tusCall("DELETE", `${first.endpoint}/${id}`, s.cookie, {})).status).toBe(204);
+    await expect.poll(async () => (await start(second)).status).toBe(201);
+  });
+
+  it("releases the reservation when an upload finishes", async () => {
+    const s = await member();
+    await prisma.account.update({ where: { id: s.id }, data: { quotaBytes: 10n } });
+    expect((await upload(s, "root", [{ rel: "a.txt", content: "123456" }])).sent[0]!.status).toBe(200);
+    // 6 bytes used, nothing pending: 4 bytes fit, 5 do not.
+    expect((await upload(s, "root", [{ rel: "b.txt", content: "1234" }])).sent[0]!.status).toBe(200);
+    expect((await upload(s, "root", [{ rel: "c.txt", content: "1" }])).status).toBe(507);
   });
 });
