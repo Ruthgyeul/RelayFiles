@@ -40,6 +40,26 @@ export async function publicTree(db: DbClient, rootId: string): Promise<SharedRo
     FROM tree JOIN "Node" n ON n.id = tree.id`;
 }
 
+/** A node on the way from the account root down to a file, with what visibility it was set to. */
+export type ChainRow = SharedRow & { visibility: "INHERIT" | "PRIVATE" | "PUBLIC" };
+
+/**
+ * One node and every folder above it, from the account root down (O(depth), one query):
+ * what a single shared file needs to be checked and located, instead of the link's whole tree.
+ */
+export async function sharedChain(db: DbClient, nodeId: string): Promise<ChainRow[]> {
+  return db.$queryRaw<ChainRow[]>`
+    WITH RECURSIVE chain AS (
+      SELECT id, "parentId", 0 AS depth FROM "Node" WHERE id = ${nodeId}
+      UNION ALL
+      SELECT n.id, n."parentId", c.depth + 1 FROM "Node" n JOIN chain c ON n.id = c."parentId"
+    )
+    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."hasThumb", n.downloads,
+           n."downloadLimit", n."dlPaused", n.access::text AS access, n."createdAt", n.visibility::text AS visibility
+    FROM chain JOIN "Node" n ON n.id = chain.id
+    ORDER BY chain.depth DESC`;
+}
+
 export interface DownloadClaim {
   id: string;
   /** Also refuse once downloaded when the item is a delete-after-download link (the link it was reached through). */

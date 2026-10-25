@@ -60,11 +60,12 @@ export async function manageAccount(targetId: string, input: ManageInput, now: D
 }
 
 /** Deletes a member account and its files (admins must be demoted first). */
-export async function deleteAccountAsAdmin(targetId: string): Promise<void> {
+export async function deleteAccountAsAdmin(targetId: string): Promise<{ name: string }> {
   const target = await findAccountById(db(), targetId);
   if (!target) throw new ApiError("NOT_FOUND");
   if (target.isAdmin) throw new ApiError("FORBIDDEN", "Admin accounts can't be deleted. Make it a member first.");
   await deleteAccount(target);
+  return { name: target.name };
 }
 
 /**

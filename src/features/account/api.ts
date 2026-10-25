@@ -9,6 +9,8 @@ export interface AccountApi {
   switchAccount(accountId: string): Promise<SessionState>;
   signOut(accountId?: string): Promise<SessionState>;
   revealToken(accountId?: string): Promise<string>;
+  /** Admin re-authentication before an account or token action. */
+  reauthenticate(token: string): Promise<void>;
 }
 
 export const accountApi: AccountApi = {
@@ -17,5 +19,8 @@ export const accountApi: AccountApi = {
   signInWithToken: (token) => apiFetch<SessionState>("/api/auth/token", { method: "POST", json: { token } }),
   switchAccount: (accountId) => apiFetch<SessionState>("/api/auth/switch", { method: "POST", json: { accountId } }),
   signOut: (accountId) => apiFetch<SessionState>("/api/auth/signout", { method: "POST", json: { accountId } }),
+  reauthenticate: async (token) => {
+    await apiFetch<{ confirmed: true }>("/api/auth/reauth", { method: "POST", json: { token } });
+  },
   revealToken: async (accountId) => (await apiFetch<{ token: string }>(accountId ? `/api/me/token?accountId=${encodeURIComponent(accountId)}` : "/api/me/token")).token,
 };
