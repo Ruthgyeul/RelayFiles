@@ -62,4 +62,6 @@
 
 - 모든 응답(`next.config.ts`): `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy: same-origin`(공유 링크 URL이 다른 사이트로 새지 않게), `Permissions-Policy`(카메라·마이크·위치·결제·USB 끔).
 - 캐시: 재생·썸네일·미리보기·변환 영상은 `private, max-age=1년, immutable`, 다운로드는 `private, no-cache`, zip과 API 에러는 `no-store`.
+- ffmpeg 입력(`server/media/ffmpeg-input.ts`): 업로드 파일은 `-protocol_whitelist file -format_whitelist <MEDIA.ffmpegDemuxers>`로만 연다. HLS 플레이리스트·concat 목록처럼 다른 파일을 가리키는 형식은 이름이나 내용과 상관없이 거부되므로, 조작한 업로드로 ffmpeg가 서버의 다른 파일을 읽어 변환 결과로 돌려줄 수 없다. Docker 이미지는 `node:24-trixie-slim`(ffmpeg 7.1)이다.
+- 프로세스 격리: Compose의 app·worker는 `cap_drop: ALL`, `read_only`(쓰기는 tmpfs `/tmp`, app은 `.next/cache`도), `pids_limit: 512`, `mem_limit`/`cpus`(`APP_MEMORY_MAX`·`APP_CPUS`, `WORKER_MEMORY_MAX`·`WORKER_CPUS`)로 돈다. nginx도 `cap_drop: ALL`. systemd 배포는 같은 값을 `MemoryMax`·`CPUQuota`·`TasksMax=512`로 건다. 폭주한 변환·썸네일 작업은 자기 서비스 상한에서 멈추고 PostgreSQL을 OOM으로 끌고 가지 않는다.
 - 영상 변환(`?transcode=1`)은 동시에 `VIDEO_TRANSCODE_MAX`개(0이면 끔)까지만 돌고, 넘으면 429와 `Retry-After`. 출력은 4GB에서 끊는다. ffmpeg·smartctl은 셸 없이 실행하고 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지만 받는다(`PROCESS`).

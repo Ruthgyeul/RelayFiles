@@ -88,7 +88,7 @@ sudo smartctl -d sat -a /dev/sdX | head -20     # SMART 확인
 ```bash
 cp .env.example .env
 # 비밀값 생성 (출력만 한다). 서버에 Node가 없으면 Docker로 실행한다
-docker run --rm -v "$PWD":/w -w /w node:24-bookworm-slim node scripts/env-secrets.mjs
+docker run --rm -v "$PWD":/w -w /w node:24-trixie-slim node scripts/env-secrets.mjs
 chmod 600 .env
 ```
 

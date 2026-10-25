@@ -62,6 +62,16 @@ x-storage: &storage
   - *storage-mount
   - *log-mount
 
+# App and worker run with no Linux capabilities, a read-only root filesystem (scratch space in
+# /tmp only) and bounded processes, memory and CPU: a runaway ffmpeg conversion or thumbnail
+# job is stopped by its own container's limit instead of pushing PostgreSQL into the OOM killer.
+x-hardening: &hardening
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: [/tmp]
+  pids_limit: 512
+
 services:
   postgres:
     image: postgres:16
@@ -101,14 +111,17 @@ services:
       retries: 20
 
   app:
-    <<: *app-env
+    <<: [*app-env, *hardening]
     build:
       <<: *image-build
       target: app
     image: relayfiles-app:${RELEASE_TAG:-latest}
     restart: unless-stopped
     logging: *logging
-    security_opt: ["no-new-privileges:true"]
+    # Next.js keeps its fetch/route cache here; it is rebuilt on start.
+    tmpfs: [/tmp, /app/.next/cache]
+    mem_limit: ${APP_MEMORY_MAX:-2G}
+    cpus: ${APP_CPUS:-3}
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
     volumes: *storage
     networks: [relay]
@@ -117,14 +130,15 @@ services:
       redis: { condition: service_healthy }
 
   worker:
-    <<: *app-env
+    <<: [*app-env, *hardening]
     build:
       <<: *image-build
       target: tools
     image: relayfiles-tools:${RELEASE_TAG:-latest}
     restart: unless-stopped
     logging: *logging
-    security_opt: ["no-new-privileges:true"]
+    mem_limit: ${WORKER_MEMORY_MAX:-2G}
+    cpus: ${WORKER_CPUS:-2}
     # Running jobs (thumbnails, cleanup) finish before the worker exits (systemd: TimeoutStopSec=60).
     stop_grace_period: 60s
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
@@ -157,7 +171,10 @@ services:
     image: nginxinc/nginx-unprivileged:1.30-alpine
     restart: unless-stopped
     logging: *logging
+    # Not read-only: the image renders the templates into /etc/nginx/conf.d when it starts.
     security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    pids_limit: 512
     # Same account as the files on the SSD (0600), group 0 for the image's writable dirs.
     user: "${STORAGE_UID:-10001}:0"
     environment:

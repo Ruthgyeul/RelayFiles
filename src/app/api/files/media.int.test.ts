@@ -89,6 +89,28 @@ describe("media processing", () => {
     }
   });
 
+  it("opens uploads only as video files, never as playlists that point at other files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "relay-media-"));
+    try {
+      const clip = join(dir, "clip.mp4");
+      await run(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x180:rate=10", "-c:v", "mpeg4", clip]);
+      const segment = join(dir, "segment.ts");
+      await run(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x180:rate=10", "-c:v", "mpeg2video", "-f", "mpegts", segment]);
+      const m = await member();
+      const real = await addFile(m, m.rootId, [], "real.mp4", await readFile(clip), "video/mp4", "VIDEO");
+      expect((await processMedia(real))?.thumb).toBe(true);
+
+      // An HLS playlist (stored as a video) that points at a file elsewhere on the server.
+      const playlist = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.0,\nfile://${segment}\n#EXT-X-ENDLIST\n`;
+      const crafted = await addFile(m, m.rootId, [], "crafted.m3u8", playlist, "video/mp4", "VIDEO");
+      expect((await processMedia(crafted))?.thumb).toBe(false);
+      const converted = await get(stream, m, crafted, {}, "?transcode=1");
+      expect((await converted.arrayBuffer()).byteLength).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("skips files it cannot decode and other types, and hides thumbnails from other accounts", async () => {
     const m = await member();
     const broken = await addFile(m, m.rootId, [], "broken.jpg", "not a jpeg", "image/jpeg", "IMAGE");
