@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac } from "node:crypto";
 import { parseUserAgent } from "@/domain/device";
-import { clientIp, isPrivateIp, maskIp } from "@/domain/network";
+import { clientIp, isPrivateIp, maskIp, rateLimitSubject } from "@/domain/network";
 import { getEnv } from "@/config/env";
 
 /** What the server records about the device making a request. The raw IP never leaves this module. */
@@ -9,7 +9,11 @@ export interface ClientInfo {
   os: string;
   browser: string;
   ipMasked: string;
-  /** Keyed hash of the IP for rate limits; not reversible without the server key. */
+  /**
+   * Keyed hash of the address for rate limits; not reversible without the server key. IPv6
+   * addresses are hashed as their /64 (`rateLimitSubject`), so a visitor cannot get past a
+   * lockout by switching to another address in the same network.
+   */
   ipKey: string;
   country: string | null;
   city: string | null;
@@ -21,7 +25,7 @@ const IP_KEY_HEX_LENGTH = 32;
 
 export function ipKeyOf(ip: string): string {
   return createHmac("sha256", getEnv("secrets").TOKEN_HMAC_KEY)
-    .update(`ip:${ip || "unknown"}`)
+    .update(`ip:${rateLimitSubject(ip) || "unknown"}`)
     .digest("hex")
     .slice(0, IP_KEY_HEX_LENGTH);
 }
