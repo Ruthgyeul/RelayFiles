@@ -9,7 +9,7 @@ import { GET as sharePreview } from "@/app/api/share/[linkId]/files/[id]/preview
 import { GET as shareThumb } from "@/app/api/share/[linkId]/files/[id]/thumb/route";
 import { POST as unlock } from "@/app/api/share/[linkId]/unlock/route";
 import { GET as shareZip, HEAD as shareZipCheck } from "@/app/api/share/[linkId]/zip/route";
-import { IMMUTABLE_CACHE, MEDIA, SHARE } from "@/config/policy";
+import { DOCUMENT_PREVIEW, IMMUTABLE_CACHE, MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER } from "@/contracts/api";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { hash } from "@node-rs/argon2";
@@ -314,5 +314,70 @@ describe("share downloads", () => {
     for (const text of ["Trip/a.txt", "Trip/Day1/b.txt", "Trip/photo.jpg", "alpha", "bravo"]) expect(body.includes(Buffer.from(text)), text).toBe(true);
     for (const text of ["Hidden", "classified", "RelayCam"]) expect(body.includes(Buffer.from(text)), text).toBe(false);
     expect((await prisma.node.findUniqueOrThrow({ where: { id: trip.id } })).downloads).toBe(1);
+  });
+
+  it("counts suffix ranges and serves later ranges only after a counted start", async () => {
+    const { trip, a } = await sharedTrip({ downloadLimit: 3 });
+    const ip = visitorIp();
+    const get = (range: string, from = ip) => visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { headers: { range }, ip: from });
+    const downloads = async () => (await prisma.node.findUniqueOrThrow({ where: { id: a } })).downloads;
+
+    // A suffix range that covers the whole file is a download like any other.
+    const whole = await get("bytes=-99999999999");
+    expect([whole.status, await whole.text()]).toEqual([206, "alpha"]);
+    expect(await downloads()).toBe(1);
+
+    // Resuming is served to the visitor who started; anyone else has to start (and be counted).
+    const resumed = await get("bytes=1-");
+    expect([resumed.status, await resumed.text()]).toEqual([206, "lpha"]);
+    expect((await get("bytes=1-", visitorIp())).status).toBe(403);
+    expect(await downloads()).toBe(1);
+  });
+
+  it("expires a delete-after-download link after one download, whatever the range", async () => {
+    const { trip, a } = await sharedTrip({ burn: true });
+    expect((await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { headers: { range: "bytes=-5" } })).status).toBe(206);
+    expect((await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { headers: { range: "bytes=-5" } })).status).toBe(410);
+  });
+
+  it("lets only one of many simultaneous downloads take the last one", async () => {
+    const { trip, a } = await sharedTrip();
+    await prisma.node.update({ where: { id: a }, data: { downloadLimit: 1 } });
+    const results = await Promise.all(Array.from({ length: 6 }, () => visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a))));
+    expect(results.filter((res) => res.status === 200)).toHaveLength(1);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: a } })).downloads).toBe(1);
+  });
+
+  it("plays what the viewer reads, not whole files of any type", async () => {
+    const { m, trip } = await sharedTrip({ access: "STREAM" });
+    const archive = await addFile(m, trip.id, ["Trip"], "backup.zip", "PK archive bytes", "application/zip");
+    const log = await addFile(m, trip.id, ["Trip"], "big.log", Buffer.alloc(DOCUMENT_PREVIEW.textMaxBytes + 10, "x"), "text/plain");
+    const stream = (id: string, headers: Record<string, string> = {}) => visit(shareStream, path(trip.linkId, id, "stream"), fileParams(trip.linkId, id), { headers });
+
+    expect((await stream(archive)).status).toBe(404);
+    expect((await stream(log)).status).toBe(403);
+    expect((await stream(log, { range: `bytes=${DOCUMENT_PREVIEW.textMaxBytes}-` })).status).toBe(403);
+    const head = await stream(log, { range: `bytes=0-${DOCUMENT_PREVIEW.textMaxBytes - 1}` });
+    expect([head.status, head.headers.get("content-length")]).toEqual([206, String(DOCUMENT_PREVIEW.textMaxBytes)]);
+    // The owner's own preview is not limited.
+    expect((await visit(shareStream, path(trip.linkId, archive, "stream"), fileParams(trip.linkId, archive), { owner: m })).status).toBe(200);
+  });
+
+  it("leaves files out of Download all like single downloads, and counts the ones included", async () => {
+    const { m, trip, a, b } = await sharedTrip();
+    const once = await addFile(m, trip.id, ["Trip"], "once.txt", "only once", "text/plain");
+    const watch = await addFile(m, trip.id, ["Trip"], "watch.txt", "stream me", "text/plain");
+    const paused = await addFile(m, trip.id, ["Trip"], "paused.txt", "on hold", "text/plain");
+    await prisma.node.update({ where: { id: once }, data: { downloadLimit: 1, downloads: 1 } });
+    await prisma.node.update({ where: { id: watch }, data: { access: "STREAM" } });
+    await prisma.node.update({ where: { id: paused }, data: { dlPaused: true } });
+
+    const res = await visit(shareZip, `/api/share/${trip.linkId}/zip?folder=${trip.id}`, { linkId: trip.linkId });
+    expect(res.status).toBe(200);
+    const body = Buffer.from(await res.arrayBuffer());
+    for (const text of ["alpha", "bravo", "Not included.txt", "Trip/once.txt  (Download limit reached)", "Trip/watch.txt  (Stream only)", "Trip/paused.txt  (Downloads paused)"]) expect(body.includes(Buffer.from(text)), text).toBe(true);
+    for (const text of ["only once", "stream me", "on hold"]) expect(body.includes(Buffer.from(text)), text).toBe(false);
+    const counts = await prisma.node.findMany({ where: { id: { in: [a, b, once] } }, select: { id: true, downloads: true } });
+    expect(Object.fromEntries(counts.map((row) => [row.id, row.downloads]))).toEqual({ [a]: 1, [b]: 1, [once]: 1 });
   });
 });
