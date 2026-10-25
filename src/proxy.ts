@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getEnv } from "@/config/env";
+import { getAppEnv, getEnv } from "@/config/env";
 import { REQUEST_ID_HEADER, type ApiFailure } from "@/contracts/api";
 import { ERRORS, type ErrorCode } from "@/contracts/errors";
 import { clientIp, ipInCidrs } from "@/domain/network";
@@ -8,7 +8,8 @@ import { clientIp, ipInCidrs } from "@/domain/network";
  * Runs before every page and API request (Next.js 16 `proxy.ts`, formerly middleware):
  * - assigns the request id shown on error pages and in logs,
  * - limits admin pages and APIs to ADMIN_ALLOWED_CIDRS when it is set,
- * - rejects cross-site writes to the API (cookie-authenticated, so a foreign Origin is refused).
+ * - rejects cross-site writes to the API (cookie-authenticated, so a foreign Origin or a
+ *   cross-site Sec-Fetch-Site is refused).
  * Authorization itself is checked again in every handler; this is only the first gate.
  */
 
@@ -22,13 +23,18 @@ function apiFailure(code: ErrorCode, requestId: string): NextResponse<ApiFailure
   );
 }
 
-/** True when the browser says the request comes from another site. */
+/**
+ * True when the browser says the request comes from another site: `Sec-Fetch-Site:
+ * cross-site`, or an Origin that is neither PUBLIC_URL nor the Host the browser addressed.
+ * X-Forwarded-Host is not consulted (any client can send it).
+ */
 function isCrossSite(req: NextRequest): boolean {
+  if (req.headers.get("sec-fetch-site") === "cross-site") return true;
   const origin = req.headers.get("origin");
   if (!origin) return false;
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   try {
-    return new URL(origin).host !== host;
+    const from = new URL(origin);
+    return from.origin !== new URL(getAppEnv().PUBLIC_URL).origin && from.host !== req.headers.get("host");
   } catch {
     return true;
   }

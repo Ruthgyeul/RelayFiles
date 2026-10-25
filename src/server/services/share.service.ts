@@ -15,7 +15,7 @@ import { isRetiredLink } from "../repositories/link-tombstone.repo";
 import { findByLinkId, publicTree, type SharedRow } from "../repositories/share.repo";
 import { countInWindow, redis } from "../redis";
 import { busyLevels } from "../share/busy";
-import { addUnlock, type Unlocks } from "../share/unlock-cookie";
+import { addUnlock, isUnlocked, type Unlocks } from "../share/unlock-cookie";
 
 /** Who is looking at a share link. */
 export interface ShareViewer {
@@ -43,7 +43,7 @@ export async function loadLink(linkId: string, viewer: ShareViewer, now: number)
       downloadLimit: root.downloadLimit,
       effectiveVisibility: visibility,
       hasPassword: root.passwordHash !== null,
-      unlocked: viewer.unlocks.has(linkId),
+      unlocked: isUnlocked(viewer.unlocks, linkId, root.passwordHash, cookieSecrets()),
     },
     now,
   );
@@ -276,12 +276,12 @@ export async function unlockShare(linkId: string, password: string, viewer: Shar
   const link = await loadLink(linkId, viewer, now);
   if (!link || link.status === "private") throw new ApiError("NOT_FOUND");
   const secret = cookieSecrets()[0]!;
-  if (!link.root.passwordHash) return addUnlock(viewer.unlocks, linkId, secret, now);
+  if (!link.root.passwordHash) return addUnlock(viewer.unlocks, linkId, null, secret, now);
 
   const key = `unlock:${linkId}:${client.ipKey}`;
   const attempts = await countInWindow(key, SHARE.unlockWindowSec);
   if (attempts > SHARE.unlockMaxAttempts) throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(key)) });
   if (!(await verify(link.root.passwordHash, password))) throw new ApiError("FORBIDDEN", "Wrong password");
   await redis().del(key);
-  return addUnlock(viewer.unlocks, linkId, secret, now);
+  return addUnlock(viewer.unlocks, linkId, link.root.passwordHash, secret, now);
 }

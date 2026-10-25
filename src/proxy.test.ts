@@ -31,6 +31,16 @@ describe("proxy", () => {
     expect(proxy(request("/api/health", { headers: { origin: "https://evil.example" } })).status).toBe(200);
   });
 
+  it("trusts PUBLIC_URL and the Host header, never X-Forwarded-Host or a cross-site fetch", async () => {
+    vi.stubEnv("PUBLIC_URL", "https://files.example.com");
+    const proxy = await load();
+    const post = (headers: Record<string, string>) => proxy(request("/api/auth/signout", { method: "POST", headers })).status;
+    expect(post({ origin: "https://files.example.com" })).toBe(200);
+    expect(post({ origin: "https://evil.example", "x-forwarded-host": "evil.example" })).toBe(403);
+    expect(post({ "sec-fetch-site": "cross-site" })).toBe(403);
+    expect(post({ origin: "http://files.local", "sec-fetch-site": "same-origin" })).toBe(200);
+  });
+
   it("limits admin pages and APIs to ADMIN_ALLOWED_CIDRS", async () => {
     const proxy = await load("192.168.0.0/24");
     const lan = { "x-real-ip": "192.168.0.20" };

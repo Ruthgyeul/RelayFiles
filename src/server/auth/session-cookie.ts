@@ -1,6 +1,6 @@
 import "server-only";
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { decodeSigned, encodeSigned } from "./signed-cookie";
 
 /**
  * The `rf_s` cookie lists the sessions signed in on this device (one per account, so several
@@ -22,33 +22,17 @@ const payloadSchema = z.object({
 
 export type SessionCookie = { sessionIds: string[]; activeSessionId: string | null };
 
-function sign(payload: string, secret: string): string {
-  return createHmac("sha256", secret).update(payload).digest("base64url");
-}
+/** Signed without a purpose (it predates them); see signed-cookie.ts. */
+const PURPOSE = "";
 
 export function encodeSessionCookie(value: SessionCookie, secret: string): string {
   const ids = [...new Set(value.sessionIds)].slice(-MAX_SESSIONS_PER_DEVICE);
   const active = value.activeSessionId && ids.includes(value.activeSessionId) ? value.activeSessionId : (ids.at(-1) ?? null);
-  const payload = Buffer.from(JSON.stringify({ v: 1, s: ids, a: active })).toString("base64url");
-  return `${payload}.${sign(payload, secret)}`;
+  return encodeSigned({ v: 1, s: ids, a: active }, secret, PURPOSE);
 }
 
 /** Returns the cookie contents, or an empty value when it is missing, tampered with or malformed. */
 export function decodeSessionCookie(raw: string | undefined, secrets: readonly string[]): SessionCookie {
-  const empty: SessionCookie = { sessionIds: [], activeSessionId: null };
-  if (!raw) return empty;
-  const [payload, signature] = raw.split(".");
-  if (!payload || !signature) return empty;
-  const given = Buffer.from(signature);
-  const valid = secrets.some((secret) => {
-    const expected = Buffer.from(sign(payload, secret));
-    return expected.length === given.length && timingSafeEqual(expected, given);
-  });
-  if (!valid) return empty;
-  try {
-    const parsed = payloadSchema.parse(JSON.parse(Buffer.from(payload, "base64url").toString("utf8")));
-    return { sessionIds: parsed.s, activeSessionId: parsed.a };
-  } catch {
-    return empty;
-  }
+  const parsed = decodeSigned(raw, payloadSchema, secrets, PURPOSE);
+  return parsed ? { sessionIds: parsed.s, activeSessionId: parsed.a } : { sessionIds: [], activeSessionId: null };
 }
