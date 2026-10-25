@@ -1,7 +1,7 @@
 import "server-only";
 import { BYTES_PER_GB } from "@/domain/quota";
 import { FileStore } from "@tus/file-store";
-import { Server, type Upload } from "@tus/server";
+import { EVENTS, Server, type Upload } from "@tus/server";
 import { getEnv } from "@/config/env";
 import { ERRORS } from "@/contracts/errors";
 import { UPLOAD_METADATA } from "@/contracts/uploads";
@@ -9,6 +9,7 @@ import { deviceOfRequest } from "../auth/current";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { layoutOf } from "../storage/layout";
+import { releaseSpace } from "../services/space.service";
 import { checkUploadStart, finalizeUpload } from "../services/upload.service";
 import { forgetUpload, loadBatch, setUploadOwner, uploadOwner } from "./batches";
 import { markActive } from "../metrics/activity";
@@ -51,7 +52,7 @@ function createServer(volumeId: string, mountPath: string): Server {
       const { batchId, slot } = slotOf(upload);
       const batch = await loadBatch(batchId);
       const owner = await ownerOn(req, batch?.accountId ?? null);
-      await checkUploadStart(owner, batchId, slot, upload.size, volumeId).catch(rethrow);
+      await checkUploadStart(owner, batchId, slot, upload.size, volumeId, upload.id).catch(rethrow);
       await setUploadOwner(upload.id, owner.id);
       return {};
     },
@@ -66,9 +67,14 @@ function createServer(volumeId: string, mountPath: string): Server {
       const batch = await loadBatch(batchId);
       if (!batch) throw tusError("NOT_FOUND", "This upload has expired. Start it again.");
       const owner = await ownerOn(req, batch.accountId);
-      const file = await finalizeUpload(owner, batch, slot, upload.id).catch(rethrow);
-      await forgetUpload(upload.id);
-      return { status_code: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ success: true, data: file }) };
+      try {
+        const file = await finalizeUpload(owner, batch, slot, upload.id).catch(rethrow);
+        await forgetUpload(upload.id);
+        return { status_code: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ success: true, data: file }) };
+      } finally {
+        // Placed (its bytes now count as used) or refused (its chunks are removed): either way no longer pending.
+        await releaseSpace(upload.id, owner.id, volumeId).catch((error: unknown) => logger.warn("upload reservation not released", { error }));
+      }
     },
     onResponseError(_req, error) {
       if ("status_code" in error) return error;
@@ -78,13 +84,25 @@ function createServer(volumeId: string, mountPath: string): Server {
   });
 }
 
+/** A cancelled upload (tus DELETE) gives its reserved space back. */
+function releaseOnTerminate(server: Server, volumeId: string): Server {
+  server.on(EVENTS.POST_TERMINATE, (_req, _res, uploadId: string) => {
+    void (async () => {
+      const accountId = await uploadOwner(uploadId);
+      if (accountId) await releaseSpace(uploadId, accountId, volumeId);
+      await forgetUpload(uploadId);
+    })().catch((error: unknown) => logger.warn("upload reservation not released", { error }));
+  });
+  return server;
+}
+
 const servers = new Map<string, Server>();
 
 /** One tus server per storage volume; chunks land in that volume's upload area. */
 export function tusServerFor(volume: { id: string; mountPath: string }): Server {
   let server = servers.get(volume.id);
   if (!server) {
-    server = createServer(volume.id, volume.mountPath);
+    server = releaseOnTerminate(createServer(volume.id, volume.mountPath), volume.id);
     servers.set(volume.id, server);
   }
   return server;

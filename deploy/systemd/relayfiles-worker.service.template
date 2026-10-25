@@ -21,6 +21,11 @@ RestartSec=5
 KillSignal=SIGTERM
 TimeoutStopSec=60
 NoNewPrivileges=true
+# Resource limits (APP_/WORKER_MEMORY_MAX, _CPUS in .env): a runaway ffmpeg conversion or
+# thumbnail job hits this service's own limit instead of starving PostgreSQL.
+MemoryMax=${MEMORY_MAX}
+CPUQuota=${CPU_QUOTA}
+TasksMax=512
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true

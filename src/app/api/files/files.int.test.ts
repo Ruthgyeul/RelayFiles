@@ -24,8 +24,9 @@ describe("owner downloads and streaming", () => {
     const etag = res.headers.get("etag")!;
     expect((await get(download, m, id, { "if-none-match": etag })).status).toBe(304);
 
-    const traffic = await prisma.trafficDaily.findMany({ where: { accountId: m.id } });
-    expect(traffic.reduce((sum, row) => sum + row.bytes, 0n)).toBe(11n);
+    // Traffic is written after the response, without holding it up.
+    const traffic = async () => (await prisma.trafficDaily.findMany({ where: { accountId: m.id } })).reduce((sum, row) => sum + row.bytes, 0n);
+    await expect.poll(traffic).toBe(11n);
   });
 
   it("streams media inline with ranges, other types as attachments", async () => {

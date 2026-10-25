@@ -5,6 +5,7 @@ import { getEnv } from "@/config/env";
 import { IMMUTABLE_CACHE, TRANSCODE } from "@/config/policy";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
+import { ffmpegInput } from "./ffmpeg-input";
 
 const globalForTranscode = globalThis as unknown as { relayTranscodes?: { running: number } };
 const slots = (globalForTranscode.relayTranscodes ??= { running: 0 });
@@ -16,8 +17,9 @@ export const runningTranscodes = () => slots.running;
 export function transcodeArgs(path: string): string[] {
   return [
     ...["-nostdin", "-hide_banner", "-loglevel", "error"],
-    // The path is an argument (no shell); a seekable file also reads MP4/MOV with the index at the end.
-    ...["-i", path, "-map", "0:v:0", "-map", "0:a:0?"],
+    // Only the file itself as a video container; a seekable file also reads MP4/MOV with the index at the end.
+    ...ffmpegInput(path),
+    ...["-map", "0:v:0", "-map", "0:a:0?"],
     // Even width, at most maxHeightPx tall, never enlarged.
     ...["-vf", `scale=-2:min(${TRANSCODE.maxHeightPx}\\,ih)`],
     ...["-c:v", "libx264", "-preset", TRANSCODE.preset, "-crf", String(TRANSCODE.crf), "-pix_fmt", "yuv420p"],

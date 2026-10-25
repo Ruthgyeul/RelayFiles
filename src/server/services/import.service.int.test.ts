@@ -18,7 +18,7 @@ let root: string;
 
 const source = (text: string) => (async function* () { yield Buffer.from(text); })();
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
-const owner = (quotaBytes: bigint | null = null) => ({ id: accountId, volumeId, quotaBytes });
+const owner = (quotaBytes: bigint | null = null) => ({ id: accountId, volumeId, quotaBytes, isAdmin: false });
 
 beforeAll(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), "relayfiles-import-")));

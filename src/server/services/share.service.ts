@@ -3,7 +3,8 @@ import { verify } from "@node-rs/argon2";
 import { getAppEnv } from "@/config/env";
 import { MS, SHARE } from "@/config/policy";
 import type { ShareCrumb, ShareItem, SharePage, ShareView } from "@/contracts/share";
-import { limitHit, shareStatus, busyBadge, type Busy, type ShareStatus } from "@/domain/share";
+import { shareStatus, busyBadge, type Busy, type ShareStatus } from "@/domain/share";
+import { downloadBlock, type DownloadBlock } from "@/domain/share-access";
 import { effectiveVisibility, settingTags, sortNodes, type NodeKind, type SettingTag, type Visibility } from "@/domain/tree";
 import type { ClientInfo } from "../auth/client-info";
 import { cookieSecrets } from "../auth/keys";
@@ -14,7 +15,7 @@ import { isRetiredLink } from "../repositories/link-tombstone.repo";
 import { findByLinkId, publicTree, type SharedRow } from "../repositories/share.repo";
 import { countInWindow, redis } from "../redis";
 import { busyLevels } from "../share/busy";
-import { addUnlock, type Unlocks } from "../share/unlock-cookie";
+import { addUnlock, isUnlocked, type Unlocks } from "../share/unlock-cookie";
 
 /** Who is looking at a share link. */
 export interface ShareViewer {
@@ -42,7 +43,7 @@ export async function loadLink(linkId: string, viewer: ShareViewer, now: number)
       downloadLimit: root.downloadLimit,
       effectiveVisibility: visibility,
       hasPassword: root.passwordHash !== null,
-      unlocked: viewer.unlocks.has(linkId),
+      unlocked: isUnlocked(viewer.unlocks, linkId, root.passwordHash, cookieSecrets()),
     },
     now,
   );
@@ -90,9 +91,15 @@ function indexTree(rows: readonly SharedRow[]) {
   return { byId, children, sizeOf };
 }
 
-/** Whether visitors may download this row (design `canDl`). */
-function canDownload(row: SharedRow, root: NodeRow, busy: Busy | undefined): boolean {
-  return root.access !== "STREAM" && row.access !== "STREAM" && !limitHit(row.downloadLimit, row.downloads) && (busy?.level ?? 0) < 2;
+/** Why visitors may not download this row now (null = they may), as on the share page (design `canDl`). */
+export function downloadBlockOf(row: SharedRow, root: Pick<NodeRow, "access">, busy: Busy | undefined): DownloadBlock | null {
+  return downloadBlock({
+    linkStreamOnly: root.access === "STREAM",
+    streamOnly: row.access === "STREAM",
+    downloadLimit: row.downloadLimit,
+    downloads: row.downloads,
+    busyLevel: busy?.level ?? 0,
+  });
 }
 
 /** The open share page for a folder inside the link (or the shared file). Null if not inside. */
@@ -126,7 +133,7 @@ async function buildView(link: LoadedLink, folderId: string | null, now: number)
     size: sizeOf(row).toString(),
     itemCount: (children.get(row.id) ?? []).length,
     busy: busyBadge(busy.get(row.id)!, now, "share"),
-    canDownload: canDownload(row, root, busy.get(row.id)),
+    canDownload: downloadBlockOf(row, root, busy.get(row.id)) === null,
     hasThumb: row.type === "FILE" && row.hasThumb,
   }));
   return {
@@ -229,9 +236,16 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
   for (let at: SharedRow | undefined = row; at; at = at.id === link.root.id ? undefined : byId.get(at.parentId ?? "")) path.unshift(at.id);
   const busy = (await busyLevels([{ id: row.id, dlPaused: row.dlPaused || link.root.dlPaused }], now)).get(row.id)!;
   if (purpose === "download") {
-    if (link.root.access === "STREAM" || row.access === "STREAM") throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
-    if (limitHit(row.downloadLimit, row.downloads)) throw new ApiError("FORBIDDEN", "Download limit reached");
-    if (busy.level === 2) throw busyError(busy, now);
+    switch (downloadBlockOf(row, link.root, busy)) {
+      case "stream-only":
+        throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
+      case "limit":
+        throw new ApiError("FORBIDDEN", "Download limit reached");
+      case "paused":
+        throw busyError(busy, now);
+      case null:
+        break;
+    }
   }
   const chain = await ancestorChain(db(), row.id);
   return { link, row, path, segments: chain.slice(1).map((ancestor) => ancestor.name), busy };
@@ -262,12 +276,12 @@ export async function unlockShare(linkId: string, password: string, viewer: Shar
   const link = await loadLink(linkId, viewer, now);
   if (!link || link.status === "private") throw new ApiError("NOT_FOUND");
   const secret = cookieSecrets()[0]!;
-  if (!link.root.passwordHash) return addUnlock(viewer.unlocks, linkId, secret, now);
+  if (!link.root.passwordHash) return addUnlock(viewer.unlocks, linkId, null, secret, now);
 
   const key = `unlock:${linkId}:${client.ipKey}`;
   const attempts = await countInWindow(key, SHARE.unlockWindowSec);
   if (attempts > SHARE.unlockMaxAttempts) throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(key)) });
   if (!(await verify(link.root.passwordHash, password))) throw new ApiError("FORBIDDEN", "Wrong password");
   await redis().del(key);
-  return addUnlock(viewer.unlocks, linkId, secret, now);
+  return addUnlock(viewer.unlocks, linkId, link.root.passwordHash, secret, now);
 }

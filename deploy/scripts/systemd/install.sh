@@ -46,11 +46,18 @@ render() {
     node "$ROOT/scripts/render-template.mjs" "$@"
 }
 
+# Cores as a CPUQuota percentage: 1.5 -> 150%.
+cpu_quota() { awk -v cpus="$1" 'BEGIN { printf "%d%%", cpus * 100 }'; }
+# unit, memory limit, CPU cores (defaults as in src/config/env.ts)
+render_unit() {
+  MEMORY_MAX="$2" CPU_QUOTA="$(cpu_quota "$3")" \
+    render "$ROOT/deploy/systemd/$1.service.template" APP_DIR STORAGE_USER STORAGE_HOME NODE_BIN MEMORY_MAX CPU_QUOTA > "$UNIT_DIR/$1.service.partial"
+  mv "$UNIT_DIR/$1.service.partial" "$UNIT_DIR/$1.service"
+}
+
 log "systemd units"
-for unit in relayfiles-app relayfiles-worker; do
-  render "$ROOT/deploy/systemd/$unit.service.template" APP_DIR STORAGE_USER STORAGE_HOME NODE_BIN > "$UNIT_DIR/$unit.service.partial"
-  mv "$UNIT_DIR/$unit.service.partial" "$UNIT_DIR/$unit.service"
-done
+render_unit relayfiles-app "$(env_value APP_MEMORY_MAX 2G)" "$(env_value APP_CPUS 3)"
+render_unit relayfiles-worker "$(env_value WORKER_MEMORY_MAX 2G)" "$(env_value WORKER_CPUS 2)"
 systemctl daemon-reload
 systemctl enable relayfiles-app relayfiles-worker
 
