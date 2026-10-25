@@ -12,7 +12,7 @@ import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { ancestorChain, type NodeRow } from "../repositories/node.repo";
 import { isRetiredLink } from "../repositories/link-tombstone.repo";
-import { findByLinkId, publicTree, type SharedRow } from "../repositories/share.repo";
+import { findByLinkId, publicTree, sharedChain, type SharedRow } from "../repositories/share.repo";
 import { countInWindow, redis } from "../redis";
 import { busyLevels } from "../share/busy";
 import { addUnlock, isUnlocked, type Unlocks } from "../share/unlock-cookie";
@@ -227,13 +227,14 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
   const link = await loadLink(linkId, viewer, now);
   if (!link) throw await missingLinkError(linkId);
   if (link.status !== "open") throw statusError(link.status);
-  const tree = await publicTree(db(), link.root.id);
-  const { byId } = indexTree(tree);
-  const row = byId.get(nodeId);
-  if (!row || row.type !== "FILE") throw new ApiError("NOT_FOUND");
-
-  const path: string[] = [];
-  for (let at: SharedRow | undefined = row; at; at = at.id === link.root.id ? undefined : byId.get(at.parentId ?? "")) path.unshift(at.id);
+  // Only the way from the file up to the account root, not the link's whole tree (every
+  // Range request of a video comes through here).
+  const chain = await sharedChain(db(), nodeId);
+  const rootAt = chain.findIndex((at) => at.id === link.root.id);
+  const row = chain.at(-1);
+  // Inside the link, and nothing between the link and the file is private (as in publicTree).
+  if (!row || row.id !== nodeId || row.type !== "FILE" || rootAt < 0 || chain.slice(rootAt + 1).some((at) => at.visibility === "PRIVATE")) throw new ApiError("NOT_FOUND");
+  const path = chain.slice(rootAt).map((at) => at.id);
   const busy = (await busyLevels([{ id: row.id, dlPaused: row.dlPaused || link.root.dlPaused }], now)).get(row.id)!;
   if (purpose === "download") {
     switch (downloadBlockOf(row, link.root, busy)) {
@@ -247,7 +248,6 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
         break;
     }
   }
-  const chain = await ancestorChain(db(), row.id);
   return { link, row, path, segments: chain.slice(1).map((ancestor) => ancestor.name), busy };
 }
 
