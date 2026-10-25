@@ -21,13 +21,13 @@ import { retiredSharePage, sharePage } from "@/server/services/share.service";
 import { purgeExpired } from "@/server/services/profile.service";
 import { findAccountById } from "@/server/repositories/account.repo";
 import { purgeRetiredLinks } from "@/server/repositories/link-tombstone.repo";
-import { UNLOCK_COOKIE } from "@/server/share/unlock-cookie";
+import { UNLOCK_COOKIE, type Unlocks } from "@/server/share/unlock-cookie";
 import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
 
 const { prisma, member, addFile, cleanup } = fileFixtures();
-const noViewer = { accountIds: [], unlocks: new Map<string, number>() };
+const noViewer = { accountIds: [], unlocks: new Map() as Unlocks };
 
 afterAll(async () => {
   await closeQueues();
@@ -151,6 +151,18 @@ describe("share page", () => {
 });
 
 describe("share previews", () => {
+  it("locks out devices that unlocked with a password that has since changed", async () => {
+    const { trip, a } = await sharedTrip({ passwordHash: await hash("first") });
+    const ip = visitorIp();
+    const right = await visit(unlock, `/api/share/${trip.linkId}/unlock`, { linkId: trip.linkId }, { method: "POST", body: { password: "first" }, ip });
+    const cookie = right.headers.getSetCookie().find((line) => line.startsWith(`${UNLOCK_COOKIE}=`))!.split(";")[0]!;
+    const download = () => visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { cookies: [cookie], ip });
+    expect((await download()).status).toBe(200);
+
+    await prisma.node.update({ where: { id: trip.id }, data: { passwordHash: await hash("second") } });
+    expect((await download()).status).toBe(401);
+  });
+
   it("lists which files have a preview and serves it without counting or logging", async () => {
     const { trip, a, photo } = await sharedTrip({ access: "STREAM" });
     await processMedia(photo);

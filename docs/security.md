@@ -48,9 +48,16 @@
 ## 공유 링크·다운로드 (M8–M9 구현)
 
 - 다운로드는 `nosniff`, 미디어 재생 외에는 `attachment`. HTML·SVG는 `application/octet-stream`으로 보낸다.
-- 링크 비밀번호는 argon2 해시로 저장한다. 맞히면 서명한 `rf_sh` 쿠키로 12시간(`SHARE.unlockHours`) 열린다. 틀린 비밀번호는 링크·주소마다 600초에 10회(`countInWindow`, INCR+EXPIRE 원자 실행)를 넘으면 429.
+- 링크 비밀번호는 argon2 해시로 저장한다. 맞히면 서명한 `rf_sh` 쿠키(v2)로 12시간(`SHARE.unlockHours`) 열린다. 쿠키 항목은 `[linkId, until, pwTag]`이고 `pwTag`는 `HMAC(COOKIE_SECRET, passwordHash)` 앞 8바이트다. 비밀번호를 바꾸면 기존 기기는 다시 입력해야 한다(v1 쿠키는 무시). 틀린 비밀번호는 링크·주소마다 600초에 10회(`countInWindow`, INCR+EXPIRE 원자 실행)를 넘으면 429.
 - 혼잡도: 10분에 다운로드 5회부터 속도를 제한하고, 10회부터 멈춘다(429 + `Retry-After`).
 - 공개 링크 이미지는 메타데이터 제거본만 보낸다(제거할 수 없는 형식은 415). 뷰어 미리보기도 메타데이터 없이 다시 인코딩한 WebP다.
+
+## 리버스 프록시·헤더
+
+- API 쓰기 요청의 CSRF 검사(`proxy.ts`): `Sec-Fetch-Site: cross-site`이면 거부하고, Origin은 `PUBLIC_URL`의 origin 또는 브라우저가 보낸 `Host`와 같아야 한다. 클라이언트가 보낼 수 있는 `X-Forwarded-Host`는 보지 않는다.
+- Nginx는 `X-Forwarded-Host`를 `$host`로 덮어쓴다. Docker 템플릿의 `X-Forwarded-Proto`는 신뢰 피어(cloudflared, `TRUSTED_PROXY_IP`)가 보낸 `http`/`https`만 넘기고, 그 밖에는 이 홉의 scheme을 쓴다.
+- X-Accel location은 `disable_symlinks on from=<볼륨 루트>`다. 앱이 `lstat`으로 확인한 뒤 Nginx가 파일을 다시 열기 때문에, 그 사이에 생긴 심볼릭 링크를 거부한다.
+- Nginx `limit_req`(앱의 Redis 제한 앞단): `POST /api/auth/*`·`POST /api/share/*/unlock` 분당 20회(버스트 20), `POST /api/uploads` 분당 60회(버스트 30), 클라이언트 주소마다. 넘으면 API 형식 JSON 429와 `Retry-After: 60`.
 
 ## 응답 헤더·자원 제한
 
