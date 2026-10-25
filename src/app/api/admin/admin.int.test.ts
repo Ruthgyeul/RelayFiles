@@ -6,9 +6,14 @@ import { afterAll, describe, expect, it } from "vitest";
 import { DELETE as deleteAccount, PATCH as manage } from "@/app/api/admin/accounts/[id]/route";
 import { GET as listAccounts } from "@/app/api/admin/accounts/route";
 import { POST as cleanup } from "@/app/api/admin/cleanup/route";
+import { GET as audit } from "@/app/api/admin/audit/route";
+import { POST as reauth } from "@/app/api/auth/reauth/route";
+import { GET as session } from "@/app/api/auth/session/route";
 import { POST as tokenSignIn } from "@/app/api/auth/token/route";
+import { GET as revealToken } from "@/app/api/me/token/route";
+import { AUTH, MS } from "@/config/policy";
 import type { SessionState } from "@/contracts/auth";
-import type { AdminAccounts, CleanupResult } from "@/contracts/admin";
+import type { AdminAccounts, AuditEntry, CleanupResult } from "@/contracts/admin";
 import { runMaintenance } from "@/server/jobs/maintenance";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { layoutOf } from "@/server/storage/layout";
@@ -30,7 +35,12 @@ async function signedInAdmin() {
   const { account, token } = await createAdminAccount();
   admins.push(account.id);
   const res = await callRoute<SessionState>(tokenSignIn, { method: "POST", body: { token }, ip: randomTestIp() });
-  return { id: account.id, cookie: res.cookie! };
+  return { id: account.id, cookie: res.cookie!, token };
+}
+
+/** Moves an account's sessions' sign-in time back, as if the device had been signed in that long. */
+async function signedInAgo(accountId: string, ms: number) {
+  await prisma.session.updateMany({ where: { accountId }, data: { createdAt: new Date(Date.now() - ms) } });
 }
 
 const exists = (path: string) => stat(path).then(() => true, () => false);
@@ -137,5 +147,49 @@ describe("cleanup", () => {
       await prisma.storageVolume.deleteMany({ where: { id } });
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("admin sessions", () => {
+  it("asks for the token again before account actions on an older session, and logs them", async () => {
+    const admin = await signedInAdmin();
+    const m = await member();
+    await signedInAgo(admin.id, (AUTH.reauthWindowMin + 1) * MS.minute);
+    const remove = () => callRoute(deleteAccount, { method: "DELETE", cookie: admin.cookie, params: { id: m.id } });
+    const asked = await remove();
+    expect([asked.status, asked.json.code]).toEqual([403, "REAUTH_REQUIRED"]);
+    expect((await callRoute(revealToken, { cookie: admin.cookie })).json.code).toBe("REAUTH_REQUIRED");
+
+    const ip = randomTestIp();
+    expect((await callRoute(reauth, { method: "POST", cookie: admin.cookie, body: { token: "x".repeat(40) }, ip })).status).toBe(401);
+    // Another account's token does not confirm this one.
+    const other = await createAdminAccount();
+    admins.push(other.account.id);
+    expect((await callRoute(reauth, { method: "POST", cookie: admin.cookie, body: { token: other.token }, ip })).status).toBe(401);
+    expect((await callRoute(reauth, { method: "POST", cookie: admin.cookie, body: { token: admin.token }, ip })).status).toBe(200);
+
+    expect((await remove()).status).toBe(200);
+    expect((await callRoute(revealToken, { cookie: admin.cookie })).status).toBe(200);
+    const events = (await callRoute<{ events: AuditEntry[] }>(audit, { cookie: admin.cookie })).json.data.events.filter((event) => event.actorId === admin.id);
+    expect(events.map((event) => [event.action, event.targetId])).toEqual([
+      ["token.reveal", admin.id],
+      ["account.delete", m.id],
+    ]);
+    expect(events[0]!.ipMasked).toMatch(/•••/);
+  });
+
+  it("ends admin sessions after AUTH.adminSessionDays, member sessions later", async () => {
+    const admin = await signedInAdmin();
+    const m = await member();
+    await signedInAgo(admin.id, AUTH.adminSessionDays * DAY + MS.minute);
+    await signedInAgo(m.id, AUTH.adminSessionDays * DAY + MS.minute);
+    expect((await callRoute<SessionState>(session, { cookie: admin.cookie })).json.data.activeAccountId).toBeNull();
+    expect((await callRoute<SessionState>(session, { cookie: m.cookie })).json.data.activeAccountId).toBe(m.id);
+  });
+
+  it("never asks members for their token again", async () => {
+    const m = await member();
+    await signedInAgo(m.id, (AUTH.reauthWindowMin + 1) * MS.minute);
+    expect((await callRoute(revealToken, { cookie: m.cookie })).status).toBe(200);
   });
 });

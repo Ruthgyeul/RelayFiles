@@ -31,6 +31,10 @@
 - **키 교체**: `*_PREVIOUS`를 설정하면 옛 키로 만든 값도 읽힌다. 다음 로그인 때 새 키로 다시 암호화·해시한다. `npm run keys:rotate`가 모든 계정을 새 키로 다시 저장하면 `*_PREVIOUS`를 지운다(절차: [runbook.md](runbook.md#비밀값-교체)).
 - **기기 쿠키** `rf_s`: 이 기기에 로그인한 세션 id 목록(최대 10)과 활성 세션만 담고 HMAC으로 서명한다(`COOKIE_SECRET`, 교체 시 `COOKIE_SECRET_PREVIOUS`). `HttpOnly`, `SameSite=Lax`, `PUBLIC_URL`이 https면 `Secure`. 토큰은 쿠키에 넣지 않는다.
 - **세션 폐기**: 요청마다 DB에서 `Session.revokedAt`과 계정 만료를 확인하므로 다른 기기에서 로그아웃하거나 만료되면 즉시 무효가 된다. 무효 세션은 쿠키에서 지운다.
+- **세션 절대 수명**(`domain/session.ts`): 로그인(`Session.createdAt`)부터 관리자 `AUTH.adminSessionDays`(7일), 일반 `AUTH.memberSessionDays`(14일)가 지나면 세션이 끝난다. 계정이 만료되지 않는 관리자라도 기기 세션은 영구적이지 않다.
+- **관리자 재인증**: 토큰 보기·재발급, 계정 관리(역할·삭제일·용량)·삭제, 가입 모드 변경은 관리자 세션이 최근 `AUTH.reauthWindowMin`(10분) 안에 토큰을 입력했을 때만 허용한다(`requireRecentAuth`, 아니면 403 `REAUTH_REQUIRED`). 입력은 `POST /api/auth/reauth`이고 로그인과 같은 잠금 단계를 쓴다. 일반 계정에는 묻지 않는다(토큰을 잃으면 로그인한 기기에서만 다시 볼 수 있기 때문).
+- **감사 로그**(`AuditEvent`): 관리자 작업(위 작업 + 정리 실행, 초대 생성·취소)을 행위자 id·이름, 대상, 짧은 설명, 마스킹한 주소와 함께 남긴다. 초대 코드는 앞 4자만 적는다. `AUTH.auditRetentionDays`(365일)가 지나면 매일 정리 작업이 지운다. 조회: `GET /api/admin/audit`.
+- **`env:check`**: 운영 모드에서 `ADMIN_ALLOWED_CIDRS`가 비어 있으면 경고한다.
 - **로그인 잠금**: 클라이언트 주소(HMAC으로 가린 키, IPv6는 `/64` 단위 — `rateLimitSubject`)마다 Redis에 실패 횟수를 센다. 5회마다 30초 → 120초 → 600초 잠금(`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_SECONDS`). 잠긴 동안에는 올바른 토큰도 429로 거부한다.
 - **익명 가입 제한**: 같은 주소에서 시간당 10개(`SIGNUPS_PER_HOUR`, 기본값은 `config/policy.ts`). 크롤러가 디스크에 계정 폴더를 채우는 것을 막는다. 가입 모드(Open/Invite only/Closed)는 `ServerConfig.signupMode`, 초대 코드는 한 번만 쓸 수 있다.
 - **계정 생성의 원자성**: 계정 행, 루트 폴더 노드, 기기 세션, 볼륨의 `users/<accountId>/` 디렉터리를 `withStorageTransaction`으로 함께 만든다. 중간에 실패하면 DB는 롤백되고 디렉터리는 휴지통으로 옮긴다.

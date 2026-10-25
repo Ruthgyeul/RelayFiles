@@ -9,6 +9,7 @@ export const ERRORS = {
   INVALID_INVITE: { status: 400, message: "Invalid or already used invite code." },
   SIGNUP_CLOSED: { status: 403, message: "New sign-ups are closed on this server." },
   FORBIDDEN: { status: 403, message: "Your account can't do that." },
+  REAUTH_REQUIRED: { status: 403, message: "Enter your account token again to continue." },
   NOT_FOUND: { status: 404, message: "Not found." },
   CONFLICT: { status: 409, message: "That name already exists here." },
   ALREADY_SIGNED_IN: { status: 409, message: "This account is already signed in." },

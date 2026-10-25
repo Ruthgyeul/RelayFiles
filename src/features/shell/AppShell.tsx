@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { SessionState } from "@/contracts/auth";
 import { NewTokenDialog } from "@/features/account/NewTokenDialog";
+import { ReauthGate } from "@/features/account/ReauthDialog";
 import { SignInDialog } from "@/features/account/SignInDialog";
 import { isTypingTarget } from "@/features/shortcuts/shortcuts";
 import { GlobalSearchDialog } from "@/features/search/GlobalSearchDialog";
@@ -110,6 +111,7 @@ function Frame({ announcement, children }: { announcement: AnnouncementDto | nul
         onCreated={shell.accountCreated}
       />
       <NewTokenDialog account={shell.tokenToSave} onDone={shell.finishSaveToken} onCopied={() => shell.notify("Token copied")} />
+      <ReauthGate />
       <Toasts />
     </PageTitleContext>
   );

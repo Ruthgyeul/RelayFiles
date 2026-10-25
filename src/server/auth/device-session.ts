@@ -4,6 +4,7 @@ import { AUTH } from "@/config/policy";
 import { getEnv } from "@/config/env";
 import type { SessionAccount, SessionState, SignupMode } from "@/contracts/auth";
 import { deletionDate, isExpired } from "@/domain/account";
+import { hasRecentAuth, isSessionOver } from "@/domain/session";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { storageBusyOf, type AccountRow } from "../repositories/account.repo";
@@ -15,6 +16,9 @@ import { decodeSessionCookie, encodeSessionCookie, SESSION_COOKIE, SESSION_COOKI
 export interface DeviceAccount {
   sessionId: string;
   account: AccountRow;
+  /** When this session signed in and last re-authenticated (admin actions, `requireRecentAuth`). */
+  signedInAt: Date;
+  reauthAt: Date | null;
 }
 
 /** Accounts signed in on the requesting device, resolved against the database. */
@@ -29,7 +33,8 @@ export interface DeviceSession {
 
 /**
  * Reads the device cookie and keeps only sessions that are still valid: not revoked
- * (signed out elsewhere or token regenerated) and whose account has not expired.
+ * (signed out elsewhere or token regenerated), not past their own lifetime (AUTH.*SessionDays)
+ * and whose account has not expired.
  */
 export async function loadDeviceSession(rawCookie: string | undefined, now: Date = new Date()): Promise<DeviceSession> {
   const cookie = decodeSessionCookie(rawCookie, cookieSecrets());
@@ -39,7 +44,9 @@ export async function loadDeviceSession(rawCookie: string | undefined, now: Date
   const accounts: DeviceAccount[] = [];
   for (const id of cookie.sessionIds) {
     const row = byId.get(id);
-    if (row && !isExpired(row.account, ttlDays, now)) accounts.push({ sessionId: id, account: row.account });
+    if (!row || isExpired(row.account, ttlDays, now)) continue;
+    if (isSessionOver({ createdAt: row.createdAt.getTime(), reauthAt: null }, row.account.isAdmin, now.getTime())) continue;
+    accounts.push({ sessionId: id, account: row.account, signedInAt: row.createdAt, reauthAt: row.reauthAt });
   }
   const active = accounts.find((item) => item.sessionId === cookie.activeSessionId) ?? accounts.at(-1) ?? null;
   const next: SessionCookie = { sessionIds: accounts.map((item) => item.sessionId), activeSessionId: active?.sessionId ?? null };
@@ -72,6 +79,17 @@ export function requireAdmin(device: DeviceSession): DeviceAccount {
   return active;
 }
 
+/**
+ * For admin actions that expose or change accounts (tokens, deletions, roles, sign-up mode):
+ * an admin session must have entered the token within AUTH.reauthWindowMin, so a device left
+ * signed in cannot be used for them. Members are not asked (they could not get their token
+ * back otherwise).
+ */
+export function requireRecentAuth(entry: DeviceAccount, now: Date = new Date()): void {
+  if (!entry.account.isAdmin) return;
+  if (!hasRecentAuth({ createdAt: entry.signedInAt.getTime(), reauthAt: entry.reauthAt?.getTime() ?? null }, now.getTime())) throw new ApiError("REAUTH_REQUIRED");
+}
+
 export function toSessionAccount(account: AccountRow): SessionAccount {
   const deletesAt = deletionDate(account, getEnv("policy").ACCOUNT_TTL_DAYS);
   return {
@@ -86,7 +104,7 @@ export function toSessionAccount(account: AccountRow): SessionAccount {
 }
 
 /** Session state for the client, including the active account's storage use. */
-export async function toSessionState(device: Pick<DeviceSession, "accounts" | "active">, signupMode: SignupMode): Promise<SessionState> {
+export async function toSessionState(device: { accounts: readonly Pick<DeviceAccount, "account">[]; active: Pick<DeviceAccount, "account"> | null }, signupMode: SignupMode): Promise<SessionState> {
   const id = device.active?.account.id;
   const [usage, storageBusy] = id ? await Promise.all([accountUsage(db(), id), storageBusyOf(db(), id)]) : [null, null];
   return {

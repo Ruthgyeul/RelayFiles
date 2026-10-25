@@ -21,4 +21,9 @@ if (issues.length) {
   console.error(`\n${issues.length} problem(s):\n- ${issues.join("\n- ")}`);
   process.exit(1);
 }
+// Admin sessions are long-lived and the admin token opens every account: in production, admin
+// pages should only answer from trusted networks.
+if ((production || process.env.NODE_ENV === "production") && !process.env.ADMIN_ALLOWED_CIDRS?.trim()) {
+  console.warn("\nWarning: ADMIN_ALLOWED_CIDRS is empty, so admin pages and APIs answer from any address. Set it to your LAN or VPN range (e.g. 192.168.0.0/24).");
+}
 console.log("\nenv:check passed");

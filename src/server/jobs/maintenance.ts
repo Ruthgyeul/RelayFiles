@@ -10,6 +10,7 @@ import { runHealthProbe } from "./health-probe";
 import { diskRates } from "../metrics/disks";
 import { networkRates } from "../metrics/system";
 import { runCleanup } from "../services/admin.service";
+import { purgeOldAuditEvents } from "../services/audit.service";
 import { driverFor } from "../storage/registry";
 import { queueConnection } from "./queue";
 
@@ -20,7 +21,8 @@ const HEALTH_PROBE = "health-probe";
 
 /**
  * The daily job: expired accounts and items, then trash entries older than the retention
- * and unfinished uploads older than UPLOAD_TMP_TTL_HOURS on every ACTIVE or DRAINING volume.
+ * and unfinished uploads older than UPLOAD_TMP_TTL_HOURS on every ACTIVE or DRAINING volume,
+ * and admin audit entries older than AUTH.auditRetentionDays.
  */
 export async function runMaintenance(now: Date) {
   const cleanup = await runCleanup(now);
@@ -34,6 +36,7 @@ export async function runMaintenance(now: Date) {
     trash += purged.trash;
     uploads += purged.uploads;
   }
+  await purgeOldAuditEvents(now).catch((error: unknown) => logger.warn("audit log not purged", { error }));
   return { ...cleanup, trash, uploads };
 }
 

@@ -21,12 +21,17 @@ export function findLiveSessions(db: DbClient, ids: string[]) {
   if (ids.length === 0) return Promise.resolve([]);
   return db.session.findMany({
     where: { id: { in: ids }, revokedAt: null },
-    select: { id: true, lastSeenAt: true, account: { select: ACCOUNT_SELECT } },
+    select: { id: true, createdAt: true, lastSeenAt: true, reauthAt: true, account: { select: ACCOUNT_SELECT } },
   });
 }
 
 export async function revokeSession(db: DbClient, sessionId: string, at: Date): Promise<void> {
   await db.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: at } });
+}
+
+/** Records that the account token was entered again on this session (admin re-authentication). */
+export async function markReauthenticated(db: DbClient, sessionId: string, at: Date): Promise<void> {
+  await db.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { reauthAt: at } });
 }
 
 export async function touchSessions(db: DbClient, ids: string[], at: Date): Promise<void> {
