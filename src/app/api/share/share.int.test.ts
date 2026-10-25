@@ -213,6 +213,17 @@ describe("share downloads", () => {
     expect((await visit(shareDownload, path(trip.linkId, secret, "download"), fileParams(trip.linkId, secret))).status).toBe(404);
   });
 
+  it("refuses files below a private folder, even in a public folder inside it", async () => {
+    const { m, trip, hidden, b } = await sharedTrip();
+    const inner = await folder(m, hidden.id, "Inner", { visibility: "PUBLIC" });
+    const deep = await addFile(m, inner.id, ["Trip", "Hidden", "Inner"], "deep.txt", "deep", "text/plain");
+    expect((await visit(shareDownload, path(trip.linkId, deep, "download"), fileParams(trip.linkId, deep))).status).toBe(404);
+    expect((await visit(shareStream, path(trip.linkId, deep, "stream"), fileParams(trip.linkId, deep))).status).toBe(404);
+    // A file two folders down a public path is found and read from the right place.
+    const res = await visit(shareDownload, path(trip.linkId, b, "download"), fileParams(trip.linkId, b));
+    expect([res.status, await res.text()]).toEqual([200, "bravo"]);
+  });
+
   it("allows streaming but not downloading on stream-only links", async () => {
     const { trip, a } = await sharedTrip({ access: "STREAM" });
     expect((await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a))).status).toBe(403);
