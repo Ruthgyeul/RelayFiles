@@ -94,6 +94,11 @@ export const SHARE = {
   eventsKeptPerNode: 200,
   /** Links of expired items keep answering "This link has expired" for this long. */
   tombstoneDays: 90,
+  /**
+   * A counted download start lets the same visitor resume (Range requests past byte 0) for
+   * this long; resuming later, or from another address, starts (and counts) a new download.
+   */
+  downloadGrantHours: 6,
 } as const;
 
 export const MEDIA = {

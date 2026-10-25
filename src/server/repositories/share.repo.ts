@@ -1,5 +1,5 @@
 import "server-only";
-import type { DbClient } from "../db/client";
+import type { DbClient, PrismaClient } from "../db/client";
 import { NODE_SELECT } from "./node.repo";
 
 export function findByLinkId(db: DbClient, linkId: string) {
@@ -40,7 +40,52 @@ export async function publicTree(db: DbClient, rootId: string): Promise<SharedRo
     FROM tree JOIN "Node" n ON n.id = tree.id`;
 }
 
-/** Counts a public download on the item and on the link it was reached through. */
-export async function countDownload(db: DbClient, ids: readonly string[]): Promise<void> {
-  await db.node.updateMany({ where: { id: { in: [...new Set(ids)] } }, data: { downloads: { increment: 1 } } });
+export interface DownloadClaim {
+  id: string;
+  /** Also refuse once downloaded when the item is a delete-after-download link (the link it was reached through). */
+  burn: boolean;
+}
+
+/** Thrown inside the claim transaction to roll back counts already made. */
+class LimitReached extends Error {}
+
+/**
+ * Counts a public download on the item and on the link it was reached through, only while
+ * every one of them is under its download limit (and a used delete-after-download link stays
+ * used). Each UPDATE re-checks the limit on the locked row, so concurrent requests at N-1
+ * cannot all pass. Returns false (nothing counted) when a limit is reached.
+ */
+export async function claimDownload(db: PrismaClient, claims: readonly DownloadClaim[]): Promise<boolean> {
+  const unique = new Map<string, boolean>();
+  for (const claim of claims) unique.set(claim.id, (unique.get(claim.id) ?? false) || claim.burn);
+  try {
+    await db.$transaction(async (tx) => {
+      for (const [id, burn] of unique) {
+        const counted = await tx.$executeRaw`
+          UPDATE "Node" SET downloads = downloads + 1
+          WHERE id = ${id}
+            AND ("downloadLimit" IS NULL OR "downloadLimit" <= 0 OR downloads < "downloadLimit")
+            AND NOT (${burn} AND burn AND downloads >= 1)`;
+        if (counted === 0) throw new LimitReached();
+      }
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof LimitReached) return false;
+    throw error;
+  }
+}
+
+/**
+ * Counts one download on each item still under its limit, in one statement (the files of a
+ * "Download all" zip). Returns the ids that were counted; the rest are at their limit.
+ */
+export async function claimEachDownload(db: DbClient, ids: readonly string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    UPDATE "Node" SET downloads = downloads + 1
+    WHERE id = ANY(${[...new Set(ids)]}::text[])
+      AND ("downloadLimit" IS NULL OR "downloadLimit" <= 0 OR downloads < "downloadLimit")
+    RETURNING id`;
+  return new Set(rows.map((row) => row.id));
 }

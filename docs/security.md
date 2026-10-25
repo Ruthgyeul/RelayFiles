@@ -50,6 +50,11 @@
 - 다운로드는 `nosniff`, 미디어 재생 외에는 `attachment`. HTML·SVG는 `application/octet-stream`으로 보낸다.
 - 링크 비밀번호는 argon2 해시로 저장한다. 맞히면 서명한 `rf_sh` 쿠키로 12시간(`SHARE.unlockHours`) 열린다. 틀린 비밀번호는 링크·주소마다 600초에 10회(`countInWindow`, INCR+EXPIRE 원자 실행)를 넘으면 429.
 - 혼잡도: 10분에 다운로드 5회부터 속도를 제한하고, 10회부터 멈춘다(429 + `Retry-After`).
+- 다운로드 횟수(`domain/share-access.ts` `downloadDecision`): Range 헤더 문자열이 아니라 **파싱한 범위**로 판단한다. 첫 바이트를 보내는 요청(Range 없음, `bytes=0-…`, 파일 전체를 덮는 `bytes=-N`)은 시작으로 세고, 그 방문자(ipKey)에게 `dl:grant:<파일>:<ipKey>`를 `SHARE.downloadGrantHours` 동안 준다. 0이 아닌 위치에서 시작하는 Range(이어받기)는 grant가 있을 때만 보낸다(없으면 403, 다시 시작하면 한 번 더 센다).
+- 카운트는 원자적이다(`share.repo.ts` `claimDownload`): 파일과 링크 루트를 한 트랜잭션에서 `downloads < downloadLimit`(루트는 burn이면 `downloads = 0`) 조건으로 올리고, 하나라도 실패하면 되돌린다. 한도 N-1에서 동시에 들어온 요청은 하나만 통과한다.
+- "Download all"(zip)은 파일마다 단일 다운로드와 같은 규칙(`downloadBlock`: Stream only, 한도 도달, 일시정지·혼잡도 2단계)으로 거르고, 뺀 파일은 사유와 함께 `Not included.txt`에 적는다. 넣은 파일은 각각 한 번씩 센다(`claimEachDownload`, 그 사이 한도에 닿은 파일은 뺀다).
+- 공유 재생 경로(`/stream`, `streamReach`)는 뷰어가 읽는 만큼만 보낸다: 미디어와 PDF는 범위 제한 없음, 텍스트·코드·표는 앞 `DOCUMENT_PREVIEW.textMaxBytes`, SVG·폰트·Word·Excel은 앞 `assetMaxBytes`까지(넘으면 403), 미리보기가 없는 형식(압축, 실행 파일, 디스크 이미지 등)은 404. 소유자 본인에게는 적용하지 않는다.
+- **Stream only는 DRM이 아니다.** 재생할 수 있는 영상·음악·이미지·PDF는 브라우저가 받은 바이트를 저장하거나 화면을 녹화할 수 있다. 다운로드 버튼과 zip, 미리보기가 없는 형식, 문서 전체 받기를 막을 뿐이다.
 - 공개 링크 이미지는 메타데이터 제거본만 보낸다(제거할 수 없는 형식은 415). 뷰어 미리보기도 메타데이터 없이 다시 인코딩한 WebP다.
 
 ## 응답 헤더·자원 제한

@@ -2,10 +2,13 @@ import "server-only";
 import { Readable } from "node:stream";
 import { SHARE } from "@/config/policy";
 import { PREFETCH_HEADER } from "@/contracts/api";
-import { zipName } from "@/domain/serving";
+import { parseRange, zipName } from "@/domain/serving";
+import { downloadDecision, streamReach, withinReach, type DownloadBlock } from "@/domain/share-access";
+import type { NodeKind } from "@/domain/tree";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { db } from "../db/client";
+import type { Busy } from "@/domain/share";
 import { bytesSource, sendFile } from "../files/send-file";
 import { sendAsset, sendThumb } from "../files/send-thumb";
 import { ApiError } from "../http/api-error";
@@ -15,12 +18,13 @@ import { canStripType, strippedCopy } from "../media/process";
 import { transcodeResponse } from "../media/transcode";
 import { findAccountById, type AccountRow } from "../repositories/account.repo";
 import { ancestorChain } from "../repositories/node.repo";
-import { countDownload, type SharedRow } from "../repositories/share.repo";
+import { claimDownload, claimEachDownload, type SharedRow } from "../repositories/share.repo";
 import { addTraffic } from "../repositories/traffic.repo";
-import { recordDownload } from "../share/busy";
+import { busyLevels, recordDownload } from "../share/busy";
+import { grantDownload, hasDownloadGrant } from "../share/download-grant";
 import { logLinkEvent } from "../share/events";
 import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driver";
-import { resolveSharedFile, resolveSharedTree, type LoadedLink, type ShareViewer } from "./share.service";
+import { downloadBlockOf, resolveSharedFile, resolveSharedTree, type LoadedLink, type SharedFile, type ShareViewer } from "./share.service";
 import { driverForAccount } from "./volume.service";
 import { zipResponse, type ZipEntry } from "./zip.service";
 import { markActive } from "../metrics/activity";
@@ -71,8 +75,23 @@ async function publicImage(driver: StorageDriver, location: StorageLocation, row
   return bytesSource(copy);
 }
 
-/** The first request of a playback or download (not a later Range request for seeking). */
-const isStart = (req: Request) => req.method === "GET" && /^(|bytes=0-\d*)$/.test(req.headers.get("range")?.trim() ?? "");
+const kindOf = (row: Pick<SharedRow, "kind">) => (row.kind ? (row.kind.toLowerCase() as NodeKind) : null);
+
+/**
+ * Counts a visitor's download start on the file and the link (atomically against their
+ * limits), lets the same visitor resume it, and records it for the busy level and activity.
+ */
+async function countSharedDownload(file: SharedFile, client: ClientInfo, now: number): Promise<void> {
+  const { link, row } = file;
+  const counted = await claimDownload(db(), [
+    { id: row.id, burn: false },
+    { id: link.root.id, burn: true },
+  ]);
+  if (!counted) throw new ApiError("FORBIDDEN", "Download limit reached");
+  await grantDownload(row.id, client.ipKey);
+  await recordDownload(file.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
+  void logLinkEvent(row, "DOWNLOAD", client);
+}
 
 /** A visitor's playback (`stream`) or download of a file inside a share link. */
 export async function serveSharedFile(req: Request, linkId: string, nodeId: string, mode: "stream" | "download", viewer: ShareViewer, client: ClientInfo): Promise<Response> {
@@ -83,16 +102,29 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   const driver = await driverForAccount(owner);
   const location = { accountId: owner.id, segments: file.segments };
   const body = stripsImage(owner, row) ? await publicImage(driver, location, row) : undefined;
+  const size = body ? body.size : Number(row.size);
+  // The same Range header Nginx applies when it sends the bytes (X-Accel).
+  const range = parseRange(req.headers.get("range"), size);
 
-  if (!link.isOwner && isStart(req)) {
-    if (mode === "download") {
-      await countDownload(db(), [row.id, link.root.id]);
-      await recordDownload(file.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
-      void logLinkEvent(row, "DOWNLOAD", client);
-    } else {
-      // Videos and audio are played; pictures and documents are looked at.
-      void logLinkEvent(row, row.kind === "VIDEO" || row.kind === "AUDIO" ? "PLAY" : "VIEW", client);
+  if (mode === "download") {
+    const granted = !link.isOwner && range !== null && range !== "unsatisfiable" && range.start > 0 && (await hasDownloadGrant(row.id, client.ipKey));
+    switch (downloadDecision({ method: req.method, range, owner: link.isOwner, granted })) {
+      case "count":
+        await countSharedDownload(file, client, now);
+        break;
+      case "deny":
+        throw new ApiError("FORBIDDEN", "Start the download again.");
+      case "allow":
+        break;
     }
+  } else if (!link.isOwner) {
+    // Playback reads what the viewer needs, not a second (uncounted) download of any file.
+    const reach = streamReach(row.name, kindOf(row));
+    if (reach === null) throw new ApiError("NOT_FOUND");
+    if (!withinReach(reach, range, size)) throw new ApiError("FORBIDDEN", "Use Download to get the whole file.");
+    // Videos and audio are played; pictures and documents are looked at.
+    const start = req.method === "GET" && (range === null || (range !== "unsatisfiable" && range.start === 0));
+    if (start) void logLinkEvent(row, row.kind === "VIDEO" || row.kind === "AUDIO" ? "PLAY" : "VIEW", client);
   }
   if (mode === "stream" && req.method === "GET") void markActive("stream", `${row.id}:${client.ipKey}`);
   return sendFile(req, {
@@ -100,7 +132,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
     location,
     name: row.name,
     mime: row.mime ?? mimeFromName(row.name),
-    size: Number(row.size),
+    size,
     etag: row.sha256 ? `${row.sha256}${body ? "-public" : ""}` : null,
     mode,
     body,
@@ -155,7 +187,49 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
   return transcodeResponse(req, path);
 }
 
-/** "Download all": a zip of a folder inside a share link, with images cleaned like single downloads. */
+/** Why a file is left out of "Download all", as written in "Not included.txt". */
+type ZipSkip = DownloadBlock | "location";
+
+const SKIP_REASONS: Record<ZipSkip, string> = {
+  "stream-only": "Stream only",
+  limit: "Download limit reached",
+  paused: "Downloads paused",
+  location: "Photo type that can't be shared without its location data",
+};
+
+/** The files of a shared folder, with what keeps each one out of the zip (null = included). */
+function zipPlan(shared: Awaited<ReturnType<typeof resolveSharedTree>>, owner: AccountRow, busy: Map<string, Busy>) {
+  const { link, folder, children } = shared;
+  const files: { row: SharedRow; name: string; segments: string[]; skip: ZipSkip | null }[] = [];
+  const folders: string[] = [];
+  const walk = (row: SharedRow, inZip: string[], onDisk: string[]) => {
+    for (const child of children.get(row.id) ?? []) {
+      const name = [...inZip, child.name].join("/");
+      const segments = [...onDisk, child.name];
+      if (child.type === "FOLDER") {
+        folders.push(name);
+        walk(child, [...inZip, child.name], segments);
+        continue;
+      }
+      const cannotStrip = stripsImage(owner, child) && !child.hasDerived && !canStripType(child.mime ?? mimeFromName(child.name));
+      const skip = link.isOwner ? (cannotStrip ? "location" : null) : (downloadBlockOf(child, link.root, busy.get(child.id)) ?? (cannotStrip ? "location" : null));
+      files.push({ row: child, name, segments, skip });
+    }
+  };
+  return { files, folders, walk: () => walk(folder, [folder.name], []) };
+}
+
+/** "Not included.txt": each left-out file with the reason, so a zip never silently drops files. */
+function skippedNote(skipped: readonly { name: string; skip: ZipSkip }[]): string {
+  const lines = skipped.map(({ name, skip }) => `${name}  (${SKIP_REASONS[skip]})`);
+  return `These files are not included:\n\n${lines.join("\n")}\n`;
+}
+
+/**
+ * "Download all": a zip of a folder inside a share link, with the same per-file rules as
+ * single downloads (stream-only, download limits, paused files) and images cleaned like
+ * single downloads. Each included file is counted like a single download of it.
+ */
 export async function zipSharedFolder(linkId: string, folderId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
   const now = Date.now();
   const shared = await resolveSharedTree(linkId, folderId, viewer, now);
@@ -164,41 +238,46 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   const driver = await driverForAccount(owner);
   const base = (await ancestorChain(db(), folder.id)).slice(1).map((row) => row.name);
 
-  const entries: ZipEntry[] = [];
-  const skipped: string[] = [];
-  let bytes = 0n;
-  const walk = (row: SharedRow, inZip: string[], onDisk: string[]) => {
-    for (const child of children.get(row.id) ?? []) {
-      const name = [...inZip, child.name].join("/");
-      const segments = [...onDisk, child.name];
-      if (child.type === "FOLDER") {
-        entries.push({ name, folder: true });
-        walk(child, [...inZip, child.name], segments);
-      } else if (child.access === "STREAM") {
-        skipped.push(name);
-      } else if (stripsImage(owner, child) && !child.hasDerived && !canStripType(child.mime ?? mimeFromName(child.name))) {
-        skipped.push(name);
-      } else {
-        bytes += child.size;
-        const location = { accountId: owner.id, segments };
-        entries.push({
-          name,
-          open: stripsImage(owner, child) ? async () => (await publicImage(driver, location, child)).open() : () => driver.createReadStream(location),
-        });
-      }
-    }
-  };
-  walk(folder, [folder.name], base);
-  if (skipped.length > 0) {
-    const note = `These files are not included (photo type that can't be shared without its location data, or stream-only):\n\n${skipped.join("\n")}\n`;
-    entries.push({ name: `${folder.name}/Not included.txt`, open: async () => Readable.from([Buffer.from(note)]) });
-  }
-  addTraffic(db(), owner.id, bytes, new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
+  const allFiles = [...children.values()].flat().filter((row) => row.type === "FILE");
+  const busy = await busyLevels(
+    allFiles.map((row) => ({ id: row.id, dlPaused: row.dlPaused || link.root.dlPaused })),
+    now,
+  );
+  const plan = zipPlan(shared, owner, busy);
+  plan.walk();
+
   if (!link.isOwner) {
-    await countDownload(db(), [folder.id, link.root.id]);
+    const claimed = await claimDownload(db(), [
+      { id: folder.id, burn: false },
+      { id: link.root.id, burn: true },
+    ]);
+    if (!claimed) throw new ApiError("FORBIDDEN", "Download limit reached");
+    // A file at its limit by now (a download finished meanwhile) is left out like one already used up.
+    const included = plan.files.filter((file) => file.skip === null);
+    const counted = await claimEachDownload(db(), included.map((file) => file.row.id));
+    for (const file of included) if (!counted.has(file.row.id)) file.skip = "limit";
     await recordDownload(shared.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
     void logLinkEvent(folder, "DOWNLOAD", client);
   }
+
+  const entries: ZipEntry[] = plan.folders.map((name) => ({ name, folder: true }));
+  const skipped: { name: string; skip: ZipSkip }[] = [];
+  let bytes = 0n;
+  for (const file of plan.files) {
+    if (file.skip !== null) {
+      skipped.push({ name: file.name, skip: file.skip });
+      continue;
+    }
+    bytes += file.row.size;
+    const location = { accountId: owner.id, segments: [...base, ...file.segments] };
+    const row = file.row;
+    entries.push({
+      name: file.name,
+      open: stripsImage(owner, row) ? async () => (await publicImage(driver, location, row)).open() : () => driver.createReadStream(location),
+    });
+  }
+  if (skipped.length > 0) entries.push({ name: `${folder.name}/Not included.txt`, open: async () => Readable.from([Buffer.from(skippedNote(skipped))]) });
+  addTraffic(db(), owner.id, bytes, new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
   return zipResponse(entries, zipName([{ name: folder.name, folder: true }], folder.name));
 }
 
