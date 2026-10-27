@@ -121,7 +121,7 @@ npm run env:secrets          # 비밀값 5개를 출력만 한다. .env에 붙�
 nano .env
 ```
 
-`/home` 아래에 두면 안 된다. 서비스가 홈 디렉터리를 읽지 못한다(`ProtectHome`). `npm ci`는 배포 사용자로 실행한다(`sudo` 아님). `postinstall`이 Prisma 클라이언트를 만든다. `npm ci`는 devDependencies도 설치해야 한다. 워커(`tsx`)와 마이그레이션(`prisma`)이 그것을 쓰기 때문이다. 그래서 셸에 `NODE_ENV=production`을 export한 상태로 `npm ci`를 실행하지 않는다(`.env`의 `NODE_ENV`는 상관없다).
+`/home` 아래에 두면 안 된다. 서비스가 홈 디렉터리를 읽지 못한다(`ProtectHome`). `npm ci`는 배포 사용자로 실행한다(`sudo` 아님). `postinstall`이 Prisma 클라이언트를 만든다. `npm ci`는 devDependencies도 설치해야 한다. 워커(`tsx`)와 마이그레이션(`prisma`)은 dependencies에 있지만, 체크아웃에서 하는 빌드(`npm run build`)가 Tailwind·TypeScript 같은 devDependencies를 쓰기 때문이다. 그래서 셸에 `NODE_ENV=production`을 export한 상태로 `npm ci`를 실행하지 않는다(`.env`의 `NODE_ENV`는 상관없다).
 
 `env:secrets` 출력(`POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, `COOKIE_SECRET`)은 처음 정한 뒤 바꾸지 않는다. `TOKEN_*`와 `COOKIE_SECRET`을 그냥 바꾸면 모든 계정이 로그인할 수 없게 된다. 바꿀 때는 [runbook.md "비밀값 교체"](runbook.md#비밀값-교체)를 따른다. `.env`는 서버 밖에도 보관한다.
 
@@ -468,7 +468,7 @@ Node.js, PostgreSQL, Redis, Nginx, ffmpeg는 apt가 관리한다. `sudo apt upgr
 | 로그인 후 바로 풀림 | `PUBLIC_URL`이 https인데 http로 접속 | scheme을 맞춘다(§6) |
 | certbot 설정이 사라짐 | `install.sh`가 사이트를 다시 렌더링했다 | 스크립트가 출력한 `certbot install …` 실행 |
 | 썸네일이 안 생긴다 | 워커가 멈췄거나 ffmpeg 없음 | `systemctl status relayfiles-worker`, `which ffmpeg` → `rf.sh media:backfill` |
-| `npm ci` 후 워커가 `Cannot find package 'tsx'` | devDependencies 없이 설치됐다 | 셸의 `NODE_ENV`를 풀고(`unset NODE_ENV`) `npm ci` |
+| `npm ci` 후 빌드가 `Cannot find module '@tailwindcss/postcss'` 등으로 실패 | devDependencies 없이 설치됐다 | 셸의 `NODE_ENV`를 풀고(`unset NODE_ENV`) `npm ci` |
 
 ## 13. 배포 후 보안 점검
 
