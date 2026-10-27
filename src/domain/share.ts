@@ -58,6 +58,41 @@ export function limitHit(downloadLimit: number | null, downloads: number): boole
   return downloadLimit !== null && downloadLimit > 0 && downloads >= downloadLimit;
 }
 
+/** The link settings of one item on the way from the account root down to a shared item. */
+export interface PathGuard {
+  expAt: number | null;
+  burn: boolean;
+  downloads: number;
+  hasPassword: boolean;
+  /** This device entered that item's password. */
+  unlocked: boolean;
+}
+
+export interface StrictestGuard {
+  /** The earliest expiry on the way (or of the owner's account). */
+  expAt: number | null;
+  /** A delete-after-download item on the way was downloaded (it is deleted with all below it). */
+  burnUsed: boolean;
+  hasPassword: boolean;
+  /** Every password on the way was entered on this device. */
+  unlocked: boolean;
+}
+
+/**
+ * The strictest settings on the way from the account root down to a shared item: an item is
+ * only as open as every folder above it, whichever link it is reached through.
+ */
+export function strictestGuard(path: readonly PathGuard[], accountDeletesAt: number | null): StrictestGuard {
+  const times = [accountDeletesAt, ...path.map((guard) => guard.expAt)].filter((at): at is number => at !== null);
+  const locks = path.filter((guard) => guard.hasPassword);
+  return {
+    expAt: times.length > 0 ? Math.min(...times) : null,
+    burnUsed: path.some((guard) => guard.burn && guard.downloads >= 1),
+    hasPassword: locks.length > 0,
+    unlocked: locks.every((guard) => guard.unlocked),
+  };
+}
+
 /**
  * What a share link shows, in the design's order: expired (past its time, or a
  * delete-after-download link that was used), download limit reached, private, password, open.

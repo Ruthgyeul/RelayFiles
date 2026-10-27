@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DOCUMENT_PREVIEW } from "@/config/policy";
 import { parseRange } from "./serving";
-import { downloadBlock, downloadDecision, streamReach, withinReach, type DownloadFacts } from "./share-access";
+import { downloadBlock, downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadFacts } from "./share-access";
 
 describe("downloadBlock", () => {
-  const open: DownloadFacts = { linkStreamOnly: false, streamOnly: false, downloadLimit: null, downloads: 0, busyLevel: 0 };
+  const open: DownloadFacts = { linkStreamOnly: false, streamOnly: false, downloadLimit: null, downloads: 0, burn: false, busyLevel: 0 };
 
   it("allows downloads unless stream-only, used up or paused", () => {
     expect(downloadBlock(open)).toBeNull();
@@ -14,6 +14,9 @@ describe("downloadBlock", () => {
     expect(downloadBlock({ ...open, streamOnly: true })).toBe("stream-only");
     expect(downloadBlock({ ...open, downloadLimit: 1, downloads: 1 })).toBe("limit");
     expect(downloadBlock({ ...open, busyLevel: 2 })).toBe("paused");
+    // Delete after download: the first download is allowed, none after it.
+    expect(downloadBlock({ ...open, burn: true })).toBeNull();
+    expect(downloadBlock({ ...open, burn: true, downloads: 1 })).toBe("limit");
   });
 });
 
@@ -87,5 +90,21 @@ describe("withinReach", () => {
     expect(withinReach(reach, parseRange("bytes=-10", size), size)).toBe(false);
     expect(withinReach(reach, null, size)).toBe(false);
     expect(withinReach(null, parseRange("bytes=0-0", size), size)).toBe(false);
+  });
+});
+
+describe("limitedStreamDecision", () => {
+  const get = { method: "GET", granted: false };
+  it("counts the first playback request and lets the same browser seek", () => {
+    expect(limitedStreamDecision({ ...get, range: null })).toBe("count");
+    expect(limitedStreamDecision({ ...get, range: { start: 0, end: 1 } })).toBe("count");
+    expect(limitedStreamDecision({ ...get, range: { start: 500, end: 999 }, granted: true })).toBe("allow");
+    expect(limitedStreamDecision({ ...get, range: { start: 0, end: 999 }, granted: true })).toBe("allow");
+  });
+
+  it("refuses later ranges without a grant, and never counts HEAD or unsatisfiable ranges", () => {
+    expect(limitedStreamDecision({ ...get, range: { start: 500, end: 999 } })).toBe("deny");
+    expect(limitedStreamDecision({ ...get, method: "HEAD", range: null })).toBe("allow");
+    expect(limitedStreamDecision({ ...get, range: "unsatisfiable" })).toBe("allow");
   });
 });

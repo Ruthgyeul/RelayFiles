@@ -113,16 +113,16 @@
 
 ### 공유 링크 (공개, 로그인 불필요)
 
-페이지 `/d/<linkId>`(하위 폴더는 `?f=<folderId>`)는 서버가 상태를 판정한다. 순서: 만료(만료 시각이 지났거나 "다운로드 1회 후 삭제"가 사용됨) → 다운로드 한도 도달 → 비공개 → 비밀번호 → 열림. 비공개로 설정된 하위 항목은 목록·크기·zip에서 빠진다. 링크 소유자가 보면 "Visitor preview" 바가 붙고, 다운로드 수·활동 기록에 남지 않는다.
+페이지 `/d/<linkId>`(하위 폴더는 `?f=<folderId>`)는 서버가 상태를 판정한다. 순서: 만료(링크나 위 폴더의 만료 시각이 지났거나, "다운로드 1회 후 삭제"가 사용됨, 또는 소유자 계정이 삭제일에 닿음) → 다운로드 한도 도달 → 비공개 → 비밀번호(링크와 위 폴더의 비밀번호 모두) → 열림. 비공개이거나 자기 비밀번호가 있거나 만료된 하위 항목은 목록·크기·zip에서 빠진다. 열 수 있거나 비밀번호로 열 수 있는 링크만 `name`을 보낸다([security.md](security.md#공유-링크다운로드)). 링크 소유자가 보면 "Visitor preview" 바가 붙고, 다운로드 수·활동 기록에 남지 않는다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| `POST` | `/api/share/:linkId/unlock` | `{ password }` argon2 확인. 맞으면 서명된 `rf_sh` 쿠키(12시간)에 링크를 기록. 틀리면 403 `Wrong password`, 주소당 10분에 10회를 넘기면 429 |
-| `GET`·`HEAD` | `/api/share/:linkId/files/:id/stream` | 방문자 재생·보기. 처음 요청만 "Played/Viewed"로 기록(30분 중복 제거). `?transcode=1`은 소유자 `stream`과 같은 변환 |
+| `POST` | `/api/share/:linkId/unlock` | `{ password }` argon2 확인. 맞으면 서명된 `rf_sh` 쿠키(12시간)에 그 비밀번호를 가진 항목(링크나 위 폴더)을 기록. 다른 비밀번호가 남았으면 페이지가 다시 묻는다. 틀리면 403 `Wrong password`, 주소당 10분에 10회를 넘기면 429 |
+| `GET`·`HEAD` | `/api/share/:linkId/files/:id/stream` | 방문자 재생·보기. 처음 요청만 "Played/Viewed"로 기록(30분 중복 제거). 다운로드 한도나 첫 다운로드 후 삭제가 걸린 파일은 브라우저마다 한 번 다운로드로 센다(`rf_dv` 쿠키). `?transcode=1`은 소유자 `stream`과 같은 변환 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/preview` | 뷰어용 이미지(WebP 미리보기, 메타데이터 없음, 없으면 `stream`과 같은 응답). "Viewed" 기록, 다음 사진 미리 받기(`x-relayfiles-prefetch` 헤더)는 세지 않는다 |
 | — | 만료로 지워진 링크 | 만료(자체 만료일, 첫 다운로드 후 삭제, 계정 삭제일)로 항목이 정리되면 그 링크와 하위 항목의 링크를 `LinkTombstone`에 `SHARE.tombstoneDays`(90일) 동안 남긴다. 그동안 `/d/<linkId>`는 "This link has expired" 카드, 파일 요청은 410. 존재한 적 없는 링크나 새 링크로 바뀐 옛 링크는 계속 404 |
 | `GET` | `/api/share/:linkId/files/:id/thumb` | 목록 미리보기(WebP, 메타데이터 없음). 재생과 같은 접근 검사(만료 410, 잠김 401, 비공개 404)이고 Stream only 링크에서도 허용. 세거나 기록하지 않는다. 썸네일이 아직 없으면 404 |
-| `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일과 링크의 다운로드 수 +1, "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
+| `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일, 링크, 경로 위의 한도·첫 다운로드 후 삭제 항목의 다운로드 수 +1(이어받기 허가는 `rf_dv` 쿠키, `If-Range`가 ETag와 다르면 파일 전체로 판단), "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
 | `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만 |
 
 - 이미지는 계정 설정 "Strip metadata on public links"(기본 켬)일 때 위치·카메라 정보를 지운 사본으로 나간다(워커가 만든 사본, 없으면 요청 시 생성). 지울 수 없는 형식(HEIC 등)은 415로 거절하고, zip에서는 빼고 `Not included.txt`에 이름을 적는다.

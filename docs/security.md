@@ -55,8 +55,14 @@
 - 다운로드는 `nosniff`, 미디어 재생 외에는 `attachment`. HTML·SVG는 `application/octet-stream`으로 보낸다.
 - 링크 비밀번호는 argon2 해시로 저장한다. 맞히면 서명한 `rf_sh` 쿠키(v2)로 12시간(`SHARE.unlockHours`) 열린다. 쿠키 항목은 `[linkId, until, pwTag]`이고 `pwTag`는 `HMAC(COOKIE_SECRET, passwordHash)` 앞 8바이트다. 비밀번호를 바꾸면 기존 기기는 다시 입력해야 한다(v1 쿠키는 무시). 틀린 비밀번호는 링크·주소마다 600초에 10회(`countInWindow`, INCR+EXPIRE 원자 실행)를 넘으면 429.
 - 혼잡도: 10분에 다운로드 5회부터 속도를 제한하고, 10회부터 멈춘다(429 + `Retry-After`).
-- 다운로드 횟수(`domain/share-access.ts` `downloadDecision`): Range 헤더 문자열이 아니라 **파싱한 범위**로 판단한다. 첫 바이트를 보내는 요청(Range 없음, `bytes=0-…`, 파일 전체를 덮는 `bytes=-N`)은 시작으로 세고, 그 방문자(ipKey)에게 `dl:grant:<파일>:<ipKey>`를 `SHARE.downloadGrantHours` 동안 준다. 0이 아닌 위치에서 시작하는 Range(이어받기)는 grant가 있을 때만 보낸다(없으면 403, 다시 시작하면 한 번 더 센다).
-- 카운트는 원자적이다(`share.repo.ts` `claimDownload`): 파일과 링크 루트를 한 트랜잭션에서 `downloads < downloadLimit`(루트는 burn이면 `downloads = 0`) 조건으로 올리고, 하나라도 실패하면 되돌린다. 한도 N-1에서 동시에 들어온 요청은 하나만 통과한다.
+- **경로 전체의 설정**(`domain/share.ts` `strictestGuard`, `share.service.ts`): 링크로 연 항목은 계정 루트에서 그 항목까지 위에 있는 모든 폴더의 설정을 함께 따른다. 위 폴더가 만료됐거나 첫 다운로드 후 삭제가 이미 쓰였으면 만료, 위 폴더에 비밀번호가 있으면 그것까지 입력해야 열린다(비밀번호를 하나 맞히면 그 비밀번호를 가진 항목들이 열리고, 남은 것이 있으면 다시 묻는다). 소유자 계정이 삭제일에 닿아도 정리 작업 전에 링크가 닫힌다.
+  - 반대로 폴더 링크 아래에서 **자기 비밀번호가 있거나 만료된 항목**은 그 폴더 링크에 나오지 않는다(목록·크기·zip에서 빠지고 파일 요청은 404). 그런 항목은 자기 링크로만 연다.
+  - 다운로드는 파일, 링크 루트, 그리고 경로 위에서 다운로드 한도나 첫 다운로드 후 삭제가 걸린 모든 항목에 함께 센다. 첫 다운로드 후 삭제가 걸린 파일은 폴더 링크로 받아도 한 번만 받는다.
+  - 비공개·만료·한도 도달 링크 페이지는 항목 이름을 보내지 않는다(열 수 있거나 비밀번호로 열 수 있는 링크, 소유자에게만).
+- 다운로드 횟수(`domain/share-access.ts` `downloadDecision`): Range 헤더 문자열이 아니라 **실제로 보낼 범위**로 판단한다(`effectiveRange`). 첫 바이트를 보내는 요청(Range 없음, `bytes=0-…`, 파일 전체를 덮는 `bytes=-N`)은 시작으로 세고, 그 브라우저에 `dl:grant:<파일>:<방문자 id>`를 `SHARE.downloadGrantHours` 동안 준다. 방문자 id는 `rf_dv` 쿠키(무작위 128비트, `Path=/api/share`, HttpOnly)다. IP가 아니므로 같은 NAT 뒤의 다른 사람은 grant를 쓰지 못한다. 0이 아닌 위치에서 시작하는 Range(이어받기)는 grant가 있을 때만 보낸다(없으면 403, 다시 시작하면 한 번 더 센다).
+  - `If-Range`가 파일의 ETag와 다르면 Nginx와 `sendFile`은 Range를 무시하고 파일 전체를 보낸다. 그래서 그런 요청은 파일 전체 요청으로 판단한다(만든 `If-Range`로 미리보기 한도나 Stream only, 다운로드 횟수를 넘지 못한다). 이어받기는 앱의 ETag(SHA-256)를 보내므로 범위가 유지된다. Docker 템플릿의 X-Accel location은 Nginx 자체 ETag 대신 앱의 ETag를 보낸다(`etag off; add_header ETag $upstream_http_etag`).
+  - 다운로드 한도나 첫 다운로드 후 삭제가 걸린 파일은 재생(`/stream`)도 센다(`limitedStreamDecision`): 첫 요청이 한 번 세고 grant를 받으며, 같은 브라우저의 탐색·재요청은 grant로 통과한다.
+- 카운트는 원자적이다(`share.repo.ts` `claimDownload`): 센 항목 모두를 한 트랜잭션에서 `downloads < downloadLimit`(첫 다운로드 후 삭제면 `downloads = 0`) 조건으로 올리고, 하나라도 실패하면 되돌린다. 한도 N-1에서 동시에 들어온 요청은 하나만 통과한다.
 - "Download all"(zip)은 파일마다 단일 다운로드와 같은 규칙(`downloadBlock`: Stream only, 한도 도달, 일시정지·혼잡도 2단계)으로 거르고, 뺀 파일은 사유와 함께 `Not included.txt`에 적는다. 넣은 파일은 각각 한 번씩 센다(`claimEachDownload`, 그 사이 한도에 닿은 파일은 뺀다). zip 항목 이름은 세그먼트마다 `\`·`:`·제어 문자를 `_`로 바꾸고 `.`·`..`을 `_`로 바꿔(`zipEntryName`), 이름에 역슬래시가 든 파일이 압축을 풀 때 대상 폴더 밖으로 나가지 못하게 한다(zip slip).
 - 공유 재생 경로(`/stream`, `streamReach`)는 뷰어가 읽는 만큼만 보낸다: 미디어와 PDF는 범위 제한 없음, 텍스트·코드·표는 앞 `DOCUMENT_PREVIEW.textMaxBytes`, SVG·폰트·Word·Excel은 앞 `assetMaxBytes`까지(넘으면 403), 미리보기가 없는 형식(압축, 실행 파일, 디스크 이미지 등)은 404. 소유자 본인에게는 적용하지 않는다.
 - **Stream only는 DRM이 아니다.** 재생할 수 있는 영상·음악·이미지·PDF는 브라우저가 받은 바이트를 저장하거나 화면을 녹화할 수 있다. 다운로드 버튼과 zip, 미리보기가 없는 형식, 문서 전체 받기를 막을 뿐이다.
