@@ -5,7 +5,7 @@ import { requireActive } from "@/server/auth/device-session";
 import { apiHandler } from "@/server/http/api-handler";
 import { reauthenticate } from "@/server/services/auth.service";
 
-/** "Confirm it's you": the active account's token, entered again before an admin action. */
+/** "Confirm it's you": the active account's token, entered again before a token or account action. */
 export const POST = apiHandler(async ({ req }) => {
   const { token } = tokenSignInSchema.parse(await req.json());
   const { sessionId, account } = requireActive(await deviceOf(req));

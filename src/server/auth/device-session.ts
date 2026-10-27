@@ -80,13 +80,13 @@ export function requireAdmin(device: DeviceSession): DeviceAccount {
 }
 
 /**
- * For admin actions that expose or change accounts (tokens, deletions, roles, sign-up mode):
- * an admin session must have entered the token within AUTH.reauthWindowMin, so a device left
- * signed in cannot be used for them. Members are not asked (they could not get their token
- * back otherwise).
+ * For actions that expose or change accounts (showing or replacing a token, deleting an
+ * account, and the admin's roles and sign-up mode): the session must have signed in or entered
+ * the token within AUTH.reauthWindowMin. A device left signed in, or a script injected into the
+ * page, cannot read the token, which never expires and signs in anywhere. This applies to
+ * members too: a new account sees its token right after sign-up, inside the window.
  */
 export function requireRecentAuth(entry: DeviceAccount, now: Date = new Date()): void {
-  if (!entry.account.isAdmin) return;
   if (!hasRecentAuth({ createdAt: entry.signedInAt.getTime(), reauthAt: entry.reauthAt?.getTime() ?? null }, now.getTime())) throw new ApiError("REAUTH_REQUIRED");
 }
 
