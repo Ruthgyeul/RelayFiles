@@ -10,7 +10,7 @@ test("every script of a page carries the nonce of its Content-Security-Policy", 
     const nonce = nonceOf(headers["content-security-policy"] ?? headers["content-security-policy-report-only"]);
     expect(nonce, path).not.toBeNull();
     const html = await response.text();
-    const scripts = html.match(/<script\b[^>]*>/g) ?? [];
+    const scripts = html.match(/<script\b[^>]*>/gi) ?? [];
     expect(scripts.length, path).toBeGreaterThan(0);
     for (const script of scripts) expect(script, path).toContain(`nonce="${nonce}"`);
   }
