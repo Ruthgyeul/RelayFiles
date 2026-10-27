@@ -89,7 +89,7 @@
 | `DELETE` | `/api/me/sessions/:id` | 다른 기기 하나 로그아웃 |
 | `PATCH` | `/api/me/preferences` | `{ stripMetadataOnShare }` 공개 링크 사진의 위치·카메라 정보 제거 |
 | `POST` | `/api/me/purge` | "Purge now": 만료된 항목(만료 시각이 지났거나 1회 다운로드 후 삭제가 사용됨)을 바로 삭제 → `{ deleted }` |
-| `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃 |
+| `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃. 관리자 계정은 최근 재인증이 필요하고(`REAUTH_REQUIRED`) 감사 로그에 남으며, 마지막 관리자는 400 `Keep at least one admin` |
 
 ### 관리자 (`ADMIN_ALLOWED_CIDRS`로 접근 주소 제한 가능)
 

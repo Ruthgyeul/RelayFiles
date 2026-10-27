@@ -32,14 +32,14 @@
 - **기기 쿠키** `rf_s`: 이 기기에 로그인한 세션 id 목록(최대 10)과 활성 세션만 담고 HMAC으로 서명한다(`COOKIE_SECRET`, 교체 시 `COOKIE_SECRET_PREVIOUS`). `HttpOnly`, `SameSite=Lax`, `PUBLIC_URL`이 https면 `Secure`. 토큰은 쿠키에 넣지 않는다.
 - **세션 폐기**: 요청마다 DB에서 `Session.revokedAt`과 계정 만료를 확인하므로 다른 기기에서 로그아웃하거나 만료되면 즉시 무효가 된다. 무효 세션은 쿠키에서 지운다.
 - **세션 절대 수명**(`domain/session.ts`): 로그인(`Session.createdAt`)부터 관리자 `AUTH.adminSessionDays`(7일), 일반 `AUTH.memberSessionDays`(14일)가 지나면 세션이 끝난다. 계정이 만료되지 않는 관리자라도 기기 세션은 영구적이지 않다.
-- **관리자 재인증**: 토큰 보기·재발급, 계정 관리(역할·삭제일·용량)·삭제, 가입 모드 변경은 관리자 세션이 최근 `AUTH.reauthWindowMin`(10분) 안에 토큰을 입력했을 때만 허용한다(`requireRecentAuth`, 아니면 403 `REAUTH_REQUIRED`). 입력은 `POST /api/auth/reauth`이고 로그인과 같은 잠금 단계를 쓴다. 일반 계정에는 묻지 않는다(토큰을 잃으면 로그인한 기기에서만 다시 볼 수 있기 때문).
+- **관리자 재인증**: 토큰 보기·재발급, 계정 관리(역할·삭제일·용량)·삭제(자기 계정 삭제 포함, 마지막 관리자는 지울 수 없다), 가입 모드 변경은 관리자 세션이 최근 `AUTH.reauthWindowMin`(10분) 안에 토큰을 입력했을 때만 허용한다(`requireRecentAuth`, 아니면 403 `REAUTH_REQUIRED`). 입력은 `POST /api/auth/reauth`이고 로그인과 같은 잠금 단계를 쓴다. 일반 계정에는 묻지 않는다(토큰을 잃으면 로그인한 기기에서만 다시 볼 수 있기 때문).
 - **감사 로그**(`AuditEvent`): 관리자 작업(위 작업 + 정리 실행, 초대 생성·취소)을 행위자 id·이름, 대상, 짧은 설명, 마스킹한 주소와 함께 남긴다. 초대 코드는 앞 4자만 적는다. `AUTH.auditRetentionDays`(365일)가 지나면 매일 정리 작업이 지운다. 조회: `GET /api/admin/audit`.
 - **`env:check`**: 운영 모드에서 `ADMIN_ALLOWED_CIDRS`가 비어 있으면 경고한다.
 - **로그인 잠금**: 클라이언트 주소(HMAC으로 가린 키, IPv6는 `/64` 단위 — `rateLimitSubject`)마다 Redis에 실패 횟수를 센다. 5회마다 30초 → 120초 → 600초 잠금(`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_SECONDS`). 잠긴 동안에는 올바른 토큰도 429로 거부한다.
 - **익명 가입 제한**: 같은 주소에서 시간당 10개(`SIGNUPS_PER_HOUR`, 기본값은 `config/policy.ts`). 크롤러가 디스크에 계정 폴더를 채우는 것을 막는다. 가입 모드(Open/Invite only/Closed)는 `ServerConfig.signupMode`, 초대 코드는 한 번만 쓸 수 있다.
 - **계정 생성의 원자성**: 계정 행, 루트 폴더 노드, 기기 세션, 볼륨의 `users/<accountId>/` 디렉터리를 `withStorageTransaction`으로 함께 만든다. 중간에 실패하면 DB는 롤백되고 디렉터리는 휴지통으로 옮긴다.
 - **클라이언트 주소**: `CF-Connecting-IP` → `X-Real-IP` 순으로 읽는다. 앱 포트는 Nginx를 통해서만 접근 가능해야 한다(직접 노출하면 헤더 위조로 잠금을 우회할 수 있음). systemd 배포는 `APP_HOST`(기본 `127.0.0.1`, 비어 있어도 루프백)로 루프백에만 열고, Docker 배포의 app 컨테이너는 포트를 공개하지 않는다. 앞단 Nginx는 방문자가 보낸 `CF-Connecting-IP`를 비워서 넘긴다. 세션에는 마스킹한 주소(`a.b.•••.•••`)와 Cloudflare 국가·도시 헤더만 저장한다.
-- **`src/proxy.ts`**: 모든 요청에 `x-request-id`를 붙이고, `ADMIN_ALLOWED_CIDRS`가 있으면 `/admin/*`·`/api/admin/*`를 그 대역에서만 허용한다(페이지는 `/error/403`, API는 403 JSON). 다른 사이트 Origin에서 온 API 쓰기 요청(POST 등)은 403으로 거부한다(CSRF 방어). 권한 검사는 각 핸들러에서 다시 한다.
+- **`src/proxy.ts`**: 모든 요청에 `x-request-id`를 붙이고, `ADMIN_ALLOWED_CIDRS`가 있으면 `/admin/*`·`/api/admin/*`를 그 대역에서만 허용한다(페이지는 프록시가 직접 보내는 403 HTML, API는 403 JSON. rewrite를 쓰면 상태가 200이 되고 `x-middleware-rewrite`에 내부 주소가 드러난다). 다른 사이트 Origin에서 온 API 쓰기 요청(POST 등)은 403으로 거부한다(CSRF 방어). 권한 검사는 각 핸들러에서 다시 한다.
 - **첫 관리자**: 서버에서 `npm run admin:create`. 토큰은 터미널에 한 번만 출력된다.
 
 ## 업로드
@@ -57,7 +57,7 @@
 - 혼잡도: 10분에 다운로드 5회부터 속도를 제한하고, 10회부터 멈춘다(429 + `Retry-After`).
 - 다운로드 횟수(`domain/share-access.ts` `downloadDecision`): Range 헤더 문자열이 아니라 **파싱한 범위**로 판단한다. 첫 바이트를 보내는 요청(Range 없음, `bytes=0-…`, 파일 전체를 덮는 `bytes=-N`)은 시작으로 세고, 그 방문자(ipKey)에게 `dl:grant:<파일>:<ipKey>`를 `SHARE.downloadGrantHours` 동안 준다. 0이 아닌 위치에서 시작하는 Range(이어받기)는 grant가 있을 때만 보낸다(없으면 403, 다시 시작하면 한 번 더 센다).
 - 카운트는 원자적이다(`share.repo.ts` `claimDownload`): 파일과 링크 루트를 한 트랜잭션에서 `downloads < downloadLimit`(루트는 burn이면 `downloads = 0`) 조건으로 올리고, 하나라도 실패하면 되돌린다. 한도 N-1에서 동시에 들어온 요청은 하나만 통과한다.
-- "Download all"(zip)은 파일마다 단일 다운로드와 같은 규칙(`downloadBlock`: Stream only, 한도 도달, 일시정지·혼잡도 2단계)으로 거르고, 뺀 파일은 사유와 함께 `Not included.txt`에 적는다. 넣은 파일은 각각 한 번씩 센다(`claimEachDownload`, 그 사이 한도에 닿은 파일은 뺀다).
+- "Download all"(zip)은 파일마다 단일 다운로드와 같은 규칙(`downloadBlock`: Stream only, 한도 도달, 일시정지·혼잡도 2단계)으로 거르고, 뺀 파일은 사유와 함께 `Not included.txt`에 적는다. 넣은 파일은 각각 한 번씩 센다(`claimEachDownload`, 그 사이 한도에 닿은 파일은 뺀다). zip 항목 이름은 세그먼트마다 `\`·`:`·제어 문자를 `_`로 바꾸고 `.`·`..`을 `_`로 바꿔(`zipEntryName`), 이름에 역슬래시가 든 파일이 압축을 풀 때 대상 폴더 밖으로 나가지 못하게 한다(zip slip).
 - 공유 재생 경로(`/stream`, `streamReach`)는 뷰어가 읽는 만큼만 보낸다: 미디어와 PDF는 범위 제한 없음, 텍스트·코드·표는 앞 `DOCUMENT_PREVIEW.textMaxBytes`, SVG·폰트·Word·Excel은 앞 `assetMaxBytes`까지(넘으면 403), 미리보기가 없는 형식(압축, 실행 파일, 디스크 이미지 등)은 404. 소유자 본인에게는 적용하지 않는다.
 - **Stream only는 DRM이 아니다.** 재생할 수 있는 영상·음악·이미지·PDF는 브라우저가 받은 바이트를 저장하거나 화면을 녹화할 수 있다. 다운로드 버튼과 zip, 미리보기가 없는 형식, 문서 전체 받기를 막을 뿐이다.
 - 공개 링크 이미지는 메타데이터 제거본만 보낸다(제거할 수 없는 형식은 415). 뷰어 미리보기도 메타데이터 없이 다시 인코딩한 WebP다.
