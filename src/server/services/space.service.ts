@@ -31,6 +31,7 @@ export interface SpaceOptions {
 }
 
 const scopesOf = (accountId: string, volumeId: string): ReservationScope[] => [{ kind: "account", id: accountId }, { kind: "volume", id: volumeId }, { kind: "anon" }];
+const scopeKey = (scope: ReservationScope) => (scope.kind === "anon" ? scope.kind : `${scope.kind}:${scope.id}`);
 
 /** Bytes an account holds on disk: its files plus deleted files still in the trash. */
 async function heldBytes(accountId: string): Promise<bigint> {
@@ -87,6 +88,26 @@ export async function reserveSpace(owner: SpaceOwner, uploadId: string, bytes: n
   if (full) {
     const budget = budgets.find((entry) => entry.scope === full.scope)!;
     throw budget.full(await reservedBytes(budget.scope));
+  }
+  try {
+    await recheckReservation(owner, bytes, volume);
+  } catch (error) {
+    await releaseSpace(uploadId, owner.id, volume.id);
+    throw error;
+  }
+}
+
+/**
+ * The usage read before reserving can be stale: a copy or upload that finished in between
+ * moved its bytes from "reserved" to "used" and neither number saw them. Reading the
+ * reservations (this one included) before the usage closes that gap: bytes leave the
+ * reservations only after they count as used.
+ */
+async function recheckReservation(owner: SpaceOwner, bytes: number, volume: SpaceVolume): Promise<void> {
+  const reserved = new Map(await Promise.all(scopesOf(owner.id, volume.id).map(async (scope) => [scopeKey(scope), await reservedBytes(scope)] as const)));
+  for (const budget of await budgetsOf(owner, volume, {})) {
+    const held = reserved.get(scopeKey(budget.scope)) ?? 0n;
+    if (budget.limit !== null && held > budget.limit) throw budget.full(held - BigInt(bytes));
   }
 }
 
