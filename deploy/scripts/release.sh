@@ -5,6 +5,7 @@
 #   git pull && deploy/scripts/release.sh
 # Rollback: docs/deploy-ubuntu.md ("롤백").
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 export RELEASE_TAG="${RELEASE_TAG:-$(git -C "$ROOT" rev-parse --short HEAD)}"

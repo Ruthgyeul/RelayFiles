@@ -3,6 +3,7 @@
 # DATA_DIR/backups, keeping the newest BACKUP_KEEP files (default 14).
 #   deploy/scripts/systemd/backup.sh
 set -euo pipefail
+# shellcheck source=../lib.sh
 source "$(dirname "$0")/../lib.sh"
 
 KEEP="${BACKUP_KEEP:-14}"
@@ -19,5 +20,5 @@ PGPASSWORD="$(env_value POSTGRES_PASSWORD)" pg_dump \
 mv "$FILE.partial" "$FILE"
 chmod 600 "$FILE"
 
-keep_newest "$DIR/relayfiles-*.dump" "$KEEP"
+keep_newest "$KEEP" "$DIR"/relayfiles-*.dump
 log "Backup done ($(du -h "$FILE" | cut -f1))."

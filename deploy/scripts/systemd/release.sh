@@ -6,6 +6,7 @@
 #   git pull && deploy/scripts/systemd/release.sh
 # The running app keeps serving from its own bundle while the new one builds.
 set -euo pipefail
+# shellcheck source=../lib.sh
 source "$(dirname "$0")/../lib.sh"
 
 SHA="$(git -C "$ROOT" rev-parse --short HEAD)"
@@ -57,7 +58,7 @@ for _ in $(seq 1 "$HEALTH_TRIES"); do
     rm -f "$FLAG"
     echo "$(date -u +%FT%TZ) $RELEASE" >> "$RELEASES"
     # Keep the newest bundles (the current one is always among them).
-    keep_newest "$APP_BUNDLES/[0-9]*-*" "$KEEP"
+    keep_newest "$KEEP" "$APP_BUNDLES"/[0-9]*-*
     log "Release $RELEASE is live."
     exit 0
   fi
