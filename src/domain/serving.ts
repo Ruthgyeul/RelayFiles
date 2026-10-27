@@ -32,6 +32,21 @@ export function parseRange(header: string | null, size: number): ByteRange | nul
   return { start, end };
 }
 
+/** Whether Range applies: no If-Range, or an If-Range equal to the current strong ETag (RFC 9110 13.1.5). */
+export function rangeApplies(ifRange: string | null, etag: string | null): boolean {
+  return ifRange === null || (etag !== null && ifRange.trim() === `"${etag}"`);
+}
+
+/**
+ * The range the response will cover. A non-matching If-Range makes Nginx (and sendFile) ignore
+ * Range and send the whole file, so access is decided on the whole file too: a made-up
+ * validator cannot turn "bytes=0-10" into an uncounted full download. A resumed download sends
+ * the file's own ETag and keeps its range.
+ */
+export function effectiveRange(range: string | null, ifRange: string | null, etag: string | null, size: number): ByteRange | null | "unsatisfiable" {
+  return rangeApplies(ifRange, etag) ? parseRange(range, size) : null;
+}
+
 /** Media the browser may render inline (viewer, inline player, thumbnails). */
 const INLINE_PREFIXES = ["video/", "audio/", "image/"];
 const NEVER_INLINE = new Set(["image/svg+xml"]);

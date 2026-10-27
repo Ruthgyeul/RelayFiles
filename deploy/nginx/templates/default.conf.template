@@ -102,6 +102,10 @@ server {
         # Cache-Control comes from the app (kept by X-Accel-Redirect): playback is cacheable,
         # downloads are not. Adding one here would send two and disable the browser cache.
         add_header X-Content-Type-Options nosniff always;
+        # The app's ETag (the file's SHA-256), not Nginx's mtime-size one: resumed downloads send
+        # it back in If-Range, and the app decides what to count by the same validator.
+        etag off;
+        add_header ETag $upstream_http_etag;
     }
 
     # Resumable uploads stream straight to the app.

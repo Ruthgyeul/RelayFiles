@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canShowInline, contentDisposition, contentRangeTotal, parseRange, zipName } from "./serving";
+import { canShowInline, contentDisposition, contentRangeTotal, effectiveRange, parseRange, rangeApplies, zipName } from "./serving";
 
 describe("parseRange", () => {
   it("parses open, closed and suffix ranges", () => {
@@ -51,5 +51,29 @@ describe("contentRangeTotal", () => {
   it("is null when the size is missing or unknown", () => {
     expect(contentRangeTotal(null)).toBeNull();
     expect(contentRangeTotal("bytes 0-99/*")).toBeNull();
+  });
+});
+
+describe("effectiveRange", () => {
+  it("is the parsed range without If-Range or with the file's own ETag", () => {
+    expect(effectiveRange("bytes=0-10", null, "abc", 100)).toEqual({ start: 0, end: 10 });
+    expect(effectiveRange("bytes=50-", '"abc"', "abc", 100)).toEqual({ start: 50, end: 99 });
+    expect(effectiveRange(null, null, "abc", 100)).toBeNull();
+  });
+
+  it("is the whole file for any other If-Range", () => {
+    expect(effectiveRange("bytes=0-10", '"x"', "abc", 100)).toBeNull();
+    expect(effectiveRange("bytes=1-1", "Wed, 21 Oct 2015 07:28:00 GMT", "abc", 100)).toBeNull();
+    expect(effectiveRange("bytes=1-1", '"abc"', null, 100)).toBeNull();
+  });
+});
+
+describe("rangeApplies", () => {
+  it("applies Range only when If-Range is absent or matches the ETag", () => {
+    expect(rangeApplies(null, "abc")).toBe(true);
+    expect(rangeApplies('"abc"', "abc")).toBe(true);
+    expect(rangeApplies('"x"', "abc")).toBe(false);
+    expect(rangeApplies("Wed, 21 Oct 2015 07:28:00 GMT", "abc")).toBe(false);
+    expect(rangeApplies('"abc"', null)).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import "server-only";
 import { pipeline, Readable } from "node:stream";
 import { getEnv } from "@/config/env";
 import { IMMUTABLE_CACHE } from "@/config/policy";
-import { canShowInline, contentDisposition, parseRange } from "@/domain/serving";
+import { canShowInline, contentDisposition, effectiveRange } from "@/domain/serving";
 import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driver";
 import { Throttle } from "./throttle";
 
@@ -56,7 +56,8 @@ export async function sendFile(req: Request, options: SendFileOptions): Promise<
     if (req.headers.get("if-none-match") === `"${etag}"`) return new Response(null, { status: 304, headers });
   }
 
-  const range = parseRange(req.headers.get("range"), size);
+  // Like Nginx: a stale If-Range (the file changed since the partial download) gets the whole file.
+  const range = effectiveRange(req.headers.get("range"), req.headers.get("if-range"), etag, size);
   if (range === "unsatisfiable") {
     headers.set("content-range", `bytes */${size}`);
     return new Response(null, { status: 416, headers });
