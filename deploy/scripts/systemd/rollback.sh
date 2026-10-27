@@ -18,7 +18,10 @@ if [ -z "$TARGET" ]; then
     if [ "${bundle##*/}" != "$CURRENT" ]; then TARGET="${bundle##*/}"; break; fi
   done
 fi
-[ -n "$TARGET" ] && [ -f "$APP_BUNDLES/$TARGET/server.js" ] || { echo "No bundle to roll back to (ls $APP_BUNDLES)." >&2; exit 1; }
+if [ -z "$TARGET" ] || [ ! -f "$APP_BUNDLES/$TARGET/server.js" ]; then
+  echo "No bundle to roll back to (ls $APP_BUNDLES)." >&2
+  exit 1
+fi
 
 log "Rolling back $CURRENT → $TARGET"
 ln -sfn "$TARGET" "$APP_BUNDLES/current.next"
