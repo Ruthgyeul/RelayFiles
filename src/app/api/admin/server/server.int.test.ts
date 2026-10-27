@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { afterAll, describe, expect, it } from "vitest";
 import { GET as metricsStream } from "@/app/api/admin/server/stream/route";
 import { POST as tokenSignIn } from "@/app/api/auth/token/route";
+import { METRICS } from "@/config/policy";
 import type { SessionState } from "@/contracts/auth";
 import type { ServerSnapshot } from "@/contracts/server-metrics";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
@@ -98,5 +99,25 @@ describe("server metrics", () => {
     expect(type).toBe("text/event-stream");
     const snapshot = JSON.parse(event.replace(/^data: /, "").trim()) as ServerSnapshot;
     expect(snapshot.services).toHaveLength(4);
+  });
+
+  it("holds at most METRICS.streamMaxPerAccount streams per account", async () => {
+    const cookie = await adminCookie();
+    const aborts: AbortController[] = [];
+    const open = async () => {
+      const abort = new AbortController();
+      aborts.push(abort);
+      const req = new NextRequest("http://localhost/api/admin/server/stream", { headers: { cookie: `${SESSION_COOKIE}=${cookie}` }, signal: abort.signal });
+      return metricsStream(req, { params: Promise.resolve({}) });
+    };
+    const opened = [];
+    for (let index = 0; index < METRICS.streamMaxPerAccount; index++) opened.push(await open());
+    expect(opened.map((res) => res.status)).toEqual(opened.map(() => 200));
+    expect((await open()).status).toBe(429);
+    // Closing one frees its place.
+    aborts[0]!.abort();
+    await opened[0]!.body?.cancel();
+    expect((await open()).status).toBe(200);
+    for (const abort of aborts) abort.abort();
   });
 });

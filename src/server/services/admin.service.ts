@@ -1,17 +1,18 @@
 import "server-only";
 import { getEnv } from "@/config/env";
-import { MS, SHARE } from "@/config/policy";
+import { AUTH, MS, SHARE } from "@/config/policy";
 import type { AdminAccounts, CleanupResult, ManageInput } from "@/contracts/admin";
 import { isExpired } from "@/domain/account";
 import { applyManage } from "@/domain/admin";
 import { BYTES_PER_GB } from "@/domain/quota";
-import { db } from "../db/client";
+import { db, type DbClient } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
-import { findAccountById } from "../repositories/account.repo";
-import { countAdmins, fileTotalsByAccount, listAccountsForAdmin, updateAccountByAdmin } from "../repositories/admin.repo";
+import { findAccountById, type AccountRow } from "../repositories/account.repo";
+import { countAdmins, fileTotalsByAccount, listAccountsForAdmin, lockAdminRoles, updateAccountByAdmin } from "../repositories/admin.repo";
 import { purgeRetiredLinks, retireLinks } from "../repositories/link-tombstone.repo";
 import { expiredItemIds, findRootFolder } from "../repositories/node.repo";
+import { purgeDeadSessions } from "../repositories/session.repo";
 import { deleteItems } from "./node-ops.service";
 import { deleteAccount } from "./profile.service";
 
@@ -42,16 +43,23 @@ export async function listAccounts(deviceAccountIds: readonly string[], activeAc
 
 /** Saves the Manage dialog: role, deletion date and storage limit. There is always one admin. */
 export async function manageAccount(targetId: string, input: ManageInput, now: Date): Promise<void> {
-  const target = await findAccountById(db(), targetId);
-  if (!target) throw new ApiError("NOT_FOUND");
-  if (target.isAdmin && !input.isAdmin && (await countAdmins(db())) <= 1) throw new ApiError("BAD_REQUEST", "Keep at least one admin");
+  await db().$transaction(async (tx) => {
+    await lockAdminRoles(tx);
+    const target = await findAccountById(tx, targetId);
+    if (!target) throw new ApiError("NOT_FOUND");
+    if (target.isAdmin && !input.isAdmin && (await countAdmins(tx)) <= 1) throw new ApiError("BAD_REQUEST", "Keep at least one admin");
+    await saveManage(tx, target, input, now);
+  });
+}
+
+async function saveManage(tx: DbClient, target: AccountRow, input: ManageInput, now: Date): Promise<void> {
   const next = applyManage(
     { createdAt: target.createdAt.getTime(), expiresAt: target.expiresAt?.getTime() ?? null, isAdmin: target.isAdmin, neverExpire: target.neverExpire },
     { isAdmin: input.isAdmin, days: input.days, reset: input.reset },
     getEnv("policy").ACCOUNT_TTL_DAYS,
     now.getTime(),
   );
-  await updateAccountByAdmin(db(), target.id, {
+  await updateAccountByAdmin(tx, target.id, {
     isAdmin: input.isAdmin,
     neverExpire: next.neverExpire,
     expiresAt: next.expiresAt === null ? null : new Date(next.expiresAt),
@@ -101,5 +109,7 @@ export async function runCleanup(now: Date): Promise<CleanupResult> {
     }
   }
   await purgeRetiredLinks(db(), new Date(now.getTime() - SHARE.tombstoneDays * MS.day));
+  // Signed out or past the longest session lifetime: those rows only grow the table.
+  await purgeDeadSessions(db(), new Date(now.getTime() - Math.max(AUTH.adminSessionDays, AUTH.memberSessionDays) * MS.day));
   return result;
 }

@@ -1,23 +1,29 @@
 import { z } from "zod";
 import { incidentInputSchema } from "@/contracts/status";
 import { ID_PATTERN } from "@/domain/ids";
+import { clientInfo } from "@/server/auth/client-info";
 import { deviceOf } from "@/server/auth/current";
 import { requireAdmin } from "@/server/auth/device-session";
 import { apiHandler } from "@/server/http/api-handler";
+import { audit } from "@/server/services/audit.service";
 import { editIncident, removeIncident } from "@/server/services/status.service";
 
 const idSchema = z.string().regex(ID_PATTERN.node);
 
 /** Edits an incident. */
 export const PUT = apiHandler<{ saved: true }, { id: string }>(async ({ req, params }) => {
-  requireAdmin(await deviceOf(req));
-  await editIncident(idSchema.parse(params.id), incidentInputSchema.parse(await req.json()));
+  const admin = requireAdmin(await deviceOf(req));
+  const id = idSchema.parse(params.id);
+  await editIncident(id, incidentInputSchema.parse(await req.json()));
+  await audit(admin, clientInfo(req.headers), "incident.edit", { id });
   return { saved: true };
 });
 
 /** Deletes an incident. */
 export const DELETE = apiHandler<{ deleted: true }, { id: string }>(async ({ req, params }) => {
-  requireAdmin(await deviceOf(req));
-  await removeIncident(idSchema.parse(params.id));
+  const admin = requireAdmin(await deviceOf(req));
+  const id = idSchema.parse(params.id);
+  await removeIncident(id);
+  await audit(admin, clientInfo(req.headers), "incident.delete", { id });
   return { deleted: true };
 });
