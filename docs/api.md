@@ -17,7 +17,7 @@
 - 그 밖의 예외는 로그에만 전체를 남기고, 응답은 항상 `500 INTERNAL "Something went wrong."`(스택, 쿼리, 내부 경로 노출 없음).
 - 429 응답은 `retry-after` 헤더와 `retryAfter` 필드를 함께 보낸다.
 - 실패 응답은 항상 `cache-control: no-store`(아직 없는 썸네일의 404가 캐시되지 않게).
-- 모든 페이지·API 응답에 보안 헤더(`next.config.ts`): `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`.
+- 모든 페이지·API 응답에 보안 헤더(`next.config.ts`): `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`. 프록시를 거치는 응답에는 요청마다 nonce가 다른 Content-Security-Policy(`CSP_MODE`)와 https 사이트의 HSTS가 붙는다([security.md](security.md#응답-헤더자원-제한)).
 - 캐시: 파일 바이트는 URL이 같으면 바뀌지 않으므로 재생(`stream`)·썸네일·미리보기·변환 영상은 `private, max-age=1년, immutable`, 다운로드는 `private, no-cache`(한도·횟수 집계를 위해 매번 요청).
 
 ## 에러 코드 (`src/contracts/errors.ts`)
@@ -54,10 +54,11 @@
 | `GET` | `/api/auth/session` | 이 기기에 로그인한 계정 목록, 활성 계정 id, 가입 모드, 활성 계정 사용량 `usage { usedBytes, rootItems, storageBusy }`(`SessionState`). `storageBusy`가 true면 파일을 새 저장소로 옮기는 중이라 변경이 잠시 막힌다(배너 표시). 무효 세션이 있으면 쿠키를 정리한다 |
 | `POST` | `/api/auth/anonymous` | `{ inviteCode? }` → 201 `{ account, token, session }`. 익명 계정을 만들고 이 기기를 로그인시킨다. 토큰은 이 응답에서만 평문으로 나온다 |
 | `POST` | `/api/auth/token` | `{ token }` → `SessionState`. 실패 시 401 `INVALID_TOKEN`, 잠금 시 429 `retryAfter` |
-| `POST` | `/api/auth/reauth` | `{ token }` → `{ confirmed: true }`. 활성 계정의 토큰을 다시 입력해 이 세션의 관리자 작업을 `AUTH.reauthWindowMin`분 동안 허용한다. 틀리면 401 `INVALID_TOKEN`(로그인과 같은 잠금) |
+| `POST` | `/api/auth/reauth` | `{ token }` → `{ confirmed: true }`. 활성 계정의 토큰을 다시 입력해 이 세션의 토큰 보기·재발급, 계정 삭제, 관리자 작업을 `AUTH.reauthWindowMin`분 동안 허용한다. 틀리면 401 `INVALID_TOKEN`(로그인과 같은 잠금) |
+| `POST` | `/api/csp-report` | 브라우저의 CSP 위반 보고(`application/csp-report`, `application/reports+json`). 인증 없음, 16KB까지만 읽고 같은 위반은 1시간에 한 번 경고 로그. 항상 204 |
 | `POST` | `/api/auth/switch` | `{ accountId }` → `SessionState`. 이 기기에 로그인한 다른 계정을 활성화 |
 | `POST` | `/api/auth/signout` | `{ accountId? }`(기본: 활성 계정) → `SessionState`. 세션을 DB에서 폐기 |
-| `GET` | `/api/me/token?accountId=` | 이 기기에 로그인한 계정(기본: 활성 계정)의 전체 토큰(`cache-control: no-store`). 다른 기기의 계정은 404. 관리자 계정 토큰은 최근 재인증이 필요하고(`REAUTH_REQUIRED`) 감사 로그에 남는다 |
+| `GET` | `/api/me/token?accountId=` | 이 기기에 로그인한 계정(기본: 활성 계정)의 전체 토큰(`cache-control: no-store`). 다른 기기의 계정은 404. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 관리자 계정 토큰 보기는 감사 로그에 남는다 |
 | `GET` | `/api/folders/:id` | `id` = `root` 또는 폴더 id. `FolderView { folder, isRoot, path, effectiveVisibility, children }`. 폴더 항목은 하위 전체 크기(`size`)와 직계 항목 수(`itemCount`)를 담는다. 각 항목의 `busy`는 공유 링크 다운로드 혼잡도 배지(`Busy`/`Server busy`/`Downloads paused`, 없으면 null). 다른 계정 폴더는 404 |
 | `POST` | `/api/folders` | `{ parentId, name }` → 201 `{ folder, requestedName, renamed }`. DB와 볼륨에 함께 만든다. 이름이 겹치면 `Name (2)`로 만들고 `renamed: true` |
 | `GET` | `/api/nodes/:id` | Properties 대화상자 정보: 항목, 위치(루트→부모 이름), 실제 공개 범위, 폴더면 하위 파일·폴더 수 |
@@ -84,12 +85,12 @@
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| `POST` | `/api/me/token` | 새 토큰 발급. 기존 토큰은 즉시 무효, 이 기기를 뺀 모든 기기 로그아웃. 새 토큰을 한 번 돌려준다 |
+| `POST` | `/api/me/token` | 새 토큰 발급. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 기존 토큰은 즉시 무효, 이 기기를 뺀 모든 기기 로그아웃. 새 토큰을 한 번 돌려준다 |
 | `GET`·`DELETE` | `/api/me/sessions` | 이 계정에 로그인된 기기 목록(이 기기 먼저) / "Sign out all others" |
 | `DELETE` | `/api/me/sessions/:id` | 다른 기기 하나 로그아웃 |
 | `PATCH` | `/api/me/preferences` | `{ stripMetadataOnShare }` 공개 링크 사진의 위치·카메라 정보 제거 |
 | `POST` | `/api/me/purge` | "Purge now": 만료된 항목(만료 시각이 지났거나 1회 다운로드 후 삭제가 사용됨)을 바로 삭제 → `{ deleted }` |
-| `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃. 관리자 계정은 최근 재인증이 필요하고(`REAUTH_REQUIRED`) 감사 로그에 남으며, 마지막 관리자는 400 `Keep at least one admin` |
+| `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 관리자 계정 삭제는 감사 로그에 남으며, 마지막 관리자는 400 `Keep at least one admin` |
 
 ### 관리자 (`ADMIN_ALLOWED_CIDRS`로 접근 주소 제한 가능)
 

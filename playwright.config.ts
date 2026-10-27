@@ -45,7 +45,8 @@ export default defineConfig({
     ? undefined
     : {
         command: `npm run build && npm run start`,
-        env: { PORT: String(testing.E2E_PORT), HOSTNAME: "127.0.0.1", ENABLE_UI_CATALOG: "true", SIGNUPS_PER_HOUR: "10000" },
+        // CSP enforced, so a blocked script, style or viewer fails the tests (e2e/fixtures.ts).
+        env: { PORT: String(testing.E2E_PORT), HOSTNAME: "127.0.0.1", ENABLE_UI_CATALOG: "true", SIGNUPS_PER_HOUR: "10000", CSP_MODE: "enforce" },
         url: BASE_URL,
         timeout: 240_000,
         reuseExistingServer: !process.env.CI,

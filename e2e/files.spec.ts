@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { newFolder, openFiles } from "./helpers";
 
 test("an empty root shows the design's empty state", async ({ page }) => {

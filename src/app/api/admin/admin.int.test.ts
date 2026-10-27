@@ -212,9 +212,13 @@ describe("admin sessions", () => {
     expect(events.map((event) => [event.action, event.targetId])).toEqual([["account.delete", admin.id]]);
   });
 
-  it("never asks members for their token again", async () => {
+  it("asks members for their token again on an older session, but not right after sign-up", async () => {
     const m = await member();
+    expect((await callRoute(revealToken, { cookie: m.cookie })).status).toBe(200);
+    const token = (await callRoute<{ token: string }>(revealToken, { cookie: m.cookie })).json.data.token;
     await signedInAgo(m.id, (AUTH.reauthWindowMin + 1) * MS.minute);
+    expect((await callRoute(revealToken, { cookie: m.cookie })).json.code).toBe("REAUTH_REQUIRED");
+    expect((await callRoute(reauth, { method: "POST", cookie: m.cookie, body: { token }, ip: randomTestIp() })).status).toBe(200);
     expect((await callRoute(revealToken, { cookie: m.cookie })).status).toBe(200);
   });
 });
