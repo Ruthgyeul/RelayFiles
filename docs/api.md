@@ -36,11 +36,12 @@
 | `ALREADY_SIGNED_IN` | 409 | 로그인 모달에 메시지 표시 |
 | `GONE` | 410 | `/error/410`(삭제된 계정·링크) |
 | `PAYLOAD_TOO_LARGE` | 413 | 토스트 |
-| `UNSUPPORTED_MEDIA` | 415 | 공개 링크에서 위치 정보를 지울 수 없는 사진(HEIC 등). 메시지 표시 |
+| `UNSUPPORTED_MEDIA` | 415 | 공개 링크에서 위치 정보를 지울 수 없는 사진(HEIC 등, 또는 워커가 정리하지 못한 깨진·너무 큰 사진). 메시지 표시 |
 | `RATE_LIMITED` | 429 | `/error/429?retry=<초>&from=<경로>` 또는 모달 카운트다운 |
 | `INTERNAL` | 500 | `error.tsx` |
 | `MAINTENANCE` | 503 | `/error/503` |
 | `STORAGE_OFFLINE` | 503 | `/error/storage-offline` |
+| `MEDIA_NOT_READY` | 503 | 공개 링크 사진의 메타데이터 제거본을 워커가 아직 만들지 않았다. `Retry-After`(`MEDIA.stripPendingRetrySec`) 뒤 다시 요청 |
 | `STORAGE_BUSY` | 503 | 토스트(계정 이동·레이아웃 마이그레이션 중. 탐색·다운로드는 계속됨) |
 | `INSUFFICIENT_STORAGE` | 507 | 토스트 + 용량 배너 |
 
@@ -125,4 +126,4 @@
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일, 링크, 경로 위의 한도·첫 다운로드 후 삭제 항목의 다운로드 수 +1(이어받기 허가는 `rf_dv` 쿠키, `If-Range`가 ETag와 다르면 파일 전체로 판단), "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
 | `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만 |
 
-- 이미지는 계정 설정 "Strip metadata on public links"(기본 켬)일 때 위치·카메라 정보를 지운 사본으로 나간다(워커가 만든 사본, 없으면 요청 시 생성). 지울 수 없는 형식(HEIC 등)은 415로 거절하고, zip에서는 빼고 `Not included.txt`에 이름을 적는다.
+- 이미지는 계정 설정 "Strip metadata on public links"(기본 켬)일 때 위치·카메라 정보를 지운 사본으로 나간다(워커가 만든 사본만, 요청 중에는 이미지를 디코딩하지 않는다). 사본이 아직 없으면 503 `MEDIA_NOT_READY`와 `Retry-After`(다시 큐에 넣는다), 지울 수 없는 형식(HEIC 등)이나 워커가 실패한 파일(`Node.stripFailed`)은 415로 거절한다. zip에서는 빼고 `Not included.txt`에 이유와 함께 적는다.
