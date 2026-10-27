@@ -24,6 +24,15 @@ fi
 RELEASE_PROBE="release-probe"
 compose_images() { RELEASE_TAG="$RELEASE_PROBE" "${COMPOSE[@]}" --profile "*" config --images | sort -u; }
 
+# health_ok URL → true only when /api/health answers with the overall status "ok". A degraded
+# app (storage or Redis missing) still answers 200, so the HTTP status alone is not enough. The
+# flat "components" object is dropped first: its entries carry their own "status"-like values.
+health_ok() {
+  local body
+  body="$(curl -fsS "$1")" || return 1
+  sed 's/"components":{[^}]*}//' <<< "$body" | grep -q '"status":"ok"'
+}
+
 log() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 
 # systemd deployment (docs/deploy-systemd.md): the account that owns the SSD files and runs

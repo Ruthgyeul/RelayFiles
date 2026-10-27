@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Releases the checked-out version: backup → build → maintenance on → migrate (schema and
-# data) → restart → health check → maintenance off → tag :latest → clean up old images
+# data) → restart → health check (status ok) → maintenance off → tag :latest → clean up old images
 # (autoclean.sh, AUTOCLEAN=0 skips it). Run on the server from the repository:
 #   git pull && deploy/scripts/release.sh
 # Rollback: docs/deploy-ubuntu.md ("롤백").
@@ -33,11 +33,12 @@ log "Migrations (schema, data, storage layout)"
 
 log "Restart app, worker and nginx"
 "${COMPOSE[@]}" up -d --no-build app worker nginx
-rm -f "$FLAG"
 
+# Nginx keeps /api/health reachable in maintenance: visitors come back only once it says "ok".
 log "Health check"
 for _ in $(seq 1 "$HEALTH_TRIES"); do
-  if curl -fsS "http://127.0.0.1:$PORT/api/health" > /dev/null; then
+  if health_ok "http://127.0.0.1:$PORT/api/health"; then
+    rm -f "$FLAG"
     echo "$(date -u +%FT%TZ) $RELEASE_TAG" >> "$RELEASES"
     # One-off commands without RELEASE_TAG ($C run --rm tools ...) use :latest, the live release.
     mapfile -t BUILT < <(compose_images | sed -n "s/:$RELEASE_PROBE\$//p")

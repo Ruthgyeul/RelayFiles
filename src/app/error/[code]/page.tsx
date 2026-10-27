@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ERROR_PAGE_CODES, type ErrorPageCode } from "@/contracts/errors";
+import { safeReturnPath } from "@/domain/redirect";
 import { ErrorScreen } from "@/features/errors/ErrorScreen";
 import { ERROR_PRESETS } from "@/features/errors/presets";
 import { RetryCountdown } from "@/features/errors/RetryCountdown";
@@ -24,12 +25,6 @@ export async function generateMetadata({ params }: PageProps<"/error/[code]">): 
   const { code } = await params;
   const preset = isRoutedCode(code) ? ERROR_PRESETS[code] : null;
   return { title: preset ? `${preset.title} · RelayFiles` : "RelayFiles", robots: { index: false } };
-}
-
-/** Only allow same-site relative paths as the retry target (no open redirects). */
-function safeReturnPath(value: string | string[] | undefined): string {
-  const path = Array.isArray(value) ? value[0] : value;
-  return path && path.startsWith("/") && !path.startsWith("//") ? path : "/";
 }
 
 export default async function ErrorCodePage({ params, searchParams }: PageProps<"/error/[code]">) {

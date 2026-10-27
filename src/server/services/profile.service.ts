@@ -7,6 +7,7 @@ import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { deleteAccountRow, lastLoginOf, updatePreferences, type AccountRow } from "../repositories/account.repo";
+import { countAdmins } from "../repositories/admin.repo";
 import { retireLinks } from "../repositories/link-tombstone.repo";
 import { accountUsage, contentCounts, expiredItemIds } from "../repositories/node.repo";
 import { listAccountSessions, revokeAccountSession, revokeOtherSessions } from "../repositories/session.repo";
@@ -92,6 +93,15 @@ export async function purgeExpired(owner: AccountRow, now: Date): Promise<{ dele
  * Deletes the account with its token, sessions and every file. The account folder goes to
  * the volume's trash (purged later), so a failed database delete can be undone.
  */
+/**
+ * "Delete account" on My Profile. The last admin cannot delete itself: the instance would be
+ * left without anyone able to manage accounts, sign-ups or storage.
+ */
+export async function deleteOwnAccount(owner: AccountRow): Promise<void> {
+  if (owner.isAdmin && (await countAdmins(db())) <= 1) throw new ApiError("BAD_REQUEST", "Keep at least one admin");
+  await deleteAccount(owner);
+}
+
 export async function deleteAccount(owner: AccountRow): Promise<void> {
   const driver = await driverForAccount(owner, "write");
   await withStorageTransaction(db(), async (tx, undo) => {

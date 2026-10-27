@@ -123,11 +123,17 @@ server {
     }
 
     location / {
-        # Maintenance mode: touch deploy/maintenance/on (remove it to come back).
-        if (-f /etc/nginx/maintenance/on) { return 503; }
+        # Maintenance mode: touch deploy/maintenance/on (remove it to come back). The health
+        # probe stays reachable so a release can confirm the new version before lifting it.
+        set $relay_maintenance "";
+        if (-f /etc/nginx/maintenance/on) { set $relay_maintenance on; }
+        if ($uri = /api/health) { set $relay_maintenance ""; }
+        if ($relay_maintenance) { return 503; }
         limit_req zone=relay_auth burst=20 nodelay;
         limit_req zone=relay_uploads burst=30 nodelay;
         proxy_pass http://relayfiles_app;
+        # Next.js internals the browser never needs (a proxy rewrite names the upstream address).
+        proxy_hide_header X-Middleware-Rewrite;
         proxy_http_version 1.1;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $relay_client_ip;

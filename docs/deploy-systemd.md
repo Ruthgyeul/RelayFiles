@@ -121,7 +121,7 @@ npm run env:secrets          # 비밀값 5개를 출력만 한다. .env에 붙�
 nano .env
 ```
 
-`/home` 아래에 두면 안 된다. 서비스가 홈 디렉터리를 읽지 못한다(`ProtectHome`). `npm ci`는 배포 사용자로 실행한다(`sudo` 아님). `postinstall`이 Prisma 클라이언트를 만든다. `npm ci`는 devDependencies도 설치해야 한다. 워커(`tsx`)와 마이그레이션(`prisma`)이 그것을 쓰기 때문이다. 그래서 셸에 `NODE_ENV=production`을 export한 상태로 `npm ci`를 실행하지 않는다(`.env`의 `NODE_ENV`는 상관없다).
+`/home` 아래에 두면 안 된다. 서비스가 홈 디렉터리를 읽지 못한다(`ProtectHome`). `npm ci`는 배포 사용자로 실행한다(`sudo` 아님). `postinstall`이 Prisma 클라이언트를 만든다. `npm ci`는 devDependencies도 설치해야 한다. 워커(`tsx`)와 마이그레이션(`prisma`)은 dependencies에 있지만, 체크아웃에서 하는 빌드(`npm run build`)가 Tailwind·TypeScript 같은 devDependencies를 쓰기 때문이다. 그래서 셸에 `NODE_ENV=production`을 export한 상태로 `npm ci`를 실행하지 않는다(`.env`의 `NODE_ENV`는 상관없다).
 
 `env:secrets` 출력(`POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, `COOKIE_SECRET`)은 처음 정한 뒤 바꾸지 않는다. `TOKEN_*`와 `COOKIE_SECRET`을 그냥 바꾸면 모든 계정이 로그인할 수 없게 된다. 바꿀 때는 [runbook.md "비밀값 교체"](runbook.md#비밀값-교체)를 따른다. `.env`는 서버 밖에도 보관한다.
 
@@ -344,7 +344,7 @@ sudo systemctl restart relayfiles-app relayfiles-worker
 journalctl -u relayfiles-app -u relayfiles-worker -f       # 표준 출력
 sudo tail -f /var/log/relayfiles/error.log                  # 앱 로그 (LOG_DIR)
 sudo tail -f /var/log/nginx/relayfiles.error.log
-touch deploy/maintenance/on    # 점검 모드 (모든 요청에 503 정적 페이지), rm으로 해제
+touch deploy/maintenance/on    # 점검 모드 (/api/health를 뺀 모든 요청에 503 정적 페이지), rm으로 해제
 ```
 
 | 하고 싶은 것 | 명령 |
@@ -379,8 +379,8 @@ deploy/scripts/systemd/release.sh
 2. `npm ci`와 `npm run build`를 한다. 그동안 실행 중인 앱은 자기 번들(`.app/current`)로 계속 응답한다.
 3. 새 번들을 `.app/<시각>-<커밋>`에 복사한다(빌드가 복사해 넣은 `.env`는 지운다. 앱은 체크아웃의 `.env`를 읽는다).
 4. 점검 모드를 켜고 마이그레이션을 실행한다: `db:deploy`, `data:migrate`, `storage:migrate`.
-5. `.app/current`를 새 번들로 바꾸고 app과 worker를 재시작한 뒤 점검 모드를 끈다.
-6. `127.0.0.1:6000/api/health`를 확인하고 `DATA_DIR/releases.log`에 기록한다. 번들은 최근 3개만 남긴다.
+5. `.app/current`를 새 번들로 바꾸고 app과 worker를 재시작한다.
+6. 앱 포트의 `/api/health`가 `status: "ok"`를 돌려줄 때까지 확인한 뒤(`degraded`는 실패로 본다) 점검 모드를 끄고 `DATA_DIR/releases.log`에 기록한다. 번들은 최근 3개만 남긴다.
 
 `HEALTH_TRIES`(기본 30, 2초 간격), `BUNDLE_KEEP`(기본 3), `BACKUP_KEEP`(기본 14)으로 동작을 바꿀 수 있다.
 
@@ -395,7 +395,7 @@ deploy/scripts/systemd/release.sh
 | 1 백업 | 아무것도 바뀌지 않았다 | `/srv/relayfiles` 권한, PostgreSQL 접속 확인 후 다시 실행 |
 | 2 `npm ci`·빌드 | 이전 번들이 계속 응답한다. 워커는 재시작 전까지 옛 코드로 돈다 | 로그를 보고 고친 뒤 다시 실행 |
 | 4 마이그레이션 | 스크립트가 끝나면서 점검 모드가 풀리고 이전 번들이 그대로 돈다. 스키마는 실패한 마이그레이션 직전까지 적용됐을 수 있다 | `deploy/scripts/systemd/rf.sh db:deploy`의 출력과 `npx prisma migrate status`로 상태를 본다. 원인을 고친 뒤 다시 `release.sh`. 실패로 표시된 마이그레이션은 `npx prisma migrate resolve --rolled-back <이름>` 후 다시 적용 |
-| 6 헬스 체크 | 새 번들로 바뀌었지만 응답이 없다 | `journalctl -u relayfiles-app -u relayfiles-worker -n 200`으로 원인을 보고, 급하면 아래 롤백 |
+| 6 헬스 체크 | 새 번들로 바뀌었지만 응답이 없거나 `degraded`다. 스크립트가 끝나면서 점검 모드는 풀린다 | `journalctl -u relayfiles-app -u relayfiles-worker -n 200`으로 원인을 보고, 급하면 아래 롤백 |
 
 뷰어 미리보기가 들어간 릴리스로 처음 올릴 때는 한 번 `deploy/scripts/systemd/rf.sh media:backfill -- --previews`를 실행한다.
 
@@ -468,7 +468,7 @@ Node.js, PostgreSQL, Redis, Nginx, ffmpeg는 apt가 관리한다. `sudo apt upgr
 | 로그인 후 바로 풀림 | `PUBLIC_URL`이 https인데 http로 접속 | scheme을 맞춘다(§6) |
 | certbot 설정이 사라짐 | `install.sh`가 사이트를 다시 렌더링했다 | 스크립트가 출력한 `certbot install …` 실행 |
 | 썸네일이 안 생긴다 | 워커가 멈췄거나 ffmpeg 없음 | `systemctl status relayfiles-worker`, `which ffmpeg` → `rf.sh media:backfill` |
-| `npm ci` 후 워커가 `Cannot find package 'tsx'` | devDependencies 없이 설치됐다 | 셸의 `NODE_ENV`를 풀고(`unset NODE_ENV`) `npm ci` |
+| `npm ci` 후 빌드가 `Cannot find module '@tailwindcss/postcss'` 등으로 실패 | devDependencies 없이 설치됐다 | 셸의 `NODE_ENV`를 풀고(`unset NODE_ENV`) `npm ci` |
 
 ## 13. 배포 후 보안 점검
 

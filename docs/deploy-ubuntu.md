@@ -482,12 +482,12 @@ deploy/scripts/release.sh
 2. 이미지 빌드 (태그 = git 커밋)
 3. 점검 모드 켜기 (Nginx가 503 점검 페이지를 보여 준다)
 4. `prisma migrate deploy`, 데이터 마이그레이션(`data:migrate`), 스토리지 레이아웃(`storage:migrate`)
-5. app·worker·nginx 재시작, 점검 모드 끄기
-6. `/api/health` 확인, `DATA_DIR/releases.log`에 기록
+5. app·worker·nginx 재시작
+6. `/api/health`의 `status`가 `ok`가 될 때까지 확인한 뒤(`degraded`는 실패로 본다) 점검 모드를 끄고 `DATA_DIR/releases.log`에 기록. 점검 중에도 Nginx는 `/api/health`만 앱으로 넘긴다
 7. 새 이미지에 `latest` 태그도 붙인다. `RELEASE_TAG` 없이 실행하는 `$C run --rm tools …`가 지금 릴리스 이미지를 쓴다.
 8. `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시를 정리한다([runbook.md](runbook.md#디스크-정리-autoclean)). 정리가 실패해도 릴리스는 그대로 살아 있다. 건너뛰려면 `AUTOCLEAN=0 deploy/scripts/release.sh`.
 
-방문자가 점검 페이지를 보는 시간은 3–5단계뿐이다. 빌드(2단계) 동안에는 이전 버전이 그대로 응답한다.
+방문자가 점검 페이지를 보는 시간은 3–6단계뿐이다. 빌드(2단계) 동안에는 이전 버전이 그대로 응답한다.
 
 환경 변수로 동작을 바꿀 수 있다.
 
@@ -506,7 +506,7 @@ deploy/scripts/release.sh
 | 1 백업 | 아무것도 바뀌지 않았다 | `DATA_DIR/backups` 권한·디스크 여유를 확인하고 다시 실행 |
 | 2 빌드 | 이전 컨테이너가 그대로 돈다 | 빌드 로그를 확인한다. 디스크 부족이면 `deploy/scripts/autoclean.sh` |
 | 4 마이그레이션 | 스크립트가 끝나면서 점검 모드가 풀리고 **이전 앱이 그대로 돈다**. 스키마는 실패한 마이그레이션 직전까지 적용됐을 수 있다 | `$C run --rm tools npx prisma migrate status`로 상태를 본다. 원인을 고친 뒤 다시 `release.sh`. 실패로 표시된 마이그레이션은 `npx prisma migrate resolve --rolled-back <이름>`으로 정리한 뒤 다시 적용한다. 데이터·스토리지 마이그레이션은 저장된 커서·저널에서 이어서 실행된다 |
-| 6 헬스 체크 | 새 컨테이너가 떠 있지만 응답이 없다 | `$C logs --tail 200 app worker`로 원인을 보고, 급하면 아래 롤백 |
+| 6 헬스 체크 | 새 컨테이너가 떠 있지만 응답이 없거나 `degraded`다. 스크립트가 끝나면서 점검 모드는 풀린다 | `$C logs --tail 200 app worker`로 원인을 보고, 급하면 아래 롤백 |
 
 ### 롤백
 
@@ -548,7 +548,7 @@ PostgreSQL 메이저 버전(16 → 17)은 데이터 디렉터리를 그대로 �
 | 정리 작업 | Accounts → Run cleanup now, Server 페이지 Cleanup job의 마지막 실행 시각 |
 | 지표 | Server 페이지 값과 `htop`, `df -h`가 비슷하다 (컨테이너 안에서 재므로 아래 참고) |
 | 앱 중단 | `$C stop app` → Nginx의 "Server unreachable" 페이지 → `$C start app`으로 복구 |
-| 점검 모드 | `touch deploy/maintenance/on` → 모든 요청이 503 "Under maintenance" → `rm`으로 해제 |
+| 점검 모드 | `touch deploy/maintenance/on` → `/api/health`를 뺀 모든 요청이 503 "Under maintenance" → `rm`으로 해제 |
 | 클라이언트 주소 | 다른 기기에서 틀린 토큰으로 5번 로그인하면 그 기기만 잠기고, 이 기기는 로그인된다 (모두가 같이 잠기면 §6 "호스트 Nginx 뒤" 설정 확인) |
 | 관리자 대역 | `ADMIN_ALLOWED_CIDRS` 밖(휴대폰 LTE 등)에서 `/admin`이 403 |
 | 노출 포트 | `ss -tlnp`에 `NGINX_LISTEN_HOST:NGINX_LISTEN_PORT`(과 SSH)만 열려 있다 |

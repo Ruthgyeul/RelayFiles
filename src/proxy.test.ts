@@ -48,7 +48,10 @@ describe("proxy", () => {
     expect(proxy(request("/admin/accounts", { headers: lan })).status).toBe(200);
     const page = proxy(request("/admin/accounts", { headers: wan }));
     expect(page.status).toBe(403);
-    expect(page.headers.get("x-middleware-rewrite")).toContain("/error/403");
+    // Answered here: a rewrite would reach the browser as 200 and expose the upstream address.
+    expect(page.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(await page.text()).toContain("Access denied");
     expect(proxy(request("/api/admin/accounts", { headers: wan })).status).toBe(403);
     expect(proxy(request("/administrator", { headers: wan })).status).toBe(200);
     expect(proxy(request("/files", { headers: wan })).status).toBe(200);
