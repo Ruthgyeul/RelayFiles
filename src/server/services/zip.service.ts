@@ -1,6 +1,7 @@
 import "server-only";
 import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
+import { zipEntryName } from "@/domain/archive";
 import { contentDisposition, zipName } from "@/domain/serving";
 import { db } from "../db/client";
 import { LazyReadable } from "../files/lazy-readable";
@@ -35,11 +36,11 @@ export function zipResponse(entries: readonly ZipEntry[], fileName: string): Res
       return;
     }
     if (entry.folder) {
-      archive.append(Buffer.alloc(0), { name: `${entry.name}/` });
+      archive.append(Buffer.alloc(0), { name: `${zipEntryName(entry.name)}/` });
       return;
     }
     current = new LazyReadable(entry.open);
-    archive.append(current, { name: entry.name });
+    archive.append(current, { name: zipEntryName(entry.name) });
   };
   archive.on("entry", appendNext);
   archive.on("warning", (error) => logger.warn("zip warning", { error }));

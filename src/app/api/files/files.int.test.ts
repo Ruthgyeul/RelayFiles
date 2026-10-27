@@ -73,4 +73,13 @@ describe("zip", () => {
     // Store mode keeps names and contents readable inside the archive.
     for (const text of ["Trip/a.txt", "Trip/empty/", "b.txt", "alpha", "bravo"]) expect(body.includes(Buffer.from(text)), text).toBe(true);
   });
+
+  it("stores backslashes in names as plain characters, so entries cannot climb out of the folder", async () => {
+    const m = await member();
+    const climb = await addFile(m, m.rootId, [], "..\\..\\evil.txt", "x", "text/plain");
+    const req = new NextRequest(`http://localhost/api/zip?ids=${climb}`, { headers: { cookie: `${SESSION_COOKIE}=${m.cookie}` } });
+    const body = Buffer.from(await (await zip(req, { params: Promise.resolve({}) })).arrayBuffer());
+    expect(body.includes(Buffer.from(".._.._evil.txt"))).toBe(true);
+    expect(body.includes(Buffer.from("../"))).toBe(false);
+  });
 });
