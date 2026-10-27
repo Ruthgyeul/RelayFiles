@@ -8,6 +8,7 @@ import { GET as listAccounts } from "@/app/api/admin/accounts/route";
 import { POST as cleanup } from "@/app/api/admin/cleanup/route";
 import { GET as audit } from "@/app/api/admin/audit/route";
 import { POST as reauth } from "@/app/api/auth/reauth/route";
+import { DELETE as deleteMe } from "@/app/api/me/route";
 import { GET as session } from "@/app/api/auth/session/route";
 import { POST as tokenSignIn } from "@/app/api/auth/token/route";
 import { GET as revealToken } from "@/app/api/me/token/route";
@@ -185,6 +186,30 @@ describe("admin sessions", () => {
     await signedInAgo(m.id, AUTH.adminSessionDays * DAY + MS.minute);
     expect((await callRoute<SessionState>(session, { cookie: admin.cookie })).json.data.activeAccountId).toBeNull();
     expect((await callRoute<SessionState>(session, { cookie: m.cookie })).json.data.activeAccountId).toBe(m.id);
+  });
+
+  it("lets an admin delete its own account only after re-entering the token, never the last admin", async () => {
+    const admin = await signedInAdmin();
+    await signedInAgo(admin.id, (AUTH.reauthWindowMin + 1) * MS.minute);
+    const asked = await callRoute(deleteMe, { method: "DELETE", cookie: admin.cookie });
+    expect([asked.status, asked.json.code]).toEqual([403, "REAUTH_REQUIRED"]);
+    expect((await callRoute(reauth, { method: "POST", cookie: admin.cookie, body: { token: admin.token }, ip: randomTestIp() })).status).toBe(200);
+
+    const others = await prisma.account.findMany({ where: { isAdmin: true, id: { not: admin.id } }, select: { id: true } });
+    await prisma.account.updateMany({ where: { id: { in: others.map((other) => other.id) } }, data: { isAdmin: false } });
+    try {
+      const last = await callRoute(deleteMe, { method: "DELETE", cookie: admin.cookie });
+      expect([last.status, last.json.error]).toEqual([400, "Keep at least one admin"]);
+    } finally {
+      await prisma.account.updateMany({ where: { id: { in: others.map((other) => other.id) } }, data: { isAdmin: true } });
+    }
+
+    // Another admin exists from here on (signedInAdmin creates one per test).
+    admins.push((await createAdminAccount()).account.id);
+    expect((await callRoute(deleteMe, { method: "DELETE", cookie: admin.cookie })).status).toBe(200);
+    expect(await prisma.account.findUnique({ where: { id: admin.id } })).toBeNull();
+    const events = await prisma.auditEvent.findMany({ where: { actorId: admin.id } });
+    expect(events.map((event) => [event.action, event.targetId])).toEqual([["account.delete", admin.id]]);
   });
 
   it("never asks members for their token again", async () => {
