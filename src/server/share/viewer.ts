@@ -6,18 +6,21 @@ import { currentDevice, deviceOf } from "../auth/current";
 import type { DeviceSession } from "../auth/device-session";
 import type { ShareViewer } from "../services/share.service";
 import { decodeUnlocks, UNLOCK_COOKIE } from "./unlock-cookie";
+import { VISITOR_COOKIE, visitorIdOf } from "./visitor-cookie";
 
-const viewerOf = (device: DeviceSession, unlockCookie: string | undefined, now: number): ShareViewer => ({
+const viewerOf = (device: DeviceSession, unlockCookie: string | undefined, visitorCookie: string | undefined, now: number): ShareViewer => ({
   accountIds: device.accounts.map((entry) => entry.account.id),
   unlocks: decodeUnlocks(unlockCookie, cookieSecrets(), now),
+  visitorId: visitorIdOf(visitorCookie),
 });
 
 /** The visitor of a share route handler. */
 export async function shareViewerOf(req: NextRequest, now: number): Promise<ShareViewer> {
-  return viewerOf(await deviceOf(req), req.cookies.get(UNLOCK_COOKIE)?.value, now);
+  return viewerOf(await deviceOf(req), req.cookies.get(UNLOCK_COOKIE)?.value, req.cookies.get(VISITOR_COOKIE)?.value, now);
 }
 
 /** The visitor of the share page (server component). */
 export async function currentShareViewer(now: number): Promise<ShareViewer> {
-  return viewerOf(await currentDevice(), (await cookies()).get(UNLOCK_COOKIE)?.value, now);
+  const jar = await cookies();
+  return viewerOf(await currentDevice(), jar.get(UNLOCK_COOKIE)?.value, jar.get(VISITOR_COOKIE)?.value, now);
 }

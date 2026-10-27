@@ -61,13 +61,20 @@ export function isUnlocked(unlocks: Unlocks, linkId: string, passwordHash: strin
   });
 }
 
-/** Adds a link (valid for SHARE.unlockHours, for its current password) and returns the new cookie value. */
-export function addUnlock(current: Unlocks, linkId: string, passwordHash: string | null, secret: string, now: number): string {
+/** Adds links (each valid for SHARE.unlockHours, for its current password) and returns the new cookie value. */
+export function unlocksWith(current: Unlocks, links: readonly { linkId: string; passwordHash: string | null }[], secret: string, now: number): string {
   const next = new Map(current);
-  next.delete(linkId);
-  next.set(linkId, { until: Math.floor(now / SECOND) + SHARE.unlockHours * HOUR_SECONDS, tag: passwordTag(passwordHash, secret) });
+  for (const { linkId, passwordHash } of links) {
+    next.delete(linkId);
+    next.set(linkId, { until: Math.floor(now / SECOND) + SHARE.unlockHours * HOUR_SECONDS, tag: passwordTag(passwordHash, secret) });
+  }
   const entries = [...next.entries()].slice(-MAX_LINKS).map(([id, { until, tag }]) => [id, until, tag]);
   return encodeSigned({ v: 2, u: entries }, secret, PURPOSE);
+}
+
+/** Adds one link (valid for SHARE.unlockHours, for its current password) and returns the new cookie value. */
+export function addUnlock(current: Unlocks, linkId: string, passwordHash: string | null, secret: string, now: number): string {
+  return unlocksWith(current, [{ linkId, passwordHash }], secret, now);
 }
 
 export const UNLOCK_COOKIE_MAX_AGE = SHARE.unlockHours * HOUR_SECONDS;

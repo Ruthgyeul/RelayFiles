@@ -2,8 +2,8 @@ import "server-only";
 import { Readable } from "node:stream";
 import { SHARE } from "@/config/policy";
 import { PREFETCH_HEADER } from "@/contracts/api";
-import { parseRange, zipName } from "@/domain/serving";
-import { downloadDecision, streamReach, withinReach, type DownloadBlock } from "@/domain/share-access";
+import { effectiveRange, zipName } from "@/domain/serving";
+import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadBlock, type DownloadDecision } from "@/domain/share-access";
 import type { NodeKind } from "@/domain/tree";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
@@ -23,6 +23,7 @@ import { addTraffic } from "../repositories/traffic.repo";
 import { busyLevels, recordDownload } from "../share/busy";
 import { grantDownload, hasDownloadGrant } from "../share/download-grant";
 import { logLinkEvent } from "../share/events";
+import { newVisitorId, setVisitorCookie } from "../share/visitor-cookie";
 import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driver";
 import { downloadBlockOf, resolveSharedFile, resolveSharedTree, type LoadedLink, type SharedFile, type ShareViewer } from "./share.service";
 import { driverForAccount } from "./volume.service";
@@ -78,19 +79,32 @@ async function publicImage(driver: StorageDriver, location: StorageLocation, row
 const kindOf = (row: Pick<SharedRow, "kind">) => (row.kind ? (row.kind.toLowerCase() as NodeKind) : null);
 
 /**
- * Counts a visitor's download start on the file and the link (atomically against their
- * limits), lets the same visitor resume it, and records it for the busy level and activity.
+ * Counts a visitor's download start on the file, the link and every item on the way that
+ * limits downloads (atomically against their limits), lets this browser resume it, and
+ * records it for the busy level and activity. Returns the visitor id the grant belongs to.
  */
-async function countSharedDownload(file: SharedFile, client: ClientInfo, now: number): Promise<void> {
-  const { link, row } = file;
-  const counted = await claimDownload(db(), [
-    { id: row.id, burn: false },
-    { id: link.root.id, burn: true },
-  ]);
-  if (!counted) throw new ApiError("FORBIDDEN", "Download limit reached");
-  await grantDownload(row.id, client.ipKey);
+async function countSharedDownload(file: SharedFile, viewer: ShareViewer, client: ClientInfo, now: number): Promise<string> {
+  const { row } = file;
+  if (!(await claimDownload(db(), file.counted))) throw new ApiError("FORBIDDEN", "Download limit reached");
+  const visitorId = viewer.visitorId ?? newVisitorId();
+  await grantDownload(row.id, visitorId);
   await recordDownload(file.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
   void logLinkEvent(row, "DOWNLOAD", client);
+  return visitorId;
+}
+
+/** Applies a download decision; returns a new visitor id when one was created for the grant. */
+async function applyDecision(decision: DownloadDecision, file: SharedFile, viewer: ShareViewer, client: ClientInfo, now: number): Promise<string | null> {
+  switch (decision) {
+    case "count": {
+      const visitorId = await countSharedDownload(file, viewer, client, now);
+      return visitorId === viewer.visitorId ? null : visitorId;
+    }
+    case "deny":
+      throw new ApiError("FORBIDDEN", "Start the download again.");
+    case "allow":
+      return null;
+  }
 }
 
 /** A visitor's playback (`stream`) or download of a file inside a share link. */
@@ -103,37 +117,34 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   const location = { accountId: owner.id, segments: file.segments };
   const body = stripsImage(owner, row) ? await publicImage(driver, location, row) : undefined;
   const size = body ? body.size : Number(row.size);
-  // The same Range header Nginx applies when it sends the bytes (X-Accel).
-  const range = parseRange(req.headers.get("range"), size);
+  const etag = row.sha256 ? `${row.sha256}${body ? "-public" : ""}` : null;
+  // What this response will cover, as sendFile and Nginx (X-Accel) decide it: Range, unless a
+  // non-matching If-Range asks for the whole file.
+  const range = effectiveRange(req.headers.get("range"), req.headers.get("if-range"), etag, size);
 
+  let newVisitor: string | null = null;
   if (mode === "download") {
-    const granted = !link.isOwner && range !== null && range !== "unsatisfiable" && range.start > 0 && (await hasDownloadGrant(row.id, client.ipKey));
-    switch (downloadDecision({ method: req.method, range, owner: link.isOwner, granted })) {
-      case "count":
-        await countSharedDownload(file, client, now);
-        break;
-      case "deny":
-        throw new ApiError("FORBIDDEN", "Start the download again.");
-      case "allow":
-        break;
-    }
+    const granted = !link.isOwner && range !== null && range !== "unsatisfiable" && range.start > 0 && (await hasDownloadGrant(row.id, viewer.visitorId));
+    newVisitor = await applyDecision(downloadDecision({ method: req.method, range, owner: link.isOwner, granted }), file, viewer, client, now);
   } else if (!link.isOwner) {
     // Playback reads what the viewer needs, not a second (uncounted) download of any file.
     const reach = streamReach(row.name, kindOf(row));
     if (reach === null) throw new ApiError("NOT_FOUND");
     if (!withinReach(reach, range, size)) throw new ApiError("FORBIDDEN", "Use Download to get the whole file.");
+    // A file under a download limit or delete-after-download: playing it counts as well.
+    if (file.limited) newVisitor = await applyDecision(limitedStreamDecision({ method: req.method, range, granted: await hasDownloadGrant(row.id, viewer.visitorId) }), file, viewer, client, now);
     // Videos and audio are played; pictures and documents are looked at.
     const start = req.method === "GET" && (range === null || (range !== "unsatisfiable" && range.start === 0));
     if (start) void logLinkEvent(row, row.kind === "VIDEO" || row.kind === "AUDIO" ? "PLAY" : "VIEW", client);
   }
   if (mode === "stream" && req.method === "GET") void markActive("stream", `${row.id}:${client.ipKey}`);
-  return sendFile(req, {
+  const response = await sendFile(req, {
     driver,
     location,
     name: row.name,
     mime: row.mime ?? mimeFromName(row.name),
     size,
-    etag: row.sha256 ? `${row.sha256}${body ? "-public" : ""}` : null,
+    etag,
     mode,
     body,
     rateLimit: file.busy.level === 1 ? SHARE.throttledBytesPerSec : undefined,
@@ -142,6 +153,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
       addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
     },
   });
+  return newVisitor ? setVisitorCookie(response, newVisitor) : response;
 }
 
 /**
@@ -247,10 +259,7 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   plan.walk();
 
   if (!link.isOwner) {
-    const claimed = await claimDownload(db(), [
-      { id: folder.id, burn: false },
-      { id: link.root.id, burn: true },
-    ]);
+    const claimed = await claimDownload(db(), shared.counted);
     if (!claimed) throw new ApiError("FORBIDDEN", "Download limit reached");
     // A file at its limit by now (a download finished meanwhile) is left out like one already used up.
     const included = plan.files.filter((file) => file.skip === null);

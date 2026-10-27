@@ -1,27 +1,31 @@
 import "server-only";
 import { verify } from "@node-rs/argon2";
-import { getAppEnv } from "@/config/env";
+import { getAppEnv, getEnv } from "@/config/env";
 import { MS, SHARE } from "@/config/policy";
 import type { ShareCrumb, ShareItem, SharePage, ShareView } from "@/contracts/share";
-import { shareStatus, busyBadge, type Busy, type ShareStatus } from "@/domain/share";
+import { deletionDate } from "@/domain/account";
+import { shareStatus, busyBadge, strictestGuard, type Busy, type ShareStatus } from "@/domain/share";
 import { downloadBlock, type DownloadBlock } from "@/domain/share-access";
 import { effectiveVisibility, settingTags, sortNodes, type NodeKind, type SettingTag, type Visibility } from "@/domain/tree";
 import type { ClientInfo } from "../auth/client-info";
 import { cookieSecrets } from "../auth/keys";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
-import { ancestorChain, type NodeRow } from "../repositories/node.repo";
+import { findAccountById } from "../repositories/account.repo";
+import type { NodeRow } from "../repositories/node.repo";
 import { isRetiredLink } from "../repositories/link-tombstone.repo";
-import { findByLinkId, publicTree, sharedChain, type SharedRow } from "../repositories/share.repo";
+import { findByLinkId, publicTree, sharedChain, type ChainRow, type SharedRow } from "../repositories/share.repo";
 import { countInWindow, redis } from "../redis";
 import { busyLevels } from "../share/busy";
-import { addUnlock, isUnlocked, type Unlocks } from "../share/unlock-cookie";
+import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "../share/unlock-cookie";
 
 /** Who is looking at a share link. */
 export interface ShareViewer {
   /** Accounts signed in on this device (the owner sees the visitor preview bar). */
   accountIds: readonly string[];
   unlocks: Unlocks;
+  /** The browser's share visitor id (`rf_dv`), which resumed downloads are granted to. */
+  visitorId: string | null;
 }
 
 const lower = <T extends string>(value: T) => value.toLowerCase() as Lowercase<T>;
@@ -29,25 +33,47 @@ const kindOf = (row: { kind: string | null }) => (row.kind ? (lower(row.kind) as
 
 export const shareUrl = (linkId: string) => `${getAppEnv().PUBLIC_URL}/d/${linkId}`;
 
-/** A link's settings, owner and status. Null when no item has this link. */
+/** Items on the way that carry link settings (the account's root folder never does). */
+const guardedPart = (chain: readonly ChainRow[]) => chain.slice(1);
+
+/**
+ * A link's settings, owner and status. Null when no item has this link. The status follows
+ * the strictest settings from the account root down to the shared item (`strictestGuard`):
+ * a folder above it that expired, was downloaded once as delete-after-download or has a
+ * password closes or locks this link too, and so does the owner's account reaching its
+ * deletion date.
+ */
 export async function loadLink(linkId: string, viewer: ShareViewer, now: number) {
   const root = await findByLinkId(db(), linkId);
   if (!root) return null;
-  const chain = await ancestorChain(db(), root.id);
+  const [chain, owner] = await Promise.all([sharedChain(db(), root.id), findAccountById(db(), root.accountId)]);
+  if (!owner) return null;
   const visibility = effectiveVisibility(chain.map((row) => lower(row.visibility) as Visibility).reverse());
-  const status: ShareStatus = shareStatus(
-    {
-      expAt: root.expAt?.getTime() ?? null,
-      burn: root.burn,
-      downloads: root.downloads,
-      downloadLimit: root.downloadLimit,
-      effectiveVisibility: visibility,
-      hasPassword: root.passwordHash !== null,
-      unlocked: isUnlocked(viewer.unlocks, linkId, root.passwordHash, cookieSecrets()),
-    },
-    now,
+  const guard = strictestGuard(
+    guardedPart(chain).map((row) => ({
+      expAt: row.expAt?.getTime() ?? null,
+      burn: row.burn,
+      downloads: row.downloads,
+      hasPassword: row.passwordHash !== null,
+      unlocked: isUnlocked(viewer.unlocks, row.linkId, row.passwordHash, cookieSecrets()),
+    })),
+    deletionDate(owner, getEnv("policy").ACCOUNT_TTL_DAYS)?.getTime() ?? null,
   );
-  return { root, chain, status, isOwner: viewer.accountIds.includes(root.accountId) };
+  const status: ShareStatus = guard.burnUsed
+    ? "expired"
+    : shareStatus(
+        {
+          expAt: guard.expAt,
+          burn: root.burn,
+          downloads: root.downloads,
+          downloadLimit: root.downloadLimit,
+          effectiveVisibility: visibility,
+          hasPassword: guard.hasPassword,
+          unlocked: guard.unlocked,
+        },
+        now,
+      );
+  return { root, chain, owner, status, isOwner: viewer.accountIds.includes(root.accountId) };
 }
 
 export type LoadedLink = NonNullable<Awaited<ReturnType<typeof loadLink>>>;
@@ -98,6 +124,7 @@ export function downloadBlockOf(row: SharedRow, root: Pick<NodeRow, "access">, b
     streamOnly: row.access === "STREAM",
     downloadLimit: row.downloadLimit,
     downloads: row.downloads,
+    burn: row.burn,
     busyLevel: busy?.level ?? 0,
   });
 }
@@ -105,7 +132,7 @@ export function downloadBlockOf(row: SharedRow, root: Pick<NodeRow, "access">, b
 /** The open share page for a folder inside the link (or the shared file). Null if not inside. */
 async function buildView(link: LoadedLink, folderId: string | null, now: number): Promise<ShareView | null> {
   const { root } = link;
-  const tree = await publicTree(db(), root.id);
+  const tree = await publicTree(db(), root.id, new Date(now));
   const { byId, children, sizeOf } = indexTree(tree);
   const rootRow = byId.get(root.id)!;
   const fileLink = root.type === "FILE";
@@ -167,7 +194,9 @@ export async function sharePage(linkId: string, folderId: string | null, viewer:
     linkId,
     url: shareUrl(linkId),
     status,
-    name: root.name,
+    // Only a link the visitor may open (or unlock) names its item: a private, expired or
+    // used-up link says nothing about what it held.
+    name: status === "open" || status === "locked" || isOwner ? root.name : "",
     owner: isOwner ? ownerLinks(link) : null,
     view,
   };
@@ -216,8 +245,22 @@ export interface SharedFile {
   path: string[];
   /** Folder names from the account root down to the file. */
   segments: string[];
+  /**
+   * Items a visitor's download is counted on: the file, the link, and every item on the way
+   * with its own download limit or delete-after-download (all checked by `claimDownload`).
+   */
+  counted: string[];
+  /** One of them limits downloads, so playback is counted too (`limitedStreamDecision`). */
+  limited: boolean;
   busy: Busy;
 }
+
+/** Items that limit downloads themselves: a download limit, or delete after the first download. */
+export const limitingIds = (rows: readonly Pick<SharedRow, "id" | "burn" | "downloadLimit">[]) =>
+  rows.filter((row) => row.burn || (row.downloadLimit !== null && row.downloadLimit > 0)).map((row) => row.id);
+
+/** An item below the link that visitors of the link may not reach: private, protected by its own password, or expired. */
+const closedBelowLink = (row: ChainRow, now: number) => row.visibility === "PRIVATE" || row.passwordHash !== null || (row.expAt !== null && row.expAt.getTime() <= now);
 
 /**
  * Checks that a visitor may play or download a file through a link: the link is open, the
@@ -232,9 +275,11 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
   const chain = await sharedChain(db(), nodeId);
   const rootAt = chain.findIndex((at) => at.id === link.root.id);
   const row = chain.at(-1);
-  // Inside the link, and nothing between the link and the file is private (as in publicTree).
-  if (!row || row.id !== nodeId || row.type !== "FILE" || rootAt < 0 || chain.slice(rootAt + 1).some((at) => at.visibility === "PRIVATE")) throw new ApiError("NOT_FOUND");
+  // Inside the link, and nothing between the link and the file is closed to it (as in publicTree).
+  if (!row || row.id !== nodeId || row.type !== "FILE" || rootAt < 0 || chain.slice(rootAt + 1).some((at) => closedBelowLink(at, now))) throw new ApiError("NOT_FOUND");
   const path = chain.slice(rootAt).map((at) => at.id);
+  const guarded = limitingIds(guardedPart(chain));
+  const counted = [...new Set([row.id, link.root.id, ...guarded])];
   const busy = (await busyLevels([{ id: row.id, dlPaused: row.dlPaused || link.root.dlPaused }], now)).get(row.id)!;
   if (purpose === "download") {
     switch (downloadBlockOf(row, link.root, busy)) {
@@ -248,7 +293,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
         break;
     }
   }
-  return { link, row, path, segments: chain.slice(1).map((ancestor) => ancestor.name), busy };
+  return { link, row, path, segments: chain.slice(1).map((ancestor) => ancestor.name), counted, limited: guarded.length > 0, busy };
 }
 
 /** Visible items of a link for "Download all" (zip), with the same checks as single downloads. */
@@ -257,7 +302,7 @@ export async function resolveSharedTree(linkId: string, folderId: string, viewer
   if (!link) throw await missingLinkError(linkId);
   if (link.status !== "open") throw statusError(link.status);
   if (link.root.access === "STREAM") throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
-  const tree = await publicTree(db(), link.root.id);
+  const tree = await publicTree(db(), link.root.id, new Date(now));
   const { byId, children } = indexTree(tree);
   const folder = byId.get(folderId);
   if (!folder) throw new ApiError("NOT_FOUND");
@@ -265,23 +310,36 @@ export async function resolveSharedTree(linkId: string, folderId: string, viewer
   if (busy.level === 2) throw busyError(busy, now);
   const path: string[] = [];
   for (let at: SharedRow | undefined = folder; at; at = at.id === link.root.id ? undefined : byId.get(at.parentId ?? "")) path.unshift(at.id);
-  return { link, folder, children, byId, path, busy };
+  // Counted for a "Download all" like a single download: the folder, the link and every item
+  // on the way that limits downloads (the files inside are counted one by one).
+  const counted = [...new Set([folder.id, link.root.id, ...limitingIds(guardedPart(link.chain)), ...limitingIds(path.map((id) => byId.get(id)!))])];
+  return { link, folder, children, byId, path, counted, busy };
 }
 
 /**
- * Checks a link password. Wrong guesses are limited per link and address; a correct one
- * returns the new unlock cookie value (the password itself is never stored client-side).
+ * Checks a password for a link. The link may need several (its own and those of folders
+ * above it): the one entered unlocks every item on the way it belongs to, and the page asks
+ * again while others are missing. Wrong guesses are limited per link and address; a correct
+ * one returns the new unlock cookie value (the password itself is never stored client-side).
  */
 export async function unlockShare(linkId: string, password: string, viewer: ShareViewer, client: ClientInfo, now: number): Promise<string> {
   const link = await loadLink(linkId, viewer, now);
   if (!link || link.status === "private") throw new ApiError("NOT_FOUND");
-  const secret = cookieSecrets()[0]!;
-  if (!link.root.passwordHash) return addUnlock(viewer.unlocks, linkId, null, secret, now);
+  const secrets = cookieSecrets();
+  const locked = guardedPart(link.chain).filter((row) => row.passwordHash !== null && !isUnlocked(viewer.unlocks, row.linkId, row.passwordHash, secrets));
+  if (locked.length === 0) return addUnlock(viewer.unlocks, linkId, link.root.passwordHash, secrets[0]!, now);
 
   const key = `unlock:${linkId}:${client.ipKey}`;
   const attempts = await countInWindow(key, SHARE.unlockWindowSec);
   if (attempts > SHARE.unlockMaxAttempts) throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(key)) });
-  if (!(await verify(link.root.passwordHash, password))) throw new ApiError("FORBIDDEN", "Wrong password");
+  const matching: ChainRow[] = [];
+  for (const row of locked) if (await verify(row.passwordHash!, password)) matching.push(row);
+  if (matching.length === 0) throw new ApiError("FORBIDDEN", "Wrong password");
   await redis().del(key);
-  return addUnlock(viewer.unlocks, linkId, link.root.passwordHash, secret, now);
+  return unlocksWith(
+    viewer.unlocks,
+    matching.map((row) => ({ linkId: row.linkId, passwordHash: row.passwordHash })),
+    secrets[0]!,
+    now,
+  );
 }

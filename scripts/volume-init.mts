@@ -40,7 +40,9 @@ if (root !== resolve(storage.STORAGE_ROOT)) {
     // Nginx opens the file again after the app's lstat check: refuse symlinks below the volume root.
     `    disable_symlinks on from=${root};\n` +
     // Cache-Control comes from the app (kept by X-Accel-Redirect); a second one would disable caching.
-    `    add_header X-Content-Type-Options nosniff always;\n}\n`;
+    `    add_header X-Content-Type-Options nosniff always;\n` +
+    // The app's ETag, which resumed downloads send back in If-Range (see default.conf.template).
+    `    etag off;\n    add_header ETag $upstream_http_etag;\n}\n`;
   try {
     await writeFile(new URL(`../${name}`, import.meta.url), location);
     console.log(`Nginx location written to ${name}.`);
