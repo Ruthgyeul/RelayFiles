@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Releases the checked-out version on the systemd deployment: backup → npm ci → build →
 # copy the bundle to .app/<release> → maintenance on → migrate (schema, data, storage
-# layout) → switch .app/current → restart → maintenance off → health check.
+# layout) → switch .app/current → restart → health check (status ok) → maintenance off.
 # Run on the server from the checkout, as the user who owns it:
 #   git pull && deploy/scripts/systemd/release.sh
 # The running app keeps serving from its own bundle while the new one builds.
@@ -49,11 +49,12 @@ log "Switch to $RELEASE and restart"
 ln -sfn "$RELEASE" "$APP_BUNDLES/current.next"
 mv -T "$APP_BUNDLES/current.next" "$APP_BUNDLES/current"
 sudo systemctl restart relayfiles-app relayfiles-worker
-rm -f "$FLAG"
 
+# Checked on the app port, past Nginx: visitors come back only once it says "ok".
 log "Health check"
 for _ in $(seq 1 "$HEALTH_TRIES"); do
-  if curl -fsS "http://127.0.0.1:$PORT/api/health" > /dev/null; then
+  if health_ok "http://127.0.0.1:$PORT/api/health"; then
+    rm -f "$FLAG"
     echo "$(date -u +%FT%TZ) $RELEASE" >> "$RELEASES"
     # Keep the newest bundles (the current one is always among them).
     keep_newest "$APP_BUNDLES/[0-9]*-*" "$KEEP"
