@@ -2,7 +2,7 @@ import "server-only";
 import { getEnv } from "@/config/env";
 import type { TokenKeys } from "./token-crypto";
 
-/** Token encryption and lookup keys, including the previous ones during rotation (docs/plan.md §13.8 ⑥). */
+/** Token encryption and lookup keys, including the previous ones during rotation (docs/runbook.md "비밀값 교체"). */
 export function tokenKeys(): TokenKeys {
   const env = getEnv("secrets");
   return {

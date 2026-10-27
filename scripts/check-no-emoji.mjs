@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fails when pictographic emoji appear in source or deploy files.
- * Icons must be SVG components (see docs/plan.md §3.2). Typographic symbols used by
+ * Icons must be SVG components (CLAUDE.md "디자인 구현 규칙"). Typographic symbols used by
  * the design (© ® ™ · … → ← ↑ ↓ ⌘ ∞ •) are not pictographic and stay allowed.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";

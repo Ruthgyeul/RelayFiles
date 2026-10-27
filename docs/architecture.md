@@ -1,6 +1,6 @@
 # 아키텍처
 
-전체 설계 근거는 [`plan.md`](plan.md) §4를 본다. 이 문서는 코드를 쓸 때 지켜야 하는 구조 규칙만 정리한다.
+코드를 쓸 때 지켜야 하는 구조 규칙을 정리한다. 보안 모델은 [security.md](security.md), API 계약은 [api.md](api.md), 디자인 수치는 [design/spec.md](design/spec.md), 운영 절차는 [runbook.md](runbook.md)를 본다.
 
 ## 레이어
 
@@ -72,4 +72,55 @@ route handler (src/app/api/**/route.ts): 인증(deviceOf/requireActive), zod 파
 |---|---|---|
 | `StorageDriver` | `LocalVolumeDriver` (외장 SSD, 볼륨 여러 개) | `S3Driver` (MinIO/R2) |
 
-지표(`systeminformation`), 위치(Cloudflare 헤더), 시각(`now` 인자)은 아직 인터페이스로 나누지 않았다.
+지표(`systeminformation`), 위치(Cloudflare 헤더)는 인터페이스 없이 직접 쓴다. 시각은 함수의 `now` 인자로 받아 테스트에서 고정한다.
+
+## 데이터 저장소
+
+| 저장소 | 담는 것 | 원천 여부 |
+|---|---|---|
+| PostgreSQL 16 | 계정, 세션, 노드 인덱스(트리, 설정, 태그, 링크), 이벤트 로그, 집계, 서버 설정 | 원천 |
+| 스토리지 볼륨 (외장 SSD) | 사용자 원본 파일, 썸네일·제거본·미리보기, 업로드 임시 조각, 휴지통 | 원천 (파일 바이트) |
+| Redis 7 | 로그인·가입·비밀번호 시도 카운터, 다운로드 혼잡도, 업로드 배치·예약, 캐시, BullMQ 큐 | 파생 (언제 비워져도 된다) |
+
+- Redis에는 다시 만들 수 있는 값만 둔다. 캐시는 `server/cache/`의 `cached(key, ttl, loader)`로만 읽고, TTL과 변경 시 무효화를 함께 쓴다.
+- 데이터 모델은 `prisma/schema.prisma`가 기준이다.
+
+## 스토리지
+
+볼륨 하나 = 마운트된 디스크 하나. 디렉터리 구조는 `server/storage/layout.ts`가 기준이다.
+
+```
+<볼륨 루트>/
+├─ .relayfiles-volume          볼륨 표시 파일 {volumeId, layoutVersion}
+├─ users/<accountId>/…         계정의 루트 폴더. 앱의 폴더 트리와 1:1, 원본 바이트 그대로
+└─ system/                     사용자 영역과 분리 (tmp/uploads, thumbs, derived, previews, trash)
+```
+
+- 디렉터리 이름은 바뀌지 않는 accountId다. 물리 경로는 볼륨 루트 + `users/<accountId>` + 조상 노드 이름으로 서버가 계산한다. 경로 문자열을 클라이언트에서 받지 않는다.
+- PostgreSQL은 인덱스, 디스크는 파일의 원천이다. 이름 변경·이동은 같은 파일시스템 안의 `rename` 한 번이다. DB와 디스크를 함께 바꾸는 작업은 `withStorageTransaction`으로 감싸고, DB가 실패하면 파일 작업을 역순으로 되돌린다.
+- 볼륨 표시 파일이 없거나 `layoutVersion`이 코드와 다르면 그 볼륨에 쓰지 않는다(빈 마운트 지점에 쓰는 사고 방지). 워커가 `VOLUME_WATCH_INTERVAL_SEC`마다 확인해 `ACTIVE` ↔ `OFFLINE`을 바꾼다.
+- 계정은 볼륨 하나에 속하고, 새 계정은 여유 공간이 가장 큰 `ACTIVE` 볼륨에 배정된다. `StorageVolume.mountPath`에 마운트 경로를 저장하므로 경로를 바꾸면 `volume:init`으로 갱신한다.
+- 원본 파일은 수정하지 않는다. 공개 링크용 메타데이터 제거본과 미리보기는 `system/` 아래 별도 파일이다.
+
+## 설정과 환경 변수
+
+- 정책 값(기간, 임계값, 크기)은 `src/config/policy.ts`에 이름을 붙여 둔다. 배포마다 다른 값(포트, 호스트, 경로, 도메인, 비밀값)은 env로 빼고, env는 `policy.ts`의 기본값을 덮어쓰기만 한다.
+- 앱은 `src/config/env.ts`의 그룹별 getter(`getAppEnv()`, `getEnv("database")` 등)로만 env를 읽는다. 그룹(`app`, `database`, `redis`, `storage`, `uploads`, `secrets`, `policy`, `jobs`, `observability`, `deploy`, `testing`)은 처음 쓰일 때 검증되므로, 빌드는 DB 비밀번호 없이 통과하고 실행 시 빠진 키는 목록으로 바로 실패한다.
+- 커밋되는 env 파일은 `.env.example` 하나다. 스키마의 키 집합과 `.env.example`의 키 집합이 같은지 `env.test.ts`가 검사하므로, 새 설정은 두 곳을 같은 PR에서 바꾼다.
+- compose는 `${VAR}`, Nginx 설정은 템플릿(Docker: nginx 이미지의 envsubst, systemd: `scripts/render-template.mjs`)으로 같은 `.env` 값을 쓴다. 코드·compose·Nginx 설정에 값을 하드코딩하지 않는다.
+- `DATABASE_URL`, `REDIS_URL`은 개별 키를 `${VAR}`로 조합한다(Next `@next/env`, Docker Compose, Prisma 설정이 같은 `.env`를 읽는다).
+
+## 버전 관리 (호환성 규칙)
+
+운영 중에 바뀌는 형식은 버전을 붙이고, 다시 실행해도 안전하게, 중단 후 이어서 할 수 있게 바꾼다.
+
+| 대상 | 규칙 | 절차 |
+|---|---|---|
+| DB 스키마 | expand → migrate → contract. 파괴적 SQL에는 `-- relayfiles: contract <이유>` | [runbook.md "DB 스키마"](runbook.md#db-스키마-prisma) |
+| 데이터 값 | `src/server/migrations/`의 `DATA_MIGRATIONS`, 배치마다 커서 저장 | [runbook.md "데이터 마이그레이션"](runbook.md#데이터-마이그레이션-백필-값-변환) |
+| 디스크 레이아웃 | 볼륨 표시 파일의 `layoutVersion`, `LAYOUT_MIGRATIONS` | [runbook.md "스토리지 레이아웃"](runbook.md#스토리지-레이아웃-storagemigrate) |
+| 비밀 키 | 암호문 앞의 키 id, `*_PREVIOUS`로 교체 기간 동안 함께 읽기 | [runbook.md "비밀값 교체"](runbook.md#비밀값-교체) |
+| Redis 키 | `REDIS_KEY_PREFIX`(`rf:v1:`). 형식이 바뀌면 접두사 버전을 올려 옛 키를 자연 만료시킨다 | — |
+| API 계약 | `src/contracts/`는 하위 호환으로만 바꾼다(필드 추가는 가능, 삭제·의미 변경은 새 필드로). 배포 중 남아 있는 옛 클라이언트도 동작해야 한다 | — |
+| 브라우저 저장값 | localStorage는 `{ v, data }`로 저장하고 버전이나 형식이 다르면 버린다(`shared/lib/local-setting.ts`) | — |
+| 공유 링크 | `/d/<linkId>` 형식과 `linkId`, 계정 토큰은 어떤 변경에서도 바뀌지 않는다 | — |

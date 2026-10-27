@@ -235,6 +235,8 @@ $C run --rm tools npm run volume:migrate -- --account <accountId> --to <volumeId
 
 이미 대상 볼륨에 있으면 아무것도 하지 않는다("The account is already on that volume.").
 
+자동 테스트(`src/app/api/files/volume-move.int.test.ts`)가 이 경로를 매번 확인한다: 이동 후 내용·권한·`linkId` 유지와 휴지통 보관, 이동 중 변경 503(`STORAGE_BUSY`)과 읽기 유지, 레이아웃 마이그레이션 중단 후 저널로 재개.
+
 ### SSD 교체 (볼륨 비우기)
 
 ```bash
@@ -270,7 +272,7 @@ tar -C /mnt/RuthVault2T/.private/Movies -cf - . | \
 
 ## 서버 이전 (N95 → 새 서버)
 
-모든 주소·경로·포트는 `.env`에 있으므로 코드는 바뀌지 않는다. 앱 서버와 DB 서버를 나눌 때(MS-A2 + MS-01)도 `POSTGRES_HOST`·`REDIS_HOST`만 바꾼다.
+모든 주소·경로·포트는 `.env`에 있으므로 코드는 바뀌지 않는다. 앱 서버와 DB 서버를 나눌 때도 `POSTGRES_HOST`·`REDIS_HOST`만 바꾼다.
 
 1. **새 서버 준비**: [deploy-ubuntu.md](deploy-ubuntu.md) §1, §3, §4를 진행한다. `.env`는 옛 서버의 것을 복사한다(비밀값이 같아야 토큰과 쿠키가 그대로 동작한다). 이미지를 빌드해 두고 `$C up -d postgres redis`까지만 실행한다.
 2. **옛 서버 점검 모드**: `touch deploy/maintenance/on`, `$C stop app worker`.
@@ -289,49 +291,6 @@ tar -C /mnt/RuthVault2T/.private/Movies -cf - . | \
 6. **시작·확인**: `$C up -d app worker nginx`, `/api/health`, `volume:list`, 아무 파일이나 다운로드해 해시 비교.
 7. **전환**: Cloudflare Tunnel은 새 서버에서 같은 토큰으로 `cloudflared`를 올리고 옛 서버의 `cloudflared`를 멈춘다. LAN 주소를 쓰면 DNS·공유기 설정을 바꾼다. `PUBLIC_URL`이 같으면 공유 링크는 그대로다.
 8. **롤백 대비**: 옛 서버는 점검 모드인 채로 1주일 둔다. 되돌릴 때는 새 서버를 멈추고 SSD를 다시 옮긴 뒤(또는 그대로) 옛 서버에서 `rm deploy/maintenance/on`, `$C start app worker`. 새 서버에서 생긴 변경은 새 서버의 덤프로 다시 옮긴다.
-
-## 리허설 기록
-
-### 2026-10-06 — 볼륨 간 이동, 볼륨 비우기, 레이아웃 마이그레이션, DB 덤프·복원
-
-개발 환경(로컬 PostgreSQL 16, Redis 7, `next dev`)에서 실제 명령으로 진행했다. 두 번째·세 번째 볼륨은 임시 디렉터리(`relayfilesDB2`, `relayfilesDB3`)로 대신했다.
-
-준비: 앱에서 익명 계정 두 개(A `tw75havn4rxn`, B `c853aph8bbyb`)를 만들고 브라우저로 `clip.bin`(3,000,000바이트 무작위), `메모 notes.txt`(한글·공백 이름)를 업로드했다.
-
-| 단계 | 명령 | 결과 |
-|---|---|---|
-| 1 | `volume:init -- …/relayfilesDB2`, `… /relayfilesDB3` | 볼륨 등록, Nginx location 파일 생성 |
-| 2 | `volume:list` | 세 볼륨 모두 `ACTIVE layout 1 online` |
-| 3 | `volume:migrate -- --account A --to V2` | `copying 2 files (3000012 bytes)` → `switched`, 1.0초. 원본은 V1 `system/trash/` |
-| 4 | `sha256sum` V1(이전) / V2(이후) | 두 파일 모두 같음 (`3e438b91…`, `ce65bc04…`) |
-| 5 | 다운로드 API · `/d/<linkId>` | 모두 200, `linkId` 그대로 |
-| 6 | 3번 다시 실행 | `The account is already on that volume.` |
-| 7 | `volume:migrate -- --account B --to V3` 후 `--volume V3 --to V2` | V3 `DRAINING`, B가 V2로 이동, 해시 같음, 다운로드·공유 링크 200 |
-| 8 | `storage:migrate` | 세 볼륨 `layout 1 is up to date.` (아직 레이아웃 단계 없음) |
-| 9 | `volume:migrate -- --volume V2 --to V1` | A, B 원래 볼륨으로 복귀 |
-| 10 | `volume:remove -- V1` / `-- V2`, `-- V3` | V1은 `ACTIVE`라 거부, V2·V3 제거(디스크 파일 유지) |
-| 11 | `pg_dump -Fc` → `pg_restore --no-owner` (새 DB) | 덤프 628KB, 0.15초 / 복원 0.17초. 계정 2,058, 노드 5,652, `linkId` 전체 md5가 원본과 같음 |
-
-자동 테스트(`src/app/api/files/volume-move.int.test.ts`)가 같은 경로를 매번 확인한다: 이동 후 내용·권한·`linkId` 유지와 휴지통 보관, 이동 중 변경 503(`STORAGE_BUSY`)과 읽기 유지, 레이아웃 마이그레이션 중단 후 저널로 재개.
-
-실서버(N95, 실제 두 번째 SSD)에서는 위 "SSD 추가" → "계정 하나 옮기기"를 테스트 계정으로 한 번 해 보고 이 표에 한 줄 추가한다.
-
-### 2026-10-11 — systemd 배포 (포트 6000, relayfiles.io)
-
-컨테이너에서 [deploy-systemd.md](deploy-systemd.md) 순서대로 진행했다. systemd가 PID 1이 아닌 환경이라, `systemctl`은 렌더링된 유닛의 `ExecStart`를 `User=`로 실행하는 대역 스크립트로 바꿔서 했다. 서비스 실행 결과는 같지만, 실서버에서 `UMask=0077` 같은 유닛 설정이 적용되는지는 따로 확인해야 한다.
-
-| 단계 | 명령 | 결과 |
-|---|---|---|
-| 1 | `/opt/relayfiles`에 clone, `npm ci`, `.env`(`APP_HOST=127.0.0.1`, `APP_PORT=6000`, `SERVER_NAME=relayfiles.io`) | |
-| 2 | `sudo deploy/scripts/systemd/install.sh` | `relayfiles` 계정·홈, `.env` `0640 root:relayfiles`, 유닛 2개(`systemd-analyze verify` 통과), Nginx 사이트 `nginx -t` 통과 |
-| 3 | `rf.sh db:deploy`, `rf.sh volume:init` | 마이그레이션 적용, 볼륨 표시 파일 `0600 relayfiles` |
-| 4 | `release.sh` | 백업 → 빌드 → `.app/<시각>-<커밋>` → 재시작 → 헬스 체크 통과, `releases.log` 기록 |
-| 5 | `rf.sh admin:create` | 사용자 루트 `drwx------ relayfiles` |
-| 6 | Nginx 경유 `Host: relayfiles.io` | `/api/health` 200, `/`·`/status`·`/files` 200, 없는 링크 404 |
-| 7 | `touch deploy/maintenance/on` / 앱 중지 | 정적 503 "Under maintenance" / 502 "Server unreachable" |
-| 8 | 워커 헬스 프로브 (`127.0.0.1:6000`) | 1분마다 Website·Storage `ok` 기록. 고치기 전의 `fetch`는 `bad port`로 실패했다 |
-| 9 | E2E(업로드·미디어·공유·파일 작업·에러 페이지, desktop+mobile)를 `http://relayfiles.io`로 | 61 통과. 이 과정에서 http 주소에서 다운로드 기록이 빠지는 문제를 찾아 고쳤다(`crypto.randomUUID`) |
-| 10 | `git pull && release.sh` 후 `rollback.sh` | 새 번들로 전환 후 이전 번들로 복귀, 헬스 200 |
 
 ## 비밀값 교체
 

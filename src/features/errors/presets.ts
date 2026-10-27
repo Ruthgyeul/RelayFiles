@@ -6,7 +6,7 @@ export interface ErrorPreset {
   /** Badge text, e.g. "404". */
   badge: string;
   icon: IconName;
-  /** 4xx = danger, 5xx and maintenance = warn, informational = accent (docs/plan.md §9.1). */
+  /** 4xx = danger, 5xx and maintenance = warn, informational = accent. */
   tone: Tone;
   title: string;
   description: string;

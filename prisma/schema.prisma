@@ -1,4 +1,4 @@
-// RelayFiles data model (docs/plan.md §13.1).
+// RelayFiles data model (docs/architecture.md "데이터 저장소").
 // PostgreSQL is the index of the file tree and all metadata; file bytes live on the
 // storage volume (/mnt/relayfilesDB) under users/<accountId>/ with the same folder names.
 
@@ -35,7 +35,7 @@ model StorageVolume {
   /// Absolute mount path for LOCAL volumes, bucket URL for S3.
   mountPath     String
   status        VolumeStatus  @default(ACTIVE)
-  /// Directory layout version; must match the code (docs/plan.md §13.8 ②).
+  /// Directory layout version; must match the code (docs/runbook.md "스토리지 레이아웃").
   layoutVersion Int           @default(1)
   reservePct    Int           @default(5)
   createdAt     DateTime      @default(now())
@@ -331,7 +331,7 @@ model LinkTombstone {
   @@index([endedAt])
 }
 
-/// Progress of resumable data migrations (scripts/migrations/data, docs/plan.md §13.8 ①).
+/// Progress of resumable data migrations (src/server/migrations, docs/runbook.md "데이터 마이그레이션").
 model DataMigration {
   id         String    @id
   startedAt  DateTime  @default(now())

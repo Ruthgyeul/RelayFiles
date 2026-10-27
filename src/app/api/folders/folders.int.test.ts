@@ -83,7 +83,7 @@ describe("folders", () => {
     const music = (await mkdir(cookie, "root", "Music")).json.data.folder.id;
     await prisma.node.update({ where: { id: music }, data: { visibility: "PUBLIC" } });
     const album = (await mkdir(cookie, music, "Album")).json.data.folder.id;
-    // File rows are created by uploads (M7); insert them directly here.
+    // File rows normally come from uploads; insert them directly here.
     await prisma.node.createMany({
       data: [
         { id: newNodeId(), accountId: id, parentId: album, type: "FILE", kind: "AUDIO", name: "a.mp3", size: 3_000n, linkId: newLinkId(), tags: ["live", "2024"] },

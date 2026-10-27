@@ -53,7 +53,7 @@ export async function writeVolumeMarker(root: string, marker: VolumeMarker): Pro
 /**
  * Verifies that the expected volume is mounted. A missing marker means the SSD is not
  * mounted (the mount point is an empty directory on the system disk) and nothing may be
- * written there (docs/plan.md §13.5 "마운트 상태 감시").
+ * written there (docs/architecture.md "스토리지").
  */
 export async function checkVolume(root: string, expectedId: string): Promise<VolumeState> {
   const marker = await readVolumeMarker(root);

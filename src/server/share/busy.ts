@@ -4,7 +4,7 @@ import { SHARE } from "@/config/policy";
 import { busyOf, type Busy } from "@/domain/share";
 import { redis } from "../redis";
 
-/** Recent public downloads per node: a sorted set of timestamps (plan §13.6). */
+/** Recent public downloads per node: a sorted set of timestamps (docs/security.md "공유 링크·다운로드"). */
 const keyOf = (nodeId: string) => `dl:${nodeId}`;
 const LIMITS = { windowMs: SHARE.busyWindowMs, throttleAt: SHARE.busyThrottleAt, pauseAt: SHARE.busyPauseAt };
 

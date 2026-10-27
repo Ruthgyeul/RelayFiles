@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Changes to the on-disk layout of a volume (docs/plan.md §13.8 ②), applied in order by
+ * Changes to the on-disk layout of a volume (docs/runbook.md "스토리지 레이아웃"), applied in order by
  * `npm run storage:migrate`. Each step moves a volume from `from` to `to` and must be safe
  * to run again after an interruption (prefer renames; check before moving).
  * Layout 1 (src/server/storage/layout.ts) is the first one, so there are no steps yet.

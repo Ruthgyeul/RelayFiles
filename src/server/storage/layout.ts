@@ -2,7 +2,7 @@ import "server-only";
 import { join } from "node:path";
 
 /**
- * Directory layout of a storage volume (docs/plan.md §13.5), layout version 1:
+ * Directory layout of a storage volume (docs/architecture.md "스토리지"), layout version 1:
  *
  *   <root>/.relayfiles-volume          volume marker (id, layout version)
  *   <root>/users/<accountId>/...       each account's root folder; original files, real names

@@ -1,6 +1,6 @@
 # Ubuntu 서버 배포 (Docker Compose)
 
-RelayFiles를 Ubuntu 서버(현재 N95, `192.168.0.100`)에 Docker Compose로 올리는 절차다. Docker 없이 systemd 서비스와 호스트 Nginx로 운영하려면 [deploy-systemd.md](deploy-systemd.md)를 본다. 설계 근거는 [plan.md](plan.md) §13.4–13.8. 운영 중 작업(백업, 복구, 롤백, 점검 모드, 볼륨)은 [runbook.md](runbook.md)를 본다.
+RelayFiles를 Ubuntu 서버(현재 N95, `192.168.0.100`)에 Docker Compose로 올리는 절차다. Docker 없이 systemd 서비스와 호스트 Nginx로 운영하려면 [deploy-systemd.md](deploy-systemd.md)를 본다. 구조는 [architecture.md](architecture.md), 보안 모델은 [security.md](security.md). 운영 중 작업(백업, 복구, 롤백, 점검 모드, 볼륨)은 [runbook.md](runbook.md)를 본다.
 
 이 문서는 처음 배포하는 사람이 위에서 아래로 그대로 따라 하면 되도록 썼다. 각 단계는 **무엇을 하는지 → 명령 → 결과 확인 → 자주 나는 문제** 순서다. 막히면 [§11 문제 해결](#11-문제-해결)을 먼저 본다.
 

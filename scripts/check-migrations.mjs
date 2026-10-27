@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Guards destructive SQL migrations (docs/plan.md §13.8 ①, CLAUDE.md "DB · 마이그레이션").
+ * Guards destructive SQL migrations (docs/runbook.md "DB 스키마", CLAUDE.md "DB · 마이그레이션").
  * Dropping or retyping data must be the "contract" step of expand → migrate → contract, so
  * such a migration has to say so with a `-- relayfiles: contract` comment explaining which
  * earlier release stopped using the data. Anything else destructive fails the check.

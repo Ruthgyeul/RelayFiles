@@ -3,7 +3,7 @@
 @import "./document.css";
 
 /*
- * Design tokens (docs/plan.md §5, docs/design/spec.md).
+ * Design tokens (docs/design/spec.md).
  * - Theme colors come from themes.css (CSS variables switched by <html data-theme>).
  * - The fixed palette below holds colors the design hardcodes regardless of theme.
  * TypeScript code refers to these through src/shared/styles/palette.ts, never by hex value.
@@ -147,7 +147,7 @@
   }
 }
 
-/* Stacking layers from the design (docs/plan.md §1.2). Use as z-(--z-modal). */
+/* Stacking layers from the design (docs/design/spec.md "z-index"). Use as z-(--z-modal). */
 :root {
   --z-header: 10;
   --z-menu-catcher: 15;

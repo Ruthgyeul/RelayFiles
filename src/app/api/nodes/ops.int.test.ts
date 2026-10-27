@@ -51,7 +51,7 @@ async function admin(): Promise<Session> {
 const folder = async (s: Session, parentId: string, name: string) => (await callRoute<CreatedFolder>(createFolder, { method: "POST", cookie: s.cookie, body: { parentId, name } })).json.data.folder;
 const list = async (s: Session, id = "root") => (await callRoute<FolderView, { id: string }>(getFolder, { cookie: s.cookie, params: { id } })).json.data;
 
-/** Adds a file row and its bytes on disk (uploads arrive in M7). */
+/** Adds a file row and its bytes on disk without going through an upload. */
 async function file(s: Session, parentId: string, segments: string[], name: string, content = "hello") {
   const id = newNodeId();
   await prisma.node.create({ data: { id, accountId: s.id, parentId, type: "FILE", kind: "OTHER", name, size: BigInt(content.length), linkId: newLinkId() } });

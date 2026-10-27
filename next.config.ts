@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   typedRoutes: true,
   experimental: {
-    // Enables forbidden() / unauthorized() and their 403 / 401 pages (docs/plan.md §9).
+    // Enables forbidden() / unauthorized() and their 403 / 401 pages.
     authInterrupts: true,
   },
   headers: async () => [{ source: "/:path*", headers: SECURITY_HEADERS }],

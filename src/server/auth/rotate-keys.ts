@@ -12,7 +12,7 @@ export interface RotationResult {
 
 /**
  * Re-encrypts every account token with the current TOKEN_ENC_KEY and rehashes its lookup
- * with the current TOKEN_HMAC_KEY (docs/plan.md §13.8 ⑥). Tokens themselves never change.
+ * with the current TOKEN_HMAC_KEY (docs/runbook.md "비밀값 교체"). Tokens themselves never change.
  * Afterwards the *_PREVIOUS keys can be removed. Safe to run again: up-to-date rows are skipped.
  */
 export async function rotateAccountKeys(db: DbClient, keys: TokenKeys, onBatch?: (done: number) => void): Promise<RotationResult> {

@@ -16,7 +16,7 @@ const globalForRedis = globalThis as unknown as { relayRedis?: Redis };
 
 /**
  * Shared Redis connection. Every key gets REDIS_KEY_PREFIX (e.g. `rf:v1:`) so a cache
- * format change can bump the prefix instead of deleting keys (docs/plan.md §13.8 ⑦).
+ * format change can bump the prefix instead of deleting keys (docs/architecture.md "버전 관리").
  */
 export function redis(): Redis {
   globalForRedis.relayRedis ??= createRedis();
