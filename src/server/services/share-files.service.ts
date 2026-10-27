@@ -1,6 +1,6 @@
 import "server-only";
 import { Readable } from "node:stream";
-import { SHARE } from "@/config/policy";
+import { MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER } from "@/contracts/api";
 import { effectiveRange, zipName } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadBlock, type DownloadDecision } from "@/domain/share-access";
@@ -9,12 +9,12 @@ import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { db } from "../db/client";
 import type { Busy } from "@/domain/share";
-import { bytesSource, sendFile } from "../files/send-file";
+import { sendFile } from "../files/send-file";
 import { sendAsset, sendThumb } from "../files/send-thumb";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
-import { canStripType, strippedCopy } from "../media/process";
+import { canStripType } from "../media/process";
 import { transcodeResponse } from "../media/transcode";
 import { findAccountById, type AccountRow } from "../repositories/account.repo";
 import { ancestorChain } from "../repositories/node.repo";
@@ -39,41 +39,38 @@ async function ownerOf(link: LoadedLink): Promise<AccountRow> {
 
 const stripsImage = (owner: AccountRow, row: Pick<SharedRow, "kind">) => owner.stripMetadataOnShare && row.kind === "IMAGE";
 
-/**
- * Copies being made now, by file and content. Visitors who open the same image before the
- * worker's copy exists share one copy instead of each holding the whole image in memory.
- */
-const stripping = new Map<string, Promise<Uint8Array | null>>();
-
-function sharedStrippedCopy(row: SharedRow, path: string, mime: string): Promise<Uint8Array | null> {
-  const key = `${row.id}:${row.sha256 ?? ""}`;
-  let pending = stripping.get(key);
-  if (!pending) {
-    pending = strippedCopy(path, mime, Number(row.size))
-      .catch(() => null)
-      .finally(() => stripping.delete(key));
-    stripping.set(key, pending);
-  }
-  return pending;
+/** Why a photo that must be sent without metadata cannot be sent now, or null when its clean copy exists. */
+function publicImageBlock(row: Pick<SharedRow, "hasDerived" | "stripFailed" | "mime" | "name">): "location" | "not-ready" | null {
+  if (row.hasDerived) return null;
+  // A type the worker cannot clean, or a file it failed on (undecodable, too large): never sent as is.
+  if (row.stripFailed || !canStripType(row.mime ?? mimeFromName(row.name))) return "location";
+  return "not-ready";
 }
 
 /**
- * Bytes of an image as visitors get it: the worker's metadata-stripped copy, or a copy
- * made now (and queued for the worker so the next request is instant). Types that cannot
- * be cleaned are refused rather than sent with their location data.
+ * Bytes of an image as visitors get it: the worker's metadata-stripped copy, streamed from
+ * disk range by range. Nothing is decoded in the request: until the worker made the copy the
+ * visitor gets 503 with Retry-After (the file is queued again), and a file the worker could
+ * not clean gets 415. Holding images in memory per request let anonymous visitors exhaust the
+ * app's memory with a folder of large or broken photos.
  */
 async function publicImage(driver: StorageDriver, location: StorageLocation, row: SharedRow): Promise<ByteSource> {
-  // The worker's copy is streamed from disk, only the requested range, never held in memory.
-  if (row.hasDerived) {
-    const asset = await driver.assetSource({ kind: "derived", accountId: location.accountId, nodeId: row.id });
-    if (asset) return asset;
+  switch (publicImageBlock(row)) {
+    case "location":
+      throw new ApiError("UNSUPPORTED_MEDIA");
+    case "not-ready":
+      void enqueueMedia([row.id]);
+      throw new ApiError("MEDIA_NOT_READY", undefined, { retryAfter: MEDIA.stripPendingRetrySec });
+    case null:
+      break;
   }
-  const mime = row.mime ?? mimeFromName(row.name);
-  const path = await driver.localPath(location);
-  const copy = path && canStripType(mime) ? await sharedStrippedCopy(row, path, mime) : null;
-  if (!copy) throw new ApiError("UNSUPPORTED_MEDIA");
-  void enqueueMedia([row.id]);
-  return bytesSource(copy);
+  const asset = await driver.assetSource({ kind: "derived", accountId: location.accountId, nodeId: row.id });
+  if (!asset) {
+    // The copy went missing on disk: make it again.
+    void enqueueMedia([row.id]);
+    throw new ApiError("MEDIA_NOT_READY", undefined, { retryAfter: MEDIA.stripPendingRetrySec });
+  }
+  return asset;
 }
 
 const kindOf = (row: Pick<SharedRow, "kind">) => (row.kind ? (row.kind.toLowerCase() as NodeKind) : null);
@@ -200,13 +197,14 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
 }
 
 /** Why a file is left out of "Download all", as written in "Not included.txt". */
-type ZipSkip = DownloadBlock | "location";
+type ZipSkip = DownloadBlock | "location" | "not-ready";
 
 const SKIP_REASONS: Record<ZipSkip, string> = {
   "stream-only": "Stream only",
   limit: "Download limit reached",
   paused: "Downloads paused",
   location: "Photo type that can't be shared without its location data",
+  "not-ready": "Photo still being prepared for sharing, try again in a moment",
 };
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
@@ -223,8 +221,8 @@ function zipPlan(shared: Awaited<ReturnType<typeof resolveSharedTree>>, owner: A
         walk(child, [...inZip, child.name], segments);
         continue;
       }
-      const cannotStrip = stripsImage(owner, child) && !child.hasDerived && !canStripType(child.mime ?? mimeFromName(child.name));
-      const skip = link.isOwner ? (cannotStrip ? "location" : null) : (downloadBlockOf(child, link.root, busy.get(child.id)) ?? (cannotStrip ? "location" : null));
+      const imageBlock = stripsImage(owner, child) ? publicImageBlock(child) : null;
+      const skip = link.isOwner ? imageBlock : (downloadBlockOf(child, link.root, busy.get(child.id)) ?? imageBlock);
       files.push({ row: child, name, segments, skip });
     }
   };

@@ -24,15 +24,6 @@ export interface SendFileOptions {
   rateLimit?: number;
 }
 
-/** Bytes held in memory as a {@link ByteSource} (a copy made for this request). */
-export function bytesSource(bytes: Uint8Array): ByteSource {
-  const all = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  return {
-    size: all.length,
-    open: async (range) => Readable.from([range ? all.subarray(range.start, range.end + 1) : all]),
-  };
-}
-
 /**
  * Sends a stored file with Range support (206) for seeking and resumed downloads. In
  * production Nginx serves the bytes (`X-Accel-Redirect`, sendfile) after the app has

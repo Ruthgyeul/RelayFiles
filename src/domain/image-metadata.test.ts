@@ -69,13 +69,15 @@ function pngChunk(type: string, data: number[]) {
 }
 
 describe("stripImageMetadata · PNG", () => {
-  it("drops text, EXIF and time chunks and stops at IEND", () => {
+  it("keeps only image and colour chunks and stops at IEND", () => {
     const png = Uint8Array.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
       ...pngChunk("IHDR", Array.from({ length: 13 }, () => 0)),
       ...pngChunk("tEXt", text("Author\0Photographer")),
       ...pngChunk("eXIf", text("GPS")),
       ...pngChunk("iCCP", text("srgb")),
+      ...pngChunk("caBX", text("C2PA claim")),
+      ...pngChunk("prVt", text("editor data")),
       ...pngChunk("IDAT", [1, 2, 3]),
       ...pngChunk("IEND", []),
       ...text("trailing GPS"),
@@ -83,6 +85,9 @@ describe("stripImageMetadata · PNG", () => {
     const out = stripImageMetadata(png, "image/png")!;
     expect(has(out, "Photographer")).toBe(false);
     expect(has(out, "GPS")).toBe(false);
+    // Private and provenance chunks go too (allowlist).
+    expect(has(out, "C2PA")).toBe(false);
+    expect(has(out, "editor data")).toBe(false);
     expect(has(out, "iCCP")).toBe(true);
     expect(has(out, "IDAT")).toBe(true);
     expect(has(out, "IEND")).toBe(true);
@@ -95,18 +100,20 @@ function riffChunk(type: string, data: number[]) {
 }
 
 describe("stripImageMetadata · WebP", () => {
-  it("drops EXIF and XMP chunks, clears their flags and fixes the RIFF size", () => {
+  it("drops EXIF, XMP and other chunks, clears their flags and fixes the RIFF size", () => {
     const body = [
       ...text("WEBP"),
       ...riffChunk("VP8X", [0x0c | 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
       ...riffChunk("VP8 ", [9, 9, 9]),
       ...riffChunk("EXIF", text("GPS here")),
       ...riffChunk("XMP ", text("<xmp>Seoul</xmp>")),
+      ...riffChunk("C2PA", text("manifest Busan")),
     ];
     const webp = Uint8Array.from([...text("RIFF"), body.length & 0xff, body.length >> 8, 0, 0, ...body]);
     const out = stripImageMetadata(webp, "image/webp")!;
     expect(has(out, "GPS")).toBe(false);
     expect(has(out, "Seoul")).toBe(false);
+    expect(has(out, "Busan")).toBe(false);
     const view = new DataView(out.buffer, out.byteOffset);
     expect(view.getUint32(4, true)).toBe(out.length - 8);
     expect(out[20]).toBe(0x10); // only the alpha flag is left

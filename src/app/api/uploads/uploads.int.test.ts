@@ -1,18 +1,22 @@
 import { createHash } from "node:crypto";
-import { readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, describe, expect, it } from "vitest";
 import { POST as anonymous } from "@/app/api/auth/anonymous/route";
 import { GET as getFolder } from "@/app/api/folders/[id]/route";
+import { POST as createFolder } from "@/app/api/folders/route";
+import { POST as remove } from "@/app/api/nodes/delete/route";
 import { POST as prepare } from "@/app/api/uploads/route";
 import * as tus from "@/app/api/uploads/tus/[...path]/route";
 import type { CreatedAccount } from "@/contracts/auth";
-import type { FolderView } from "@/contracts/nodes";
+import { STORAGE } from "@/config/policy";
+import type { CreatedFolder, FolderView } from "@/contracts/nodes";
 import type { PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
 import { db } from "@/server/db/client";
 import { redis } from "@/server/redis";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
+import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
 import { randomTestIp } from "../../../../test/file-fixtures";
@@ -100,6 +104,30 @@ describe("uploads", () => {
     ]);
     expect(loose.plan.kind === "ready" && loose.plan.folder.name).toBe("Upload Oct 6, 9:00 AM");
     expect(await readFile(join(s.root, "Trip", "day1", "a.txt"), "utf8")).toBe("a");
+  });
+
+  it("limits the depth of Home uploads like uploads into a folder", async () => {
+    const s = await member();
+    const deep = Array.from({ length: STORAGE.maxFolderDepth }, (_, index) => `d${index}`).join("/");
+    const res = await callRoute(prepare, { method: "POST", cookie: s.cookie, body: { target: "home", files: [{ rel: `${deep}/a.txt`, size: 1 }, { rel: "b.txt", size: 1 }] } });
+    expect([res.status, res.json.error]).toEqual([400, "Folders are nested too deeply."]);
+  });
+
+  it("removes the received bytes when an upload cannot be placed", async () => {
+    const s = await member();
+    const target = (await callRoute<CreatedFolder>(createFolder, { method: "POST", cookie: s.cookie, body: { parentId: "root", name: "Inbox" } })).json.data.folder;
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: target.id, files: [{ rel: "a.txt", size: 5 }] } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+    const created = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "5", "upload-metadata": `batch ${b64(plan.batchId)},index ${b64("0")}` });
+    const id = created.headers.get("location")!.split("/").pop()!;
+    // The folder goes away while the upload is still running.
+    await callRoute(remove, { method: "POST", cookie: s.cookie, body: { ids: [target.id] } });
+    const finished = await tusCall("PATCH", `${plan.endpoint}/${id}`, s.cookie, { "upload-offset": "0", "content-type": "application/offset+octet-stream" }, Buffer.from("hello"));
+    expect(finished.status).toBeGreaterThanOrEqual(400);
+    const uploads = await readdir(layoutOf(configuredVolumeRoot()).uploads);
+    expect(uploads.filter((name) => name.startsWith(id))).toEqual([]);
+    expect(await prisma.node.count({ where: { accountId: s.id, name: "a.txt" } })).toBe(0);
   });
 
   it("asks about duplicates and applies replace, keep both or skip", async () => {

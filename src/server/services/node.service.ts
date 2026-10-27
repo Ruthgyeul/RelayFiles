@@ -28,6 +28,7 @@ import {
 } from "../repositories/node.repo";
 import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
+import { assertItemRoom } from "./item-limit.service";
 import { driverForAccount } from "./volume.service";
 
 /** Tag searches return at most this many items. */
@@ -155,10 +156,11 @@ function isUniqueViolation(error: unknown): boolean {
  * Creates a folder in the database and on the volume together. A taken name gets the next
  * free "Name (2)" variant like the design; the caller is told so it can say so.
  */
-export async function createFolder(account: Pick<AccountRow, "id" | "volumeId">, parentRef: string, requested: string): Promise<CreatedFolder> {
+export async function createFolder(account: Pick<AccountRow, "id" | "volumeId" | "isAdmin">, parentRef: string, requested: string): Promise<CreatedFolder> {
   const wanted = requested.trim() || "New folder";
   const error = nameError(wanted);
   if (error) throw new ApiError("BAD_REQUEST", error, { fields: { name: error } });
+  await assertItemRoom(account, 1);
 
   const parent = await resolveFolder(account.id, parentRef);
   const chain = await ancestorChain(db(), parent.id);

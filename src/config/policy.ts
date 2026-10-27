@@ -52,6 +52,11 @@ export const FILES = {
   rowEstimatePx: 68,
   /** The same for rows with a media preview (288px square or audio player under the name). */
   previewRowEstimatePx: 370,
+  /**
+   * Files and folders one member account may hold (admins: no limit). Empty files cost no
+   * quota, so without a count millions of them could use up the volume's inodes and the database.
+   */
+  maxItemsPerAccount: 100_000,
 } as const;
 
 /** Global search (design `gs*`, Ctrl/⌘ K). */
@@ -102,6 +107,8 @@ export const SHARE = {
 } as const;
 
 export const MEDIA = {
+  /** Retry-After for a shared photo whose metadata-stripped copy the worker has not made yet. */
+  stripPendingRetrySec: 5,
   /** Longest side of generated thumbnails (2x the 288px list preview). */
   thumbSizePx: 576,
   thumbQuality: 72,

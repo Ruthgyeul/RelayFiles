@@ -12,12 +12,25 @@ import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path
 /** "2026-10-06T03-12-00-000Z": when an item was moved to the trash (filename-safe ISO time). */
 const trashStamp = (at: Date) => at.toISOString().replace(/[:.]/g, "-");
 const TRASH_STAMP = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-/;
+/** Hex characters of the random part of a trash entry name. */
+const TRASH_NONCE_LENGTH = 8;
 
 function trashTime(name: string): number | null {
   const match = TRASH_STAMP.exec(name);
   if (!match) return null;
   const [, date, hours, minutes, seconds, millis] = match;
   return Date.parse(`${date}T${hours}:${minutes}:${seconds}.${millis}Z`);
+}
+
+/** Copies a file or a folder tree to a path that must not exist yet. */
+async function copyEntry(source: string, target: string): Promise<void> {
+  const info = await stat(source);
+  if (info.isDirectory()) {
+    await cp(source, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true });
+  } else {
+    // Reflink when the filesystem supports it (instant copy), otherwise a normal copy.
+    await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+  }
 }
 
 /** Account and node ids (generated, lowercase alphanumerics). */
@@ -74,9 +87,22 @@ export class LocalVolumeDriver implements StorageDriver {
 
   async moveIntoPlace(tempPath: string, location: StorageLocation): Promise<void> {
     if (!tempPath.startsWith(this.layout.uploads)) throw new Error("Uploads must come from the volume's upload area.");
-    const target = await this.pathOf(location);
-    await mkdir(dirname(target), { recursive: true, mode: DIR_MODE });
-    await rename(tempPath, target);
+    // The folder must still exist: creating it again here would bring back a folder renamed or
+    // deleted while the upload finished, outside the database.
+    await rename(tempPath, await this.pathOf(location));
+  }
+
+  async stageCopy(from: StorageLocation): Promise<string> {
+    const source = await this.pathOf(from);
+    const target = join(this.layout.uploads, `copy-${randomUUID()}`);
+    await mkdir(this.layout.uploads, { recursive: true, mode: DIR_MODE });
+    await copyEntry(source, target);
+    return target;
+  }
+
+  async discardStaged(tempPath: string): Promise<void> {
+    if (!tempPath.startsWith(this.layout.uploads)) throw new Error("Only the volume's upload area holds staged files.");
+    await rm(tempPath, { recursive: true, force: true });
   }
 
   async rename(from: StorageLocation, to: StorageLocation): Promise<void> {
@@ -86,18 +112,13 @@ export class LocalVolumeDriver implements StorageDriver {
 
   async copy(from: StorageLocation, to: StorageLocation): Promise<void> {
     const [source, target] = await Promise.all([this.pathOf(from), this.pathOf(to)]);
-    const info = await stat(source);
-    if (info.isDirectory()) {
-      await cp(source, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true });
-    } else {
-      // Reflink when the filesystem supports it (instant copy), otherwise a normal copy.
-      await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
-    }
+    await copyEntry(source, target);
   }
 
   async moveToTrash(location: StorageLocation): Promise<string> {
     const source = await this.pathOf(location);
-    const name = `${trashStamp(new Date())}-${location.accountId}-${basename(source)}`;
+    // A random part after the time: two items with the same name trashed in the same millisecond must not collide.
+    const name = `${trashStamp(new Date())}-${randomUUID().slice(0, TRASH_NONCE_LENGTH)}-${location.accountId}-${basename(source)}`;
     const target = join(this.layout.trash, name);
     await mkdir(this.layout.trash, { recursive: true, mode: DIR_MODE });
     await rename(source, target);

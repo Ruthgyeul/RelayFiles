@@ -171,8 +171,13 @@ function stripJpeg(bytes: Uint8Array): Uint8Array | null {
 // ---------------------------------------------------------------- PNG
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-/** Text, EXIF and time chunks: where cameras and editors put location, device and dates. */
-const PNG_DROP = new Set(["eXIf", "tEXt", "zTXt", "iTXt", "tIME"]);
+/**
+ * Chunks kept: image data, colour handling and animation (APNG). Everything else goes,
+ * including text, EXIF and time chunks and private ones (C2PA's caBX, editors' own) where
+ * cameras and apps put location, device and dates. An allowlist, so a new metadata chunk
+ * is dropped too.
+ */
+const PNG_KEEP = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "iCCP", "sBIT", "sRGB", "cICP", "mDCV", "cLLI", "bKGD", "pHYs", "acTL", "fcTL", "fdAT"]);
 const PNG_CHUNK_OVERHEAD = 12;
 
 function stripPng(bytes: Uint8Array): Uint8Array | null {
@@ -187,7 +192,7 @@ function stripPng(bytes: Uint8Array): Uint8Array | null {
     const type = String.fromCharCode(...bytes.subarray(at + 4, at + 8));
     const end = at + PNG_CHUNK_OVERHEAD + length;
     need(bytes, end);
-    if (!PNG_DROP.has(type)) out.push(bytes.subarray(at, end));
+    if (PNG_KEEP.has(type)) out.push(bytes.subarray(at, end));
     at = end;
     if (type === "IEND") return out.bytes();
   }
@@ -200,6 +205,8 @@ const RIFF_HEADER = 12;
 const CHUNK_HEADER = 8;
 const VP8X_EXIF_FLAG = 0x08;
 const VP8X_XMP_FLAG = 0x04;
+/** Chunks kept: image data, alpha, animation and colour profile; EXIF, XMP, C2PA and any other chunk are dropped. */
+const WEBP_KEEP = new Set(["VP8 ", "VP8L", "VP8X", "ALPH", "ANIM", "ANMF", "ICCP"]);
 
 function stripWebp(bytes: Uint8Array): Uint8Array | null {
   if (!ascii(bytes, 0, "RIFF") || !ascii(bytes, 8, "WEBP")) return null;
@@ -212,7 +219,7 @@ function stripWebp(bytes: Uint8Array): Uint8Array | null {
     const size = view.getUint32(at + 4, true);
     const end = at + CHUNK_HEADER + size + (size % 2);
     need(bytes, Math.min(end, riffEnd));
-    if (type !== "EXIF" && type !== "XMP ") {
+    if (WEBP_KEEP.has(type)) {
       const chunk = bytes.slice(at, Math.min(end, riffEnd));
       if (type === "VP8X") chunk[CHUNK_HEADER] = chunk[CHUNK_HEADER]! & ~(VP8X_EXIF_FLAG | VP8X_XMP_FLAG);
       chunks.push(chunk);
