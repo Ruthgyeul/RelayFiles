@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { hash } from "@node-rs/argon2";
 import type { LinkEventDto, NodeItem, SettingsInput, TransferResult } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
@@ -11,7 +12,6 @@ import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
 import {
-  accountUsage,
   addLinkEvent,
   ancestorChain,
   deleteNodes,
@@ -27,9 +27,13 @@ import {
   updateNode,
   type NodeRow,
 } from "../repositories/node.repo";
+import { recordTrashed } from "../repositories/trash.repo";
+import { findVolume } from "../repositories/volume.repo";
 import type { StorageLocation } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
+import { assertItemRoom } from "./item-limit.service";
 import { toNodeItem } from "./node.service";
+import { releaseSpace, reserveSpace } from "./space.service";
 import { driverForAccount } from "./volume.service";
 
 type Owner = Pick<AccountRow, "id" | "volumeId" | "isAdmin" | "quotaBytes">;
@@ -147,6 +151,12 @@ export async function moveNodes(owner: Owner, ids: string[], targetRef: string):
 /**
  * Copies items with everything inside (design `copyTo`): new ids and links, zero
  * downloads, settings and tags kept. Bytes are copied on the volume (reflink when possible).
+ *
+ * The space is reserved like an upload's (account quota, the volume's reserve, the anonymous
+ * total and uploads in progress), so copies started together cannot overrun them. Bytes are
+ * copied into the volume's temp area first, outside any database transaction: a large copy
+ * must not hold a database connection (or run past the transaction timeout and roll back
+ * after the work). Only the renames into place and the new rows share one short transaction.
  */
 export async function copyNodes(owner: Owner, ids: string[], targetRef: string): Promise<TransferResult> {
   const target = await requireFolder(owner.id, targetRef);
@@ -155,55 +165,65 @@ export async function copyNodes(owner: Owner, ids: string[], targetRef: string):
   if (items.length === 0) throw new ApiError("BAD_REQUEST", "Can't copy there");
 
   const trees = await Promise.all(items.map((row) => subtreeRows(db(), row.id)));
+  await assertItemRoom(owner, trees.reduce((sum, tree) => sum + tree.length, 0));
   const bytes = trees.flat().reduce((sum, row) => sum + (row.type === "FILE" ? row.size : 0n), 0n);
-  if (owner.quotaBytes !== null) {
-    const { usedBytes } = await accountUsage(db(), owner.id);
-    if (usedBytes + bytes > owner.quotaBytes) throw new ApiError("INSUFFICIENT_STORAGE", "Not enough space in this account for the copy.");
-  }
-
   const driver = await driverForAccount(owner, "write");
-  const targetSegments = targetChain.slice(1).map((row) => row.name);
-  const taken = await listSiblingNames(db(), target.id);
-  let renamed = 0;
-  const now = new Date();
-  const copies = await Promise.all(items.map(async (row) => ({ row, from: await locationOf(owner.id, row.id) })));
-  const media: string[] = [];
+  const volume = await findVolume(db(), owner.volumeId);
+  if (!volume) throw new ApiError("STORAGE_OFFLINE");
+  const reservation = `copy-${randomUUID()}`;
+  await reserveSpace(owner, reservation, Number(bytes), { id: volume.id, reservePct: volume.reservePct, driver });
 
-  await withStorageTransaction(db(), async (tx, undo) => {
-    for (const [index, { row, from }] of copies.entries()) {
-      const name = uniqName(taken, row.name, row.type === "FILE");
-      taken.push(name);
-      if (name !== row.name) renamed++;
-      const newIds = new Map<string, string>();
-      const rows = trees[index]!.map((source) => {
-        const id = newNodeId();
-        newIds.set(source.id, id);
-        const isTop = source.id === row.id;
-        return {
-          ...source,
-          id,
-          parentId: isTop ? target.id : newIds.get(source.parentId!)!,
-          name: isTop ? name : source.name,
-          linkId: newLinkId(),
-          downloads: 0,
-          hasThumb: false,
-          hasDerived: false,
-          createdAt: now,
-          updatedAt: now,
-        } satisfies Prisma.NodeCreateManyInput;
-      });
-      await insertNodes(tx, rows);
-      const to = { accountId: owner.id, segments: [...targetSegments, name] };
-      await driver.copy(from, to);
-      undo.push("remove copy", async () => {
-        await driver.moveToTrash(to);
-      });
-      media.push(...rows.filter((copy) => copy.type === "FILE" && (copy.kind === "IMAGE" || copy.kind === "VIDEO")).map((copy) => copy.id));
-    }
-  });
-  // Assets are keyed by node id, so copies get their own (rebuilt by the worker).
-  void enqueueMedia(media);
-  return { done: items.length, renamed, targetName: target.name };
+  const staged: string[] = [];
+  try {
+    const copies = await Promise.all(items.map(async (row) => ({ row, from: await locationOf(owner.id, row.id) })));
+    for (const { from } of copies) staged.push(await driver.stageCopy(from));
+
+    const targetSegments = targetChain.slice(1).map((row) => row.name);
+    const taken = await listSiblingNames(db(), target.id);
+    let renamed = 0;
+    const now = new Date();
+    const media: string[] = [];
+    await withStorageTransaction(db(), async (tx, undo) => {
+      for (const [index, { row }] of copies.entries()) {
+        const name = uniqName(taken, row.name, row.type === "FILE");
+        taken.push(name);
+        if (name !== row.name) renamed++;
+        const newIds = new Map<string, string>();
+        const rows = trees[index]!.map((source) => {
+          const id = newNodeId();
+          newIds.set(source.id, id);
+          const isTop = source.id === row.id;
+          return {
+            ...source,
+            id,
+            parentId: isTop ? target.id : newIds.get(source.parentId!)!,
+            name: isTop ? name : source.name,
+            linkId: newLinkId(),
+            downloads: 0,
+            hasThumb: false,
+            hasDerived: false,
+            stripFailed: false,
+            createdAt: now,
+            updatedAt: now,
+          } satisfies Prisma.NodeCreateManyInput;
+        });
+        await insertNodes(tx, rows);
+        const to = { accountId: owner.id, segments: [...targetSegments, name] };
+        await driver.moveIntoPlace(staged[index]!, to);
+        undo.push("remove copy", async () => {
+          await driver.moveToTrash(to);
+        });
+        media.push(...rows.filter((copy) => copy.type === "FILE" && (copy.kind === "IMAGE" || copy.kind === "VIDEO")).map((copy) => copy.id));
+      }
+    });
+    // Assets are keyed by node id, so copies get their own (rebuilt by the worker).
+    void enqueueMedia(media);
+    return { done: items.length, renamed, targetName: target.name };
+  } finally {
+    // Copies that did not get into place (an error part-way) leave nothing in the temp area.
+    for (const path of staged) await driver.discardStaged(path).catch((error: unknown) => logger.warn("staged copy not removed", { error }));
+    await releaseSpace(reservation, owner.id, volume.id).catch((error: unknown) => logger.warn("copy reservation not released", { error }));
+  }
 }
 
 /** Deletes items with everything inside; files go to the volume's trash for the purge job. */
@@ -222,6 +242,12 @@ export async function deleteItems(owner: Owner, ids: string[]): Promise<{ delete
       const trashed = await driver.moveToTrash(location);
       undo.push("restore deleted item", () => driver.restoreFromTrash(trashed, location));
     }
+    // The bytes stay on disk until the daily job empties the trash, and count until then.
+    await recordTrashed(
+      tx,
+      owner.id,
+      files.reduce((sum, row) => sum + row.size, 0n),
+    );
   });
   // Thumbnails and stripped copies are rebuilt on demand, so they are removed right away.
   await driver.removeAssets(owner.id, files.map((row) => row.id)).catch((error: unknown) => logger.warn("assets not removed", { error }));

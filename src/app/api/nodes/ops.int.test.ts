@@ -16,9 +16,12 @@ import { POST as transfer } from "@/app/api/nodes/transfer/route";
 import type { CreatedAccount } from "@/contracts/auth";
 import type { CreatedFolder, FolderView, LinkEventDto, NodeItem, TransferResult } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
+import { FILES } from "@/config/policy";
 import { db } from "@/server/db/client";
+import { forgetTrashedBefore } from "@/server/repositories/trash.repo";
 import { redis } from "@/server/redis";
 import { createAdminAccount } from "@/server/services/auth.service";
+import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
 import { randomTestIp } from "../../../../test/file-fixtures";
@@ -35,7 +38,8 @@ interface Session {
 }
 
 async function member(): Promise<Session> {
-  const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip });
+  // A fresh address per account keeps the tests under the per-address sign-up limit.
+  const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip: randomTestIp() });
   const id = res.json.data.account.id;
   accounts.push(id);
   return { id, cookie: res.cookie!, root: userRootOf(configuredVolumeRoot(), id) };
@@ -123,6 +127,34 @@ describe("move and copy", () => {
     const res = await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [big], targetId: "root", mode: "copy" } });
     expect(res.status).toBe(507);
   });
+
+  it("reserves a copy's space, so copies sent at once cannot overrun the quota, and leaves no staged bytes", async () => {
+    const s = await member();
+    const big = await file(s, (await list(s)).folder.id, [], "big.bin", "x".repeat(10));
+    await prisma.account.update({ where: { id: s.id }, data: { quotaBytes: 25n } });
+    const copy = () => callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [big], targetId: "root", mode: "copy" } });
+    const results = await Promise.all([copy(), copy(), copy()]);
+    // 10 used + 10 per copy: only one copy fits in 25.
+    expect(results.map((res) => res.status).sort()).toEqual([200, 507, 507]);
+    expect((await list(s)).children.map((child) => child.name).sort()).toEqual(["big (2).bin", "big.bin"]);
+    const staged = (await readdir(layoutOf(configuredVolumeRoot()).uploads)).filter((name) => name.startsWith("copy-"));
+    expect(staged).toEqual([]);
+  });
+
+  it("refuses to create more items than an account may hold", async () => {
+    const s = await member();
+    const rootId = (await list(s)).folder.id;
+    // Fill the account to one below the limit in one statement.
+    const fill = FILES.maxItemsPerAccount - 1;
+    await prisma.$executeRaw`
+      INSERT INTO "Node" (id, "accountId", "parentId", type, name, "linkId", "updatedAt")
+      SELECT md5(random()::text || g::text), ${s.id}, ${rootId}, 'FOLDER', 'f' || g, md5(random()::text || g::text || 'l'), now()
+      FROM generate_series(1, ${fill}) AS g`;
+    expect((await callRoute(createFolder, { method: "POST", cookie: s.cookie, body: { parentId: "root", name: "One more" } })).status).toBe(201);
+    const refused = await callRoute(createFolder, { method: "POST", cookie: s.cookie, body: { parentId: "root", name: "Too many" } });
+    expect([refused.status, refused.json.error]).toEqual([400, `An account can hold at most ${FILES.maxItemsPerAccount} files and folders.`]);
+    await prisma.node.deleteMany({ where: { accountId: s.id, parentId: rootId } });
+  });
 });
 
 describe("delete", () => {
@@ -136,6 +168,20 @@ describe("delete", () => {
     expect(await readdir(s.root)).toEqual([]);
     const other = await member();
     expect((await callRoute(remove, { method: "POST", cookie: other.cookie, body: { ids: [gone.id] } })).status).toBe(404);
+  });
+
+  it("counts deleted bytes until the trash is emptied, so upload-and-delete cannot fill the disk", async () => {
+    const s = await member();
+    const first = await file(s, (await list(s)).folder.id, [], "a.bin", "x".repeat(8));
+    await prisma.account.update({ where: { id: s.id }, data: { quotaBytes: 10n } });
+    await callRoute(remove, { method: "POST", cookie: s.cookie, body: { ids: [first] } });
+    const second = await file(s, (await list(s)).folder.id, [], "b.bin", "y");
+    // 8 bytes in the trash + 1 in the file: one 1-byte copy fits in 10, a second does not.
+    expect((await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [second], targetId: "root", mode: "copy" } })).status).toBe(200);
+    expect((await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [second], targetId: "root", mode: "copy" } })).status).toBe(507);
+    // The daily job's cut-off forgets them.
+    await forgetTrashedBefore(prisma, new Date(Date.now() + 1_000));
+    expect((await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [second], targetId: "root", mode: "copy" } })).status).toBe(200);
   });
 });
 

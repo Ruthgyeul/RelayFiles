@@ -4,6 +4,7 @@ import { getEnv } from "@/config/env";
 import { MS, STORAGE } from "@/config/policy";
 import { db } from "../db/client";
 import { logger } from "../logger";
+import { forgetTrashedBefore } from "../repositories/trash.repo";
 import { listPurgeableVolumes } from "../repositories/volume.repo";
 import { recordCleanup, recordSample } from "../metrics/history";
 import { runHealthProbe } from "./health-probe";
@@ -38,6 +39,8 @@ export async function runMaintenance(now: Date) {
     trash += purged.trash;
     uploads += purged.uploads;
   }
+  // The same cut-off as the trash itself: those bytes no longer count toward anyone's storage.
+  await forgetTrashedBefore(db(), trashBefore).catch((error: unknown) => logger.warn("trash records not purged", { error }));
   await purgeOldAuditEvents(now).catch((error: unknown) => logger.warn("audit log not purged", { error }));
   return { ...cleanup, trash, uploads };
 }

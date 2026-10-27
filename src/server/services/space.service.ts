@@ -6,6 +6,7 @@ import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import type { AccountRow } from "../repositories/account.repo";
 import { accountUsage, anonUsage } from "../repositories/node.repo";
+import { accountTrashedBytes, anonTrashedBytes } from "../repositories/trash.repo";
 import type { StorageDriver } from "../storage/driver";
 import { availableAboveReserve } from "../storage/registry";
 import { releaseUpload, reservedBytes, reserveUpload, type ReservationScope, type ScopeLimit } from "../upload/reservations";
@@ -31,15 +32,23 @@ export interface SpaceOptions {
 
 const scopesOf = (accountId: string, volumeId: string): ReservationScope[] => [{ kind: "account", id: accountId }, { kind: "volume", id: volumeId }, { kind: "anon" }];
 
+/** Bytes an account holds on disk: its files plus deleted files still in the trash. */
+async function heldBytes(accountId: string): Promise<bigint> {
+  const [{ usedBytes }, trashed] = await Promise.all([accountUsage(db(), accountId), accountTrashedBytes(db(), accountId)]);
+  return usedBytes + trashed;
+}
+
 /**
  * What new bytes must fit in, before unfinished uploads are counted: the account quota, the
  * volume's free space above its reserve, and (for anonymous accounts) ANON_TOTAL_QUOTA_GB.
+ * Deleted files count until the daily job empties the trash: they still take disk space, and
+ * "upload, delete, repeat" would otherwise fill the volume past every quota.
  */
 async function budgetsOf(owner: SpaceOwner, volume: SpaceVolume, { quotas = true }: SpaceOptions): Promise<Budget[]> {
   const budgets: Budget[] = [];
   if (quotas && owner.quotaBytes !== null) {
     const quota = owner.quotaBytes;
-    const { usedBytes } = await accountUsage(db(), owner.id);
+    const usedBytes = await heldBytes(owner.id);
     budgets.push({
       scope: { kind: "account", id: owner.id },
       limit: quota - usedBytes,
@@ -54,7 +63,8 @@ async function budgetsOf(owner: SpaceOwner, volume: SpaceVolume, { quotas = true
   const anonTotalGb = getEnv("policy").ANON_TOTAL_QUOTA_GB;
   if (quotas && !owner.isAdmin && anonTotalGb !== undefined) {
     const total = BigInt(Math.round(anonTotalGb * BYTES_PER_GB));
-    budgets.push({ scope: { kind: "anon" }, limit: total - (await anonUsage(db())), full: () => new ApiError("INSUFFICIENT_STORAGE") });
+    const [files, trashed] = await Promise.all([anonUsage(db()), anonTrashedBytes(db())]);
+    budgets.push({ scope: { kind: "anon" }, limit: total - files - trashed, full: () => new ApiError("INSUFFICIENT_STORAGE") });
   }
   return budgets;
 }

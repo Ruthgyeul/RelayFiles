@@ -18,6 +18,11 @@ export async function accountUsage(db: DbClient, accountId: string): Promise<{ u
   return { usedBytes: sum._sum.size ?? 0n, rootItems };
 }
 
+/** Files and folders of an account, its root folder included. */
+export function countItems(db: DbClient, accountId: string): Promise<number> {
+  return db.node.count({ where: { accountId } });
+}
+
 /** Bytes stored by all anonymous (non-admin) accounts, for ANON_TOTAL_QUOTA_GB. */
 export async function anonUsage(db: DbClient): Promise<bigint> {
   const sum = await db.node.aggregate({ where: { type: "FILE", account: { isAdmin: false } }, _sum: { size: true } });

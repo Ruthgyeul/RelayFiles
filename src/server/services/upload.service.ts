@@ -7,7 +7,7 @@ import { STORAGE } from "@/config/policy";
 import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
 import { randomString, ID_ALPHABET, newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
-import { homeUploadPlan, kindFromMime, mimeFromName, uploadFallbackName } from "@/domain/upload";
+import { folderCount, homeUploadPlan, kindFromMime, mimeFromName, uploadFallbackName } from "@/domain/upload";
 import { db, Prisma } from "../db/client";
 import { ApiError } from "../http/api-error";
 import {
@@ -28,6 +28,8 @@ import { driverFor } from "../storage/registry";
 import type { StorageDriver } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { loadBatch, saveBatch, type UploadBatch } from "../upload/batches";
+import { recordTrashed } from "../repositories/trash.repo";
+import { assertItemRoom } from "./item-limit.service";
 import { createFolder } from "./node.service";
 import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
 import { assertAccountWritable, driverForAccount } from "./volume.service";
@@ -36,6 +38,11 @@ import { enqueueMedia } from "../jobs/queue";
 type Owner = SpaceOwner;
 
 const BATCH_ID_LENGTH = 24;
+/** Folder depth of the folder a Home upload creates: the account root, then the upload folder. */
+const HOME_UPLOAD_DEPTH = 2;
+
+/** Files plus the folders their paths create, at most (existing folders are reused). */
+const newItemCount = (rels: readonly string[]) => rels.length + folderCount(rels);
 
 function isUniqueViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -72,6 +79,9 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
       input.fallbackName && !nameError(input.fallbackName) ? input.fallbackName : uploadFallbackName(new Date()),
     );
     files = files.map((file, position) => ({ ...file, rel: plan.rels[position]! }));
+    // The root, the new upload folder, then each file's folders.
+    if (files.some((file) => HOME_UPLOAD_DEPTH + file.rel.split("/").length > STORAGE.maxFolderDepth)) throw new ApiError("BAD_REQUEST", "Folders are nested too deeply.");
+    await assertItemRoom(owner, newItemCount(files.map((file) => file.rel)) + 1);
     await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space);
     folder = (await createFolder(owner, "root", plan.name)).folder;
   } else {
@@ -85,6 +95,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
     if (duplicates.length > 0 && !input.dup) return { kind: "duplicates", names: duplicates.map((file) => file.rel) };
     if (input.dup === "skip") files = files.filter((file) => !isDuplicate(file.rel));
     if (files.length === 0) return { kind: "nothing" };
+    await assertItemRoom(owner, newItemCount(files.map((file) => file.rel)));
     await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space);
     folder = target;
   }
@@ -167,7 +178,6 @@ async function sha256Of(path: string): Promise<string> {
 export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: number, uploadId: string): Promise<UploadedFile> {
   const entry = batch.files[slot];
   if (!entry) throw new ApiError("NOT_FOUND");
-  const rel = entry.rel;
   const driver = await driverForAccount(owner, "write");
   const volume = await findVolume(db(), batch.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
@@ -178,8 +188,23 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
     await rm(`${tempPath}.json`, { force: true });
     throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
   }
-  const parts = rel.split("/");
+  try {
+    return await placeUpload(owner, driver, batch, entry, tempPath);
+  } catch (error) {
+    // A refused upload (its folder was deleted meanwhile, a name clash) must not leave its
+    // bytes in the temp area until the daily cleanup, where no quota sees them.
+    await rm(tempPath, { force: true });
+    await rm(`${tempPath}.json`, { force: true });
+    throw error;
+  }
+}
+
+/** Puts a received upload into its folder and records it (the second half of {@link finalizeUpload}). */
+async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBatch, entry: UploadBatch["files"][number], tempPath: string): Promise<UploadedFile> {
+  const parts = entry.rel.split("/");
   const fileName = parts.at(-1)!;
+  // The account's own folder never moves, so it may be (re)created; folders below it must exist.
+  await driver.ensureUserRoot(owner.id);
   const folder = await ensureFolders(owner, driver, batch.folderId, parts.slice(0, -1));
 
   const detected = await fileTypeFromFile(tempPath).catch(() => undefined);
@@ -195,6 +220,7 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
       await deleteNodes(tx, [replace.id]);
       const trashed = await driver.moveToTrash(location);
       undo.push("restore replaced file", () => driver.restoreFromTrash(trashed, location));
+      await recordTrashed(tx, owner.id, replace.size);
     }
     const created = await createFileNode(tx, {
       id: newNodeId(),

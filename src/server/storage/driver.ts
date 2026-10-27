@@ -49,8 +49,12 @@ export interface StorageDriver {
   stat(location: StorageLocation): Promise<StorageStat | null>;
   createReadStream(location: StorageLocation, range?: { start: number; end: number }): Promise<Readable>;
   createFolder(location: StorageLocation): Promise<void>;
-  /** Moves a finished upload from the temp area into place without copying bytes. */
+  /** Moves a finished upload or staged copy from the temp area into place without copying bytes; the folder must exist. */
   moveIntoPlace(tempPath: string, location: StorageLocation): Promise<void>;
+  /** Copies an item into the temp area (reflink when possible) and returns its path, for {@link moveIntoPlace}. */
+  stageCopy(from: StorageLocation): Promise<string>;
+  /** Removes a staged copy or upload from the temp area (missing is fine). */
+  discardStaged(tempPath: string): Promise<void>;
   rename(from: StorageLocation, to: StorageLocation): Promise<void>;
   copy(from: StorageLocation, to: StorageLocation): Promise<void>;
   /** Moves an item (or a whole account root when segments is empty) to the trash area. */
