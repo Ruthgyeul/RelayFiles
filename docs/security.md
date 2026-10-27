@@ -32,7 +32,7 @@
 - **기기 쿠키** `rf_s`: 이 기기에 로그인한 세션 id 목록(최대 10)과 활성 세션만 담고 HMAC으로 서명한다(`COOKIE_SECRET`, 교체 시 `COOKIE_SECRET_PREVIOUS`). `HttpOnly`, `SameSite=Lax`, `PUBLIC_URL`이 https면 `Secure`. 토큰은 쿠키에 넣지 않는다.
 - **세션 폐기**: 요청마다 DB에서 `Session.revokedAt`과 계정 만료를 확인하므로 다른 기기에서 로그아웃하거나 만료되면 즉시 무효가 된다. 무효 세션은 쿠키에서 지운다.
 - **세션 절대 수명**(`domain/session.ts`): 로그인(`Session.createdAt`)부터 관리자 `AUTH.adminSessionDays`(7일), 일반 `AUTH.memberSessionDays`(14일)가 지나면 세션이 끝난다. 계정이 만료되지 않는 관리자라도 기기 세션은 영구적이지 않다.
-- **관리자 재인증**: 토큰 보기·재발급, 계정 관리(역할·삭제일·용량)·삭제(자기 계정 삭제 포함, 마지막 관리자는 지울 수 없다), 가입 모드 변경은 관리자 세션이 최근 `AUTH.reauthWindowMin`(10분) 안에 토큰을 입력했을 때만 허용한다(`requireRecentAuth`, 아니면 403 `REAUTH_REQUIRED`). 입력은 `POST /api/auth/reauth`이고 로그인과 같은 잠금 단계를 쓴다. 일반 계정에는 묻지 않는다(토큰을 잃으면 로그인한 기기에서만 다시 볼 수 있기 때문).
+- **재인증**: 토큰 보기·재발급, 자기 계정 삭제(마지막 관리자는 지울 수 없다)와 관리자의 계정 관리(역할·삭제일·용량)·삭제, 가입 모드 변경은 세션이 최근 `AUTH.reauthWindowMin`(10분) 안에 로그인했거나 토큰을 다시 입력했을 때만 허용한다(`requireRecentAuth`, 아니면 403 `REAUTH_REQUIRED`). 일반 계정도 같다. 토큰은 만료되지 않고 어디서나 로그인할 수 있어서, 두고 간 기기나 페이지에 주입된 스크립트가 읽으면 계정이 영구히 넘어가기 때문이다. 새 계정은 가입 직후(창 안)에 토큰을 볼 수 있다. 입력은 `POST /api/auth/reauth`이고 로그인과 같은 잠금 단계를 쓴다.
 - **감사 로그**(`AuditEvent`): 관리자 작업(위 작업 + 정리 실행, 초대 생성·취소)을 행위자 id·이름, 대상, 짧은 설명, 마스킹한 주소와 함께 남긴다. 초대 코드는 앞 4자만 적는다. `AUTH.auditRetentionDays`(365일)가 지나면 매일 정리 작업이 지운다. 조회: `GET /api/admin/audit`.
 - **`env:check`**: 운영 모드에서 `ADMIN_ALLOWED_CIDRS`가 비어 있으면 경고한다.
 - **로그인 잠금**: 클라이언트 주소(HMAC으로 가린 키, IPv6는 `/64` 단위 — `rateLimitSubject`)마다 Redis에 실패 횟수를 센다. 5회마다 30초 → 120초 → 600초 잠금(`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_SECONDS`). 잠긴 동안에는 올바른 토큰도 429로 거부한다.
@@ -71,7 +71,13 @@
 
 ## 응답 헤더·자원 제한
 
-- 모든 응답(`next.config.ts`): `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy: same-origin`(공유 링크 URL이 다른 사이트로 새지 않게), `Permissions-Policy`(카메라·마이크·위치·결제·USB 끔).
+- 모든 응답(`next.config.ts`): `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`(공유 링크 URL이 다른 사이트로 새지 않게), `Permissions-Policy`(카메라·마이크·위치·결제·USB 끔).
+- **Content-Security-Policy**(`src/proxy.ts`, 정책은 `domain/security-headers.ts`): 요청마다 nonce를 새로 만들어 요청 헤더(Next.js가 자기 스크립트에 nonce를 붙인다)와 응답 헤더에 넣는다. `script-src 'self' 'nonce-…' 'strict-dynamic'`(개발 모드만 `'unsafe-eval'`), `style-src 'self' 'unsafe-inline'`(React `style` prop), `img-src 'self' blob: data:`(SVG·docx 미리보기), `media-src`·`font-src`·`connect-src`·`worker-src 'self'`, `object-src 'none'`, `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`. SVG 미리보기나 Word HTML, 앞으로 생길 XSS가 페이지에 들어가도 스크립트를 실행하지 못한다.
+  - `CSP_MODE=report-only`(기본)는 막지 않고 위반만 `/api/csp-report`로 받는다(같은 위반은 1시간에 한 번 `csp violation` 경고 로그, 쿼리 문자열과 방문자 정보는 남기지 않는다). report-only는 `frame-ancestors`를 무시하므로 액자 삽입은 `X-Frame-Options: DENY`가 막는다. 프록시가 강제 CSP 헤더를 하나 더 보내면 안 된다: Next.js는 프록시 응답 헤더를 렌더링할 요청에도 복사하고 `content-security-policy`를 먼저 읽기 때문에 nonce를 찾지 못한다. 로그에 위반이 없으면 `CSP_MODE=enforce`로 바꾼다.
+  - E2E는 `CSP_MODE=enforce`로 돌고, 테스트 페이지에서 CSP 위반이 하나라도 나면 실패한다(`e2e/fixtures.ts`).
+  - 클라이언트가 보낸 CSP 요청 헤더는 지우고 프록시가 만든 것만 넘긴다(nonce 위조 방지).
+- **Strict-Transport-Security**: `PUBLIC_URL`이 https이고 요청 Host가 그 호스트일 때만 `max-age=HSTS_MAX_AGE_SEC`(기본 1년)를 보낸다. LAN의 `http://192.168.0.100` 접속에는 보내지 않는다. `HSTS_INCLUDE_SUBDOMAINS=true`는 같은 도메인의 모든 서브도메인이 https일 때만 켠다. Cloudflare에서 HSTS를 켰다면 `HSTS_MAX_AGE_SEC=0`으로 한 곳에서만 보낸다.
+- SVG 미리보기는 DOMPurify(svg·svgFilters 프로필)로 스크립트·이벤트 핸들러·외부 참조를 지운 뒤 blob `<img>`로 그린다. blob URL을 새 탭에서 열어도 앱 출처에서 스크립트가 돌지 않는다.
 - 캐시: 재생·썸네일·미리보기·변환 영상은 `private, max-age=1년, immutable`, 다운로드는 `private, no-cache`, zip과 API 에러는 `no-store`.
 - ffmpeg 입력(`server/media/ffmpeg-input.ts`): 업로드 파일은 `-protocol_whitelist file -format_whitelist <MEDIA.ffmpegDemuxers>`로만 연다. HLS 플레이리스트·concat 목록처럼 다른 파일을 가리키는 형식은 이름이나 내용과 상관없이 거부되므로, 조작한 업로드로 ffmpeg가 서버의 다른 파일을 읽어 변환 결과로 돌려줄 수 없다. Docker 이미지는 `node:24-trixie-slim`(ffmpeg 7.1)이다.
 - 프로세스 격리: Compose의 app·worker는 `cap_drop: ALL`, `read_only`(쓰기는 tmpfs `/tmp`, app은 `.next/cache`도), `pids_limit: 512`, `mem_limit`/`cpus`(`APP_MEMORY_MAX`·`APP_CPUS`, `WORKER_MEMORY_MAX`·`WORKER_CPUS`)로 돈다. nginx도 `cap_drop: ALL`. systemd 배포는 같은 값을 `MemoryMax`·`CPUQuota`·`TasksMax=512`로 건다. 폭주한 변환·썸네일 작업은 자기 서비스 상한에서 멈추고 PostgreSQL을 OOM으로 끌고 가지 않는다.
