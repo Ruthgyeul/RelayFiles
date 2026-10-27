@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { REQUEST_ID_HEADER, type ApiFailure, type ApiSuccess } from "@/contracts/api";
 import { ERRORS, type ErrorCode } from "@/contracts/errors";
+import { validRequestId } from "@/domain/ids";
 import { logger } from "../logger";
 import { ApiError } from "./api-error";
 
@@ -56,7 +57,7 @@ export function toFailure(error: unknown, requestId: string): NextResponse<ApiFa
  */
 export function apiHandler<T, P = Record<string, never>>(handler: Handler<P, T>) {
   return async (req: NextRequest, context: RouteContext<P>): Promise<Response> => {
-    const requestId = req.headers.get(REQUEST_ID_HEADER) ?? randomUUID();
+    const requestId = validRequestId(req.headers.get(REQUEST_ID_HEADER)) ?? randomUUID();
     try {
       const params = (await context?.params) ?? ({} as P);
       const result = await handler({ req, params, requestId });

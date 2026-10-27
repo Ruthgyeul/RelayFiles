@@ -1,3 +1,4 @@
+import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -15,10 +16,13 @@ afterEach(() => {
 });
 
 describe("proxy", () => {
-  it("assigns a request id and keeps an incoming one", async () => {
+  it("assigns a request id and keeps an incoming UUID", async () => {
     const proxy = await load();
     expect(proxy(request("/")).headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
-    expect(proxy(request("/", { headers: { "x-request-id": "abc" } })).headers.get("x-request-id")).toBe("abc");
+    const incoming = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    expect(proxy(request("/", { headers: { "x-request-id": incoming } })).headers.get("x-request-id")).toBe(incoming);
+    // Anything but a UUID is replaced: request ids end up in logs and on error pages.
+    expect(proxy(request("/", { headers: { "x-request-id": "<script>x</script>" } })).headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("refuses cross-site API writes but allows same-site and non-browser ones", async () => {
@@ -93,5 +97,12 @@ describe("proxy", () => {
   it("leaves admin paths open when no networks are configured", async () => {
     const proxy = await load("");
     expect(proxy(request("/admin/server", { headers: { "x-real-ip": "203.0.113.9" } })).status).toBe(200);
+  });
+
+  it("runs for every page and API path, skipping static files only outside /api", async () => {
+    const { config } = await import("./proxy");
+    const matches = (url: string) => unstable_doesMiddlewareMatch({ config, url });
+    for (const url of ["/", "/files", "/admin/accounts", "/api/admin/accounts", "/api/admin/x.png", "/api/nodes/abc.svg", "/d/abc"]) expect(matches(url), url).toBe(true);
+    for (const url of ["/_next/static/chunks/a.js", "/icon.svg", "/fonts/a.woff2", "/logo.png", "/api/uploads/tus/vol/123"]) expect(matches(url), url).toBe(false);
   });
 });

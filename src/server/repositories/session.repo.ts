@@ -29,6 +29,20 @@ export async function revokeSession(db: DbClient, sessionId: string, at: Date): 
   await db.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: at } });
 }
 
+export async function revokeSessions(db: DbClient, sessionIds: readonly string[], at: Date): Promise<void> {
+  if (sessionIds.length === 0) return;
+  await db.session.updateMany({ where: { id: { in: [...sessionIds] }, revokedAt: null }, data: { revokedAt: at } });
+}
+
+/**
+ * Deletes sessions that can never be used again: revoked ones, and ones older than the longest
+ * session lifetime (`createdBefore`). Returns how many were deleted.
+ */
+export async function purgeDeadSessions(db: DbClient, createdBefore: Date): Promise<number> {
+  const { count } = await db.session.deleteMany({ where: { OR: [{ revokedAt: { not: null } }, { createdAt: { lt: createdBefore } }] } });
+  return count;
+}
+
 /** Records that the account token was entered again on this session (admin re-authentication). */
 export async function markReauthenticated(db: DbClient, sessionId: string, at: Date): Promise<void> {
   await db.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { reauthAt: at } });
