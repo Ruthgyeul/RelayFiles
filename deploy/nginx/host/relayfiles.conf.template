@@ -8,10 +8,12 @@ upstream relayfiles_app {
     keepalive 16;
 }
 
-# Behind Cloudflare Tunnel, cloudflared sets X-Forwarded-Proto; otherwise use this hop's scheme.
-map $http_x_forwarded_proto $relayfiles_proto {
-    default $http_x_forwarded_proto;
-    ""      $scheme;
+# Behind Cloudflare Tunnel, cloudflared (on this host, 127.0.0.1) sets X-Forwarded-Proto. Only
+# its value is trusted, and only http/https: anyone else could send "https" over plain http.
+# $realip_remote_addr is the peer before set_real_ip_from replaced it with the visitor.
+map "$realip_remote_addr|$http_x_forwarded_proto" $relayfiles_proto {
+    "~^127\.0\.0\.1\|(?<proto>https?)$" $proto;
+    default $scheme;
 }
 
 # First line of defense before the app's own Redis limits (and before argon2 checks link
