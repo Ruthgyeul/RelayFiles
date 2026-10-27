@@ -20,6 +20,8 @@ export function transcodeArgs(path: string): string[] {
     // Only the file itself as a video container; a seekable file also reads MP4/MOV with the index at the end.
     ...ffmpegInput(path),
     ...["-map", "0:v:0", "-map", "0:a:0?"],
+    // No metadata or chapters from the source: phones write the recording place (©xyz) there.
+    ...["-map_metadata", "-1", "-map_chapters", "-1"],
     // Even width, at most maxHeightPx tall, never enlarged.
     ...["-vf", `scale=-2:min(${TRANSCODE.maxHeightPx}\\,ih)`],
     ...["-c:v", "libx264", "-preset", TRANSCODE.preset, "-crf", String(TRANSCODE.crf), "-pix_fmt", "yuv420p"],

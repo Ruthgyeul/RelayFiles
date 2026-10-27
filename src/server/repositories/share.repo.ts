@@ -16,6 +16,8 @@ export interface SharedRow {
   size: bigint;
   sha256: string | null;
   hasDerived: boolean;
+  /** The worker could not make the metadata-stripped copy. */
+  stripFailed: boolean;
   hasThumb: boolean;
   downloads: number;
   downloadLimit: number | null;
@@ -40,7 +42,7 @@ export async function publicTree(db: DbClient, rootId: string, now: Date): Promi
       SELECT n.id FROM "Node" n JOIN tree t ON n."parentId" = t.id
       WHERE n.visibility <> 'PRIVATE' AND n."passwordHash" IS NULL AND (n."expAt" IS NULL OR n."expAt" > ${now})
     )
-    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."hasThumb", n.downloads,
+    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."hasThumb", n.downloads,
            n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt"
     FROM tree JOIN "Node" n ON n.id = tree.id`;
 }
@@ -67,7 +69,7 @@ export async function sharedChain(db: DbClient, nodeId: string): Promise<ChainRo
       UNION ALL
       SELECT n.id, n."parentId", c.depth + 1 FROM "Node" n JOIN chain c ON n.id = c."parentId"
     )
-    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."hasThumb", n.downloads,
+    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."hasThumb", n.downloads,
            n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt", n.visibility::text AS visibility,
            n."linkId", n."expAt", n."passwordHash"
     FROM chain JOIN "Node" n ON n.id = chain.id

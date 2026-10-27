@@ -79,6 +79,9 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
     return null;
   }
   const result = { thumb: thumb !== null, derived: derived !== null, preview: keepPreview };
-  await updateNode(db(), row.id, { hasThumb: result.thumb, hasDerived: result.derived });
+  // An image that should have been cleaned but was not (undecodable, too large) is not tried
+  // again for every visitor: share routes answer 415 for it until the file changes.
+  const stripFailed = row.kind === "IMAGE" && !result.derived && canStripType(mime);
+  await updateNode(db(), row.id, { hasThumb: result.thumb, hasDerived: result.derived, stripFailed });
   return result;
 }

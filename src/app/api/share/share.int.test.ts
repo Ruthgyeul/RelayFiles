@@ -340,6 +340,11 @@ describe("share downloads", () => {
 
   it("sends images without camera data unless the owner turned that off", async () => {
     const { m, trip, photo } = await sharedTrip();
+    // Nothing is decoded in the request: until the worker made the clean copy, visitors wait.
+    const early = await visit(shareDownload, path(trip.linkId, photo, "download"), fileParams(trip.linkId, photo));
+    expect([early.status, early.headers.get("retry-after")]).toEqual([503, String(MEDIA.stripPendingRetrySec)]);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: photo } })).downloads).toBe(0);
+    await processMedia(photo);
     const cleaned = Buffer.from(await (await visit(shareDownload, path(trip.linkId, photo, "download"), fileParams(trip.linkId, photo))).arrayBuffer());
     expect(cleaned.includes(Buffer.from("RelayCam"))).toBe(false);
     expect((await sharp(cleaned).metadata()).width).toBe(8);
@@ -347,6 +352,14 @@ describe("share downloads", () => {
     await prisma.account.update({ where: { id: m.id }, data: { stripMetadataOnShare: false } });
     const original = Buffer.from(await (await visit(shareStream, path(trip.linkId, photo, "stream"), fileParams(trip.linkId, photo))).arrayBuffer());
     expect(original.includes(Buffer.from("RelayCam"))).toBe(true);
+  });
+
+  it("answers 415 for a photo the worker could not clean, without trying again per request", async () => {
+    const { m, trip } = await sharedTrip();
+    const broken = await addFile(m, trip.id, ["Trip"], "broken.jpg", Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x10, 1, 2]), "image/jpeg", "IMAGE");
+    await processMedia(broken);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: broken } })).stripFailed).toBe(true);
+    expect((await visit(shareStream, path(trip.linkId, broken, "stream"), fileParams(trip.linkId, broken))).status).toBe(415);
   });
 
   it("streams the worker's stripped copy from disk, range by range", async () => {
