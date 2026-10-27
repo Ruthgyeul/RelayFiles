@@ -28,6 +28,16 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     if [ -f /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi \
  && npm ci --no-audit --no-fund
 
+# Runtime dependencies only (no vitest, playwright, eslint, jsdom) for the tools image. tsx and
+# prisma are dependencies because the worker and migrations run them in production.
+FROM base AS prod-deps
+COPY package.json package-lock.json prisma.config.ts ./
+COPY prisma ./prisma
+COPY src/config ./src/config
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -f /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi \
+ && npm ci --omit=dev --no-audit --no-fund
+
 FROM deps AS build
 COPY . .
 # Offline build: fonts and every other asset come from node_modules.
@@ -55,7 +65,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "/usr/local/lib/relayfiles/healthcheck.mjs"]
 CMD ["node", "server.js"]
 
-FROM deps AS tools
+FROM prod-deps AS tools
 ARG STORAGE_UID=10001
 ARG STORAGE_GID=10001
 # ffmpeg for video thumbnails.
