@@ -1,12 +1,12 @@
 # 디자인 수치 스펙
 
-시안(`Relay_App.dc.html`, 구현 완료 후 삭제. 원본은 `git show 056195d:docs/design/Relay_App.dc.html`)에서 뽑은 값과, 그 값을 구현한 위치를 정리한다. 이제 이 문서와 코드가 기준이다. 화면을 만들 때 이 문서의 프리미티브와 토큰만 쓴다. 실제 렌더링은 개발용 카탈로그 `/dev/ui`(`ENABLE_UI_CATALOG=true`)에서 확인한다.
+디자인 토큰·프리미티브의 수치와 그 값을 구현한 위치를 정리한다. 이 문서와 코드가 기준이다. 화면을 만들 때 이 문서의 프리미티브와 토큰만 쓴다. 실제 렌더링은 개발용 카탈로그 `/dev/ui`(`ENABLE_UI_CATALOG=true`)에서 확인한다.
 
 ## 1. 토큰
 
 | 종류 | 원천 | 사용 |
 |---|---|---|
-| 테마 색 22개 × 10 테마 | `src/shared/styles/themes.css` (시안 11행 그대로 옮긴 값, 이제 이 파일이 기준. `tokens.test.ts`가 10개 테마 × 22개 변수 구조를 검사) | `bg-card`, `text-t3`, `border-ctrl`, `bg-accent-soft` 등 |
+| 테마 색 22개 × 10 테마 | `src/shared/styles/themes.css` (이 파일이 기준. `tokens.test.ts`가 10개 테마 × 22개 변수 구조를 검사) | `bg-card`, `text-t3`, `border-ctrl`, `bg-accent-soft` 등 |
 | 고정 팔레트 | `src/shared/styles/globals.css` `@theme static` | `text-ok-text`, `bg-danger-bg`, `text-kind-folder` 등 |
 | 데이터로 고르는 색 | `src/shared/styles/palette.ts` (`var(--…)` 참조만) | 인라인 `style` |
 | 그림자 | `shadow-toolbar` · `shadow-logo` · `shadow-popover` · `shadow-panel` · `shadow-modal` · `shadow-search` · `shadow-viewer` | |

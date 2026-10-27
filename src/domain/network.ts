@@ -1,6 +1,6 @@
 /**
  * IP address helpers. Real IP addresses are never stored or logged, only masked forms
- * (docs/plan.md §13.6); these functions run on the address read from the proxy headers.
+ * (docs/security.md "인증"); these functions run on the address read from the proxy headers.
  */
 
 const MASK = "•••";

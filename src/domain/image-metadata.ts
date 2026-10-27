@@ -1,6 +1,6 @@
 /**
  * Lossless removal of location and camera metadata from images sent through public share
- * links (docs/plan.md §0, §13.5). Pixels are never re-encoded: only metadata segments are
+ * links (docs/security.md "공유 링크·다운로드"). Pixels are never re-encoded: only metadata segments are
  * dropped. Originals stay untouched; callers write the result as a separate copy.
  *
  * Returns null when the bytes are not a well-formed JPEG, PNG or WebP file.

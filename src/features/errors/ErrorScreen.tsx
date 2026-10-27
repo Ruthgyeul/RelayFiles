@@ -16,8 +16,8 @@ export interface ErrorScreenProps {
 }
 
 /**
- * Full-page error / warning screen in the design language of the share page status cards
- * (docs/plan.md §9.1): header with the logo, centered card, icon box, code badge, actions.
+ * Full-page error / warning screen in the design language of the share page status cards:
+ * header with the logo, centered card, icon box, code badge, actions.
  */
 export function ErrorScreen({ preset, description, actions, reference }: ErrorScreenProps) {
   const tone = TONE[preset.tone];

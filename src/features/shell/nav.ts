@@ -14,7 +14,7 @@ export interface NavItem {
 }
 
 /**
- * Sidebar and drawer navigation in the design's order (docs/plan.md §1.1). `/files` is an
+ * Sidebar and drawer navigation in the design's order. `/files` is an
  * optional catch-all route, which the typed-route check only accepts with `as Route`.
  */
 export const NAV_ITEMS: readonly NavItem[] = [

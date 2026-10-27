@@ -29,7 +29,7 @@ export interface Transactional<Tx> {
 
 /**
  * Keeps PostgreSQL (the index) and the disk (the source of truth) consistent
- * (docs/plan.md §13.5). The callback performs DB writes through `tx` and filesystem
+ * (docs/architecture.md "스토리지"). The callback performs DB writes through `tx` and filesystem
  * changes, registering an undo for each filesystem change. If the callback throws or the
  * commit fails, the DB rolls back and the undo actions restore the disk.
  */

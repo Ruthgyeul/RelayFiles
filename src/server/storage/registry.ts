@@ -37,7 +37,7 @@ export interface VolumeCandidate {
   available: bigint;
 }
 
-/** New accounts go to the ACTIVE volume with the most free space (docs/plan.md §13.5). */
+/** New accounts go to the ACTIVE volume with the most free space (docs/architecture.md "스토리지"). */
 export function pickVolumeForNewAccount(candidates: readonly VolumeCandidate[]): string | null {
   let best: VolumeCandidate | null = null;
   for (const candidate of candidates) {

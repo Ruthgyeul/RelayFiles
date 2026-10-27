@@ -1,6 +1,6 @@
 /**
  * Error codes shared by the API and the client. The client maps codes to screens and
- * dialogs (docs/plan.md §9); messages here are safe to show to users.
+ * dialogs (docs/api.md "에러 코드"); messages here are safe to show to users.
  */
 export const ERRORS = {
   BAD_REQUEST: { status: 400, message: "The request is malformed." },

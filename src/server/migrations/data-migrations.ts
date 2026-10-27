@@ -3,7 +3,7 @@ import type { DbClient } from "../db/client";
 
 /**
  * Data migrations: backfills and value conversions that run after the SQL migrations
- * (docs/plan.md §13.8 ①). Each one works in batches and saves a cursor, so an interrupted
+ * (docs/runbook.md "데이터 마이그레이션"). Each one works in batches and saves a cursor, so an interrupted
  * run continues where it stopped. Finished migrations are recorded and never run again.
  */
 export interface DataMigrationStep {

@@ -3,7 +3,7 @@ import { ACCOUNT, AUTH, JOBS, LOGIN, MEDIA, STORAGE, TRANSCODE, UPLOAD } from ".
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
- * Environment configuration (docs/plan.md §19).
+ * Environment configuration (docs/architecture.md "설정과 환경 변수").
  * Every runtime setting is read here and nowhere else. Keys are split into groups that are
  * validated lazily when the subsystem first needs them, so the build does not require
  * database or secret values. `.env.example` must list exactly the keys defined below

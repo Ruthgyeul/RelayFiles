@@ -10,7 +10,7 @@ import { checkVolume } from "../storage/volume";
 
 /**
  * Chooses the volume for a new account: the mounted ACTIVE volume with the most free space
- * above its reserve (docs/plan.md §13.5 "다중 볼륨"). Unmounted volumes are skipped so a
+ * above its reserve (docs/architecture.md "스토리지"). Unmounted volumes are skipped so a
  * missing SSD never receives writes on the system disk.
  */
 export async function volumeForNewAccount(): Promise<StorageDriver> {

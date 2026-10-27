@@ -2,7 +2,7 @@ import "server-only";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
- * Account tokens are stored twice, neither in plain text (docs/plan.md §13.2):
+ * Account tokens are stored twice, neither in plain text (docs/security.md "인증"):
  * - `tokenLookup`: HMAC-SHA256 used to find the account at sign-in.
  * - `tokenEnc`: AES-256-GCM ciphertext so the owner can reveal the full token on the profile.
  *

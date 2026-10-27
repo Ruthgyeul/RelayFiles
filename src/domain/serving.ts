@@ -1,7 +1,7 @@
 /**
  * HTTP rules for serving files: byte ranges (video seeking) and which types may be shown
  * inline. Everything else is sent as an attachment so a crafted file (HTML, SVG) can never
- * run in the app's origin (docs/plan.md §13.5).
+ * run in the app's origin (docs/security.md "공유 링크·다운로드").
  */
 
 export interface ByteRange {

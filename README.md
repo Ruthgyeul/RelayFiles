@@ -2,8 +2,6 @@
 
 Fast and easy file sharing system. A private file drop for sharing and streaming media from a self-hosted server: upload, get a link, and let it expire on a date or after a set number of downloads.
 
-> Status: **M0–M16 implemented**, running in production. Design decisions: [`docs/plan.md`](docs/plan.md).
-
 ## Stack
 
 Next.js 16.4 (App Router) · React 19.3 · Tailwind CSS 4.3 · TypeScript 6 · PostgreSQL 16 + Prisma · Redis 7 + BullMQ · Vitest · Playwright
@@ -39,7 +37,6 @@ npm run worker         # thumbnails, previews, cleanup (needs ffmpeg)
 
 ## Documentation
 
-- [Design decisions](docs/plan.md)
 - [Deployment (Docker)](docs/deploy-ubuntu.md) · [Deployment (systemd)](docs/deploy-systemd.md) · [Runbook](docs/runbook.md)
 - [Architecture](docs/architecture.md)
 - [Design spec](docs/design/spec.md)

@@ -5,7 +5,7 @@ import { lockSecondsAfter, type LockoutPolicy } from "@/domain/lockout";
 import { countInWindow, redis } from "../redis";
 
 /**
- * Failed token sign-ins per client address (docs/plan.md §13.2). Counters live in Redis
+ * Failed token sign-ins per client address (docs/security.md "인증"). Counters live in Redis
  * with TTLs, so a Redis flush only resets lockouts and never locks anyone out.
  */
 const failKey = (ipKey: string) => `auth:fail:${ipKey}`;

@@ -1,8 +1,8 @@
 # 보안 모델
 
-설계 근거는 [plan.md](plan.md) §13.4–13.6. 이 문서는 구현된 내용을 기준으로 갱신한다.
+코드와 함께 갱신한다. 구조와 저장소 역할은 [architecture.md](architecture.md)를 본다.
 
-## 파일 스토리지 (M2 구현)
+## 파일 스토리지
 
 | 위협 | 구현 |
 |---|---|
@@ -25,7 +25,7 @@
 
 - 예상하지 못한 예외는 응답에 내용을 싣지 않는다(`apiHandler`). 요청 id로 로그를 찾는다.
 
-## 인증 (M3 구현)
+## 인증
 
 - **계정 토큰**(40자)은 평문으로 저장하지 않는다. `Account.tokenLookup` = HMAC-SHA256(`TOKEN_HMAC_KEY`)으로 로그인 시 계정을 찾고, `Account.tokenEnc` = AES-256-GCM(`TOKEN_ENC_KEY`, `[키 id 4B][IV 12B][tag 16B][암호문]`)으로 소유자가 프로필에서 다시 볼 수 있게 한다(`server/auth/token-crypto.ts`).
 - **키 교체**: `*_PREVIOUS`를 설정하면 옛 키로 만든 값도 읽힌다. 다음 로그인 때 새 키로 다시 암호화·해시한다. `npm run keys:rotate`가 모든 계정을 새 키로 다시 저장하면 `*_PREVIOUS`를 지운다(절차: [runbook.md](runbook.md#비밀값-교체)).
@@ -42,7 +42,7 @@
 - **`src/proxy.ts`**: 모든 요청에 `x-request-id`를 붙이고, `ADMIN_ALLOWED_CIDRS`가 있으면 `/admin/*`·`/api/admin/*`를 그 대역에서만 허용한다(페이지는 `/error/403`, API는 403 JSON). 다른 사이트 Origin에서 온 API 쓰기 요청(POST 등)은 403으로 거부한다(CSRF 방어). 권한 검사는 각 핸들러에서 다시 한다.
 - **첫 관리자**: 서버에서 `npm run admin:create`. 토큰은 터미널에 한 번만 출력된다.
 
-## 업로드 (M7 구현)
+## 업로드
 
 - 업로드는 `POST /api/uploads`로 배치를 만든 뒤 tus로 보낸다. 배치(계정, 볼륨, 대상 폴더, 파일 목록, 중복 처리 방식)는 Redis에 `UPLOAD_TMP_TTL_HOURS` 동안 저장되고, tus 업로드는 시작할 때 크기를 밝혀야 하고(`Upload-Defer-Length` 불가) 배치에 적힌 크기와 같아야 시작된다. 그 크기로 용량·여유 공간을 검사하고, 완료 시 받은 바이트 수를 다시 대조한다.
 - **진행 중인 업로드 예약**(`server/upload/reservations.ts`, `space.service.ts`): 확정된 파일만 보면 동시에 시작한 업로드가 각각 검사를 통과해 쿼터나 디스크를 넘는다. tus 업로드를 시작할 때 계정·볼륨·익명 계정 전체(`ANON_TOTAL_QUOTA_GB`) 범위마다 남은 공간과 진행 중 예약 합계를 Lua 스크립트 하나로 확인하고 예약한다. 완료(파일이 사용량에 들어감)·거부·취소(tus DELETE) 때 풀고, 남은 예약은 `UPLOAD_TMP_TTL_HOURS` 뒤 저절로 소멸한다(그때 조각도 정리된다). 배치 준비(`POST /api/uploads`)도 예약을 포함해 검사한다.
@@ -50,7 +50,7 @@
 - 조각은 볼륨의 `system/tmp/uploads/`에 쌓이고, 완료되면 같은 파일시스템 안에서 `rename`으로 사용자 폴더에 들어간다(복사 없음). 파일 종류는 내용(매직 바이트)으로 판정하고, SHA-256을 기록한다.
 - tus 경로(`/api/uploads/tus/*`)는 `proxy.ts` matcher에서 제외한다. 프록시는 요청 본문을 메모리에 복사(기본 10MB 제한)하기 때문이다. 이 경로는 쿠키(SameSite=Lax)와 배치 소유권으로 보호된다. 배치를 만드는 `POST /api/uploads`는 프록시의 Origin 검사를 거친다.
 
-## 공유 링크·다운로드 (M8–M9 구현)
+## 공유 링크·다운로드
 
 - 다운로드는 `nosniff`, 미디어 재생 외에는 `attachment`. HTML·SVG는 `application/octet-stream`으로 보낸다.
 - 링크 비밀번호는 argon2 해시로 저장한다. 맞히면 서명한 `rf_sh` 쿠키(v2)로 12시간(`SHARE.unlockHours`) 열린다. 쿠키 항목은 `[linkId, until, pwTag]`이고 `pwTag`는 `HMAC(COOKIE_SECRET, passwordHash)` 앞 8바이트다. 비밀번호를 바꾸면 기존 기기는 다시 입력해야 한다(v1 쿠키는 무시). 틀린 비밀번호는 링크·주소마다 600초에 10회(`countInWindow`, INCR+EXPIRE 원자 실행)를 넘으면 429.

@@ -4,9 +4,9 @@
 
 셀프호스팅 파일 공유·스트리밍 서비스. 디자인 시안을 Next.js로 구현하고 Ubuntu 서버(N95)에서 실제로 운영한다.
 
-- 구현 계획(단일 기준): [`docs/plan.md`](docs/plan.md)
-- 디자인 수치·토큰: [`docs/design/spec.md`](docs/design/spec.md) (구현이 끝나 시안 원본 `Relay_App.dc.html`은 삭제했다. 필요하면 `git show 056195d:docs/design/Relay_App.dc.html`)
-- 아키텍처와 레이어 규칙: [`docs/architecture.md`](docs/architecture.md)
+- 디자인 수치·토큰: [`docs/design/spec.md`](docs/design/spec.md)
+- 아키텍처, 레이어 규칙, 스토리지, 환경 변수, 버전 관리: [`docs/architecture.md`](docs/architecture.md)
+- 보안 모델: [`docs/security.md`](docs/security.md) · API: [`docs/api.md`](docs/api.md)
 
 ## 스택 (버전은 `package.json`이 기준)
 
@@ -17,8 +17,8 @@
 | 스타일 | Tailwind CSS 4.3 (CSS-first `@theme`), 디자인 토큰은 CSS 변수 |
 | 언어 | TypeScript 6.0 strict (`typescript-eslint`가 TS 7을 지원할 때까지 `~6.0.3` 고정) |
 | 검증 | zod 4 (env, API 계약) |
-| 데이터 | PostgreSQL 16 + Prisma 7, Redis 7 + BullMQ (M2부터) |
-| 파일 | 외장 SSD `/mnt/relayfilesDB`, 사용자별 루트 폴더에 원본 저장 (M2부터) |
+| 데이터 | PostgreSQL 16 + Prisma 7, Redis 7 + BullMQ |
+| 파일 | 외장 SSD `/mnt/relayfilesDB`, 사용자별 루트 폴더에 원본 저장 |
 | 테스트 | Vitest 5 (단위), Playwright 1.63 (E2E, 360/768/1280 뷰포트) |
 | 린트 | ESLint 9 flat config + `eslint-plugin-boundaries` (레이어 규칙) |
 

@@ -37,7 +37,7 @@ export interface SpaceInfo {
 }
 
 /**
- * Storage backend contract (docs/plan.md §13.5 "확장성"). Services use only this interface,
+ * Storage backend contract (docs/architecture.md "교체 가능한 인터페이스"). Services use only this interface,
  * so a second SSD or an S3/MinIO backend can be added without changing them.
  */
 export interface StorageDriver {

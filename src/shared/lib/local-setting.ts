@@ -1,6 +1,6 @@
 /**
  * Small per-device UI preferences in localStorage, stored as `{ v, data }` so a format
- * change can migrate or drop old values (docs/plan.md §13.8 ⑦). Storage can be missing
+ * change can migrate or drop old values (docs/architecture.md "버전 관리"). Storage can be missing
  * or blocked (private mode), so every access is guarded.
  */
 const VERSION = 1;

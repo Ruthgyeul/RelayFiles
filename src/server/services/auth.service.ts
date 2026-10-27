@@ -57,7 +57,7 @@ interface ProvisionOptions {
 /**
  * Creates the account row, its root folder, its directory on the storage volume and
  * (optionally) a device session in one storage transaction: if any step fails, nothing is
- * left behind in the database or on disk (docs/plan.md §13.1).
+ * left behind in the database or on disk (docs/security.md "계정 생성의 원자성").
  */
 async function provisionAccount({ isAdmin, inviteCode, client }: ProvisionOptions): Promise<ProvisionedAccount> {
   const driver = await volumeForNewAccount();
