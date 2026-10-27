@@ -69,6 +69,7 @@ model Account {
   lastLoginAt          DateTime      @default(now())
   sessions             Session[]
   nodes                Node[]
+  trashed              TrashedBytes[]
   traffic              TrafficDaily[]
 
   @@index([volumeId])
@@ -158,6 +159,8 @@ model Node {
   sha256        String?
   hasThumb      Boolean     @default(false)
   hasDerived    Boolean     @default(false)
+  /// The worker could not make the metadata-stripped copy (undecodable or too large): visitors get 415, not a retry.
+  stripFailed   Boolean     @default(false)
   /// Set by the reconcile job when the file is missing on disk.
   missing       Boolean     @default(false)
   /// Public link id (/d/<linkId>). Never changes during migrations; regenerated only on request.
@@ -337,4 +340,17 @@ model DataMigration {
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
   cursor     String?
+}
+
+/// Bytes of deleted files waiting in a volume's trash (system/trash). They still take disk space, so
+/// they count toward the account's storage until the daily job removes the trash for good.
+model TrashedBytes {
+  id        String   @id
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  bytes     BigInt
+  trashedAt DateTime @default(now())
+
+  @@index([accountId])
+  @@index([trashedAt])
 }
