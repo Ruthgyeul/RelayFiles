@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Shared helpers for the deploy scripts. Values are read from .env without sourcing it
 # (values such as "Seoul, KR" are not valid shell).
+# The variables defined here are used by the scripts that source this file, not by it.
+# shellcheck disable=SC2034
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export ENV_FILE="${ENV_FILE:-$ROOT/.env}"
@@ -30,6 +32,7 @@ compose_images() { RELEASE_TAG="$RELEASE_PROBE" "${COMPOSE[@]}" --profile "*" co
 health_ok() {
   local body
   body="$(curl -fsS "$1")" || return 1
+  # shellcheck disable=SC2001 # a regex, which ${body//…} cannot express
   sed 's/"components":{[^}]*}//' <<< "$body" | grep -q '"status":"ok"'
 }
 
@@ -41,9 +44,18 @@ STORAGE_USER="relayfiles"
 STORAGE_HOME="/var/lib/relayfiles"
 APP_BUNDLES="$ROOT/.app"
 
-# keep_newest GLOB COUNT → removes all but the newest COUNT paths matching GLOB.
+# newest_first PATH... → the PATHs that exist, newest modification time first, one per line.
+newest_first() {
+  local path
+  for path in "$@"; do
+    if [ -e "$path" ]; then printf '%s\t%s\n' "$(stat -c %Y -- "$path")" "$path"; fi
+  done | sort -rn | cut -f2-
+}
+
+# keep_newest COUNT PATH... → removes all but the newest COUNT of PATHs (pass an unquoted glob).
 keep_newest() {
-  local old
-  mapfile -t old < <(ls -1dt $1 2>/dev/null | tail -n +"$(($2 + 1))")
+  local count="$1" path old
+  shift
+  mapfile -t old < <(newest_first "$@" | tail -n +"$((count + 1))")
   for path in "${old[@]}"; do rm -rf -- "$path"; done
 }

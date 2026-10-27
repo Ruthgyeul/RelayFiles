@@ -6,6 +6,7 @@
 #   sudo deploy/scripts/setup-docker.sh --dry-run  # only print the commands
 # Every path comes from .env: DOCKER_DATA_ROOT, STORAGE_ROOT, DATA_DIR, LOG_DIR.
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 DRY_RUN=false

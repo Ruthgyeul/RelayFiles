@@ -1,0 +1,3 @@
+# shellcheck (CI: deploy scripts). Resolve `# shellcheck source=` paths next to each script.
+source-path=SCRIPTDIR
+external-sources=true

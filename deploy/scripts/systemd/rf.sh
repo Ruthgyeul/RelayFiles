@@ -4,6 +4,7 @@
 #   deploy/scripts/systemd/rf.sh admin:create
 #   deploy/scripts/systemd/rf.sh volume:init -- /mnt/relayfilesDB2
 set -euo pipefail
+# shellcheck source=../lib.sh
 source "$(dirname "$0")/../lib.sh"
 
 [ $# -gt 0 ] || { echo "usage: $0 <npm script> [args]" >&2; exit 2; }

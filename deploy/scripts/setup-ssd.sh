@@ -5,6 +5,7 @@
 #   sudo deploy/scripts/setup-ssd.sh /dev/sdX            # asks before formatting
 #   sudo deploy/scripts/setup-ssd.sh /dev/sdX --dry-run  # only prints the commands
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 DEVICE="${1:-}"
@@ -48,7 +49,7 @@ run cryptsetup open --key-file "$KEY" "$DEVICE" "$NAME"
 log "ext4 filesystem (no reserved blocks; the app keeps STORAGE_RESERVE_PERCENT free)"
 run mkfs.ext4 -L "$NAME" -m 0 "/dev/mapper/$NAME"
 
-LUKS_UUID="$( [ "$DRY_RUN" = true ] && echo '<luks-uuid>' || blkid -s UUID -o value "$DEVICE")"
+if [ "$DRY_RUN" = true ]; then LUKS_UUID="<luks-uuid>"; else LUKS_UUID="$(blkid -s UUID -o value "$DEVICE")"; fi
 log "Unlock and mount at boot ($MOUNT)"
 run sh -c "grep -q '^$NAME ' /etc/crypttab || echo '$NAME UUID=$LUKS_UUID $KEY luks,discard,nofail' >> /etc/crypttab"
 run sh -c "grep -q ' $MOUNT ' /etc/fstab || echo '/dev/mapper/$NAME $MOUNT ext4 defaults,noatime,nodev,nosuid,noexec,nofail,x-systemd.device-timeout=10s 0 2' >> /etc/fstab"

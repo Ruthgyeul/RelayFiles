@@ -6,6 +6,7 @@
 # with values from .env, then enables the services. It does not start the app; the first
 # deploy/scripts/systemd/release.sh does.
 set -euo pipefail
+# shellcheck source=../lib.sh
 source "$(dirname "$0")/../lib.sh"
 
 [ "$(id -u)" -eq 0 ] || { echo "Run with sudo." >&2; exit 1; }
