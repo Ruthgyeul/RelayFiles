@@ -57,6 +57,39 @@ describe("proxy", () => {
     expect(proxy(request("/files", { headers: wan })).status).toBe(200);
   });
 
+  it("adds a fresh CSP nonce to the request and the response, report-only by default", async () => {
+    const proxy = await load();
+    const first = proxy(request("/files"));
+    const second = proxy(request("/files"));
+    const policy = first.headers.get("content-security-policy-report-only")!;
+    expect(policy).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
+    expect(second.headers.get("content-security-policy-report-only")).not.toBe(policy);
+    // No second, enforced policy: Next.js would read it from the request and miss the nonce.
+    expect(first.headers.get("content-security-policy")).toBeNull();
+    expect(first.headers.get("reporting-endpoints")).toBe('csp="/api/csp-report"');
+    // Next.js reads the nonce from the request header the page renders with.
+    expect(first.headers.get("x-middleware-request-content-security-policy-report-only")).toBe(policy);
+  });
+
+  it("enforces the policy with CSP_MODE=enforce and ignores a policy the client sent", async () => {
+    vi.stubEnv("CSP_MODE", "enforce");
+    const proxy = await load();
+    const res = proxy(request("/files", { headers: { "content-security-policy": "script-src 'nonce-attacker'" } }));
+    const policy = res.headers.get("content-security-policy")!;
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).not.toContain("attacker");
+    expect(res.headers.get("x-middleware-request-content-security-policy")).toBe(policy);
+    expect(res.headers.get("content-security-policy-report-only")).toBeNull();
+  });
+
+  it("sends HSTS only for the https PUBLIC_URL host", async () => {
+    vi.stubEnv("PUBLIC_URL", "https://files.local");
+    const proxy = await load();
+    expect(proxy(request("/files")).headers.get("strict-transport-security")).toBe("max-age=31536000");
+    const lan = new NextRequest("http://192.168.0.100/files", { headers: { host: "192.168.0.100" } });
+    expect(proxy(lan).headers.get("strict-transport-security")).toBeNull();
+  });
+
   it("leaves admin paths open when no networks are configured", async () => {
     const proxy = await load("");
     expect(proxy(request("/admin/server", { headers: { "x-real-ip": "203.0.113.9" } })).status).toBe(200);

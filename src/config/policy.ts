@@ -302,3 +302,12 @@ export const TRANSCODE = {
   /** Retry-After sent while every conversion slot is in use. */
   busyRetrySec: 10,
 } as const;
+
+export const HEADERS = {
+  /** Default for HSTS_MAX_AGE_SEC: one year, the minimum browsers' preload lists accept. */
+  hstsMaxAgeSec: 365 * 24 * 60 * 60,
+  /** Largest CSP violation report the app reads; browsers send a few hundred bytes. */
+  cspReportMaxBytes: 16 * 1024,
+  /** The same violation (directive + blocked resource) is logged at most once per this window. */
+  cspReportDedupeSec: 60 * 60,
+} as const;

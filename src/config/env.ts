@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, JOBS, LOGIN, MEDIA, STORAGE, TRANSCODE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, HEADERS, JOBS, LOGIN, MEDIA, STORAGE, TRANSCODE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -50,6 +50,12 @@ export const ENV_GROUPS = {
     SERVER_LOCATION: z.string().default("Seoul, KR"),
     ENABLE_UI_CATALOG: bool.default(false),
     ADMIN_ALLOWED_CIDRS: cidrList.default([]),
+    /** "report-only" logs violations without blocking (to /api/csp-report); "enforce" blocks them. */
+    CSP_MODE: z.enum(["report-only", "enforce"]).default("report-only"),
+    /** Strict-Transport-Security max-age when PUBLIC_URL is https (0 = do not send it, e.g. Cloudflare already does). */
+    HSTS_MAX_AGE_SEC: z.coerce.number().int().min(0).default(HEADERS.hstsMaxAgeSec),
+    /** Adds includeSubDomains; only when every subdomain of PUBLIC_URL's domain is https. */
+    HSTS_INCLUDE_SUBDOMAINS: bool.default(false),
   }),
   database: z.object({
     POSTGRES_HOST: z.string().default("localhost"),
