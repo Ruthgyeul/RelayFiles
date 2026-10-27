@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { itemMenu, names, newFolder, openFiles } from "./helpers";
 
 test("renames with the design's conflict message", async ({ page }) => {

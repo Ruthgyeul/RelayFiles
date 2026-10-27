@@ -1,4 +1,5 @@
-import { expect, test, type Browser, type Page, type ViewportSize } from "@playwright/test";
+import type { Browser, Page, ViewportSize } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import type { FolderView, NodeItem } from "@/contracts/nodes";
 import { itemMenu, newFolder, openFiles, silentWav } from "./helpers";
 

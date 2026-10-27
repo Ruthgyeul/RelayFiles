@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { expect, test, type Browser, type Page, type ViewportSize } from "@playwright/test";
+import type { Browser, Page, ViewportSize } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /** Creates an admin with the real console script and returns its token. */
 function createAdmin(): string {

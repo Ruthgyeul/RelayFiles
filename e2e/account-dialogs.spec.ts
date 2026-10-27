@@ -1,4 +1,5 @@
-import { expect, test, type Locator } from "@playwright/test";
+import type { Locator } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 async function css(locator: Locator, property: string): Promise<string> {
   return locator.first().evaluate((el, prop) => getComputedStyle(el).getPropertyValue(prop), property);

@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import type { FolderView } from "@/contracts/nodes";
 import { newFolder, openFiles } from "./helpers";
 

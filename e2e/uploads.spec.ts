@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { names, openFiles } from "./helpers";
 
 const file = (name: string, content: string, mimeType = "text/plain") => ({ name, mimeType, buffer: Buffer.from(content) });
