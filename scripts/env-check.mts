@@ -2,11 +2,11 @@
  * Validates the environment exactly as the app would load it (.env, .env.local, .env.<mode>),
  * without starting the server. Usage: npm run env:check [-- --production]
  */
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { checkAllEnv, ENV_KEYS } from "../src/config/env";
 
 const production = process.argv.includes("--production");
-const { loadedEnvFiles } = loadEnvConfig(process.cwd(), !production);
+const { loadedEnvFiles } = nextEnv.loadEnvConfig(process.cwd(), !production);
 
 console.log(`Mode: ${production ? "production" : "development"}`);
 console.log(`Loaded: ${loadedEnvFiles.length ? loadedEnvFiles.map((f) => f.path).join(", ") : "(no .env files found; copy .env.example to .env)"}`);
