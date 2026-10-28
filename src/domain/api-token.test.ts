@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { bearerToken, hasScope, tokenExpired } from "./api-token";
-import { newApiToken, newAccountToken } from "./ids";
+import { apiTokenIdOf, bearerToken, hasScope, tokenExpired } from "./api-token";
+import { newAccountToken, newApiToken, newApiTokenId } from "./ids";
 
 describe("personal API tokens", () => {
   it("reads only well-formed personal tokens from the Authorization header", () => {
-    const token = newApiToken();
-    expect(token).toMatch(/^rfp_[A-Za-z0-9]{43}$/);
+    const id = newApiTokenId();
+    const token = newApiToken(id);
+    expect(token).toMatch(new RegExp(`^rfp_${id}_[A-Za-z0-9]{43}$`));
+    expect(apiTokenIdOf(token)).toBe(id);
+    expect(apiTokenIdOf(`rfp_${id}_short`)).toBeNull();
     expect(bearerToken(`Bearer ${token}`)).toBe(token);
     expect(bearerToken(`bearer  ${token} `)).toBe(token);
     expect(bearerToken(null)).toBeNull();

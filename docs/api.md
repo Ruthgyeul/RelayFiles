@@ -98,7 +98,7 @@
 
 ### API v1 (스크립트·앱용, 개인 API 토큰)
 
-프로필 "API tokens"에서 만든 토큰(`rfp_` + 43자)을 `Authorization: Bearer <token>`으로 보낸다. 쿠키는 읽지 않는다(브라우저 세션으로는 호출할 수 없다). 응답 형식과 에러 코드는 위와 같다.
+프로필 "API tokens"에서 만든 토큰(`rfp_<id>_<43자>`)을 `Authorization: Bearer <token>`으로 보낸다. 쿠키는 읽지 않는다(브라우저 세션으로는 호출할 수 없다). 응답 형식과 에러 코드는 위와 같다.
 
 - 토큰이 없거나 틀리거나 만료됐거나 계정이 삭제일에 닿으면 401, 범위(scope)가 없으면 403.
 - 토큰마다 분당 `API.requestsPerMinute`(120)회를 넘기면 429 + `Retry-After`.

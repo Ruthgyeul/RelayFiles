@@ -3,7 +3,7 @@ CREATE TABLE "ApiToken" (
     "id" TEXT NOT NULL,
     "accountId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "lookup" TEXT NOT NULL,
+    "secretHash" TEXT NOT NULL,
     "scopes" TEXT[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expiresAt" TIMESTAMP(3),
@@ -11,9 +11,6 @@ CREATE TABLE "ApiToken" (
 
     CONSTRAINT "ApiToken_pkey" PRIMARY KEY ("id")
 );
-
--- CreateIndex
-CREATE UNIQUE INDEX "ApiToken_lookup_key" ON "ApiToken"("lookup");
 
 -- CreateIndex
 CREATE INDEX "ApiToken_accountId_idx" ON "ApiToken"("accountId");

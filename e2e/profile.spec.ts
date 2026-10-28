@@ -60,7 +60,7 @@ test("creates an API token, shows it once, uses it and revokes it", async ({ pag
 
   const shown = page.getByRole("dialog", { name: "Copy your API token" });
   const value = await shown.getByLabel("New API token").textContent();
-  expect(value).toMatch(/^rfp_[A-Za-z0-9_-]{43}$/);
+  expect(value).toMatch(/^rfp_[a-z0-9]{12}_[A-Za-z0-9]{43}$/);
   await shown.getByRole("button", { name: "Copy" }).click();
   await expect(page.getByText("API token copied")).toBeVisible();
   await shown.getByRole("button", { name: "Done" }).click();

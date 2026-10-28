@@ -13,7 +13,10 @@ export const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export const ID_LENGTH = { account: 12, node: 12, link: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12 } as const;
 
-/** Personal API tokens start with this, so they are told apart from account tokens and found by secret scanners. */
+/**
+ * Personal API tokens are `rfp_<token id>_<43 random characters>`: the prefix tells them apart
+ * from account tokens (and lets secret scanners find them), the id finds the row to check.
+ */
 export const API_TOKEN_PREFIX = "rfp_";
 
 type RandomSource = (bytes: Uint8Array) => Uint8Array;
@@ -41,7 +44,7 @@ export const ID_PATTERN = {
   link: pattern(ID_LENGTH.link, ID_ALPHABET),
   token: pattern(ID_LENGTH.token, TOKEN_ALPHABET),
   session: pattern(ID_LENGTH.session, ID_ALPHABET),
-  apiToken: new RegExp(`^${API_TOKEN_PREFIX}[${TOKEN_ALPHABET}]{${ID_LENGTH.apiToken}}$`),
+  apiToken: new RegExp(`^${API_TOKEN_PREFIX}([${ID_ALPHABET}]{${ID_LENGTH.apiTokenId}})_[${TOKEN_ALPHABET}]{${ID_LENGTH.apiToken}}$`),
   apiTokenId: pattern(ID_LENGTH.apiTokenId, ID_ALPHABET),
   anonName: new RegExp(`^anon-[${ID_ALPHABET}]{${ID_LENGTH.anonSuffix}}$`),
   invite: new RegExp(`^[${INVITE_ALPHABET}]{4}-[${INVITE_ALPHABET}]{4}$`),
@@ -58,7 +61,7 @@ export const newLinkId = () => randomString(ID_LENGTH.link, ID_ALPHABET);
 export const newAccountToken = () => randomString(ID_LENGTH.token, TOKEN_ALPHABET);
 export const newSessionId = () => randomString(ID_LENGTH.session, ID_ALPHABET);
 export const newAnonName = () => `anon-${randomString(ID_LENGTH.anonSuffix, ID_ALPHABET)}`;
-export const newApiToken = () => `${API_TOKEN_PREFIX}${randomString(ID_LENGTH.apiToken, TOKEN_ALPHABET)}`;
+export const newApiToken = (id: string) => `${API_TOKEN_PREFIX}${id}_${randomString(ID_LENGTH.apiToken, TOKEN_ALPHABET)}`;
 export const newApiTokenId = () => randomString(ID_LENGTH.apiTokenId, ID_ALPHABET);
 export const newInviteCode = () => `${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}-${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}`;
 

@@ -361,6 +361,10 @@ export const API = {
   requestsPerMinute: 120,
   /** "Last used" is written at most this often. */
   touchIntervalSec: 5 * 60,
+  /** A token checked against its argon2 hash is trusted this long by the same process (the row is still read). */
+  verifyCacheSec: 5 * 60,
+  /** Tokens one process remembers as checked; the oldest is dropped first. */
+  verifyCacheMax: 1_000,
 } as const;
 
 /** Backup verification (deploy/scripts/verify-backup.sh, npm run backup:verify). */

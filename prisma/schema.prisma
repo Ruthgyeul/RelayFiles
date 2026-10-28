@@ -382,8 +382,8 @@ model ApiToken {
   accountId  String
   account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   name       String
-  /// HMAC-SHA256 (hex) of the token with TOKEN_HMAC_KEY, like Account.tokenLookup.
-  lookup     String    @unique
+  /// argon2id hash of the whole token (rfp_<id>_<secret>); the token itself is never stored.
+  secretHash String
   /// What the token may do (contracts/api-tokens.ts API_SCOPES).
   scopes     String[]
   createdAt  DateTime  @default(now())

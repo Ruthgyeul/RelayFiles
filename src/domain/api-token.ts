@@ -7,6 +7,11 @@ export function bearerToken(header: string | null): string | null {
   return token && ID_PATTERN.apiToken.test(token) ? token : null;
 }
 
+/** The token id inside a personal token (which row to check it against). */
+export function apiTokenIdOf(token: string): string | null {
+  return ID_PATTERN.apiToken.exec(token)?.[1] ?? null;
+}
+
 /** Whether a token with `scopes` may do what `needed` names. */
 export function hasScope(scopes: readonly string[], needed: string): boolean {
   return scopes.includes(needed);
