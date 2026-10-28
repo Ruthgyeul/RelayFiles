@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, HEADERS, JOBS, LOGIN, MEDIA, STORAGE, TRANSCODE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, HEADERS, JOBS, LOGIN, MEDIA, NGINX, STORAGE, TRANSCODE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -129,6 +129,12 @@ export const ENV_GROUPS = {
     /** Host address Nginx is published on: 127.0.0.1 when another proxy on the host sits in front. */
     NGINX_LISTEN_HOST: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("0.0.0.0"),
     NGINX_LISTEN_PORT: port.default(80),
+    /** Nginx request limits (both templates): body size in MB, and per-minute rates with bursts. */
+    NGINX_MAX_BODY_MB: positiveInt.max(1_024).default(NGINX.maxBodyMb),
+    NGINX_AUTH_RATE_PER_MIN: positiveInt.default(NGINX.authRatePerMin),
+    NGINX_AUTH_BURST: positiveInt.default(NGINX.authBurst),
+    NGINX_UPLOAD_RATE_PER_MIN: positiveInt.default(NGINX.uploadRatePerMin),
+    NGINX_UPLOAD_BURST: positiveInt.default(NGINX.uploadBurst),
     CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
     /** Host directory for PostgreSQL, Redis and backups (docker compose). */
     DATA_DIR: z.string().startsWith("/").default("/srv/relayfiles"),

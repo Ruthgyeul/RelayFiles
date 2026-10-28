@@ -17,8 +17,6 @@ import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
 import { driverForAccount } from "./volume.service";
 
-/** Tag searches return at most this many items. */
-const TAG_SEARCH_LIMIT = 500;
 
 const VISIBILITY: Record<NodeRow["visibility"], Visibility> = { INHERIT: "inherit", PRIVATE: "private", PUBLIC: "public" };
 
@@ -116,7 +114,7 @@ async function withPaths(accountId: string, rows: NodeRow[]): Promise<TaggedItem
 
 /** Items anywhere in the account that carry every tag, with their folder path. */
 export async function searchByTags(accountId: string, tags: string[]): Promise<TaggedItem[]> {
-  return withPaths(accountId, await findByTags(db(), accountId, tags, TAG_SEARCH_LIMIT));
+  return withPaths(accountId, await findByTags(db(), accountId, tags, SEARCH.tagResultLimit));
 }
 
 /**
@@ -126,7 +124,7 @@ export async function searchByTags(accountId: string, tags: string[]): Promise<T
 export async function searchItems(accountId: string, raw: string): Promise<TaggedItem[]> {
   const query = parseSearchQuery(raw);
   if (query.mode === "recent") return withPaths(accountId, await recentFiles(db(), accountId, SEARCH.recentItems));
-  const rows = query.mode === "tags" ? await findByTags(db(), accountId, query.tags, TAG_SEARCH_LIMIT) : await findByName(db(), accountId, query.text, SEARCH.nameCandidates);
+  const rows = query.mode === "tags" ? await findByTags(db(), accountId, query.tags, SEARCH.tagResultLimit) : await findByName(db(), accountId, query.text, SEARCH.nameCandidates);
   const ranked = rankByName(
     rows.map((row) => ({ row, name: row.name, type: row.type === "FOLDER" ? ("folder" as const) : ("file" as const) })),
     query.mode === "name" ? query.text : "",

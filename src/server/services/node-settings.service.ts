@@ -1,5 +1,6 @@
 import "server-only";
 import { hash } from "@node-rs/argon2";
+import { FILES, SHARE } from "@/config/policy";
 import type { LinkEventDto, NodeItem, SettingsInput } from "@/contracts/nodes";
 import { newLinkId } from "@/domain/ids";
 import { isExpiryOption, nextExpiry } from "@/domain/share";
@@ -12,11 +13,6 @@ import { descendantIds, inheritVisibilityBelow } from "../repositories/node-tree
 import { requireNode, type NodeOwner } from "./node-ops.service";
 import { toNodeItem } from "./node.service";
 
-/** Link activity entries returned to the owner (the database keeps 200 per item). */
-const ACTIVITY_LIMIT = 200;
-/** Tags one item can carry. */
-const MAX_TAGS_PER_ITEM = 20;
-
 /** Adds and removes tags on one or many items (the tags dialog edits common tags in bulk). */
 export async function updateTags(owner: NodeOwner, ids: string[], add: string[], remove: string[]): Promise<{ updated: number }> {
   const adding = [...new Set(add.map(normalizeTag).filter(Boolean))];
@@ -26,7 +22,7 @@ export async function updateTags(owner: NodeOwner, ids: string[], add: string[],
   await db().$transaction(async (tx) => {
     for (const row of rows) {
       const tags = [...new Set([...row.tags.filter((tag) => !removing.has(tag)), ...adding])];
-      if (tags.length > MAX_TAGS_PER_ITEM) throw new ApiError("BAD_REQUEST", `An item can have at most ${MAX_TAGS_PER_ITEM} tags.`);
+      if (tags.length > FILES.maxTagsPerItem) throw new ApiError("BAD_REQUEST", `An item can have at most ${FILES.maxTagsPerItem} tags.`);
       await updateNode(tx, row.id, { tags });
     }
   });
@@ -36,7 +32,7 @@ export async function updateTags(owner: NodeOwner, ids: string[], add: string[],
 const VISIBILITY = { inherit: "INHERIT", private: "PRIVATE", public: "PUBLIC" } as const;
 
 /**
- * Saves share settings (design `saveSettings`). Only admins change expiry and
+ * Saves share settings. Only admins change expiry and
  * delete-after-download; members' items are deleted with their account.
  */
 export async function updateSettings(owner: NodeOwner, nodeId: string, input: SettingsInput): Promise<NodeItem> {
@@ -65,7 +61,7 @@ export async function updateSettings(owner: NodeOwner, nodeId: string, input: Se
   return toNodeItem(updated);
 }
 
-/** Replaces the share link; the old one stops working at once (design `regenLink`). */
+/** Replaces the share link; the old one stops working at once. */
 export async function regenerateLink(owner: NodeOwner, nodeId: string): Promise<NodeItem> {
   const row = await requireNode(owner.id, nodeId);
   const updated = await db().$transaction(async (tx) => {
@@ -80,7 +76,7 @@ export async function regenerateLink(owner: NodeOwner, nodeId: string): Promise<
 export async function linkActivity(owner: NodeOwner, nodeId: string): Promise<LinkEventDto[]> {
   const row = await requireNode(owner.id, nodeId);
   const ids = row.type === "FOLDER" ? [row.id, ...(await descendantIds(db(), row.id))] : [row.id];
-  const events = await listLinkEvents(db(), ids, ACTIVITY_LIMIT);
+  const events = await listLinkEvents(db(), ids, SHARE.activityListLimit);
   return events.map((event) => ({ ...event, kind: event.kind.toLowerCase() as LinkEventDto["kind"], at: event.at.toISOString() }));
 }
 

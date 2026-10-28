@@ -65,7 +65,11 @@ systemctl enable relayfiles-app relayfiles-worker
 log "Nginx site $SITE"
 CERTBOT=false
 grep -q "managed by Certbot" "$SITE" 2> /dev/null && CERTBOT=true
-render "$ROOT/deploy/nginx/host/relayfiles.conf.template" APP_DIR APP_PORT SERVER_NAME NGINX_LISTEN_PORT > "$SITE.partial"
+# Request limits default as in src/config/policy.ts NGINX.
+NGINX_MAX_BODY_MB="$(env_value NGINX_MAX_BODY_MB 100)" NGINX_AUTH_RATE_PER_MIN="$(env_value NGINX_AUTH_RATE_PER_MIN 20)" NGINX_AUTH_BURST="$(env_value NGINX_AUTH_BURST 20)" \
+  NGINX_UPLOAD_RATE_PER_MIN="$(env_value NGINX_UPLOAD_RATE_PER_MIN 60)" NGINX_UPLOAD_BURST="$(env_value NGINX_UPLOAD_BURST 30)" \
+  render "$ROOT/deploy/nginx/host/relayfiles.conf.template" APP_DIR APP_PORT SERVER_NAME NGINX_LISTEN_PORT \
+  NGINX_MAX_BODY_MB NGINX_AUTH_RATE_PER_MIN NGINX_AUTH_BURST NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST > "$SITE.partial"
 mv "$SITE.partial" "$SITE"
 ln -sfn "$SITE" /etc/nginx/sites-enabled/relayfiles.conf
 nginx -t

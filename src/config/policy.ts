@@ -14,6 +14,8 @@ export const DB_WRITE = {
 export const ACCOUNT = {
   /** Member accounts are deleted with their files this many days after creation. */
   ttlDays: 14,
+  /** Days shown in the profile "Traffic" card. */
+  trafficDays: 30,
   /** Storage quota for new member accounts, in GB (decimal, 1 GB = 1e9 bytes like the design). */
   defaultQuotaGb: 5,
 } as const;
@@ -32,13 +34,9 @@ export const STORAGE = {
   reservePercent: 5,
   /** How often the volume marker file is checked, in seconds. */
   volumeWatchIntervalSec: 30,
-  /** Upload/quota warning levels (percent of quota). */
-  quotaWarnPercent: 80,
-  quotaFullPercent: 95,
   /** Deleted items stay in the volume's trash this long before they are removed for good. */
   trashRetentionHours: 24,
-  /** Filesystem limits (ext4). */
-  maxNameBytes: 255,
+  /** Filesystem limits (ext4; the name limit is domain/names MAX_NAME_BYTES). */
   maxPathBytes: 4096,
   maxFolderDepth: 32,
   /**
@@ -63,6 +61,8 @@ export const FILES = {
    * quota, so without a count millions of them could use up the volume's inodes and the database.
    */
   maxItemsPerAccount: 100_000,
+  /** Tags one item can carry. */
+  maxTagsPerItem: 20,
 } as const;
 
 /** Global search (design `gs*`, Ctrl/⌘ K). */
@@ -77,6 +77,8 @@ export const SEARCH = {
   maxQueryLength: 200,
   /** Delay before a query runs while typing. */
   debounceMs: 150,
+  /** Items a tag search (File Manager "#tag", global search) returns at most. */
+  tagResultLimit: 500,
 } as const;
 
 export const UPLOAD = {
@@ -103,6 +105,10 @@ export const SHARE = {
   eventDedupeSec: 1_800,
   /** Link activity entries kept per item (design: 200). */
   eventsKeptPerNode: 200,
+  /** Entries the Activity dialog shows; a folder's log merges everything inside it. */
+  activityListLimit: 200,
+  /** Password unlocks one device remembers; the oldest are dropped first. */
+  unlockCookieMaxLinks: 50,
   /** Links of expired items keep answering "This link has expired" for this long. */
   tombstoneDays: 90,
   /**
@@ -212,8 +218,10 @@ export const METRICS = {
   linkCacheSec: 300,
 } as const;
 
-/** Status page (design `isStatus`): browser checks, history ranges and the rating thresholds. */
+/** Status page: browser checks, history ranges and the rating thresholds. */
 export const STATUS = {
+  /** /api/health gives up on PostgreSQL, Redis or the volume after this long and reports it down. */
+  healthCheckTimeoutMs: 2_000,
   /** The browser checks the server this often while the page is open (design: 2.5 s). */
   pingIntervalMs: 2_500,
   /** Browser checks kept for the averages (design: last 40). */
@@ -284,6 +292,12 @@ export const AUTH = {
   reauthWindowMin: 10,
   /** Admin audit entries are kept this long. */
   auditRetentionDays: 365,
+  /** Audit entries the admin page loads at once. */
+  auditListLimit: 200,
+  /** The device cookie lives a year; the sessions inside it end with their own lifetimes. */
+  sessionCookieMaxAgeSec: 365 * 24 * 60 * 60,
+  /** Accounts signed in on one device at most. */
+  maxSessionsPerDevice: 10,
 } as const;
 
 /** Production log files (LOG_DIR): rotated by size so a busy server cannot fill the disk. */
@@ -320,6 +334,24 @@ export const TRANSCODE = {
   maxOutputBytes: 4 * 1024 * 1024 * 1024,
   /** Retry-After sent while every conversion slot is in use. */
   busyRetrySec: 10,
+} as const;
+
+/** Server settings (admin Settings page). */
+export const SETTINGS = {
+  /** The theme is read on every page; this long it comes from the cache. */
+  themeCacheSec: 60,
+} as const;
+
+/** Defaults of the Nginx request limits (deploy env NGINX_*; both Nginx templates use them). */
+export const NGINX = {
+  /** Largest request body; tus chunks (UPLOAD_CHUNK_SIZE_MB, at most 95) must fit. */
+  maxBodyMb: 100,
+  /** Sign-in and account requests per client address per minute, and the burst allowed above it. */
+  authRatePerMin: 20,
+  authBurst: 20,
+  /** Upload preparations per client address per minute, and the burst allowed above it. */
+  uploadRatePerMin: 60,
+  uploadBurst: 30,
 } as const;
 
 export const HEADERS = {

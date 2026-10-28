@@ -215,7 +215,8 @@ nano .env
 | `ANON_TOTAL_QUOTA_GB` | 없음 | 익명 가입을 열어 둘 때. 디스크 크기보다 작게 잡아 낯선 사용자가 디스크를 채우지 못하게 한다 |
 | `DEFAULT_QUOTA_GB` / `ACCOUNT_TTL_DAYS` | 5 / 14 | 새 계정의 용량과 자동 삭제일 |
 | `UPLOAD_MAX_FILE_SIZE_GB` | 없음 | 파일 하나의 최대 크기 |
-| `UPLOAD_CHUNK_SIZE_MB` | 50 | Cloudflare를 쓰면 100 미만으로 둔다 (Nginx `client_max_body_size`는 100m) |
+| `UPLOAD_CHUNK_SIZE_MB` | 50 | Cloudflare를 쓰면 100 미만으로 둔다 (Nginx `client_max_body_size`는 `NGINX_MAX_BODY_MB`, 기본 100) |
+| `NGINX_MAX_BODY_MB`, `NGINX_AUTH_RATE_PER_MIN`, `NGINX_AUTH_BURST`, `NGINX_UPLOAD_RATE_PER_MIN`, `NGINX_UPLOAD_BURST` | 100, 20, 20, 60, 30 | 두 Nginx 템플릿(compose·호스트)의 요청 크기와 주소별 요청 수 제한. 바꾸면 nginx를 다시 만든다(`docker compose up -d nginx`, systemd는 `install.sh`) |
 | `APP_MEMORY_MAX`·`APP_CPUS`·`WORKER_MEMORY_MAX`·`WORKER_CPUS` | 2G·3·2G·2 | 서버 사양에 맞춰. 둘의 합이 전체 메모리의 절반 정도면 PostgreSQL이 여유 있다 |
 | `VIDEO_TRANSCODE_MAX` | 2 | 동시 영상 변환 수. CPU가 약하면 1, 끄려면 0 |
 | `JOBS_TIMEZONE`·`CLEANUP_CRON` | `Asia/Seoul`·`0 4 * * *` | 매일 정리 작업 시각 |

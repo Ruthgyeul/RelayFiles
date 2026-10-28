@@ -11,8 +11,6 @@ import { decodeSigned, encodeSigned } from "../auth/signed-cookie";
  * and tags only (never passwords) and is signed so it cannot be edited.
  */
 export const UNLOCK_COOKIE = "rf_sh";
-/** Links remembered at once; the oldest are dropped first. */
-const MAX_LINKS = 50;
 const SECOND = MS.second;
 const HOUR_SECONDS = MS.hour / MS.second;
 const PURPOSE = "share:";
@@ -22,7 +20,7 @@ const TAG_BYTES = 8;
 /** v1 entries had no password tag; they are ignored, so those visitors enter the password once more. */
 const payloadSchema = z.object({
   v: z.literal(2),
-  u: z.array(z.tuple([z.string().max(32), z.number().int(), z.string().max(16)])).max(MAX_LINKS),
+  u: z.array(z.tuple([z.string().max(32), z.number().int(), z.string().max(16)])).max(SHARE.unlockCookieMaxLinks),
 });
 
 export interface Unlock {
@@ -68,7 +66,7 @@ export function unlocksWith(current: Unlocks, links: readonly { linkId: string; 
     next.delete(linkId);
     next.set(linkId, { until: Math.floor(now / SECOND) + SHARE.unlockHours * HOUR_SECONDS, tag: passwordTag(passwordHash, secret) });
   }
-  const entries = [...next.entries()].slice(-MAX_LINKS).map(([id, { until, tag }]) => [id, until, tag]);
+  const entries = [...next.entries()].slice(-SHARE.unlockCookieMaxLinks).map(([id, { until, tag }]) => [id, until, tag]);
   return encodeSigned({ v: 2, u: entries }, secret, PURPOSE);
 }
 

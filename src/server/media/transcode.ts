@@ -73,7 +73,7 @@ export function transcodeResponse(req: Request, path: string): Response {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   };
   child.on("error", (error) => {
-    logger.warn("video conversion could not start", { error: error.message });
+    logger.warn("video conversion could not start", { error });
     release();
   });
   child.on("close", (code, signal) => {

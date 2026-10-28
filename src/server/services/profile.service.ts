@@ -1,6 +1,6 @@
 import "server-only";
 import { getEnv } from "@/config/env";
-import { MS } from "@/config/policy";
+import { ACCOUNT, MS } from "@/config/policy";
 import type { DeviceDto, Preferences, ProfileData } from "@/contracts/profile";
 import { dailySeries, deletionDate, deviceLocation, maskToken } from "@/domain/account";
 import { db, type DbClient } from "../db/client";
@@ -17,8 +17,6 @@ import { revealToken } from "./auth.service";
 import { deleteItems } from "./node-ops.service";
 import { driverForAccount } from "./volume.service";
 
-/** Days shown in the profile "Traffic" card. */
-const TRAFFIC_DAYS = 30;
 
 export async function listDevices(accountId: string, currentSessionId: string): Promise<DeviceDto[]> {
   const sessions = await listAccountSessions(db(), accountId);
@@ -38,7 +36,7 @@ export async function listDevices(accountId: string, currentSessionId: string): 
 /** Everything the My Profile page shows. */
 export async function profileOf(account: AccountRow, currentSessionId: string, now: Date = new Date()): Promise<ProfileData> {
   const ttlDays = getEnv("policy").ACCOUNT_TTL_DAYS;
-  const from = new Date(now.getTime() - (TRAFFIC_DAYS - 1) * MS.day);
+  const from = new Date(now.getTime() - (ACCOUNT.trafficDays - 1) * MS.day);
   const [token, usage, counts, traffic, devices, lastLoginAt] = await Promise.all([
     revealToken(account.id),
     accountUsage(db(), account.id),
@@ -47,7 +45,7 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
     listDevices(account.id, currentSessionId),
     lastLoginOf(db(), account.id),
   ]);
-  const days = dailySeries(traffic, TRAFFIC_DAYS, now);
+  const days = dailySeries(traffic, ACCOUNT.trafficDays, now);
   return {
     account: {
       id: account.id,
