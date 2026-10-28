@@ -26,3 +26,13 @@ export function normalizeTag(input: string): string {
     .replace(/[#,]/g, "")
     .slice(0, MAX_TAG_LENGTH);
 }
+
+/**
+ * The search query after clicking a tag chip: a tag search gets the tag added (unless it is
+ * already there), any other text is replaced by a search for that tag.
+ */
+export function withTagQuery(query: string, tag: string): string {
+  const trimmed = query.trim();
+  if (!trimmed.startsWith("#")) return `#${tag}`;
+  return parseTags(trimmed).includes(tag) ? trimmed : `${trimmed} #${tag}`;
+}

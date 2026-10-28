@@ -1,85 +1,22 @@
 "use client";
 
-import type { DragEvent, ReactNode } from "react";
-import type { NodeItem } from "@/contracts/nodes";
-import { formatClock, formatDateTime, formatSize } from "@/domain/format";
-import { itemCount, settingTags } from "@/domain/tree";
+import type { ReactNode } from "react";
+import { formatClock, formatDateTime } from "@/domain/format";
+import { settingTags } from "@/domain/tree";
 import { FILES } from "@/config/policy";
 import { previewKindOf } from "@/domain/media";
 import { ListPreview } from "@/features/viewer/ListPreview";
 import { useResume } from "@/features/viewer/useResume";
 import { cn } from "@/shared/lib/cn";
 import { BusyPill } from "@/shared/ui/BusyPill";
-import { Icon, type IconName } from "@/shared/ui/icon/Icon";
+import { Icon } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
 import { fileUrls } from "@/shared/lib/files-api";
 import { kindOf } from "@/shared/ui/node-kind";
 import { toShareSettings } from "./settings";
-import type { DropTargetProps } from "./useDragMove";
-
-export interface ItemProps {
-  item: NodeItem;
-  /** Folder path shown before the meta in tag search results. */
-  parentPath?: string;
-  parentVisibility: "private" | "public";
-  selected: boolean;
-  now: number;
-  onToggle: () => void;
-  onPrimary: () => void;
-  /** Opens a file in the viewer (thumbnails, "Open viewer"). */
-  onPreview: () => void;
-  onMenu: (anchor: HTMLElement) => void;
-  onTag: (tag: string) => void;
-  menuOpen: boolean;
-  /** Drag source props (desktop drag-to-move). */
-  drag?: { draggable: true; onDragStart: (event: DragEvent) => void; onDragEnd: () => void };
-  /** Drop target props for folders. */
-  drop?: DropTargetProps;
-  /** A dragged item is over this folder. */
-  dropOver?: boolean;
-  /** Long lists: skip rendering while off screen (content-visibility). */
-  lazy?: boolean;
-}
-
-/** "3 items" for folders, the size for files, prefixed with the folder path in tag search. */
-export function itemMeta(item: NodeItem, parentPath?: string): string {
-  const own = item.type === "folder" ? itemCount(item.itemCount) : formatSize(Number(item.size));
-  return parentPath ? `${parentPath} · ${own}` : own;
-}
-
-/** Row button: 40px tap target below 720px (label hidden), 30px with label above. */
-export function RowButton({ icon, label, onClick }: { icon: IconName; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="box-border flex h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-[10px] border border-ctrl bg-btn px-2.5 text-[13px] font-bold text-t1 hover:bg-btn-h sm:h-[30px] sm:min-w-[30px]"
-    >
-      <Icon name={icon} size={15} />
-      <span className="max-sm:hidden">{label}</span>
-    </button>
-  );
-}
-
-export function MenuButton({ label, open, onMenu, className }: { label: string; open: boolean; onMenu: (anchor: HTMLElement) => void; className?: string }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-haspopup="menu"
-      aria-expanded={open}
-      onClick={(event) => {
-        event.stopPropagation();
-        onMenu(event.currentTarget);
-      }}
-      className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent text-t3 hover:bg-btn sm:size-[30px]", className)}
-    >
-      <Icon name="dots-three-vertical" weight="bold" size={16} />
-    </button>
-  );
-}
+import { MenuButton } from "./ItemButtons";
+import { itemMeta, type ItemProps } from "./item-props";
 
 /** "1:12 / 4:05" when a video or audio file has a saved position (design `resumeText`). */
 function ResumeMeta({ id }: { id: string }) {
