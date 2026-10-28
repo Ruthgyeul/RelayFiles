@@ -10,23 +10,8 @@ import type { AccountRow } from "../repositories/account.repo";
 import { db } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import {
-  ancestorChain,
-  childCounts,
-  createFolderNode,
-  descendantCounts,
-  findByName,
-  findByTags,
-  findNode,
-  findRootFolder,
-  folderSizes,
-  listChildren,
-  listFolders,
-  listSiblingNames,
-  recentFiles,
-  tagUsage,
-  type NodeRow,
-} from "../repositories/node.repo";
+import { childCounts, createFolderNode, findByName, findByTags, findNode, findRootFolder, listChildren, listFolders, listSiblingNames, recentFiles, tagUsage, type NodeRow } from "../repositories/node.repo";
+import { ancestorChain, descendantCounts, folderSizes } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";

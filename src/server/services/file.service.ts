@@ -1,8 +1,8 @@
 import "server-only";
 import { mimeFromName } from "@/domain/upload";
 import { db } from "../db/client";
-import { sendFile } from "../files/send-file";
-import { sendAsset, sendThumb } from "../files/send-thumb";
+import { sendFile } from "../http/send-file";
+import { sendAsset, sendThumb } from "../http/send-thumb";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { transcodeResponse } from "../media/transcode";

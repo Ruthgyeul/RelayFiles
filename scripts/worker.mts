@@ -7,7 +7,7 @@
 // Loads .env before the app modules below; the worker runs until a signal, so it does not use runScript.
 import "./lib/bootstrap.mjs";
 
-const { startMediaWorker } = await import("../src/server/jobs/media.worker");
+const { startMediaWorker } = await import("../src/server/jobs/media-worker");
 const { startMaintenanceWorker } = await import("../src/server/jobs/maintenance");
 const { logger } = await import("../src/server/logger");
 const { db } = await import("../src/server/db/client");

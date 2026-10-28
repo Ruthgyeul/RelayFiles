@@ -12,18 +12,8 @@ import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import {
-  ancestorChain,
-  createFileNode,
-  createFolderNode,
-  deleteNodes,
-  findChildByName,
-  findNode,
-  findRootFolder,
-  listSiblingNames,
-  relativePaths,
-  type NodeRow,
-} from "../repositories/node.repo";
+import { createFileNode, createFolderNode, deleteNodes, findChildByName, findNode, findRootFolder, listSiblingNames, type NodeRow } from "../repositories/node.repo";
+import { ancestorChain, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { layoutOf } from "../storage/layout";
 import { driverFor } from "../storage/registry";

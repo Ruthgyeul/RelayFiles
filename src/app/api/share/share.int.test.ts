@@ -17,7 +17,7 @@ import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
 import { processMedia } from "@/server/media/process";
 import { getFolderView } from "@/server/services/node.service";
-import { retiredSharePage, sharePage } from "@/server/services/share.service";
+import { retiredSharePage, sharePage } from "@/server/share/share.service";
 import { purgeExpired } from "@/server/services/profile.service";
 import { findAccountById } from "@/server/repositories/account.repo";
 import { purgeRetiredLinks } from "@/server/repositories/link-tombstone.repo";

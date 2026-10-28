@@ -1,6 +1,6 @@
 import { tagsSchema } from "@/contracts/nodes";
 import { apiHandler } from "@/server/http/api-handler";
-import { updateTags } from "@/server/services/node-ops.service";
+import { updateTags } from "@/server/services/node-settings.service";
 
 /** Adds and removes tags on one or many items. */
 export const POST = apiHandler({ auth: "active" }, async ({ req, active: { account } }) => {
