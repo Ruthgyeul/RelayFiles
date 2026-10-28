@@ -2,7 +2,8 @@
 # Weekly backup check for the systemd deployment (docs/runbook.md "백업 검증"): restores the
 # newest dump into a scratch database (VERIFY_DB, default relayfiles_verify, dropped
 # afterwards) on the local PostgreSQL, then `npm run backup:verify` compares it with
-# production, runs a report-only storage:fsck and stores the result for the Server page.
+# production, runs a report-only storage:fsck and stores the result for the Server page. With
+# an offsite repository (offsite-backup.sh), OFFSITE_CHECK_PERCENT of it is verified as well.
 # One JSON line per run is appended to DATA_DIR/backup-verify.log. Run as root (it creates
 # and drops the scratch database as the postgres account); exits 1 when the backup is not usable.
 #   sudo deploy/scripts/systemd/verify-backup.sh
@@ -24,7 +25,12 @@ drop() { sudo -u postgres dropdb --if-exists "$VERIFY_DB"; }
 trap drop EXIT
 
 # verify ARGS... → npm run backup:verify as the storage account, reading the scratch URL on stdin.
-verify() { "$(dirname "$0")/rf.sh" backup:verify -- "$@" | tee -a "$LOG"; }
+# The offsite repository (offsite-backup.sh) is checked first; a failure is one more problem.
+OFFSITE_FAILURE="$(offsite_check)"
+OFFSITE_ARGS=()
+[ -z "$OFFSITE_FAILURE" ] || OFFSITE_ARGS=(--offsite-failure "$OFFSITE_FAILURE")
+
+verify() { "$(dirname "$0")/rf.sh" backup:verify -- "${OFFSITE_ARGS[@]}" "$@" | tee -a "$LOG"; }
 
 DUMP="$(newest_first "$DIR"/relayfiles-*.dump | head -n 1)"
 if [ -z "$DUMP" ]; then

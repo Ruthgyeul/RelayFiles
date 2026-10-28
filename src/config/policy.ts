@@ -398,6 +398,18 @@ export const BACKUP = {
   checksKept: 52,
 } as const;
 
+/** Defaults of the offsite restic backup (deploy/scripts/offsite-backup.sh; OFFSITE_* in .env). */
+export const OFFSITE = {
+  /** Snapshots `restic forget` keeps: the newest per day, week and month. */
+  keepDaily: 7,
+  keepWeekly: 4,
+  keepMonthly: 6,
+  /** Share of the repository's data the weekly check downloads and verifies. */
+  checkPercent: 5,
+  /** Shortest repository password accepted (it encrypts every offsite copy). */
+  passwordMinLength: 16,
+} as const;
+
 /** Server settings (admin Settings page). */
 export const SETTINGS = {
   /** The theme is read on every page; this long it comes from the cache. */

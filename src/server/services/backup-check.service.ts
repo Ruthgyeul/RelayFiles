@@ -19,6 +19,8 @@ export interface BackupVerifyInput {
   restoreMs: number | null;
   /** Set when the shell step failed before anything could be compared (e.g. pg_restore failed). */
   failure?: string;
+  /** What `restic check` reported about the offsite repository, when it failed. */
+  offsiteFailure?: string;
 }
 
 /** Newest migration directory of this code, or null when it ships none. */
@@ -67,6 +69,7 @@ async function compare(input: BackupVerifyInput & { dump: { name: string; at: Da
       restored: restored.counts,
       live,
       fsckDifferences: differences,
+      offsiteError: input.offsiteFailure ?? null,
     },
     { maxDumpAgeHours: BACKUP.verifyMaxDumpAgeHours, maxDriftPct: BACKUP.verifyMaxDriftPct },
   );
@@ -87,7 +90,7 @@ export async function verifyBackup(input: BackupVerifyInput, now: Date = new Dat
           dumpAt: input.dump?.at ?? null,
           restoreMs: input.restoreMs,
           fsckDifferences: null,
-          problems: [input.failure ?? "no database dump found (deploy/scripts/backup.sh)"],
+          problems: [input.failure ?? "no database dump found (deploy/scripts/backup.sh)", ...(input.offsiteFailure ? [`offsite backup: ${input.offsiteFailure}`] : [])],
         }
       : await compare({ ...input, dump: input.dump, restoredUrl: input.restoredUrl }, now);
   await recordBackupCheck(db(), check);

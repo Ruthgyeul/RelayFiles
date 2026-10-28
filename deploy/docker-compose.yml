@@ -39,6 +39,11 @@ x-app-env: &app-env
     HEALTH_PROBE_URL: http://app:${APP_PORT:-3000}
     PORT: ${APP_PORT:-3000}
     HOSTNAME: 0.0.0.0
+    # The offsite backup runs on the host (deploy/scripts/offsite-backup.sh): its keys stay out of the containers.
+    RESTIC_REPOSITORY: ""
+    RESTIC_PASSWORD: ""
+    OFFSITE_ACCESS_KEY_ID: ""
+    OFFSITE_SECRET_ACCESS_KEY: ""
 
 x-image-build: &image-build
   context: ..

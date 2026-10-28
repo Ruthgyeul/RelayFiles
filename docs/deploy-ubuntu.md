@@ -591,7 +591,7 @@ crontab -e      # docker 그룹에 속한 배포 사용자로
 
 - cron에는 `PATH`가 짧으므로 `docker`를 못 찾으면 crontab 맨 위에 `PATH=/usr/local/bin:/usr/bin:/bin`을 넣는다.
 - `rsync`를 cron에서 `sudo`로 쓰려면 그 명령만 비밀번호 없이 허용한다(`sudo visudo -f /etc/sudoers.d/relayfiles-backup`에 `<사용자> ALL=(root) NOPASSWD: /usr/bin/rsync`). 아니면 root의 crontab(`sudo crontab -e`)에 넣는다.
-- 백업 디스크가 같은 서버에 붙어 있으면 서버 고장·도난에는 소용이 없다. `DATA_DIR/backups`의 덤프와 `.env`, SSD 키는 주기적으로 서버 밖(다른 기기, 클라우드의 암호화된 저장소)에도 둔다.
+- 백업 디스크가 같은 서버에 붙어 있으면 서버 고장·도난에는 소용이 없다. 덤프와 원본 파일은 `deploy/scripts/offsite-backup.sh`(restic, R2·B2에 암호화)로 서버 밖에도 보낸다. root crontab에 `45 3 * * * cd /home/<사용자>/RelayFiles && deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1`(설정은 [runbook.md "오프사이트 백업"](runbook.md#오프사이트-백업)). `.env`와 SSD 키는 비밀번호 관리자 같은 곳에 따로 둔다.
 - **복원 연습**을 한 번 해 둔다. 덤프가 있어도 복원해 본 적이 없으면 백업이 아니다([runbook.md "DB 복구"](runbook.md#db-복구)).
 
 ## 11. 문제 해결

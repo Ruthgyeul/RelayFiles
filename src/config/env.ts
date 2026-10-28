@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, HEADERS, JOBS, LOGIN, MEDIA, NGINX, STORAGE, TRANSCODE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, HEADERS, JOBS, LOGIN, MEDIA, NGINX, OFFSITE, STORAGE, TRANSCODE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -160,6 +160,32 @@ export const ENV_GROUPS = {
     WORKER_MEMORY_MAX: memorySize.default("2G"),
     WORKER_CPUS: cpus.default(2),
   }),
+  offsite: z
+    .object({
+      /**
+       * restic repository for deploy/scripts/offsite-backup.sh, e.g. an S3 bucket on Cloudflare R2
+       * or Backblaze B2 (`s3:https://<endpoint>/<bucket>/relayfiles`). Empty: no offsite backup.
+       */
+      RESTIC_REPOSITORY: z
+        .string()
+        .regex(/^(s3|b2|sftp|rest|azure|gs|swift|rclone):/, "must start with a restic backend such as s3:")
+        .optional(),
+      /** Encrypts every offsite copy; keep a copy away from the server too, it cannot be recovered. */
+      RESTIC_PASSWORD: z.string().min(OFFSITE.passwordMinLength).optional(),
+      /** S3 credentials of the repository (passed to restic as AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). */
+      OFFSITE_ACCESS_KEY_ID: z.string().optional(),
+      OFFSITE_SECRET_ACCESS_KEY: z.string().optional(),
+      OFFSITE_KEEP_DAILY: positiveInt.default(OFFSITE.keepDaily),
+      OFFSITE_KEEP_WEEKLY: positiveInt.default(OFFSITE.keepWeekly),
+      OFFSITE_KEEP_MONTHLY: positiveInt.default(OFFSITE.keepMonthly),
+      OFFSITE_CHECK_PERCENT: z.coerce.number().positive().max(100).default(OFFSITE.checkPercent),
+      /** More directories to back up, space-separated (the users/ folders of extra volumes). */
+      OFFSITE_EXTRA_PATHS: z
+        .string()
+        .regex(/^\/\S*( \/\S*)*$/, "must be absolute paths separated by spaces")
+        .optional(),
+    })
+    .refine((env) => !env.RESTIC_REPOSITORY || env.RESTIC_PASSWORD, { message: "RESTIC_PASSWORD is required with RESTIC_REPOSITORY", path: ["RESTIC_PASSWORD"] }),
   testing: z.object({
     E2E_PORT: port.default(3100),
     E2E_BASE_URL: z.url().optional(),

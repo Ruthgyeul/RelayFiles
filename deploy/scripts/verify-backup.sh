@@ -2,7 +2,8 @@
 # Weekly backup check (docs/runbook.md "백업 검증"): restores the newest database dump into a
 # throwaway PostgreSQL container (same image as production, no data directory of its own,
 # removed afterwards), then `npm run backup:verify` in the tools container compares it with
-# production, runs a report-only storage:fsck and stores the result for the Server page.
+# production, runs a report-only storage:fsck and stores the result for the Server page. With
+# an offsite repository (offsite-backup.sh), OFFSITE_CHECK_PERCENT of it is verified as well.
 # One JSON line per run is appended to DATA_DIR/backup-verify.log. Exits 1 when the backup
 # is not usable, so cron can mail the output.
 #   deploy/scripts/verify-backup.sh
@@ -22,7 +23,12 @@ cleanup() { docker rm -f -v "$NAME" > /dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 # verify ARGS... → npm run backup:verify in the tools container, reading the scratch URL on stdin.
-verify() { "${COMPOSE[@]}" --profile tools run --rm -T tools npm run -s backup:verify -- "$@" | tee -a "$LOG"; }
+# The offsite repository (offsite-backup.sh) is checked first; a failure is one more problem.
+OFFSITE_FAILURE="$(offsite_check)"
+OFFSITE_ARGS=()
+[ -z "$OFFSITE_FAILURE" ] || OFFSITE_ARGS=(--offsite-failure "$OFFSITE_FAILURE")
+
+verify() { "${COMPOSE[@]}" --profile tools run --rm -T tools npm run -s backup:verify -- "${OFFSITE_ARGS[@]}" "$@" | tee -a "$LOG"; }
 
 DUMP="$(newest_first "$DIR"/relayfiles-*.dump | head -n 1)"
 if [ -z "$DUMP" ]; then
