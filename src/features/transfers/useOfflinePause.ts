@@ -5,7 +5,7 @@ import type { Transfer } from "./transfers-context";
 
 /**
  * Pauses every running transfer while the browser is offline and continues the ones it
- * paused once the connection is back (design); transfers the user paused stay paused.
+ * paused once the connection is back; transfers the user paused stay paused.
  */
 export function useOfflinePause(transfers: Transfer[], pause: (id: string, auto: boolean) => void, resume: (id: string) => void): void {
   const latest = useRef(transfers);

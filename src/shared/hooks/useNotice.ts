@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-/** How long a notice stays up (design `note`: 1800 ms). */
+/** How long a notice stays up (1800 ms). */
 const NOTICE_MS = 1_800;
 
 /** The current short notice and a function that shows a new one (replacing the previous). */

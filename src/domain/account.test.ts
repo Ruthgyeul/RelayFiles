@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { ACCOUNT_COLORS, accountColor, dailySeries, daysLeft, deletionDate, deviceLocation, isExpired, maskToken, retentionText } from "./account";
+import { ACCOUNT_COLORS, accountColor, dailySeries, daysLeft, daysLeftUntil, deletionDate, deviceLocation, isExpired, maskToken, retentionText } from "./account";
 
 const DAY = 86_400_000;
 const created = new Date("2026-10-01T00:00:00Z");
 const member = { createdAt: created, expiresAt: null, isAdmin: false, neverExpire: false };
+
+describe("daysLeftUntil", () => {
+  it("rounds partial days up and never goes below zero", () => {
+    const now = created.getTime();
+    expect(daysLeftUntil(now + 2 * DAY, now)).toBe(2);
+    expect(daysLeftUntil(now + 1, now)).toBe(1);
+    expect(daysLeftUntil(now, now)).toBe(0);
+    expect(daysLeftUntil(now - DAY, now)).toBe(0);
+  });
+});
 
 describe("account lifecycle", () => {
   it("deletes members ttl days after creation", () => {

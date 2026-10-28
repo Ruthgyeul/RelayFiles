@@ -1,5 +1,5 @@
 /**
- * File tree rules from the design prototype: sorting (`sortNodes`), type filters, path
+ * File tree rules from the design: sorting, type filters, path
  * crumbs, inherited visibility (`effVis`) and the setting tags shown under items (`tags`).
  */
 import { formatLeft } from "./format";
@@ -77,7 +77,7 @@ export interface Crumb {
 
 export type CrumbSlot = { kind: "crumb"; crumb: Crumb; index: number } | { kind: "gap"; hidden: Crumb[] };
 
-/** Crumbs shown at most: 3 below 720px, 6 otherwise (design `MAX`). */
+/** Crumbs shown at most: 3 below 720px, 6 otherwise. */
 export const CRUMB_LIMIT = { mobile: 3, desktop: 6 } as const;
 
 /** Collapses a long path to [root, …, last max−2] like the design; the gap lists the hidden folders. */
@@ -124,7 +124,7 @@ export interface SettingTag {
 }
 
 /**
- * Tags describing an item's share settings (design `tags`). A private item is only tagged
+ * Tags describing an item's share settings. A private item is only tagged
  * "Private" when its parent is public, because private is the default.
  */
 export function settingTags(settings: ShareSettings, downloads: number, parentVisibility: "private" | "public" | null, now: number): SettingTag[] {
@@ -153,7 +153,7 @@ export function visibilityTag(own: Visibility, effective: "private" | "public", 
   return { icon: "lock-key", label: own === "private" || isRoot ? "Private" : "Private · inherited" };
 }
 
-/** Title of the empty list state (design `emptyTitle`). */
+/** Title of the empty list state. */
 export function emptyTitle({ tagMode, wanted, query, filter }: { tagMode: boolean; wanted: readonly string[]; query: string; filter: FilterKey }): string {
   if (tagMode) {
     if (wanted.length === 0) return "Type a tag after #";

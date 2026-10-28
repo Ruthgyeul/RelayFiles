@@ -52,7 +52,7 @@ export async function tusVolume(volumeId: string | undefined) {
 }
 
 /**
- * Plans an upload (design `startUpload`): validates names, reports duplicates for the
+ * Plans an upload: validates names, reports duplicates for the
  * dialog, checks quota and disk space, creates the Home upload folder, and stores the batch
  * the tus server will accept files for.
  */

@@ -18,7 +18,7 @@ import { usePing } from "./usePing";
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
-/** Public Status page (design `isStatus`). */
+/** Public Status page. */
 export function StatusPage({ initial }: { initial: StatusData }) {
   usePageTitle("Status");
   const { activeAccount, notify } = useShell();

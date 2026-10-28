@@ -52,8 +52,8 @@ map "$request_method $uri" $relay_upload_limit {
     "POST /api/uploads" $relay_client_ip;
     default "";
 }
-limit_req_zone $relay_auth_limit zone=relay_auth:10m rate=20r/m;
-limit_req_zone $relay_upload_limit zone=relay_uploads:10m rate=60r/m;
+limit_req_zone $relay_auth_limit zone=relay_auth:10m rate=${NGINX_AUTH_RATE_PER_MIN}r/m;
+limit_req_zone $relay_upload_limit zone=relay_uploads:10m rate=${NGINX_UPLOAD_RATE_PER_MIN}r/m;
 
 # No client addresses in Nginx logs (same rule as the app's logs).
 log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
@@ -64,8 +64,8 @@ server {
     server_tokens off;
     access_log /dev/stdout relayfiles;
 
-    # Uploads arrive in tus chunks of UPLOAD_CHUNK_SIZE_MB (at most 95 MB).
-    client_max_body_size 100m;
+    # Uploads arrive in tus chunks of UPLOAD_CHUNK_SIZE_MB (at most 95 MB), below this.
+    client_max_body_size ${NGINX_MAX_BODY_MB}m;
 
     sendfile on;
     tcp_nopush on;
@@ -133,8 +133,8 @@ server {
         if (-f /etc/nginx/maintenance/on) { set $relay_maintenance on; }
         if ($uri = /api/health) { set $relay_maintenance ""; }
         if ($relay_maintenance) { return 503; }
-        limit_req zone=relay_auth burst=20 nodelay;
-        limit_req zone=relay_uploads burst=30 nodelay;
+        limit_req zone=relay_auth burst=${NGINX_AUTH_BURST} nodelay;
+        limit_req zone=relay_uploads burst=${NGINX_UPLOAD_BURST} nodelay;
         proxy_pass http://relayfiles_app;
         # Next.js internals the browser never needs (a proxy rewrite names the upstream address).
         proxy_hide_header X-Middleware-Rewrite;

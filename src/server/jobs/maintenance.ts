@@ -80,6 +80,6 @@ export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue:
     },
     { ...queueConnection("worker"), concurrency: 1 },
   );
-  worker.on("failed", (job, error) => logger.error("maintenance job failed", { job: job?.name, error: error.message }));
+  worker.on("failed", (job, error) => logger.error("maintenance job failed", { job: job?.name, error }));
   return { worker, queue };
 }

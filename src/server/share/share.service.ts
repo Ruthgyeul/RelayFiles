@@ -78,7 +78,7 @@ export async function loadLink(linkId: string, viewer: ShareViewer, now: number)
 
 export type LoadedLink = NonNullable<Awaited<ReturnType<typeof loadLink>>>;
 
-/** Tags under the share page title: settings without "Public" and the lock (design `sh.tags`). */
+/** Tags under the share page title: settings without "Public" and the lock. */
 function shareTags(root: NodeRow, now: number): SettingTag[] {
   const tags = settingTags(
     {
@@ -117,7 +117,7 @@ function indexTree(rows: readonly SharedRow[]) {
   return { byId, children, sizeOf };
 }
 
-/** Why visitors may not download this row now (null = they may), as on the share page (design `canDl`). */
+/** Why visitors may not download this row now (null = they may), as on the share page. */
 export function downloadBlockOf(row: SharedRow, root: Pick<NodeRow, "access">, busy: Busy | undefined): DownloadBlock | null {
   return downloadBlock({
     linkStreamOnly: root.access === "STREAM",

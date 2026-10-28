@@ -1,5 +1,5 @@
 /**
- * Identifier formats from the design prototype (`newAcct`, `regenLink`, `genInvite`).
+ * Identifier formats from the design.
  * Generation uses Web Crypto (available in browsers and Node) with rejection sampling,
  * so every character is uniformly distributed (the prototype's modulo had a small bias).
  */
@@ -56,6 +56,5 @@ export const newAnonName = () => `anon-${randomString(ID_LENGTH.anonSuffix, ID_A
 export const newInviteCode = () => `${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}-${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}`;
 
 export const isAccountId = (value: string) => ID_PATTERN.account.test(value);
-export const isNodeId = (value: string) => ID_PATTERN.node.test(value);
 export const isLinkId = (value: string) => ID_PATTERN.link.test(value);
 export const isSessionId = (value: string) => ID_PATTERN.session.test(value);

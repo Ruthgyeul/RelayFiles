@@ -42,7 +42,7 @@ async function attempt<T>(step: string, nodeId: string, run: () => Promise<T>): 
   try {
     return await run();
   } catch (error) {
-    logger.warn("media step failed", { step, nodeId, error: error instanceof Error ? error.message : String(error) });
+    logger.warn("media step failed", { step, nodeId, error });
     return null;
   }
 }

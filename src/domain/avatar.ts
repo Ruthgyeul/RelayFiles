@@ -1,5 +1,5 @@
 /**
- * Deterministic pixel identicon for an account, ported from the design prototype (`avatarOf`).
+ * Deterministic pixel identicon for an account, from the design.
  * The same seed (account id) always yields the same 6×6 mirrored SVG, returned as a data URI.
  */
 

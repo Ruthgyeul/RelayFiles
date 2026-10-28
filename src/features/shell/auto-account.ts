@@ -1,7 +1,7 @@
 import { readSessionValue, writeSessionValue } from "@/shared/lib/local-setting";
 
 /**
- * The anonymous account created automatically for this visit (design `autoAcct`). It is
+ * The anonymous account created automatically for this visit. It is
  * remembered per browser tab so the "You're signed in as …" banner survives reloads until
  * dismissed. Exposed as an external store for useSyncExternalStore.
  */

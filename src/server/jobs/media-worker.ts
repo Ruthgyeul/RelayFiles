@@ -11,7 +11,7 @@ export function startMediaWorker(): Worker<MediaJob> {
     ...queueConnection("worker"),
     concurrency: getEnv("jobs").MEDIA_WORKER_CONCURRENCY,
   });
-  worker.on("failed", (job, error) => logger.error("media job failed", { nodeId: job?.data.nodeId, attempts: job?.attemptsMade, error: error.message }));
-  worker.on("error", (error) => logger.error("media worker error", { error: error.message }));
+  worker.on("failed", (job, error) => logger.error("media job failed", { nodeId: job?.data.nodeId, attempts: job?.attemptsMade, error }));
+  worker.on("error", (error) => logger.error("media worker error", { error }));
   return worker;
 }

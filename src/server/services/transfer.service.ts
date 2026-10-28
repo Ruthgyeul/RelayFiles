@@ -24,7 +24,7 @@ function isInside(chainIds: string[], nodeId: string): boolean {
 }
 
 /**
- * Moves items into a folder (design `move`): items already there, the target itself and
+ * Moves items into a folder: items already there, the target itself and
  * anything that would land inside itself are skipped; clashing names get "Name (2)".
  */
 export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: string): Promise<TransferResult> {
@@ -56,7 +56,7 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
 }
 
 /**
- * Copies items with everything inside (design `copyTo`): new ids and links, zero
+ * Copies items with everything inside: new ids and links, zero
  * downloads, settings and tags kept. Bytes are copied on the volume (reflink when possible).
  *
  * The space is reserved like an upload's (account quota, the volume's reserve, the anonymous

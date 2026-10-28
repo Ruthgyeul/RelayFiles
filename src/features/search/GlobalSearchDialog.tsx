@@ -20,7 +20,7 @@ export function searchHitHref(item: TaggedItem): string {
   return item.kind && item.kind !== "other" ? `${folder}?view=${item.id}` : folder;
 }
 
-/** Global search (design `gsOpen`): every file and folder of the active account. */
+/** Global search: every file and folder of the active account. */
 export function GlobalSearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const [query, setQuery] = useState("");

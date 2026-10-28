@@ -43,7 +43,7 @@ export function folderRows(folders: FolderNode[], request: MoveRequest): Row[] {
   return rows;
 }
 
-/** Indentation of a row: 12px + 18px per level (design). */
+/** Indentation of a row: 12px + 18px per level. */
 const ROW_PADDING = { base: 12, step: 18 } as const;
 
 /** "Move …" / "Copy …" dialog with the account's folder tree (440px). */

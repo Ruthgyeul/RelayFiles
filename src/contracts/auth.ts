@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Sign-up modes an admin can choose on the Server page (design `suOpts`). */
+/** Sign-up modes an admin can choose on the Server page. */
 export const SIGNUP_MODES = ["open", "invite", "closed"] as const;
 export type SignupMode = (typeof SIGNUP_MODES)[number];
 
@@ -74,5 +74,3 @@ export const signOutSchema = z.object({
   accountId: z.string().min(1).max(32).optional(),
 });
 
-export type TokenSignIn = z.infer<typeof tokenSignInSchema>;
-export type CreateAccount = z.infer<typeof createAccountSchema>;

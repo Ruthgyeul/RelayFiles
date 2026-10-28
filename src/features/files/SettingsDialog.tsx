@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatLongDate } from "@/domain/format";
 import type { NodeItem, SettingsInput, Visibility } from "@/contracts/nodes";
 import { EXPIRY_OPTIONS, isExpiryOption } from "@/domain/share";
 import { ApiClientError } from "@/shared/lib/api-client";
@@ -82,7 +83,7 @@ export function SettingsDialog({ request, isAdmin, accountDeletesAt, onClose, on
     }
   };
 
-  const deletesOn = accountDeletesAt ? new Date(accountDeletesAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
+  const deletesOn = accountDeletesAt ? formatLongDate(accountDeletesAt) : null;
 
   return (
     <Modal open onClose={onClose} width={480} layer="modal">

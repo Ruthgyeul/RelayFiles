@@ -10,7 +10,7 @@ import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { panelSummary, percentDone, transferMeta, type TransferStatus } from "./transfer-text";
 import { useTransfers, type Transfer } from "./transfers-context";
 
-/** Look per status (design `badge`, `boxBg`, `icon`). */
+/** Look per status. */
 const LOOK: Record<TransferStatus, { badge: string; box: string; badgeText: string; icon: IconName; weight: "fill" | "regular" | "bold"; iconColor: string }> = {
   active: { badge: "UPLOADING", box: "bg-accent-soft", badgeText: "text-accent-text", icon: "circle-notch", weight: "regular", iconColor: "text-accent-icon animate-spin" },
   paused: { badge: "PAUSED", box: "bg-warn-bg-soft", badgeText: "text-warn-text", icon: "pause", weight: "fill", iconColor: "text-warn-text" },

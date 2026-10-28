@@ -1,5 +1,5 @@
 /**
- * Tag rules from the design prototype (`parseTags`, `hasAllTags`, tag editor).
+ * Tag rules: parsing a "#tag" query, matching items that carry every tag, and normalizing new tags.
  * Tags are lowercase words; the search box switches to tag mode when it starts with "#".
  */
 

@@ -38,7 +38,7 @@ export function parseSmart(json: string, device: string): ServiceRow {
   }
 }
 
-/** The Services card (design `srv.services`), measured, never assumed. */
+/** The Services card, measured, never assumed. */
 export async function serviceRows(now: Date): Promise<ServiceRow[]> {
   const volumes = await listActiveVolumes(db());
   const states = await Promise.all(volumes.map((volume) => checkVolume(volume.mountPath, volume.id)));

@@ -8,8 +8,6 @@ import { db } from "../db/client";
 import { logger } from "../logger";
 import { listAuditEvents, purgeAuditEvents, recordAuditEvent } from "../repositories/audit.repo";
 
-/** Entries the admin API returns at once. */
-const LIST_LIMIT = 200;
 const isAuditAction = (value: string): value is AuditAction => (AUDIT_ACTIONS as readonly string[]).includes(value);
 
 /**
@@ -35,7 +33,7 @@ export async function audit(actor: Pick<DeviceAccount, "account">, client: Pick<
 
 /** The newest audit entries for the admin API. */
 export async function recentAuditEvents(): Promise<AuditEntry[]> {
-  const rows = await listAuditEvents(db(), LIST_LIMIT);
+  const rows = await listAuditEvents(db(), AUTH.auditListLimit);
   return rows.flatMap((row) => (isAuditAction(row.action) ? [{ ...row, action: row.action, at: row.at.toISOString() }] : []));
 }
 

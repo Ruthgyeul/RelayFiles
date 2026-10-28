@@ -24,7 +24,7 @@ export interface NodeActions {
 type Candidate = [label: string, icon: MenuEntry["icon"], action: (() => void) | undefined] | null;
 
 /**
- * Item menu in the design's four groups (`nodeMenu`): open/download, sharing, file
+ * Item menu in the design's four groups: open/download, sharing, file
  * operations, properties. Groups are separated by a line; empty groups disappear.
  */
 export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings">, isRoot: boolean, isAdmin: boolean, actions: NodeActions): MenuEntry[] {

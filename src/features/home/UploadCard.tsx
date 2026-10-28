@@ -32,7 +32,7 @@ export function UploadCard() {
         </div>
       </div>
       <div className="p-5">
-        {/* A click anywhere picks files (design); keyboard users get the two buttons inside. */}
+        {/* A click anywhere picks files; keyboard users get the two buttons inside. */}
         <div
           onClick={() => pickFiles(HOME)}
           onDragOver={(event) => {

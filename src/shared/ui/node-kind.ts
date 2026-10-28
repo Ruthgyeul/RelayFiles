@@ -9,7 +9,7 @@ interface KindIcon {
   color: string;
 }
 
-/** Icon and color per item type (design `KIND`); folders use the filled icon. */
+/** Icon and color per item type; folders use the filled icon. */
 export const KIND_ICON: Record<"folder" | NonNullable<NodeItem["kind"]>, KindIcon> = {
   folder: { icon: "folder-simple", color: KIND_COLOR.folder },
   video: { icon: "file-video", color: KIND_COLOR.video },

@@ -36,7 +36,7 @@ function StatCard({ icon, box, color, label, value }: { icon: IconName; box: str
   );
 }
 
-/** Admin "Accounts" page (design `isAdmin`): stats, cleanup, filters, search and account rows. */
+/** Admin "Accounts" page: stats, cleanup, filters, search and account rows. */
 export function AccountsPage({ data }: { data: AdminAccounts }) {
   usePageTitle("Accounts");
   const router = useRouter();

@@ -1,6 +1,6 @@
 import { Skeleton } from "@/shared/ui/Display";
 
-/** Row widths of the design's boot skeleton (`SKEL`). */
+/** Row widths of the design's boot skeleton. */
 const ROWS = [62, 48, 70, 40, 56, 66].map((w, i) => ({ w1: `${w}%`, w2: `${24 + ((i * 13) % 22)}%` }));
 
 /** Shown while a page loads: the design's boot skeleton (header card, toolbar, six rows). */

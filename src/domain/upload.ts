@@ -1,7 +1,8 @@
 /**
- * Upload rules from the design (`startUpload`): every Home upload gets its own folder,
+ * Upload rules from the design: every Home upload gets its own folder,
  * named after the single top-level folder, the single file, or the upload time.
  */
+import { formatShortDateTime } from "./format";
 import type { NodeKind } from "./tree";
 
 /** Folder name and relative paths for a Home upload. */
@@ -15,7 +16,7 @@ export function homeUploadPlan(rels: readonly string[], fallbackName: string): {
 
 /** "Upload Oct 5, 3:12 PM" in the uploader's locale settings (design fallback name). */
 export function uploadFallbackName(at: Date): string {
-  return `Upload ${at.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+  return `Upload ${formatShortDateTime(at)}`;
 }
 
 /** Number of distinct folders a set of relative paths creates (transfer panel "N folders"). */
@@ -28,7 +29,7 @@ export function folderCount(rels: readonly string[]): number {
   return dirs.size;
 }
 
-/** Media kind from a MIME type (design `kindOf`). */
+/** Media kind from a MIME type. */
 export function kindFromMime(mime: string): NodeKind {
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";

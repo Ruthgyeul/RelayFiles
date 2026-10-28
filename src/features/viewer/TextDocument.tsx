@@ -3,7 +3,7 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { lineCount, prettyJson } from "@/domain/document";
 import type { FileFormat } from "@/domain/file-format";
-import { formatSize } from "@/domain/format";
+import { formatCount, formatSize } from "@/domain/format";
 import { CodeView } from "./CodeView";
 import { DocumentBar } from "./DocumentBar";
 import { FailedPreview, LoadingPreview } from "./PreviewMessage";
@@ -49,7 +49,7 @@ export function TextDocument({ src, format, binary, notify }: TextDocumentProps)
   const lines = lineCount(text);
   const details = [
     format.label,
-    `${lines.toLocaleString("en-US")} ${lines === 1 ? "line" : "lines"}`,
+    `${formatCount(lines)} ${lines === 1 ? "line" : "lines"}`,
     file.encoding === "utf-8" ? null : file.encoding.toUpperCase(),
     file.truncated ? `First ${formatSize(file.shown)}${file.total ? ` of ${formatSize(file.total)}` : ""}` : null,
   ].filter((detail) => detail !== null);

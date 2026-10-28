@@ -86,7 +86,7 @@
 - Nginx는 `X-Forwarded-Host`를 `$host`로 덮어쓴다. Docker 템플릿의 `X-Forwarded-Proto`는 신뢰 피어(cloudflared, `TRUSTED_PROXY_IP`)가 보낸 `http`/`https`만 넘기고, 그 밖에는 이 홉의 scheme을 쓴다. 호스트 Nginx 템플릿(systemd)도 같은 호스트의 cloudflared(`127.0.0.1`, `$realip_remote_addr`)가 보낸 값만 믿는다.
 - 렌더링 스크립트는 `.env` 값에 줄바꿈·`;`·`{}`·따옴표·`$`·`\`가 있으면 거부한다(`render-template.mjs`). `setup-ssd.sh`는 `STORAGE_ROOT`가 평범한 경로인지, UID·GID가 숫자인지 확인한 뒤 fstab·crypttab에 쓴다.
 - X-Accel location은 `disable_symlinks on from=<볼륨 루트>`다. 앱이 `lstat`으로 확인한 뒤 Nginx가 파일을 다시 열기 때문에, 그 사이에 생긴 심볼릭 링크를 거부한다.
-- Nginx `limit_req`(앱의 Redis 제한 앞단): `POST /api/auth/*`·`POST /api/share/*/unlock` 분당 20회(버스트 20), `POST /api/uploads` 분당 60회(버스트 30), 클라이언트 주소마다. 넘으면 API 형식 JSON 429와 `Retry-After: 60`.
+- Nginx `limit_req`(앱의 Redis 제한 앞단): `POST /api/auth/*`·`POST /api/share/*/unlock` 분당 20회(버스트 20, `NGINX_AUTH_RATE_PER_MIN`·`NGINX_AUTH_BURST`), `POST /api/uploads` 분당 60회(버스트 30, `NGINX_UPLOAD_RATE_PER_MIN`·`NGINX_UPLOAD_BURST`), 클라이언트 주소마다. 요청 본문은 `NGINX_MAX_BODY_MB`(100)까지. 넘으면 API 형식 JSON 429와 `Retry-After: 60`.
 
 ## 응답 헤더·자원 제한
 

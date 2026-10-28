@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { formatCount } from "@/domain/format";
 import { DOCUMENT_PREVIEW } from "@/config/policy";
 import { parseDelimited } from "@/domain/document";
 
@@ -20,7 +21,7 @@ export function RowsTable({ rows, columns, truncated }: RowsTableProps) {
   const [head = [], ...body] = rows.slice(0, DOCUMENT_PREVIEW.tableMaxRows + 1);
   const shownColumns = Array.from({ length: Math.min(columns, DOCUMENT_PREVIEW.tableMaxColumns) }, (_, index) => index);
   const notes = [
-    truncated || rows.length > DOCUMENT_PREVIEW.tableMaxRows + 1 ? `First ${DOCUMENT_PREVIEW.tableMaxRows.toLocaleString("en-US")} rows` : null,
+    truncated || rows.length > DOCUMENT_PREVIEW.tableMaxRows + 1 ? `First ${formatCount(DOCUMENT_PREVIEW.tableMaxRows)} rows` : null,
     columns > DOCUMENT_PREVIEW.tableMaxColumns ? `First ${DOCUMENT_PREVIEW.tableMaxColumns} columns` : null,
   ].filter((note) => note !== null);
   return (

@@ -18,7 +18,7 @@ interface DevicesCardProps {
   onSignOutOthers: () => void;
 }
 
-/** "Signed-in devices" with this device first (design). */
+/** "Signed-in devices" with this device first. */
 export function DevicesCard({ devices, onSignOut, onSignOutOthers }: DevicesCardProps) {
   const now = useNow(true, SEEN_TICK_MS);
   const mounted = useMounted();

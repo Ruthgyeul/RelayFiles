@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { BusyBadge } from "@/domain/share";
+import { MAX_DOWNLOAD_LIMIT, MAX_SHARE_NOTE_LENGTH, type BusyBadge } from "@/domain/share";
 import { FILES, SEARCH } from "@/config/policy";
 
 export type NodeKind = "video" | "audio" | "image" | "other";
@@ -38,7 +38,7 @@ export interface NodeItem {
   linkId: string;
   hasThumb: boolean;
   settings: NodeSettingsDto;
-  /** Share-link download congestion (design `busyShow`): "Busy", "Server busy" or paused. */
+  /** Share-link download congestion: "Busy", "Server busy" or paused. */
   busy: BusyBadge | null;
 }
 
@@ -131,11 +131,11 @@ export const settingsSchema = z.object({
   /** Admins only; ignored for members (their items are deleted with the account). */
   expiry: z.string().max(16),
   burn: z.boolean(),
-  downloadLimit: z.number().int().positive().max(1_000_000).nullable(),
+  downloadLimit: z.number().int().positive().max(MAX_DOWNLOAD_LIMIT).nullable(),
   /** undefined = keep, "" = remove, otherwise the new password. */
   password: z.string().max(128).optional(),
   access: z.enum(["both", "stream"]),
-  note: z.string().max(2_000),
+  note: z.string().max(MAX_SHARE_NOTE_LENGTH),
   /** Folders: reset the visibility of everything inside to "inherit". */
   applyDown: z.boolean().default(false),
 });

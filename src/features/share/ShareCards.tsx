@@ -7,7 +7,7 @@ import { Button } from "@/shared/ui/Button";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { errorText, shareApi } from "./api";
 
-/** Centered 400px card of the share page states (design `shBlocked`, `shExpired`, …). */
+/** Centered 400px card of the share page states. */
 function StateCard({ icon, iconBox, iconColor, title, gap = "gap-3", children }: { icon: IconName; iconBox: string; iconColor: string; title: string; gap?: "gap-3" | "gap-3.5"; children: ReactNode }) {
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-6">
@@ -71,7 +71,7 @@ export function PrivateCard({ ownerNodeId, notify }: { ownerNodeId: string | nul
   );
 }
 
-/** Password form (design `shLocked`); a right password reloads the page unlocked. */
+/** Password form; a right password reloads the page unlocked. */
 export function LockedCard({ linkId, name }: { linkId: string; name: string }) {
   const router = useRouter();
   const [password, setPassword] = useState("");

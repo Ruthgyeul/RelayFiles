@@ -34,7 +34,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   iconSize?: number;
   /** Apply the design's hover color. Only some buttons in the design have one. */
   hoverable?: boolean;
-  /** Hide the text label below 720px (the design's `showLabels`), keeping only the icon. */
+  /** Hide the text label below 720px, keeping only the icon. */
   hideLabelOnMobile?: boolean;
   children?: ReactNode;
 }

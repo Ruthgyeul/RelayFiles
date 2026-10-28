@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import { formatCount } from "@/domain/format";
 import { DOCUMENT_PREVIEW } from "@/config/policy";
 import { DocumentBar } from "./DocumentBar";
 import { FailedPreview, LoadingPreview } from "./PreviewMessage";
@@ -106,7 +107,7 @@ export default function PdfView({ src }: { src: string }) {
   const pages = state.status === "ready" ? state.doc.numPages : null;
   return (
     <div className="flex size-full min-h-0 flex-col self-stretch">
-      {pages !== null && <DocumentBar details={["PDF", `${pages.toLocaleString("en-US")} ${pages === 1 ? "page" : "pages"}`]} />}
+      {pages !== null && <DocumentBar details={["PDF", `${formatCount(pages)} ${pages === 1 ? "page" : "pages"}`]} />}
       <div ref={scroller} tabIndex={0} aria-label="PDF pages" className="min-h-0 flex-1 overflow-auto bg-viewer-hover">
         {state.status === "loading" && <LoadingPreview />}
         {state.status === "error" && <FailedPreview />}

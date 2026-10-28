@@ -18,7 +18,7 @@ import { toShareSettings } from "./settings";
 import { MenuButton } from "./ItemButtons";
 import { itemMeta, type ItemProps } from "./item-props";
 
-/** "1:12 / 4:05" when a video or audio file has a saved position (design `resumeText`). */
+/** "1:12 / 4:05" when a video or audio file has a saved position. */
 function ResumeMeta({ id }: { id: string }) {
   const point = useResume(id);
   if (!point) return null;
