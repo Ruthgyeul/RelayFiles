@@ -5,6 +5,12 @@
 
 export const MS = { second: 1_000, minute: 60_000, hour: 3_600_000, day: 86_400_000 } as const;
 
+/** Writes that pick a random id or token, or create a row a parallel request may create too. */
+export const DB_WRITE = {
+  /** Tries in all when a unique index refuses the write (an id collision or a lost race). */
+  uniqueRetryAttempts: 3,
+} as const;
+
 export const ACCOUNT = {
   /** Member accounts are deleted with their files this many days after creation. */
   ttlDays: 14,

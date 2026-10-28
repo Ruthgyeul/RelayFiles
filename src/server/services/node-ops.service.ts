@@ -6,7 +6,9 @@ import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { isExpiryOption, nextExpiry } from "@/domain/share";
 import { normalizeTag } from "@/domain/tags";
+import { segmentsBelowRoot } from "@/domain/tree";
 import { db, Prisma } from "../db/client";
+import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
@@ -29,12 +31,12 @@ import {
 } from "../repositories/node.repo";
 import { recordTrashed } from "../repositories/trash.repo";
 import { findVolume } from "../repositories/volume.repo";
-import type { StorageLocation } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
 import { toNodeItem } from "./node.service";
 import { releaseSpace, reserveSpace } from "./space.service";
 import { driverForAccount } from "./volume.service";
+import { locationOf } from "./node-location";
 
 type Owner = Pick<AccountRow, "id" | "volumeId" | "isAdmin" | "quotaBytes">;
 
@@ -42,12 +44,6 @@ type Owner = Pick<AccountRow, "id" | "volumeId" | "isAdmin" | "quotaBytes">;
 const ACTIVITY_LIMIT = 200;
 /** Tags one item can carry. */
 const MAX_TAGS_PER_ITEM = 20;
-
-/** Storage location of a node: its folder names below the account root. */
-async function locationOf(accountId: string, nodeId: string): Promise<StorageLocation> {
-  const chain = await ancestorChain(db(), nodeId);
-  return { accountId, segments: chain.slice(1).map((row) => row.name) };
-}
 
 async function requireNode(accountId: string, nodeId: string): Promise<NodeRow> {
   const row = await findNode(db(), accountId, nodeId);
@@ -61,9 +57,6 @@ async function requireFolder(accountId: string, ref: string): Promise<NodeRow> {
   return row;
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}
 
 /** Renames in the database and on disk; a taken name is refused with a suggestion (design wording). */
 export async function renameNode(owner: Owner, nodeId: string, requested: string): Promise<NodeItem> {
@@ -128,7 +121,7 @@ export async function moveNodes(owner: Owner, ids: string[], targetRef: string):
   if (items.length === 0) throw new ApiError("BAD_REQUEST", "Can't move there");
 
   const driver = await driverForAccount(owner, "write");
-  const targetSegments = targetChain.slice(1).map((row) => row.name);
+  const targetSegments = segmentsBelowRoot(targetChain);
   const taken = await listSiblingNames(db(), target.id);
   let renamed = 0;
   const plan = await Promise.all(
@@ -178,7 +171,7 @@ export async function copyNodes(owner: Owner, ids: string[], targetRef: string):
     const copies = await Promise.all(items.map(async (row) => ({ row, from: await locationOf(owner.id, row.id) })));
     for (const { from } of copies) staged.push(await driver.stageCopy(from));
 
-    const targetSegments = targetChain.slice(1).map((row) => row.name);
+    const targetSegments = segmentsBelowRoot(targetChain);
     const taken = await listSiblingNames(db(), target.id);
     let renamed = 0;
     const now = new Date();

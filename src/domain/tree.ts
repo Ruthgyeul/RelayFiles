@@ -88,12 +88,14 @@ export function collapseCrumbs(chain: readonly Crumb[], max: number): CrumbSlot[
   return [slots[0]!, { kind: "gap", hidden: chain.slice(1, chain.length - tail) }, ...slots.slice(chain.length - tail)];
 }
 
+/** Folder names below the account root, from a chain that starts at the root (the storage path of a node). */
+export function segmentsBelowRoot(chain: readonly { name: string }[]): string[] {
+  return chain.slice(1).map((entry) => entry.name);
+}
+
 /** "/Videos/2024" for the path bar (the root is "/"). */
 export function pathString(chain: readonly Crumb[]): string {
-  return `/${chain
-    .slice(1)
-    .map((crumb) => crumb.name)
-    .join("/")}`;
+  return `/${segmentsBelowRoot(chain).join("/")}`;
 }
 
 /** Visibility that applies: the nearest explicit setting from the node up to the root; private by default. */

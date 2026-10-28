@@ -8,7 +8,9 @@ import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/co
 import { randomString, ID_ALPHABET, newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { folderCount, homeUploadPlan, kindFromMime, mimeFromName, uploadFallbackName } from "@/domain/upload";
-import { db, Prisma } from "../db/client";
+import { segmentsBelowRoot } from "@/domain/tree";
+import { db } from "../db/client";
+import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import {
   ancestorChain,
@@ -44,9 +46,6 @@ const HOME_UPLOAD_DEPTH = 2;
 /** Files plus the folders their paths create, at most (existing folders are reused). */
 const newItemCount = (rels: readonly string[]) => rels.length + folderCount(rels);
 
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}
 
 /** Rejects a path with an invalid segment, naming the first problem (design wording). */
 export function checkRelPath(rel: string): void {
@@ -137,36 +136,27 @@ export async function checkUploadStart(owner: Owner, batchId: string, slot: numb
 async function ensureFolders(owner: Owner, driver: StorageDriver, baseId: string, dirs: string[]): Promise<{ id: string; segments: string[] }> {
   const base = await ancestorChain(db(), baseId);
   let parentId = baseId;
-  const segments = base.slice(1).map((row) => row.name);
+  const segments = segmentsBelowRoot(base);
   for (const dir of dirs) {
-    for (let attempt = 0; ; attempt++) {
+    // A parallel upload may create the same folder first: the next try finds and uses it.
+    const folder = await retryOnUniqueViolation(async () => {
       const existing = await findChildByName(db(), parentId, dir);
-      if (existing?.type === "FOLDER") {
-        parentId = existing.id;
-        segments.push(dir);
-        break;
-      }
+      if (existing?.type === "FOLDER") return { id: existing.id, name: dir };
       // A file already has this name: put the folder next to it as "Name (2)".
       const name = existing ? uniqName(await listSiblingNames(db(), parentId), dir, false) : dir;
-      try {
-        const created = await withStorageTransaction(db(), async (tx, undo) => {
-          const row = await createFolderNode(tx, { id: newNodeId(), accountId: owner.id, parentId, name, linkId: newLinkId() });
-          const location = { accountId: owner.id, segments: [...segments, name] };
-          await driver.createFolder(location);
-          undo.push("remove upload folder", async () => {
-            await driver.moveToTrash(location);
-          });
-          return row;
+      const created = await withStorageTransaction(db(), async (tx, undo) => {
+        const row = await createFolderNode(tx, { id: newNodeId(), accountId: owner.id, parentId, name, linkId: newLinkId() });
+        const location = { accountId: owner.id, segments: [...segments, name] };
+        await driver.createFolder(location);
+        undo.push("remove upload folder", async () => {
+          await driver.moveToTrash(location);
         });
-        parentId = created.id;
-        segments.push(name);
-        break;
-      } catch (error) {
-        // A parallel upload created the same folder: use it.
-        if (isUniqueViolation(error) && attempt < 2) continue;
-        throw error;
-      }
-    }
+        return row;
+      });
+      return { id: created.id, name };
+    });
+    parentId = folder.id;
+    segments.push(folder.name);
   }
   return { id: parentId, segments };
 }

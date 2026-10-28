@@ -24,8 +24,7 @@ export const GET = apiHandler(async ({ req }) => {
 });
 
 /** "Generate a new token": the old one stops working and other devices are signed out. */
-export const POST = apiHandler(async ({ req }) => {
-  const active = requireActive(await deviceOf(req));
+export const POST = apiHandler({ auth: "active" }, async ({ req, active }) => {
   requireRecentAuth(active);
   const { account, sessionId } = active;
   const token = await regenerateToken(account.id, sessionId);

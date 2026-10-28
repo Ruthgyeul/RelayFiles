@@ -6,8 +6,9 @@ import { LOSSLESS_STRIP_TYPES, stripImageMetadata } from "@/domain/image-metadat
 import { db } from "../db/client";
 import { logger } from "../logger";
 import { findAccountById } from "../repositories/account.repo";
-import { ancestorChain, findNodeForJob, updateNode } from "../repositories/node.repo";
+import { findNodeForJob, updateNode } from "../repositories/node.repo";
 import { driverForAccount } from "../services/volume.service";
+import { locationOf } from "../services/node-location";
 import { imagePreview, imageThumbnail, videoThumbnail, wantsPreview } from "./thumbnail";
 
 /** Image types sharp can rewrite in the same format (metadata is dropped on output). */
@@ -56,8 +57,7 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
   const account = await findAccountById(db(), row.accountId);
   if (!account) return null;
   const driver = await driverForAccount(account, "write");
-  const chain = await ancestorChain(db(), row.id);
-  const path = await driver.localPath({ accountId: row.accountId, segments: chain.slice(1).map((ancestor) => ancestor.name) });
+  const path = await driver.localPath(await locationOf(row.accountId, row.id));
   if (!path) throw new Error("Media processing needs a local volume.");
   const mime = row.mime ?? "";
   const asset = { accountId: row.accountId, nodeId: row.id };

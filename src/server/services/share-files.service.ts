@@ -9,6 +9,7 @@ import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { db } from "../db/client";
 import type { Busy } from "@/domain/share";
+import { segmentsBelowRoot } from "@/domain/tree";
 import { sendFile } from "../files/send-file";
 import { sendAsset, sendThumb } from "../files/send-thumb";
 import { ApiError } from "../http/api-error";
@@ -246,7 +247,7 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   const { link, folder, children } = shared;
   const owner = await ownerOf(link);
   const driver = await driverForAccount(owner);
-  const base = (await ancestorChain(db(), folder.id)).slice(1).map((row) => row.name);
+  const base = segmentsBelowRoot(await ancestorChain(db(), folder.id));
 
   const allFiles = [...children.values()].flat().filter((row) => row.type === "FILE");
   const busy = await busyLevels(
