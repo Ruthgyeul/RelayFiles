@@ -7,10 +7,11 @@ import nextEnv from "@next/env";
 nextEnv.loadEnvConfig(process.cwd());
 
 const { db } = await import("../src/server/db/client");
+const { listVolumesIn } = await import("../src/server/repositories/volume.repo");
 const { migrateVolumeLayout } = await import("../src/server/services/storage-migration.service");
 
 let failed = false;
-for (const volume of await db().storageVolume.findMany({ where: { status: { not: "OFFLINE" } }, select: { id: true } })) {
+for (const volume of await listVolumesIn(db(), ["ACTIVE", "READONLY", "DRAINING"])) {
   try {
     await migrateVolumeLayout(volume.id, (message) => console.log(message));
   } catch (error) {

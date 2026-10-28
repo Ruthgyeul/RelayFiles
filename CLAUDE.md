@@ -96,7 +96,8 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 ## API · 보안
 
 - 응답 형식: `{ success: true, data }` / `{ success: false, error, code }`. 스택 트레이스, 쿼리, 내부 경로를 노출하지 않는다.
-- 모든 route handler는 `apiHandler()`(try-catch, 로깅, 에러 마스킹, request id)를 거친다.
+- 모든 route handler는 `apiHandler()`(try-catch, 로깅, 에러 마스킹, request id)를 거친다. 예외는 tus 업로드 라우트 하나다(자체 프로토콜, 마스킹은 직접 한다).
+- 쿼리는 `src/server/repositories`에만 쓴다(`db().<model>` 직접 호출은 lint 오류).
 - 파일 경로는 클라이언트에서 받지 않는다(nodeId → 서버가 계산). 해석한 경로가 사용자 루트 하위인지 항상 검사한다.
 - 다른 계정의 리소스는 404로 응답한다.
 - 원본 파일은 수정하지 않는다. SSD는 LUKS2로 전체 암호화하고, 앱에서 파일 단위 암호화는 하지 않는다.
