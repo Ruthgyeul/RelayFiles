@@ -5,7 +5,7 @@ import { backupProblems, type BackupFacts } from "./backup-check";
 const now = Date.UTC(2026, 9, 28, 12);
 const limits = { maxDumpAgeHours: 26, maxDriftPct: 20 };
 const counts = { accounts: 10, nodes: 500, publicLinks: 20 };
-const good: BackupFacts = { dumpAt: now - 3 * MS.hour, now, restoredMigration: "2_b", expectedMigration: "2_b", restored: counts, live: counts, fsckDifferences: 0 };
+const good: BackupFacts = { dumpAt: now - 3 * MS.hour, now, restoredMigration: "2_b", expectedMigration: "2_b", restored: counts, live: counts, fsckDifferences: 0, offsiteError: null };
 
 describe("backupProblems", () => {
   it("accepts a fresh dump with the current schema and about the live counts", () => {
@@ -25,5 +25,6 @@ describe("backupProblems", () => {
     expect(backupProblems({ ...good, restored: { ...counts, accounts: 7 } }, limits)).toEqual(["7 accounts in the dump, 10 live"]);
     expect(backupProblems({ ...good, fsckDifferences: 1 }, limits)).toEqual(["storage check found 1 difference (npm run storage:fsck)"]);
     expect(backupProblems({ ...good, fsckDifferences: 3 }, limits)).toEqual(["storage check found 3 differences (npm run storage:fsck)"]);
+    expect(backupProblems({ ...good, offsiteError: "restic check failed" }, limits)).toEqual(["offsite backup: restic check failed"]);
   });
 });

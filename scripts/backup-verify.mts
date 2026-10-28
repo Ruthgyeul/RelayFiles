@@ -6,6 +6,7 @@
  * The scratch database's connection string comes on stdin (`--restored-url -`): it carries a
  * password, and command lines are visible to every user on the server.
  *   npm run -s backup:verify -- [--dump-name <file> --dump-at <ISO time>] --failure "<what failed>"
+ * Either form takes --offsite-failure "<what restic check said>" when the offsite repository failed its check.
  * Exits 1 when the backup is not usable, so cron can alert.
  */
 import { parseArgs } from "node:util";
@@ -18,6 +19,7 @@ const { values } = parseArgs({
     "restored-url": { type: "string" },
     "restore-ms": { type: "string" },
     failure: { type: "string" },
+    "offsite-failure": { type: "string" },
   },
 });
 const { verifyBackup } = await import("../src/server/services/backup-check.service");
@@ -37,6 +39,7 @@ await runScript(async () => {
     restoredUrl: values["restored-url"] === "-" ? (await readStdin()) || null : (values["restored-url"] ?? null),
     restoreMs: restoreMs !== null && Number.isFinite(restoreMs) ? restoreMs : null,
     failure: values.failure,
+    offsiteFailure: values["offsite-failure"],
   });
   console.log(JSON.stringify({ checkedAt: new Date().toISOString(), ...check }));
   return check.ok ? 0 : 1;

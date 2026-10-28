@@ -18,6 +18,8 @@ export interface BackupFacts {
   live: BackupCounts;
   /** Items storage:fsck found different between the database and the volumes. */
   fsckDifferences: number;
+  /** What `restic check` reported about the offsite repository; null when it passed or none is set up. */
+  offsiteError: string | null;
 }
 
 export interface BackupLimits {
@@ -46,5 +48,6 @@ export function backupProblems(facts: BackupFacts, limits: BackupLimits): string
     else if (live > 0 && ((live - restored) / live) * PERCENT > limits.maxDriftPct) problems.push(`${restored} ${COUNT_LABEL[key]} in the dump, ${live} live`);
   }
   if (facts.fsckDifferences > 0) problems.push(`storage check found ${facts.fsckDifferences} difference${facts.fsckDifferences === 1 ? "" : "s"} (npm run storage:fsck)`);
+  if (facts.offsiteError) problems.push(`offsite backup: ${facts.offsiteError}`);
   return problems;
 }

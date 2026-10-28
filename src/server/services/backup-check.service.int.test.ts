@@ -44,6 +44,13 @@ describe("backup verification", () => {
     expect(row.detail).toContain("pg_restore failed");
   });
 
+  it("fails when the offsite repository failed its check", async () => {
+    const check = await verifyBackup({ dump: dump(MS.hour), restoredUrl: restoredUrl(), restoreMs: 1_000, offsiteFailure: "restic check found errors" });
+    expect(check).toMatchObject({ ok: false, problems: ["offsite backup: restic check found errors"] });
+    const failed = await verifyBackup({ dump: null, restoredUrl: null, restoreMs: null, failure: "no dump", offsiteFailure: "repository unreachable" });
+    expect(failed.problems).toEqual(["no dump", "offsite backup: repository unreachable"]);
+  });
+
   it("fails when the scratch database cannot be read", async () => {
     const url = new URL(restoredUrl());
     url.pathname = "/relayfiles_no_such_database";
