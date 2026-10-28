@@ -56,6 +56,7 @@ npm run check:migrations # 파괴적 SQL 마이그레이션에 contract 표시�
 npm run storage:migrate  # 볼륨 디렉터리 레이아웃을 코드 버전으로 올림(READONLY + 저널, 재개 가능)
 npm run storage:import   # -- --account <id> [--to <폴더>] [--ignore-quota], stdin의 tar를 계정에 복사(재실행 = 이어하기)
 npm run storage:fsck     # DB와 볼륨 대조(보고만). -- --fix: 디스크에만 있는 항목 휴지통, 없어진 파일 missing 표시
+npm run backup:verify    # 복원한 덤프와 운영 DB 비교 + fsck 보고, 결과 저장 (deploy/scripts/verify-backup.sh가 실행)
 npm run volume:list      # 볼륨 상태·계정 수·여유 공간
 npm run volume:migrate   # -- --account <id> --to <vol> | --volume <vol> [--to <vol>] (복사 → SHA-256 대조 → 전환)
 npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해제

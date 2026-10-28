@@ -585,6 +585,8 @@ crontab -e      # docker 그룹에 속한 배포 사용자로
 15 3 * * * cd /home/<사용자>/RelayFiles && deploy/scripts/backup.sh >> /home/<사용자>/relayfiles-backup.log 2>&1
 # 매일 03:45 사용자 파일을 다른 디스크로 (DB 덤프 직후라 시점이 맞는다)
 45 3 * * * sudo rsync -aHAX --delete <STORAGE_ROOT>/ /mnt/<백업 디스크>/relayfilesDB/ >> /home/<사용자>/relayfiles-rsync.log 2>&1
+# 매주 일요일 05:15 백업 검증: 최신 덤프를 임시 컨테이너에 복원해 운영과 비교 + fsck 보고 (runbook.md "백업 검증")
+15 5 * * 0 cd /home/<사용자>/RelayFiles && deploy/scripts/verify-backup.sh >> /home/<사용자>/relayfiles-verify.log 2>&1
 ```
 
 - cron에는 `PATH`가 짧으므로 `docker`를 못 찾으면 crontab 맨 위에 `PATH=/usr/local/bin:/usr/bin:/bin`을 넣는다.
