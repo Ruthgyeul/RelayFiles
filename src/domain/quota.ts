@@ -5,6 +5,7 @@
 
 /** Storage sizes are decimal like the design (1 GB = 10^9 bytes). */
 export const BYTES_PER_GB = 1_000_000_000;
+export const BYTES_PER_MB = 1_000_000;
 /** Largest storage limit an admin can set (1 PB): far above any disk, it only stops typos and overflow. */
 export const MAX_QUOTA_GB = 1_000_000;
 
