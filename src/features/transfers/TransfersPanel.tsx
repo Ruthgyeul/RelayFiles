@@ -8,7 +8,7 @@ import { useNow } from "@/shared/hooks/useNow";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { panelSummary, percentDone, transferMeta, type TransferStatus } from "./transfer-text";
-import { useTransfers, type Transfer } from "./TransfersProvider";
+import { useTransfers, type Transfer } from "./transfers-context";
 
 /** Look per status (design `badge`, `boxBg`, `icon`). */
 const LOOK: Record<TransferStatus, { badge: string; box: string; badgeText: string; icon: IconName; weight: "fill" | "regular" | "bold"; iconColor: string }> = {

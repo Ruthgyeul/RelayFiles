@@ -1,72 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { DuplicatePolicy } from "@/contracts/uploads";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import type { DuplicatePolicy, PrepareUploadResult } from "@/contracts/uploads";
 import { nameError } from "@/domain/names";
 import { folderCount, uploadFallbackName } from "@/domain/upload";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError, apiFetch } from "@/shared/lib/api-client";
-import type { PrepareUploadResult } from "@/contracts/uploads";
 import { DuplicateDialog, type DuplicateRequest } from "./DuplicateDialog";
-import { entriesFromList, type UploadEntry } from "./read-drop";
-import type { TransferStatus } from "./transfer-text";
+import type { UploadEntry } from "./read-drop";
+import { TransfersContext, type DownloadRequest, type Transfer, type TransfersContextValue, type UploadTarget } from "./transfers-context";
 import { BatchUploader } from "./upload-runner";
-
-/** Where an upload goes: "home" (new folder at the root), "root", or a folder id. */
-export interface UploadTarget {
-  ref: string;
-  name: string;
-}
-
-/** A download handed to the browser: what the panel shows about it. */
-export interface DownloadRequest {
-  url: string;
-  title: string;
-  files: number;
-  total: number;
-}
-
-export interface Transfer {
-  id: string;
-  direction: "up" | "down";
-  title: string;
-  folderId: string;
-  fromHome: boolean;
-  files: number;
-  folders: number;
-  total: number;
-  done: number;
-  status: TransferStatus;
-  auto: boolean;
-  error?: string;
-  /** Time spent transferring before the current run, and when the current run started. */
-  activeMs: number;
-  runningSince: number | null;
-}
-
-interface TransfersContextValue {
-  transfers: Transfer[];
-  panelOpen: boolean;
-  panelExpanded: boolean;
-  lastUpload: { folderId: string; name: string } | null;
-  pickFiles: (target: UploadTarget) => void;
-  pickFolder: (target: UploadTarget) => void;
-  upload: (entries: UploadEntry[], target: UploadTarget) => void;
-  download: (request: DownloadRequest) => void;
-  togglePause: (id: string) => void;
-  remove: (id: string) => void;
-  clearFinished: () => void;
-  setPanel: (open: boolean, expanded?: boolean) => void;
-}
-
-const TransfersContext = createContext<TransfersContextValue | null>(null);
-
-export function useTransfers(): TransfersContextValue {
-  const value = useContext(TransfersContext);
-  if (!value) throw new Error("useTransfers must be used inside <TransfersProvider>.");
-  return value;
-}
+import { useFilePickers } from "./useFilePickers";
+import { useOfflinePause } from "./useOfflinePause";
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
@@ -82,9 +28,6 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
   const [lastUpload, setLastUpload] = useState<{ folderId: string; name: string } | null>(null);
   const [duplicate, setDuplicate] = useState<(DuplicateRequest & { entries: UploadEntry[]; target: UploadTarget }) | null>(null);
   const runners = useRef(new Map<string, BatchUploader>());
-  const fileInput = useRef<HTMLInputElement>(null);
-  const folderInput = useRef<HTMLInputElement>(null);
-  const pickTarget = useRef<UploadTarget | null>(null);
   // crypto.randomUUID() exists only in secure contexts; plain-http LAN access must work too.
   const downloadSeq = useRef(0);
 
@@ -201,21 +144,8 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
-  // Pause everything while offline and continue once the connection is back (design).
-  const latest = useRef(transfers);
-  useEffect(() => {
-    latest.current = transfers;
-  });
-  useEffect(() => {
-    const onOffline = () => latest.current.filter((transfer) => transfer.status === "active").forEach((transfer) => pause(transfer.id, true));
-    const onOnline = () => latest.current.filter((transfer) => transfer.status === "paused" && transfer.auto).forEach((transfer) => resume(transfer.id));
-    window.addEventListener("offline", onOffline);
-    window.addEventListener("online", onOnline);
-    return () => {
-      window.removeEventListener("offline", onOffline);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [pause, resume]);
+  useOfflinePause(transfers, pause, resume);
+  const pickers = useFilePickers(upload);
 
   const value = useMemo<TransfersContextValue>(
     () => ({
@@ -225,14 +155,8 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
       lastUpload,
       upload,
       download,
-      pickFiles: (target) => {
-        pickTarget.current = target;
-        fileInput.current?.click();
-      },
-      pickFolder: (target) => {
-        pickTarget.current = target;
-        folderInput.current?.click();
-      },
+      pickFiles: pickers.pickFiles,
+      pickFolder: pickers.pickFolder,
       togglePause: (id) => {
         const transfer = transfers.find((entry) => entry.id === id);
         if (transfer?.status === "active") pause(id, false);
@@ -246,31 +170,13 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
       clearFinished: () => setTransfers((list) => list.filter((entry) => entry.status === "active" || entry.status === "paused")),
       setPanel: (open, expanded) => setPanelState((current) => ({ open, expanded: expanded ?? current.expanded })),
     }),
-    [transfers, panel, lastUpload, upload, download, pause, resume],
+    [transfers, panel, lastUpload, upload, download, pause, resume, pickers.pickFiles, pickers.pickFolder],
   );
-
-  const onPicked = (list: FileList | null) => {
-    const target = pickTarget.current;
-    if (list && list.length && target) upload(entriesFromList(list), target);
-  };
 
   return (
     <TransfersContext value={value}>
       {children}
-      <input ref={fileInput} type="file" multiple hidden aria-hidden onChange={(event) => (onPicked(event.target.files), (event.target.value = ""))} />
-      <input
-        ref={(element) => {
-          folderInput.current = element;
-          // Folder pickers are not standard attributes in React's typings.
-          element?.setAttribute("webkitdirectory", "");
-          element?.setAttribute("directory", "");
-        }}
-        type="file"
-        multiple
-        hidden
-        aria-hidden
-        onChange={(event) => (onPicked(event.target.files), (event.target.value = ""))}
-      />
+      {pickers.inputs}
       <DuplicateDialog request={duplicate} onChoose={(policy) => duplicate && start(duplicate.entries, duplicate.target, policy)} onClose={() => setDuplicate(null)} />
     </TransfersContext>
   );

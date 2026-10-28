@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { NodeItem } from "@/contracts/nodes";
 import { zipName } from "@/domain/serving";
 import { useShell } from "@/features/shell/ShellProvider";
-import { useTransfers } from "@/features/transfers/TransfersProvider";
+import { useTransfers } from "@/features/transfers/transfers-context";
 import { MediaViewer, type ViewerItem } from "@/features/viewer/MediaViewer";
 import { fileUrls } from "@/shared/lib/files-api";
 
