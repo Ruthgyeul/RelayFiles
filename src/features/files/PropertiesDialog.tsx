@@ -9,8 +9,8 @@ import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { IconButton } from "@/shared/ui/IconButton";
 import { Modal } from "@/shared/ui/Modal";
-import { filesApi } from "./api";
-import { kindOf } from "./kind";
+import { filesApi } from "@/shared/lib/files-api";
+import { kindOf } from "@/shared/ui/node-kind";
 
 const TYPE_LABEL = { video: "Video", audio: "Audio", image: "Image", other: "File" } as const;
 

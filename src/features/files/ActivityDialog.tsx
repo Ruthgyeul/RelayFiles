@@ -8,7 +8,7 @@ import { FIXED_COLOR, KIND_COLOR } from "@/shared/styles/palette";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { Modal } from "@/shared/ui/Modal";
 import { IconButton } from "@/shared/ui/IconButton";
-import { filesApi } from "./api";
+import { filesApi } from "@/shared/lib/files-api";
 
 /** Label, icon and color per event (design `K`). */
 const EVENT: Record<LinkEventKind, { label: string; icon: IconName; color: string }> = {

@@ -13,8 +13,8 @@ import { BusyPill } from "@/shared/ui/BusyPill";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
-import { fileUrls } from "./api";
-import { kindOf } from "./kind";
+import { fileUrls } from "@/shared/lib/files-api";
+import { kindOf } from "@/shared/ui/node-kind";
 import { toShareSettings } from "./settings";
 import type { DropTargetProps } from "./useDragMove";
 

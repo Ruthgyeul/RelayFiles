@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { filesApi } from "@/features/files/api";
-import { folderHref } from "@/features/files/paths";
+import { filesApi } from "@/shared/lib/files-api";
+import { folderHref } from "@/shared/lib/routes";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useNow } from "@/shared/hooks/useNow";
 import { cn } from "@/shared/lib/cn";

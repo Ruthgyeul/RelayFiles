@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 import { BusyPill } from "@/shared/ui/BusyPill";
 import { Icon } from "@/shared/ui/icon/Icon";
-import { kindOf } from "./kind";
+import { kindOf } from "@/shared/ui/node-kind";
 import { MediaThumb, ResumeBar } from "./MediaThumb";
 import { itemMeta, MenuButton, type ItemProps } from "./NodeRow";
 

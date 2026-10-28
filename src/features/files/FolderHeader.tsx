@@ -9,7 +9,7 @@ import { Button } from "@/shared/ui/Button";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
-import { folderHref } from "./paths";
+import { folderHref } from "@/shared/lib/routes";
 import { toShareSettings } from "./settings";
 import type { DropTargetProps } from "./useDragMove";
 

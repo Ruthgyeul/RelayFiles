@@ -9,7 +9,7 @@ import { Field, FieldGroup, TextArea, TextInput } from "@/shared/ui/Field";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { Modal, ModalFooter, ModalHeader } from "@/shared/ui/Modal";
 import { CheckRow, OptionCard, OptionChip } from "@/shared/ui/Option";
-import { filesApi } from "./api";
+import { filesApi } from "@/shared/lib/files-api";
 
 export interface SettingsRequest {
   item: NodeItem;

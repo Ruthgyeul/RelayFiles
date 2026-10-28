@@ -2,7 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import type { SessionState } from "@/contracts/auth";
 import { NewTokenDialog } from "@/features/account/NewTokenDialog";
 import { ReauthGate } from "@/features/account/ReauthDialog";
 import { SignInDialog } from "@/features/account/SignInDialog";
@@ -10,8 +9,6 @@ import { isTypingTarget } from "@/features/shortcuts/shortcuts";
 import { GlobalSearchDialog } from "@/features/search/GlobalSearchDialog";
 import { SearchButton } from "@/features/search/SearchButton";
 import { ShortcutsDialog } from "@/features/shortcuts/ShortcutsDialog";
-import { TransfersPanel } from "@/features/transfers/TransfersPanel";
-import { TransfersProvider } from "@/features/transfers/TransfersProvider";
 import { readLocalSetting, writeLocalSetting } from "@/shared/lib/local-setting";
 import { AppFooter } from "./AppFooter";
 import { AppHeader } from "./AppHeader";
@@ -20,7 +17,7 @@ import { BannerStack } from "./BannerStack";
 import { Drawer } from "./Drawer";
 import { activeNavItem } from "./nav";
 import { PageTitleContext } from "./page-title";
-import { ShellProvider, useShell, type ClientConfig } from "./ShellProvider";
+import { useShell } from "./ShellProvider";
 import { Sidebar } from "./Sidebar";
 import { Toasts } from "./Toasts";
 
@@ -28,19 +25,12 @@ const SIDEBAR_KEY = "relay.sidebarCollapsed";
 const DESKTOP_QUERY = "(min-width: 1024px)";
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
-/** Signed-in application frame: sidebar or drawer, header, banners, page, footer, dialogs. */
-export function AppShell({ initialSession, config, announcement, children }: { initialSession: SessionState; config: ClientConfig; announcement: AnnouncementDto | null; children: ReactNode }) {
-  return (
-    <ShellProvider initialSession={initialSession} config={config}>
-      <TransfersProvider>
-        <Frame announcement={announcement}>{children}</Frame>
-        <TransfersPanel />
-      </TransfersProvider>
-    </ShellProvider>
-  );
-}
-
-function Frame({ announcement, children }: { announcement: AnnouncementDto | null; children: ReactNode }) {
+/**
+ * Signed-in application frame: sidebar or drawer, header, banners, page, footer, dialogs.
+ * Rendered inside ShellProvider (and TransfersProvider) by the app layout, which composes them
+ * so the shell does not import the features that use it.
+ */
+export function AppShell({ announcement, children }: { announcement: AnnouncementDto | null; children: ReactNode }) {
   const shell = useShell();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
