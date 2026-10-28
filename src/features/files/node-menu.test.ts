@@ -5,7 +5,7 @@ import { buildNodeMenu, type NodeActions } from "./node-menu";
 const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
 const noop = () => undefined;
 const all: Required<NodeActions> = Object.fromEntries(
-  ["open", "preview", "download", "downloadZip", "share", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rename", "copy", "move", "delete", "properties"].map((key) => [key, noop]),
+  ["open", "preview", "download", "downloadZip", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rename", "copy", "move", "delete", "properties"].map((key) => [key, noop]),
 ) as Required<NodeActions>;
 
 const folder: Pick<NodeItem, "type" | "kind" | "settings"> = { type: "folder", kind: null, settings };
@@ -19,6 +19,7 @@ describe("buildNodeMenu (design nodeMenu)", () => {
       "Open",
       "Download",
       "| Share",
+      "Upload links",
       "Tags",
       "Direct link",
       "New link",

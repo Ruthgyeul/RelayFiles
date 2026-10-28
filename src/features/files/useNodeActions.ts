@@ -37,6 +37,7 @@ export function useNodeActions({ view, isAdmin, dialogs, media, linkOf, copyLink
       download: () => media.download(item),
       downloadZip: item.type === "file" ? () => media.zip([item]) : undefined,
       share: item.type === "folder" ? () => router.push(sharePageHref(item.linkId)) : undefined,
+      uploadLinks: item.type === "folder" ? () => dialogs.uploadLinks(item) : undefined,
       tags: () => dialogs.tags([item]),
       directLink: () => copyLink(linkOf(item.linkId), current ? view.effectiveVisibility : visibilityOf(item)),
       newLink: () => dialogs.newLink(item),
