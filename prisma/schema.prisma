@@ -354,3 +354,21 @@ model TrashedBytes {
   @@index([accountId])
   @@index([trashedAt])
 }
+
+/// One run of deploy/scripts/verify-backup.sh: the newest dump restored into a scratch database
+/// and compared with production, plus a report-only storage:fsck. The Server page shows the latest.
+model BackupCheck {
+  id              BigInt    @id @default(autoincrement())
+  checkedAt       DateTime  @default(now())
+  ok              Boolean
+  /// File name of the dump that was restored (null when none was found).
+  dumpName        String?
+  dumpAt          DateTime?
+  restoreMs       Int?
+  /// Items storage:fsck found different between the database and the volumes.
+  fsckDifferences Int?
+  /// What failed, in words for the Server page (empty when ok).
+  problems        String[]
+
+  @@index([checkedAt])
+}
