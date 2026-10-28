@@ -70,6 +70,10 @@ export interface StorageDriver {
   space(): Promise<SpaceInfo>;
   /** Writes a generated file atomically (temp file + rename), replacing an older one. */
   writeAsset(asset: AssetRef, data: Uint8Array): Promise<void>;
+  /** Moves a generated file written in the temp area (a video conversion) into place, replacing an older one. */
+  adoptAsset(asset: AssetRef, tempPath: string): Promise<void>;
+  /** A path in the temp area for a generated file that is too large to hold in memory. */
+  stagingPath(): Promise<string>;
   /** Reads a generated file, or null when it does not exist. */
   readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null>;
   /** A generated file as a ranged source (nothing stays open until it is read), or null when missing. */
@@ -80,7 +84,7 @@ export interface StorageDriver {
    * Permanently removes trash entries moved there before `trashBefore` and unfinished uploads
    * last written before `uploadsBefore`. Returns how many entries were removed.
    */
-  purgeSystem(trashBefore: Date, uploadsBefore: Date): Promise<{ trash: number; uploads: number }>;
+  purgeSystem(trashBefore: Date, uploadsBefore: Date, transcodedBefore: Date): Promise<{ trash: number; uploads: number; transcoded: number }>;
   /** Removes every generated file of an account (account deletion). */
   removeAccountAssets(accountId: string): Promise<void>;
   /** True when the upload staging area accepts a write (Status page probe). */
