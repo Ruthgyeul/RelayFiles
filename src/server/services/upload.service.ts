@@ -56,6 +56,12 @@ export function checkRelPath(rel: string): void {
   }
 }
 
+/** The volume a tus request (`/api/uploads/tus/<volumeId>/…`) writes to; null when it is unknown or offline. */
+export async function tusVolume(volumeId: string | undefined) {
+  const volume = volumeId ? await findVolume(db(), volumeId) : null;
+  return volume && volume.status !== "OFFLINE" ? volume : null;
+}
+
 /**
  * Plans an upload (design `startUpload`): validates names, reports duplicates for the
  * dialog, checks quota and disk space, creates the Home upload folder, and stores the batch

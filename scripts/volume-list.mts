@@ -4,11 +4,12 @@ import nextEnv from "@next/env";
 nextEnv.loadEnvConfig(process.cwd());
 
 const { db } = await import("../src/server/db/client");
+const { listVolumesWithAccounts } = await import("../src/server/repositories/volume.repo");
 const { checkVolume } = await import("../src/server/storage/volume");
 const { driverFor } = await import("../src/server/storage/registry");
 const { formatSize } = await import("../src/domain/format");
 
-const volumes = await db().storageVolume.findMany({ orderBy: { createdAt: "asc" }, include: { _count: { select: { accounts: true } } } });
+const volumes = await listVolumesWithAccounts(db());
 for (const volume of volumes) {
   const state = await checkVolume(volume.mountPath, volume.id);
   const space = state.state === "online" && volume.status !== "OFFLINE" ? await driverFor(volume).space() : null;

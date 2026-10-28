@@ -13,6 +13,7 @@ nextEnv.loadEnvConfig(process.cwd());
 
 const { getEnv } = await import("../src/config/env");
 const { db } = await import("../src/server/db/client");
+const { registerVolume } = await import("../src/server/repositories/volume.repo");
 const { initVolume, readVolumeMarker } = await import("../src/server/storage/volume");
 
 const storage = getEnv("storage");
@@ -20,13 +21,7 @@ const root = resolve(process.argv[2] ?? storage.STORAGE_ROOT);
 await mkdir(root, { recursive: true });
 
 const marker = (await readVolumeMarker(root)) ?? (await initVolume(root, randomUUID()));
-const existing = await db().storageVolume.findUnique({ where: { id: marker.volumeId }, select: { status: true } });
-await db().storageVolume.upsert({
-  where: { id: marker.volumeId },
-  create: { id: marker.volumeId, mountPath: root, layoutVersion: marker.layoutVersion, reservePct: Math.round(storage.STORAGE_RESERVE_PERCENT) },
-  // A remount brings an OFFLINE volume back; READONLY and DRAINING belong to a running migration.
-  update: { mountPath: root, ...(existing?.status === "OFFLINE" ? { status: "ACTIVE" as const } : {}) },
-});
+await registerVolume(db(), { id: marker.volumeId, mountPath: root, layoutVersion: marker.layoutVersion, reservePct: Math.round(storage.STORAGE_RESERVE_PERCENT) });
 
 console.log(`Volume ${marker.volumeId} ready at ${root} (layout v${marker.layoutVersion}).`);
 
