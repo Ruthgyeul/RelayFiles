@@ -5,6 +5,8 @@
  */
 import nextEnv from "@next/env";
 
+// Admin scripts log to tools-*.log (the worker sets "worker" before importing this).
+process.env.LOG_SERVICE ||= "tools";
 nextEnv.loadEnvConfig(process.cwd());
 
 /**

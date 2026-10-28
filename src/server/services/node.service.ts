@@ -132,7 +132,6 @@ export async function searchItems(accountId: string, raw: string): Promise<Tagge
   return withPaths(accountId, ranked.map(({ row }) => row));
 }
 
-
 /**
  * Creates a folder in the database and on the volume together. A taken name gets the next
  * free "Name (2)" variant like the design; the caller is told so it can say so.

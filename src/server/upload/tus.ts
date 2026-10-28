@@ -12,6 +12,7 @@ import { layoutOf } from "../storage/layout";
 import { releaseSpace } from "../services/space.service";
 import { checkUploadStart, finalizeUpload } from "../services/upload.service";
 import { forgetUpload, loadBatch, setUploadOwner, uploadOwner } from "./batches";
+import { RedisLocker } from "./redis-locker";
 import { markActive } from "../metrics/activity";
 
 
@@ -40,11 +41,15 @@ function slotOf(upload: Upload): { batchId: string; slot: number } {
   return { batchId, slot };
 }
 
+/** Upload locks shared by every app process (one locker for all volumes' servers). */
+const locker = new RedisLocker();
+
 function createServer(volumeId: string, mountPath: string): Server {
   const maxGb = getEnv("uploads").UPLOAD_MAX_FILE_SIZE_GB;
   return new Server({
     path: `/api/uploads/tus/${volumeId}`,
     datastore: new FileStore({ directory: layoutOf(mountPath).uploads }),
+    locker,
     maxSize: maxGb ? Math.round(maxGb * BYTES_PER_GB) : undefined,
     relativeLocation: true,
     respectForwardedHeaders: true,
@@ -98,14 +103,16 @@ function releaseOnTerminate(server: Server, volumeId: string): Server {
   return server;
 }
 
-const servers = new Map<string, Server>();
+const servers = new Map<string, { mountPath: string; server: Server }>();
 
-/** One tus server per storage volume; chunks land in that volume's upload area. */
+/**
+ * One tus server per storage volume; chunks land in that volume's upload area. Like the
+ * storage driver, a volume registered again at another path gets a new server for it.
+ */
 export function tusServerFor(volume: { id: string; mountPath: string }): Server {
-  let server = servers.get(volume.id);
-  if (!server) {
-    server = releaseOnTerminate(createServer(volume.id, volume.mountPath), volume.id);
-    servers.set(volume.id, server);
-  }
+  const existing = servers.get(volume.id);
+  if (existing?.mountPath === volume.mountPath) return existing.server;
+  const server = releaseOnTerminate(createServer(volume.id, volume.mountPath), volume.id);
+  servers.set(volume.id, { mountPath: volume.mountPath, server });
   return server;
 }

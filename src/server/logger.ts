@@ -35,11 +35,14 @@ function createLogger(): winston.Logger {
   if (production) {
     try {
       mkdirSync(observability.LOG_DIR, { recursive: true });
-      // Size-rotated; `tailable` keeps the newest lines in the plain file name (error.log, error1.log, ...).
+      // Size-rotated; `tailable` keeps the newest lines in the plain file name (app-error.log,
+      // app-error1.log, ...). Each process has its own files: two processes rotating one file by
+      // size would rename it under each other.
       const rotation = { maxsize: LOGS.maxFileBytes, maxFiles: LOGS.maxFiles, tailable: true };
+      const prefix = `${observability.LOG_DIR}/${observability.LOG_SERVICE}`;
       transports.push(
-        new winston.transports.File({ filename: `${observability.LOG_DIR}/error.log`, level: "error", ...rotation }),
-        new winston.transports.File({ filename: `${observability.LOG_DIR}/combined.log`, ...rotation }),
+        new winston.transports.File({ filename: `${prefix}-error.log`, level: "error", ...rotation }),
+        new winston.transports.File({ filename: `${prefix}-combined.log`, ...rotation }),
       );
     } catch {
       // The log directory is not writable (e.g. read-only container): keep console output only.
@@ -49,7 +52,7 @@ function createLogger(): winston.Logger {
   return winston.createLogger({
     level: logLevelOf(app.NODE_ENV, observability),
     format: winston.format.combine(redactFormat(), winston.format.timestamp(), winston.format.errors({ stack: !production }), winston.format.json()),
-    defaultMeta: { service: "relayfiles" },
+    defaultMeta: { service: "relayfiles", process: observability.LOG_SERVICE },
     transports,
   });
 }

@@ -86,6 +86,14 @@ export const UPLOAD = {
   chunkSizeMb: 50,
   /** Incomplete upload chunks older than this are removed. */
   tmpTtlHours: 6,
+  /**
+   * tus upload locks live in Redis so every app process sees them: a lock lapses this long after
+   * its last renewal (a crashed process cannot hold it for good), and a request waits at most
+   * lockAcquireMs for one, asking the holder to let go every lockRetryMs.
+   */
+  lockLeaseMs: 30_000,
+  lockAcquireMs: 30_000,
+  lockRetryMs: 250,
 } as const;
 
 export const SHARE = {
@@ -334,6 +342,11 @@ export const TRANSCODE = {
   maxOutputBytes: 4 * 1024 * 1024 * 1024,
   /** Retry-After sent while every conversion slot is in use. */
   busyRetrySec: 10,
+  /**
+   * A conversion slot (shared by every app process through Redis) lapses this long after its
+   * last renewal, so a crashed process frees its slots; running conversions renew every third of it.
+   */
+  slotLeaseMs: 60_000,
 } as const;
 
 /** Server settings (admin Settings page). */

@@ -511,12 +511,7 @@ deploy/scripts/release.sh
 
 ### 롤백
 
-```bash
-tail -5 "$(grep ^DATA_DIR= .env | cut -d= -f2)/releases.log"   # 이전 태그 확인
-RELEASE_TAG=<이전 태그> $C up -d --no-build app worker
-```
-
-DB 스키마는 expand → contract로 나눠 넣으므로 바로 이전 릴리스는 새 스키마에서도 동작한다. 파괴적 변경이 들어간 릴리스를 되돌릴 때는 그 릴리스 직전 백업을 복구한다. 자세한 내용은 [runbook.md "롤백"](runbook.md#롤백)과 ["DB 복구"](runbook.md#db-복구).
+절차와 DB 스키마 규칙은 [runbook.md "롤백"](runbook.md#롤백)에 있다(이전 이미지 태그로 `app`·`worker`를 다시 띄운다).
 
 ### 특정 릴리스에서 한 번만 할 일
 
@@ -572,7 +567,7 @@ PostgreSQL 메이저 버전(16 → 17)은 데이터 디렉터리를 그대로 �
   | 코드, `.env`, 점검 플래그 | `~/RelayFiles` (`deploy/maintenance/on`) |
   | 사용자 파일, 썸네일·미리보기, 업로드 임시 조각, 휴지통 | `STORAGE_ROOT` (`users/`, `system/`) |
   | PostgreSQL, Redis, DB 백업, 릴리스 기록 | `DATA_DIR` (`pg/`, `redis/`, `backups/`, `releases.log`) |
-  | 앱·워커 로그 | `LOG_DIR` (`error.log`, `combined.log`, 20MB × 5개 순환) |
+  | 앱·워커 로그 | `LOG_DIR` (프로세스마다 `app-`·`worker-`·`tools-` + `error.log`·`combined.log`, 20MB × 5개 순환) |
   | nginx 접근 로그, 컨테이너 표준 출력 | `$C logs <서비스>` (Docker data-root 안) |
   | Docker 이미지·빌드 캐시 | `DOCKER_DATA_ROOT` |
   | SSD 키 | `/etc/relayfiles/ssd.key` (서버 밖에도 보관) |
@@ -599,7 +594,7 @@ crontab -e      # docker 그룹에 속한 배포 사용자로
 
 ## 11. 문제 해결
 
-먼저 볼 것: `$C ps`(상태), `$C logs --tail 100 app worker nginx`(로그), `curl -fsS http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/api/health`(구성 요소별 상태), 에러 화면의 요청 ID로 `LOG_DIR/combined.log` 검색.
+먼저 볼 것: `$C ps`(상태), `$C logs --tail 100 app worker nginx`(로그), `curl -fsS http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/api/health`(구성 요소별 상태), 에러 화면의 요청 ID로 `LOG_DIR/app-combined.log` 검색.
 
 | 증상 | 원인 | 해결 |
 |---|---|---|

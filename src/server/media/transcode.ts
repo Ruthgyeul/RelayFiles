@@ -5,6 +5,7 @@ import { getEnv } from "@/config/env";
 import { IMMUTABLE_CACHE, TRANSCODE } from "@/config/policy";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
+import { acquireSlot, type SemaphoreSlot } from "../redis-semaphore";
 import { ffmpegInput } from "./ffmpeg-input";
 
 const globalForTranscode = globalThis as unknown as { relayTranscodes?: { running: number } };
@@ -45,20 +46,35 @@ class OutputLimit extends Transform {
   }
 }
 
+const busy = () => new ApiError("RATE_LIMITED", "The server is converting other videos. Try again shortly.", { retryAfter: TRANSCODE.busyRetrySec });
+/** Stands in for the shared slot while Redis is unreachable; the process limit still applies. */
+const PROCESS_ONLY: SemaphoreSlot = { release: async () => undefined };
+
+/** One of the VIDEO_TRANSCODE_MAX slots shared by every app process, or null when all are in use. */
+async function sharedSlot(limit: number): Promise<SemaphoreSlot | null> {
+  try {
+    return await acquireSlot("transcode", limit, TRANSCODE.slotLeaseMs);
+  } catch (error) {
+    logger.warn("shared conversion slots unavailable; limiting this process only", { error });
+    return PROCESS_ONLY;
+  }
+}
+
 /**
  * Plays a video the browser cannot decode by converting it while it streams. At most
- * VIDEO_TRANSCODE_MAX conversions run at once; each one is killed (SIGKILL) as soon as the
- * viewer leaves or the output limit is reached, and is always reaped (`close`).
+ * VIDEO_TRANSCODE_MAX conversions run at once across every app process (Redis slots); each
+ * one is killed (SIGKILL) as soon as the viewer leaves or the output limit is reached, and is
+ * always reaped (`close`).
  */
-export function transcodeResponse(req: Request, path: string): Response {
+export async function transcodeResponse(req: Request, path: string): Promise<Response> {
   // A finished conversion is kept by the browser: watching again costs no CPU.
   const headers = new Headers({ "content-type": "video/mp4", "cache-control": IMMUTABLE_CACHE, "x-content-type-options": "nosniff", "x-accel-buffering": "no" });
   const { FFMPEG_PATH, VIDEO_TRANSCODE_MAX } = getEnv("jobs");
   if (VIDEO_TRANSCODE_MAX === 0) throw new ApiError("NOT_FOUND");
   if (req.method === "HEAD") return new Response(null, { headers });
-  if (slots.running >= VIDEO_TRANSCODE_MAX) {
-    throw new ApiError("RATE_LIMITED", "The server is converting other videos. Try again shortly.", { retryAfter: TRANSCODE.busyRetrySec });
-  }
+  if (slots.running >= VIDEO_TRANSCODE_MAX) throw busy();
+  const slot = await sharedSlot(VIDEO_TRANSCODE_MAX);
+  if (!slot) throw busy();
 
   slots.running++;
   const started = Date.now();
@@ -68,6 +84,7 @@ export function transcodeResponse(req: Request, path: string): Response {
     if (released) return;
     released = true;
     slots.running--;
+    slot.release().catch((error: unknown) => logger.warn("conversion slot not released", { error }));
   };
   const stop = () => {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");

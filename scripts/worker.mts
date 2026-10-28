@@ -8,8 +8,10 @@
  *   watch (VOLUME_WATCH_INTERVAL_SEC)
  * Stops cleanly on SIGINT/SIGTERM so running jobs finish before the process exits.
  */
-// Loads .env before the app modules below; the worker runs until a signal, so it does not use runScript.
-import "./lib/bootstrap.mjs";
+// worker-*.log in LOG_DIR. Then .env is loaded before the app modules below; the worker runs
+// until a signal, so it does not use runScript.
+process.env.LOG_SERVICE ||= "worker";
+await import("./lib/bootstrap.mjs");
 
 const { startMediaWorker } = await import("../src/server/jobs/media-worker");
 const { startMaintenanceWorker } = await import("../src/server/jobs/maintenance");

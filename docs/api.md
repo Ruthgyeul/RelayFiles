@@ -17,8 +17,8 @@
 - 그 밖의 예외는 로그에만 전체를 남기고, 응답은 항상 `500 INTERNAL "Something went wrong."`(스택, 쿼리, 내부 경로 노출 없음).
 - 429 응답은 `retry-after` 헤더와 `retryAfter` 필드를 함께 보낸다.
 - 실패 응답은 항상 `cache-control: no-store`(아직 없는 썸네일의 404가 캐시되지 않게).
-- 모든 페이지·API 응답에 보안 헤더(`next.config.ts`): `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`. 프록시를 거치는 응답에는 요청마다 nonce가 다른 Content-Security-Policy(`CSP_MODE`)와 https 사이트의 HSTS가 붙는다([security.md](security.md#응답-헤더자원-제한)).
-- 캐시: 파일 바이트는 URL이 같으면 바뀌지 않으므로 재생(`stream`)·썸네일·미리보기·변환 영상은 `private, max-age=1년, immutable`, 다운로드는 `private, no-cache`(한도·횟수 집계를 위해 매번 요청).
+- 보안 헤더(CSP, HSTS 등): [security.md "응답 헤더·자원 제한"](security.md#응답-헤더자원-제한).
+- 파일 응답의 캐시(`Cache-Control`): [architecture.md "미리보기 전송"](architecture.md#미리보기-전송).
 
 ## 에러 코드 (`src/contracts/errors.ts`)
 
@@ -75,6 +75,7 @@
 | `PUT` | `/api/nodes/:id/pause` | 관리자: 다운로드 일시정지/재개 |
 | `POST` | `/api/uploads` | 업로드 준비 `{ target: home\|root\|폴더id, files: [{ rel, size }], dup?, fallbackName? }` → `{ kind: duplicates, names }` / `{ kind: nothing }` / `{ kind: ready, batchId, endpoint, folder, files }`. 이름 검증, 용량·볼륨 여유 공간(507), Home 업로드 폴더 생성 |
 | tus | `/api/uploads/tus/:volumeId[/:uploadId]` | 재개 가능한 업로드(tus 1.0, 청크 `UPLOAD_CHUNK_SIZE_MB`). 메타데이터 `batch`, `index`, `filename`. 업로드한 기기의 계정만 이어 올리거나 조회할 수 있다. 완료되면 `{ success, data: { nodeId, name, folderId } }`. `proxy.ts`를 거치지 않는다(본문 버퍼링 방지) |
+| `GET` | `/api/search?q=…` | 전역 검색(Ctrl/⌘ K): 빈 값이면 최근 파일 8개, `#태그`로 시작하면 모든 태그를 가진 항목, 그 밖에는 이름 검색(후보 200개를 순위로 정렬해 최대 30개). 결과마다 폴더 경로. `q`는 200자까지 |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
 | `GET`·`HEAD` | `/api/files/:id/download` | 원본 그대로 첨부 파일로 받기. SHA-256 ETag(304), Range(206/416), RFC 6266 파일명(한글). `STORAGE_ACCEL_ENABLED`면 Nginx `X-Accel-Redirect`로 넘긴다. 받은 바이트는 `TrafficDaily`에 기록 |
 | `GET`·`HEAD` | `/api/files/:id/stream` | 뷰어·인라인 재생용. 영상·음악·이미지만 inline, SVG·HTML은 항상 첨부(`nosniff`). `?transcode=1`: 브라우저가 못 여는 영상을 ffmpeg로 720p H.264/AAC fragmented MP4로 변환하며 전송(동시 `VIDEO_TRANSCODE_MAX`개, 꽉 차면 429 + `Retry-After`, 0이면 404) |
