@@ -29,7 +29,7 @@ src/app ──────────► features ─► shared ─┐
 ## 서버 요청 흐름
 
 ```
-route handler (src/app/api/**/route.ts): 인증(deviceOf/requireActive), zod 파싱
+route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "admin" }) → active), zod 파싱
   → apiHandler로 감싼다: request id, 에러 마스킹(ApiError·ZodError → 표준 응답, 에러 응답은 no-store)
     → service (src/server/services): 업무 규칙, 권한, 트랜잭션
       → repository (src/server/repositories): Prisma 접근만
