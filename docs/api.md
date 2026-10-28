@@ -93,6 +93,28 @@
 | `PATCH` | `/api/me/preferences` | `{ stripMetadataOnShare }` 공개 링크 사진의 위치·카메라 정보 제거 |
 | `POST` | `/api/me/purge` | "Purge now": 만료된 항목(만료 시각이 지났거나 1회 다운로드 후 삭제가 사용됨)을 바로 삭제 → `{ deleted }` |
 | `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 관리자 계정 삭제는 감사 로그에 남으며, 마지막 관리자는 400 `Keep at least one admin` |
+| `GET`·`POST` | `/api/me/api-tokens` | 개인 API 토큰 목록(토큰 값은 없음) / 새 토큰 `{ name, scopes, expiresInDays: 7\|30\|90\|365\|null }` → `{ token, item }`(201, 토큰은 이때 한 번만). 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). `metrics:read`는 관리자만(403). 계정당 `API.maxTokensPerAccount`(20)개. 감사 로그 `apiToken.create` |
+| `DELETE` | `/api/me/api-tokens/:id` | 토큰 폐기(즉시 무효). 다른 계정의 토큰은 404. 감사 로그 `apiToken.revoke` |
+
+### API v1 (스크립트·앱용, 개인 API 토큰)
+
+프로필 "API tokens"에서 만든 토큰(`rfp_` + 43자)을 `Authorization: Bearer <token>`으로 보낸다. 쿠키는 읽지 않는다(브라우저 세션으로는 호출할 수 없다). 응답 형식과 에러 코드는 위와 같다.
+
+- 토큰이 없거나 틀리거나 만료됐거나 계정이 삭제일에 닿으면 401, 범위(scope)가 없으면 403.
+- 토큰마다 분당 `API.requestsPerMinute`(120)회를 넘기면 429 + `Retry-After`.
+- 범위: `files:read`(보기·다운로드), `files:write`(업로드·폴더 만들기·삭제), `metrics:read`(관리자, `/metrics`용).
+- 다른 계정의 항목은 404.
+
+| 메서드 | 경로 | 범위 | 설명 |
+|---|---|---|---|
+| `GET` | `/api/v1/me` | 아무거나 | 계정 id·이름·관리자 여부, `quotaBytes`, `usedBytes`, 이 토큰의 `scopes` |
+| `GET` | `/api/v1/folders/:id` | `files:read` | 폴더(`root` 또는 id), 경로, 하위 항목(웹 앱의 `/api/folders/:id`와 같은 형식) |
+| `POST` | `/api/v1/folders` | `files:write` | `{ parentId: "root"\|id, name }` 폴더 만들기(201). 이름이 겹치면 "Name (2)" |
+| `POST` | `/api/v1/files?folder=root\|id&name=` | `files:write` | 요청 본문 전체가 파일 하나(`Content-Length` 필수). 이름이 겹치면 "name (2)". 용량·항목 수·크기 한도는 tus 업로드와 같다. 201 `{ nodeId, name, folderId, linkId, url }` — `url`은 공유 링크(공개 여부는 폴더 설정을 따른다). 본문은 Nginx `client_max_body_size`(`NGINX_MAX_BODY_MB`)까지, 더 큰 파일은 웹 앱(tus)으로 |
+| `GET` | `/api/v1/files/:id` | `files:read` | 원본 다운로드(Range·ETag는 웹 앱과 같다) |
+| `DELETE` | `/api/v1/nodes/:id` | `files:write` | 파일이나 폴더(안의 모든 것 포함) 삭제, 볼륨 휴지통으로 → `{ deleted }` |
+
+ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Method `POST`, Body `Binary`, Header `Authorization: Bearer rfp_…`, URL `{json:data.url}`. curl: `curl -H "Authorization: Bearer $TOKEN" --data-binary @a.png "https://<도메인>/api/v1/files?name=a.png"`.
 
 ### 관리자 (`ADMIN_ALLOWED_CIDRS`로 접근 주소 제한 가능)
 
@@ -108,7 +130,7 @@
 | `POST` | `/api/admin/invites` | 일회용 초대 코드 `XXXX-XXXX` 생성 |
 | `DELETE` | `/api/admin/invites/:code` | 사용 전 코드 취소(사용된 코드는 404) |
 | `POST` | `/api/admin/cleanup` | "Run cleanup now": 삭제일이 지난 계정과 만료 항목 삭제 → `{ accounts, items }` |
-| `GET` | `/api/admin/audit` | 감사 로그 최신 200건 `{ events: AuditEntry[] }`(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대 생성·취소, 관리자 토큰 보기·재발급, 공지 게시·내리기, 테마 변경, 장애 등록·수정·삭제) |
+| `GET` | `/api/admin/audit` | 감사 로그 최신 200건 `{ events: AuditEntry[] }`(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대 생성·취소, 관리자 토큰 보기·재발급, 공지 게시·내리기, 테마 변경, 장애 등록·수정·삭제, API 토큰 만들기·폐기) |
 | `GET` | `/api/admin/server/stream` | Server 페이지 실측 지표 SSE(1.5초마다 스냅샷, 느린 스냅샷은 겹치지 않고 건너뜀) |
 | `POST` | `/api/admin/incidents` | Status 페이지 Incident 등록 `{ title, text, severity, date, duration, resolved }` |
 | `PUT`·`DELETE` | `/api/admin/incidents/:id` | Incident 수정 / 삭제 |
