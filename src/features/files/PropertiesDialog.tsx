@@ -11,6 +11,7 @@ import { IconButton } from "@/shared/ui/IconButton";
 import { Modal } from "@/shared/ui/Modal";
 import { filesApi } from "@/shared/lib/files-api";
 import { kindOf } from "@/shared/ui/node-kind";
+import { LinkField } from "./LinkField";
 
 const TYPE_LABEL = { video: "Video", audio: "Audio", image: "Image", other: "File" } as const;
 
@@ -118,21 +119,7 @@ export function PropertiesDialog({ nodeId, onClose, linkOf, onCopyLink, onEditTa
                 )}
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 pt-3">
-              <span className="text-[13px] text-t4">Link</span>
-              <div className="flex gap-1.5">
-                <div className="flex h-9 min-w-0 flex-1 items-center truncate rounded-[10px] border border-ctrl bg-bg px-2.5 font-mono text-[12px] text-accent-text">{url}</div>
-                <button
-                  type="button"
-                  title="Copy link"
-                  aria-label="Copy link"
-                  onClick={() => onCopyLink(url, props.effectiveVisibility)}
-                  className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-ctrl bg-btn text-t1"
-                >
-                  <Icon name="copy" />
-                </button>
-              </div>
-            </div>
+            <LinkField key={url} url={url} visibility={props.effectiveVisibility} onCopy={() => onCopyLink(url, props.effectiveVisibility)} />
           </>
         )}
       </div>
