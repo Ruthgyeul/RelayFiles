@@ -37,6 +37,8 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
       → cache (src/server/cache): Redis, 파생 데이터만
 ```
 
+- 공유 링크(`/d/<linkId>`)의 규칙과 응답은 `src/server/share/`에 모여 있다(`share.service.ts` 링크 해석·잠금, `share-files.service.ts` 파일·zip 응답, 쿠키·다운로드 허가·이벤트). 파일 바이트를 보내는 HTTP 도구(`send-file.ts`, `send-thumb.ts`, `throttle.ts`)는 `src/server/http/`에 있다.
+
 - 쿼리는 repository에만 쓴다. 서비스·잡·스크립트에서 `db()`는 repository 함수에 넘기거나 트랜잭션(`$transaction`)을 열 때만 쓴다(`no-restricted-syntax`). `src/app`은 `@/server/db`·`@/server/repositories`를 import하지 않고 서비스를 부른다(`no-restricted-imports`).
 - 예외: tus 업로드 라우트(`src/app/api/uploads/tus`)는 `apiHandler`를 거치지 않는다. tus가 자체 평문 프로토콜로 응답하기 때문이며, 같은 방식으로 try-catch와 에러 마스킹을 직접 한다. 볼륨 조회는 `upload.service.tusVolume()`이 한다.
 

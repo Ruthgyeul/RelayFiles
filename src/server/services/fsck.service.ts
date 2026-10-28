@@ -2,7 +2,8 @@ import "server-only";
 import { compareTrees, type FsckFindings, type TreeEntry } from "@/domain/fsck";
 import { db } from "../db/client";
 import { accountIdsOnVolume, allAccountIds } from "../repositories/account.repo";
-import { findRootFolder, setMissing, treeEntries } from "../repositories/node.repo";
+import { findRootFolder, setMissing } from "../repositories/node.repo";
+import { treeEntries } from "../repositories/node-tree.repo";
 import { listVolumesIn } from "../repositories/volume.repo";
 import { driverFor } from "../storage/registry";
 

@@ -4,7 +4,7 @@ import { db } from "../db/client";
 import type { ClientInfo } from "../auth/client-info";
 import { logger } from "../logger";
 import { redis } from "../redis";
-import { addLinkEvent, trimLinkEvents } from "../repositories/node.repo";
+import { addLinkEvent, trimLinkEvents } from "../repositories/link-event.repo";
 
 export type LinkEventKind = "OPEN" | "PLAY" | "VIEW" | "DOWNLOAD";
 

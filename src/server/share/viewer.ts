@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import { cookieSecrets } from "../auth/keys";
 import { currentDevice, deviceOf } from "../auth/current";
 import type { DeviceSession } from "../auth/device-session";
-import type { ShareViewer } from "../services/share.service";
+import type { ShareViewer } from "./share.service";
 import { decodeUnlocks, UNLOCK_COOKIE } from "./unlock-cookie";
 import { VISITOR_COOKIE, visitorIdOf } from "./visitor-cookie";
 

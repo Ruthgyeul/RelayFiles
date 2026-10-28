@@ -12,7 +12,7 @@ import { POST as removeNodes } from "@/app/api/nodes/delete/route";
 import { getEnv } from "@/config/env";
 import { IMMUTABLE_CACHE, MEDIA } from "@/config/policy";
 import { exifOrientation } from "@/domain/image-metadata";
-import { startMediaWorker } from "@/server/jobs/media.worker";
+import { startMediaWorker } from "@/server/jobs/media-worker";
 import { closeQueues, enqueueMedia } from "@/server/jobs/queue";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { layoutOf } from "@/server/storage/layout";

@@ -2,7 +2,7 @@ import { getEnv } from "@/config/env";
 import { linkIdSchema, unlockSchema } from "@/contracts/share";
 import { clientInfo } from "@/server/auth/client-info";
 import { apiHandler, ok } from "@/server/http/api-handler";
-import { unlockShare } from "@/server/services/share.service";
+import { unlockShare } from "@/server/share/share.service";
 import { UNLOCK_COOKIE, UNLOCK_COOKIE_MAX_AGE } from "@/server/share/unlock-cookie";
 import { shareViewerOf } from "@/server/share/viewer";
 

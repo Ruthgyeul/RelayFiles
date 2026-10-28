@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { STATUS } from "@/config/policy";
 import type { IncidentDto, IncidentInput, StatusData } from "@/contracts/status";
 import { connectionLevel, connectionStats } from "@/domain/status";
-import { usePageTitle } from "@/features/shell/page-title";
+import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";

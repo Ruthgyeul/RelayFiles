@@ -2,7 +2,7 @@ import { nodeIdSchema } from "@/contracts/nodes";
 import { linkIdSchema } from "@/contracts/share";
 import { clientInfo } from "@/server/auth/client-info";
 import { apiHandler } from "@/server/http/api-handler";
-import { checkSharedFolder, zipSharedFolder } from "@/server/services/share-files.service";
+import { checkSharedFolder, zipSharedFolder } from "@/server/share/share-files.service";
 import { shareViewerOf } from "@/server/share/viewer";
 
 /** "Download all": the visible contents of a folder in a share link as one zip (?folder=id). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasAllTags, normalizeTag, parseTags } from "./tags";
+import { hasAllTags, normalizeTag, parseTags, withTagQuery } from "./tags";
 
 describe("tags", () => {
   it("parses tag queries like the design", () => {
@@ -18,5 +18,14 @@ describe("tags", () => {
     expect(normalizeTag("  #Road Trip ")).toBe("road-trip");
     expect(normalizeTag("a,b#c")).toBe("abc");
     expect(normalizeTag("x".repeat(40))).toHaveLength(24);
+  });
+});
+
+describe("withTagQuery", () => {
+  it("starts a tag search, adds to one, and does not repeat a tag", () => {
+    expect(withTagQuery("", "trip")).toBe("#trip");
+    expect(withTagQuery("beach photos", "trip")).toBe("#trip");
+    expect(withTagQuery(" #summer ", "trip")).toBe("#summer #trip");
+    expect(withTagQuery("#summer #trip", "trip")).toBe("#summer #trip");
   });
 });

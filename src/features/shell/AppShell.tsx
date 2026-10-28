@@ -16,7 +16,7 @@ import type { AnnouncementDto } from "@/contracts/server-settings";
 import { BannerStack } from "./BannerStack";
 import { Drawer } from "./Drawer";
 import { activeNavItem } from "./nav";
-import { PageTitleContext } from "./page-title";
+import { PageTitleContext } from "./usePageTitle";
 import { useShell } from "./ShellProvider";
 import { Sidebar } from "./Sidebar";
 import { Toasts } from "./Toasts";

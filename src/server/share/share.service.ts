@@ -16,8 +16,8 @@ import type { NodeRow } from "../repositories/node.repo";
 import { isRetiredLink } from "../repositories/link-tombstone.repo";
 import { findByLinkId, publicTree, sharedChain, type ChainRow, type SharedRow } from "../repositories/share.repo";
 import { countInWindow, redis } from "../redis";
-import { busyLevels } from "../share/busy";
-import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "../share/unlock-cookie";
+import { busyLevels } from "./busy";
+import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "./unlock-cookie";
 
 /** Who is looking at a share link. */
 export interface ShareViewer {

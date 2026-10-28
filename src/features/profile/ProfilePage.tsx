@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useState } from "react";
 import type { DeviceDto, ProfileData } from "@/contracts/profile";
-import { usePageTitle } from "@/features/shell/page-title";
+import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";

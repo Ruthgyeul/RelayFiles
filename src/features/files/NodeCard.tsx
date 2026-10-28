@@ -6,7 +6,8 @@ import { BusyPill } from "@/shared/ui/BusyPill";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { kindOf } from "@/shared/ui/node-kind";
 import { MediaThumb, ResumeBar } from "./MediaThumb";
-import { itemMeta, MenuButton, type ItemProps } from "./NodeRow";
+import { MenuButton } from "./ItemButtons";
+import { itemMeta, type ItemProps } from "./item-props";
 
 /** Grid card: 4:3 preview area with the type icon, corner checkbox, name, meta and menu. */
 export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy }: ItemProps) {

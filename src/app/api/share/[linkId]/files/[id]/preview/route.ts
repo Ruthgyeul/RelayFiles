@@ -2,7 +2,7 @@ import { nodeIdSchema } from "@/contracts/nodes";
 import { linkIdSchema } from "@/contracts/share";
 import { clientInfo } from "@/server/auth/client-info";
 import { apiHandler } from "@/server/http/api-handler";
-import { serveSharedPreview } from "@/server/services/share-files.service";
+import { serveSharedPreview } from "@/server/share/share-files.service";
 import { shareViewerOf } from "@/server/share/viewer";
 
 /** The viewer's picture of an image in a share link: a screen-sized WebP without metadata. */

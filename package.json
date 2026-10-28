@@ -14,7 +14,7 @@
     "check:emoji": "node scripts/check-no-emoji.mjs",
     "check:cycles": "node scripts/check-feature-cycles.mjs",
     "check": "npm run typecheck && npm run lint && npm run check:emoji && npm run check:cycles && npm run check:migrations && npm run test && npm run build",
-    "env:check": "tsx scripts/env-check.ts",
+    "env:check": "tsx scripts/env-check.mts",
     "env:secrets": "node scripts/env-secrets.mjs",
     "postinstall": "prisma generate",
     "test:integration": "vitest run --project integration",
