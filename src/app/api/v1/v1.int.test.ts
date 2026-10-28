@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
-import { afterAll, describe, expect, it } from "vitest";
+import { randomBytes } from "node:crypto";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { GET as listTokens, POST as createToken } from "@/app/api/me/api-tokens/route";
 import { DELETE as revokeToken } from "@/app/api/me/api-tokens/[id]/route";
 import { GET as download } from "@/app/api/v1/files/[id]/route";
@@ -17,6 +18,15 @@ import { runCleanup } from "@/server/services/admin.service";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { callRoute } from "../../../../test/route-call";
 import { fileFixtures, type FixtureMember } from "../../../../test/file-fixtures";
+
+import { tokenLookups } from "@/server/auth/token-crypto";
+
+// Lets a test add a previous TOKEN_HMAC_KEY, as during a key rotation.
+const rotation = vi.hoisted(() => ({ previousHmacKey: undefined as string | undefined }));
+vi.mock("@/server/auth/keys", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/auth/keys")>();
+  return { ...actual, tokenKeys: () => ({ ...actual.tokenKeys(), previousHmacKey: rotation.previousHmacKey }) };
+});
 
 const { prisma, member, addFile, cleanup } = fileFixtures();
 
@@ -89,6 +99,26 @@ describe("personal API tokens", () => {
     expect((await v1(me, { token: reader.token })).status).toBe(401);
     await runCleanup(new Date());
     expect(await prisma.apiToken.count({ where: { id: reader.item.id } })).toBe(0);
+  });
+
+  it("stores only a keyed hash and re-keys a token found with the previous key", async () => {
+    const m = await member();
+    const { token, item } = await tokenFor(m, ["files:read"]);
+    const { tokenKeys } = await vi.importActual<typeof import("@/server/auth/keys")>("@/server/auth/keys");
+    const current = tokenLookups(token, tokenKeys())[0]!;
+    expect((await prisma.apiToken.findUniqueOrThrow({ where: { id: item.id } })).lookup).toBe(current);
+
+    const old = randomBytes(32).toString("hex");
+    await prisma.apiToken.update({ where: { id: item.id }, data: { lookup: tokenLookups(token, { ...tokenKeys(), hmacKey: old })[0]! } });
+    expect((await v1(me, { token })).status).toBe(401);
+    rotation.previousHmacKey = old;
+    try {
+      expect((await v1(me, { token })).status).toBe(200);
+    } finally {
+      rotation.previousHmacKey = undefined;
+    }
+    expect((await prisma.apiToken.findUniqueOrThrow({ where: { id: item.id } })).lookup).toBe(current);
+    expect((await v1(me, { token })).status).toBe(200);
   });
 
   it("limits requests per token per minute", async () => {

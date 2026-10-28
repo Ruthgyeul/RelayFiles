@@ -30,9 +30,14 @@ export async function deleteApiToken(db: DbClient, accountId: string, id: string
   return (await db.apiToken.deleteMany({ where: { id, accountId } })).count === 1;
 }
 
-/** The token with this lookup hash and its account. */
-export function findApiTokenByLookup(db: DbClient, lookup: string) {
-  return db.apiToken.findUnique({ where: { lookup }, select: { ...TOKEN_SELECT, account: { select: ACCOUNT_SELECT } } });
+/** The token with one of these lookup HMACs (current key, then the previous one) and its account. */
+export function findApiTokenByLookups(db: DbClient, lookups: readonly string[]) {
+  return db.apiToken.findFirst({ where: { lookup: { in: [...lookups] } }, select: { ...TOKEN_SELECT, lookup: true, account: { select: ACCOUNT_SELECT } } });
+}
+
+/** Re-keys a token found with the previous TOKEN_HMAC_KEY (key rotation). */
+export async function setApiTokenLookup(db: DbClient, id: string, lookup: string): Promise<void> {
+  await db.apiToken.update({ where: { id }, data: { lookup } });
 }
 
 /** Records use, at most once per `since` (a busy token would otherwise write on every request). */

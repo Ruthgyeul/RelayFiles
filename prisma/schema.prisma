@@ -382,7 +382,7 @@ model ApiToken {
   accountId  String
   account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   name       String
-  /// SHA-256 (hex) of the token.
+  /// HMAC-SHA256 (hex) of the token with TOKEN_HMAC_KEY, like Account.tokenLookup.
   lookup     String    @unique
   /// What the token may do (contracts/api-tokens.ts API_SCOPES).
   scopes     String[]

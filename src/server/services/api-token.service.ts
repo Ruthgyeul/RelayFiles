@@ -1,17 +1,18 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { getEnv } from "@/config/env";
 import { API, MS } from "@/config/policy";
 import { ADMIN_ONLY_SCOPES, API_SCOPES, type ApiScope, type ApiTokenDto, type CreateApiTokenInput, type CreatedApiToken } from "@/contracts/api-tokens";
 import { isExpired } from "@/domain/account";
 import { bearerToken, hasScope, tokenExpired } from "@/domain/api-token";
 import { newApiToken, newApiTokenId } from "@/domain/ids";
+import { tokenKeys } from "../auth/keys";
+import { tokenLookups } from "../auth/token-crypto";
 import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { countInWindow } from "../redis";
 import type { AccountRow } from "../repositories/account.repo";
-import { countApiTokens, createApiTokenRow, deleteApiToken, findApiTokenByLookup, listApiTokenRows, touchApiToken } from "../repositories/api-token.repo";
+import { countApiTokens, createApiTokenRow, deleteApiToken, findApiTokenByLookups, listApiTokenRows, setApiTokenLookup, touchApiToken } from "../repositories/api-token.repo";
 
 /** Seconds in the rate-limit window (API.requestsPerMinute). */
 const RATE_WINDOW_SEC = MS.minute / MS.second;
@@ -23,8 +24,11 @@ export interface ApiCaller {
   scopes: readonly ApiScope[];
 }
 
-/** Tokens hold 256 random bits, so a plain SHA-256 identifies them without a key to rotate. */
-const lookupOf = (token: string) => createHash("sha256").update(token).digest("hex");
+/**
+ * Lookup HMACs of a token under TOKEN_HMAC_KEY (and TOKEN_HMAC_KEY_PREVIOUS during rotation),
+ * like account tokens: a leaked database alone cannot be matched against guessed tokens.
+ */
+const lookupsOf = (token: string) => tokenLookups(token, tokenKeys());
 
 const isScope = (value: string): value is ApiScope => (API_SCOPES as readonly string[]).includes(value);
 
@@ -55,7 +59,7 @@ export async function createApiToken(account: Pick<AccountRow, "id" | "isAdmin">
       id: newApiTokenId(),
       accountId: account.id,
       name: input.name,
-      lookup: lookupOf(token),
+      lookup: lookupsOf(token)[0]!,
       scopes: [...new Set(input.scopes)],
       expiresAt: input.expiresInDays === null ? null : new Date(now.getTime() + input.expiresInDays * MS.day),
     });
@@ -74,7 +78,8 @@ export async function revokeApiToken(accountId: string, id: string): Promise<voi
  */
 export async function requireApiCaller(headers: Headers, scope: ApiScope | null, now: Date = new Date()): Promise<ApiCaller> {
   const token = bearerToken(headers.get("authorization"));
-  const row = token ? await findApiTokenByLookup(db(), lookupOf(token)) : null;
+  const lookups = token ? lookupsOf(token) : [];
+  const row = lookups.length > 0 ? await findApiTokenByLookups(db(), lookups) : null;
   if (!row || tokenExpired(row.expiresAt?.getTime() ?? null, now.getTime()) || isExpired(row.account, getEnv("policy").ACCOUNT_TTL_DAYS, now)) {
     throw new ApiError("UNAUTHORIZED", "Missing, unknown or expired API token.");
   }
@@ -82,6 +87,8 @@ export async function requireApiCaller(headers: Headers, scope: ApiScope | null,
   if ((await countInWindow(`api:rate:${row.id}`, RATE_WINDOW_SEC)) > API.requestsPerMinute) {
     throw new ApiError("RATE_LIMITED", "Too many requests with this token. Try again in a minute.", { retryAfter: RATE_WINDOW_SEC });
   }
+  // Found with the previous key: store it under the current one, so it survives the rotation.
+  if (row.lookup !== lookups[0]) await setApiTokenLookup(db(), row.id, lookups[0]!);
   await touchApiToken(db(), row.id, now, new Date(now.getTime() - API.touchIntervalSec * MS.second));
   return { account: row.account, tokenId: row.id, scopes: row.scopes.filter(isScope) };
 }

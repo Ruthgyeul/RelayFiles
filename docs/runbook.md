@@ -329,6 +329,8 @@ tar -C /mnt/RuthVault2T/.private/Movies -cf - . | \
 
 어떤 키로도 풀리지 않는 계정이 있으면 3단계가 그 계정 id를 출력하고 실패한다. 이때는 `*_PREVIOUS`를 지우지 않는다.
 
+개인 API 토큰(`/api/v1`)은 평문을 저장하지 않으므로 `keys:rotate`가 바꿀 수 없다. 옛 키로 저장된 토큰은 다음에 쓰일 때 새 키로 다시 저장된다. `TOKEN_HMAC_KEY_PREVIOUS`를 지우기 전에 한 번도 쓰이지 않은 토큰은 동작하지 않으니, 프로필 "API tokens"의 "never used"·오래된 "used" 토큰은 다시 만든다.
+
 ### 쿠키 서명 키 (`COOKIE_SECRET`)
 
 지금 값을 `COOKIE_SECRET_PREVIOUS`로 옮기고 새 값을 넣은 뒤 재시작한다. 옛 키로 서명된 기기 쿠키도 계속 받아들이고, 쿠키를 다시 저장할 때(로그인, 계정 추가·전환·로그아웃) 새 키로 서명한다. 한 달쯤 뒤에 `COOKIE_SECRET_PREVIOUS`를 지운다. 그때까지 쿠키가 다시 저장되지 않은 기기는 토큰으로 다시 로그인해야 한다.
