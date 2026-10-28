@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAppEnv, getEnv } from "@/config/env";
 import { REQUEST_ID_HEADER, type ApiFailure } from "@/contracts/api";
 import { ERRORS, type ErrorCode } from "@/contracts/errors";
+import { validRequestId } from "@/domain/ids";
 import { clientIp, ipInCidrs } from "@/domain/network";
 import { contentSecurityPolicy, CSP_REPORT_GROUP, CSP_REPORT_PATH, strictTransportSecurity } from "@/domain/security-headers";
 import { ERROR_PRESETS } from "@/features/errors/presets";
@@ -90,7 +91,7 @@ function withSecurityHeaders<R extends NextResponse>(response: R, security: Secu
 }
 
 export function proxy(req: NextRequest) {
-  const requestId = req.headers.get(REQUEST_ID_HEADER) ?? crypto.randomUUID();
+  const requestId = validRequestId(req.headers.get(REQUEST_ID_HEADER)) ?? crypto.randomUUID();
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
   const security = securityHeaders(req);
@@ -116,5 +117,7 @@ export function proxy(req: NextRequest) {
 export const config = {
   // Skip build assets and static files, and tus uploads (the proxy would buffer their bodies);
   // everything else (pages and API) goes through the proxy.
-  matcher: ["/((?!_next/static|_next/image|api/uploads/tus|favicon.ico|icon.svg|.*\\.(?:woff2?|png|jpe?g|webp|svg|ico)$).*)"],
+  // Static file names are skipped only outside /api: an API path ending in ".png" must still get
+  // the CSRF and admin-range checks.
+  matcher: ["/((?!_next/static|_next/image|api/uploads/tus|favicon.ico|icon.svg|(?!api/).*\\.(?:woff2?|png|jpe?g|webp|svg|ico)$).*)"],
 };

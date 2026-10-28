@@ -74,7 +74,7 @@ x-hardening: &hardening
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
     restart: unless-stopped
     logging: *logging
     environment:
@@ -93,7 +93,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7
+    image: redis:7@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
     restart: unless-stopped
     logging: *logging
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--appendonly", "yes", "--appendfsync", "everysec"]
@@ -150,11 +150,12 @@ services:
       redis: { condition: service_healthy }
 
   tools:
-    <<: *app-env
+    # The same limits as the worker: migrations, imports and admin scripts touch the database and
+    # every file on the SSD. npm and tsx keep their caches in the /tmp tmpfs.
+    <<: [*app-env, *hardening]
     image: relayfiles-tools:${RELEASE_TAG:-latest}
     profiles: [tools]
     logging: *logging
-    security_opt: ["no-new-privileges:true"]
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
     volumes:
       - *storage-mount
@@ -168,7 +169,7 @@ services:
 
   nginx:
     # 1.30 is the maintained stable branch (1.29 mainline no longer gets updates).
-    image: nginxinc/nginx-unprivileged:1.30-alpine
+    image: nginxinc/nginx-unprivileged:1.30-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
     restart: unless-stopped
     logging: *logging
     # Not read-only: the image renders the templates into /etc/nginx/conf.d when it starts.
@@ -199,7 +200,7 @@ services:
 
   cloudflared:
     # Pinned: `latest` would change the tunnel client on any pull. Bump it with the other images.
-    image: cloudflare/cloudflared:2026.10.0
+    image: cloudflare/cloudflared:2026.10.0@sha256:9b49eed8f62806d5d45ddf59ecefb5710429598ea6d3fcccd2af938f621b2b07
     profiles: [tunnel]
     restart: unless-stopped
     logging: *logging

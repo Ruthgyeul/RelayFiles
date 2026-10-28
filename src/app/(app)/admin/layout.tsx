@@ -7,6 +7,6 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const device = await currentDevice();
   // A first visit has no account yet; the shell creates one and refreshes this page.
   if (!device.active) return <Loading />;
-  if (!device.active.account.isAdmin) forbidden();
+  if (!device.active.account.isAdmin || !device.adminNetwork) forbidden();
   return children;
 }

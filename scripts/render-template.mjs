@@ -30,6 +30,17 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+/**
+ * Characters that could end a value early in an Nginx or systemd file (a new line, ";", braces,
+ * quotes, "$" or "\") and so add directives of their own. Hosts, ports, paths and sizes never need them.
+ */
+const UNSAFE_VALUE = /[\u0000-\u001f\u007f;{}"'`$\\]/;
+const unsafe = keys.filter((key) => UNSAFE_VALUE.test(process.env[key]));
+if (unsafe.length > 0) {
+  console.error(`These .env values contain characters not allowed in ${templatePath} (new lines, ; { } quotes $ \\): ${unsafe.join(", ")}`);
+  process.exit(1);
+}
+
 const rendered = readFileSync(templatePath, "utf8").replace(/\$\{([A-Z][A-Z0-9_]*)\}/g, (match, key) => {
   if (!keys.includes(key)) {
     console.error(`${templatePath} uses \${${key}}, which was not listed`);

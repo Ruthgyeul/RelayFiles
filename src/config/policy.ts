@@ -182,6 +182,12 @@ export const DOCUMENT_PREVIEW = {
 export const METRICS = {
   /** The Server page stream sends a snapshot this often (design: 1.5 s). */
   streamIntervalMs: 1_500,
+  /** A stream re-reads its session this often and ends when the admin was signed out or demoted. */
+  streamSessionCheckMs: 30_000,
+  /** A stream ends after this long; the browser's EventSource reconnects (and is checked again). */
+  streamMaxLifetimeMs: 60 * 60 * 1_000,
+  /** Server page streams one account may hold open at once (each one samples the server). */
+  streamMaxPerAccount: 3,
   /** Bandwidth and disk read/write history shown on the Server page, one bar per hour. */
   historyHours: 48,
   /** The hourly history changes once per sample, so the stream reuses it this long. */

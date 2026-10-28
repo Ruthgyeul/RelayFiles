@@ -11,7 +11,7 @@ import type { CreatedAccount, SessionState } from "@/contracts/auth";
 import { newInviteCode } from "@/domain/ids";
 import { ipKeyOf } from "@/server/auth/client-info";
 import { clearFailures } from "@/server/auth/login-limiter";
-import { SESSION_COOKIE } from "@/server/auth/session-cookie";
+import { MAX_SESSIONS_PER_DEVICE, SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { db } from "@/server/db/client";
 import { redis } from "@/server/redis";
 import { createAdminAccount } from "@/server/services/auth.service";
@@ -151,6 +151,19 @@ describe("token sign-in, multi-account and sign-out", () => {
     expect(out.json.data.activeAccountId).toBe(ids[1]);
   });
 
+  it("revokes the oldest session a full device cookie pushes out", async () => {
+    let cookie: string | undefined;
+    const sessionIds: string[] = [];
+    for (let index = 0; index <= MAX_SESSIONS_PER_DEVICE; index++) {
+      const res = await createAnon(nextIp(), cookie);
+      cookie = res.cookie;
+      sessionIds.push((await prisma.session.findFirstOrThrow({ where: { accountId: res.json.data.account.id } })).id);
+    }
+    const [oldest, ...kept] = sessionIds;
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: oldest! } })).revokedAt).not.toBeNull();
+    expect(await prisma.session.count({ where: { id: { in: kept }, revokedAt: null } })).toBe(MAX_SESSIONS_PER_DEVICE);
+  });
+
   it("rejects forged cookies", async () => {
     const res = await createAnon();
     const forged = `${res.cookie!.split(".")[0]}.AAAA`;
@@ -174,6 +187,26 @@ describe("lockout", () => {
     const blocked = await call(tokenSignIn, { body: { token: valid }, ip });
     expect(blocked.status).toBe(429);
     expect(blocked.json.retryAfter).toBeGreaterThan(0);
+  });
+
+  it("does not let a correct token from the same address reset the failures", async () => {
+    const mine = (await createAnon()).json.data.token;
+    const ip = nextIp();
+    for (let round = 0; round < 2; round++) {
+      // Two guesses, then the guesser's own account, again and again.
+      for (let guess = 0; guess < 2; guess++) await call(tokenSignIn, { body: { token: "y".repeat(40) }, ip });
+      await call(tokenSignIn, { body: { token: mine }, ip });
+    }
+    const fifth = await call(tokenSignIn, { body: { token: "y".repeat(40) }, ip });
+    expect([fifth.status, fifth.json.retryAfter]).toEqual([429, 30]);
+  });
+
+  it("counts parallel guesses before checking them, so they cannot all slip in before the lock", async () => {
+    const ip = nextIp();
+    const results = await Promise.all(Array.from({ length: 12 }, () => call(tokenSignIn, { body: { token: "z".repeat(40) }, ip })));
+    // Five are checked (the fifth starts the lock); the rest are refused unchecked.
+    expect(results.filter((res) => res.status === 401)).toHaveLength(4);
+    expect(results.filter((res) => res.status === 429)).toHaveLength(8);
   });
 
   it("locks out the whole IPv6 /64, not just one address in it", async () => {

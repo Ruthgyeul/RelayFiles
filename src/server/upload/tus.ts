@@ -48,6 +48,8 @@ function createServer(volumeId: string, mountPath: string): Server {
     maxSize: maxGb ? Math.round(maxGb * BYTES_PER_GB) : undefined,
     relativeLocation: true,
     respectForwardedHeaders: true,
+    // Uploads come from this site's own pages; other origins get no CORS headers (default: any).
+    allowedOrigins: [new URL(getEnv("app").PUBLIC_URL).origin],
     async onUploadCreate(req, upload) {
       const { batchId, slot } = slotOf(upload);
       const batch = await loadBatch(batchId);

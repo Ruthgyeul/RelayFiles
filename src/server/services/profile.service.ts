@@ -3,11 +3,11 @@ import { getEnv } from "@/config/env";
 import { MS } from "@/config/policy";
 import type { DeviceDto, Preferences, ProfileData } from "@/contracts/profile";
 import { dailySeries, deletionDate, deviceLocation, maskToken } from "@/domain/account";
-import { db } from "../db/client";
+import { db, type DbClient } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { deleteAccountRow, lastLoginOf, updatePreferences, type AccountRow } from "../repositories/account.repo";
-import { countAdmins } from "../repositories/admin.repo";
+import { countAdmins, lockAdminRoles } from "../repositories/admin.repo";
 import { retireLinks } from "../repositories/link-tombstone.repo";
 import { accountUsage, contentCounts, expiredItemIds } from "../repositories/node.repo";
 import { listAccountSessions, revokeAccountSession, revokeOtherSessions } from "../repositories/session.repo";
@@ -98,13 +98,19 @@ export async function purgeExpired(owner: AccountRow, now: Date): Promise<{ dele
  * left without anyone able to manage accounts, sign-ups or storage.
  */
 export async function deleteOwnAccount(owner: AccountRow): Promise<void> {
-  if (owner.isAdmin && (await countAdmins(db())) <= 1) throw new ApiError("BAD_REQUEST", "Keep at least one admin");
-  await deleteAccount(owner);
+  await deleteAccount(owner, async (tx) => {
+    if (!owner.isAdmin) return;
+    // Serialized with demotions and other admins' deletions (lockAdminRoles).
+    await lockAdminRoles(tx);
+    if ((await countAdmins(tx)) <= 1) throw new ApiError("BAD_REQUEST", "Keep at least one admin");
+  });
 }
 
-export async function deleteAccount(owner: AccountRow): Promise<void> {
+/** Deletes an account with its files; `guard` runs first in the same transaction and may refuse. */
+export async function deleteAccount(owner: AccountRow, guard?: (tx: DbClient) => Promise<void>): Promise<void> {
   const driver = await driverForAccount(owner, "write");
   await withStorageTransaction(db(), async (tx, undo) => {
+    await guard?.(tx);
     await deleteAccountRow(tx, owner.id);
     const location = { accountId: owner.id, segments: [] };
     const trashed = await driver.moveToTrash(location);

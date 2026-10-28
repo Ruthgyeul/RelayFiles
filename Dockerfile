@@ -7,7 +7,8 @@
 # tini as PID 1 (reaps orphaned processes, forwards stop signals) in Compose, k3s or docker run.
 
 # Debian 13 (trixie): ffmpeg 7.1 instead of bookworm's 5.1 (demuxers are where ffmpeg CVEs land).
-ARG NODE_IMAGE=node:24-trixie-slim
+# Pinned by digest (the tag alone can be re-pointed); Dependabot proposes the new digest.
+ARG NODE_IMAGE=node:24-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea
 
 FROM ${NODE_IMAGE} AS base
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -70,7 +71,8 @@ ARG STORAGE_UID=10001
 ARG STORAGE_GID=10001
 # ffmpeg for video thumbnails.
 ARG TOOLS_PACKAGES="ffmpeg"
-ENV NODE_ENV=production
+# The container's filesystem is read-only (compose): npm writes its cache and logs to the /tmp tmpfs.
+ENV NODE_ENV=production NPM_CONFIG_CACHE=/tmp/.npm
 RUN groupadd --system --gid ${STORAGE_GID} relayfiles \
  && useradd --system --uid ${STORAGE_UID} --gid relayfiles --no-create-home relayfiles \
  && if [ -n "${TOOLS_PACKAGES}" ]; then apt-get update && apt-get install -y --no-install-recommends ${TOOLS_PACKAGES} && rm -rf /var/lib/apt/lists/*; fi

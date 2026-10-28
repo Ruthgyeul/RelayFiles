@@ -236,7 +236,8 @@ sudo deploy/scripts/systemd/install.sh
 | 설정 | 의미 |
 |---|---|
 | `User=relayfiles`, `UMask=0077` | SSD에 쓰는 파일·폴더가 `0600`/`0700`이 된다 |
-| `NoNewPrivileges`, `ProtectSystem=full`, `ProtectHome`, `PrivateTmp` | 서비스가 `/usr`·`/etc`와 홈 디렉터리를 바꾸거나 읽지 못하고, 자기 `/tmp`를 따로 쓴다 |
+| `NoNewPrivileges`, `ProtectSystem=strict` + `ReadWritePaths`, `ProtectHome`, `PrivateTmp` | 서비스는 SSD(`STORAGE_ROOT`), `LOG_DIR`, 서비스 홈, (앱) `.app/`에만 쓸 수 있고 홈 디렉터리를 읽지 못하며 자기 `/tmp`를 따로 쓴다. SSD를 하나 더 붙이면 `sudo systemctl edit relayfiles-app`(worker도)에서 `[Service]` 아래 `ReadWritePaths=<마운트 경로>`를 더한다 |
+| `ProtectKernel*`, `ProtectControlGroups`, `ProtectClock`, `RestrictAddressFamilies`, `RestrictNamespaces`, `RestrictSUIDSGID`, `LockPersonality`, `SystemCallArchitectures=native` | 커널 설정·모듈·로그, cgroup, 시계를 바꾸지 못하고, 네트워크는 Unix·IPv4·IPv6(와 네트워크 인터페이스 목록용 netlink)만, 새 네임스페이스·setuid·다른 아키텍처 시스템 콜을 쓰지 못한다 |
 | `MemoryMax`, `CPUQuota`, `TasksMax=512` | 영상 변환·썸네일 작업이 폭주해도 자기 상한에서 멈춘다(PostgreSQL을 굶기지 않는다) |
 | `Restart=on-failure`, `RestartSec=5` | 비정상 종료 시 5초 뒤 다시 시작 |
 | 워커 `TimeoutStopSec=60` | 멈출 때 진행 중인 작업이 끝날 시간을 준다 |

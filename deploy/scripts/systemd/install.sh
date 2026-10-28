@@ -51,8 +51,8 @@ render() {
 cpu_quota() { awk -v cpus="$1" 'BEGIN { printf "%d%%", cpus * 100 }'; }
 # unit, memory limit, CPU cores (defaults as in src/config/env.ts)
 render_unit() {
-  MEMORY_MAX="$2" CPU_QUOTA="$(cpu_quota "$3")" \
-    render "$ROOT/deploy/systemd/$1.service.template" APP_DIR STORAGE_USER STORAGE_HOME NODE_BIN MEMORY_MAX CPU_QUOTA > "$UNIT_DIR/$1.service.partial"
+  MEMORY_MAX="$2" CPU_QUOTA="$(cpu_quota "$3")" STORAGE_ROOT="$(env_value STORAGE_ROOT /mnt/relayfilesDB)" LOG_DIR="$(env_value LOG_DIR /var/log/relayfiles)" \
+    render "$ROOT/deploy/systemd/$1.service.template" APP_DIR STORAGE_USER STORAGE_HOME NODE_BIN MEMORY_MAX CPU_QUOTA STORAGE_ROOT LOG_DIR > "$UNIT_DIR/$1.service.partial"
   mv "$UNIT_DIR/$1.service.partial" "$UNIT_DIR/$1.service"
 }
 

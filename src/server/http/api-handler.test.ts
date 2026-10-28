@@ -19,9 +19,10 @@ describe("apiHandler", () => {
     expect(res.headers.get("x-request-id")).toMatch(/[0-9a-f-]{36}/);
   });
 
-  it("keeps an incoming request id", async () => {
-    const res = await call(apiHandler(async () => null), { "x-request-id": "req-123" });
-    expect(res.headers.get("x-request-id")).toBe("req-123");
+  it("keeps an incoming UUID request id and replaces anything else", async () => {
+    const incoming = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    expect((await call(apiHandler(async () => null), { "x-request-id": incoming })).headers.get("x-request-id")).toBe(incoming);
+    expect((await call(apiHandler(async () => null), { "x-request-id": "req-123" })).headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("maps ApiError to its status and safe message", async () => {

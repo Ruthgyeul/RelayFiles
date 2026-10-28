@@ -13,6 +13,7 @@ import {
   newNodeId,
   newSessionId,
   randomString,
+  validRequestId,
 } from "./ids";
 
 describe("id generators", () => {
@@ -49,5 +50,14 @@ describe("id generators", () => {
     expect(isAccountId("abcdefghjkm1")).toBe(false);
     expect(isAccountId("../etc/passwd")).toBe(false);
     expect(isLinkId("abcdefghjk")).toBe(true);
+  });
+});
+
+describe("validRequestId", () => {
+  it("keeps UUIDs and drops anything else", () => {
+    expect(validRequestId("0f8fad5b-d9cb-469f-a165-70867728950e")).toBe("0f8fad5b-d9cb-469f-a165-70867728950e");
+    expect(validRequestId("abc")).toBeNull();
+    expect(validRequestId("0f8fad5b-d9cb-469f-a165-70867728950e\nforged log line")).toBeNull();
+    expect(validRequestId(null)).toBeNull();
   });
 });

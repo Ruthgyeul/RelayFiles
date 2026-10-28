@@ -19,6 +19,18 @@ export function countAdmins(db: DbClient): Promise<number> {
   return db.account.count({ where: { isAdmin: true } });
 }
 
+/** Advisory lock key for changes that can remove an admin (any fixed 64-bit number). */
+const ADMIN_ROLES_LOCK_KEY = 0x72_66_61_64_6d_69_6e;
+
+/**
+ * Serializes, inside a transaction, every change that can take the last admin away (demotion,
+ * deleting an admin account): two admins demoting each other at once would otherwise each see
+ * the other still counted and leave none.
+ */
+export async function lockAdminRoles(tx: DbClient): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ADMIN_ROLES_LOCK_KEY})`;
+}
+
 export async function updateAccountByAdmin(db: DbClient, accountId: string, data: { isAdmin: boolean; neverExpire: boolean; expiresAt: Date | null; quotaBytes: bigint | null }): Promise<void> {
   await db.account.update({ where: { id: accountId }, data });
 }

@@ -17,6 +17,10 @@ MOUNT="$(env_value STORAGE_ROOT /mnt/relayfilesDB)"
 UID_="$(env_value STORAGE_UID 10001)"
 GID_="$(env_value STORAGE_GID 10001)"
 case "$MOUNT" in /*) ;; *) echo "STORAGE_ROOT must be an absolute path in production (now: $MOUNT)." >&2; exit 1 ;; esac
+# These values end up in shell commands, /etc/fstab and /etc/crypttab: nothing but a plain path
+# and numeric ids, so a stray quote or space in .env cannot change what runs as root.
+[[ "$MOUNT" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "STORAGE_ROOT may only contain letters, digits and . _ / - (now: $MOUNT)." >&2; exit 1; }
+[[ "$UID_" =~ ^[0-9]+$ && "$GID_" =~ ^[0-9]+$ ]] || { echo "STORAGE_UID and STORAGE_GID must be numbers." >&2; exit 1; }
 NAME="relayfilesDB"
 KEY=/etc/relayfiles/ssd.key
 

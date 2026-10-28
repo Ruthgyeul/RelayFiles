@@ -48,6 +48,12 @@ export const AUDIT_ACTIONS = [
   "invite.revoke",
   "token.reveal",
   "token.regenerate",
+  "announcement.publish",
+  "announcement.remove",
+  "theme.set",
+  "incident.post",
+  "incident.edit",
+  "incident.delete",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

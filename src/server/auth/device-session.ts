@@ -9,9 +9,9 @@ import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { storageBusyOf, type AccountRow } from "../repositories/account.repo";
 import { accountUsage } from "../repositories/node.repo";
-import { findLiveSessions, touchSessions } from "../repositories/session.repo";
+import { findLiveSessions, revokeSessions, touchSessions } from "../repositories/session.repo";
 import { cookieSecrets } from "./keys";
-import { decodeSessionCookie, encodeSessionCookie, SESSION_COOKIE, SESSION_COOKIE_MAX_AGE, type SessionCookie } from "./session-cookie";
+import { decodeSessionCookie, encodeSessionCookie, MAX_SESSIONS_PER_DEVICE, SESSION_COOKIE, SESSION_COOKIE_MAX_AGE, type SessionCookie } from "./session-cookie";
 
 export interface DeviceAccount {
   sessionId: string;
@@ -29,6 +29,8 @@ export interface DeviceSession {
   cookie: SessionCookie;
   /** True when the cookie must be rewritten (revoked or expired sessions were removed). */
   stale: boolean;
+  /** The request comes from ADMIN_ALLOWED_CIDRS (or no range is set); admin routes need it. */
+  adminNetwork: boolean;
 }
 
 /**
@@ -36,7 +38,7 @@ export interface DeviceSession {
  * (signed out elsewhere or token regenerated), not past their own lifetime (AUTH.*SessionDays)
  * and whose account has not expired.
  */
-export async function loadDeviceSession(rawCookie: string | undefined, now: Date = new Date()): Promise<DeviceSession> {
+export async function loadDeviceSession(rawCookie: string | undefined, adminNetwork: boolean, now: Date = new Date()): Promise<DeviceSession> {
   const cookie = decodeSessionCookie(rawCookie, cookieSecrets());
   const rows = await findLiveSessions(db(), cookie.sessionIds);
   const ttlDays = getEnv("policy").ACCOUNT_TTL_DAYS;
@@ -63,6 +65,7 @@ export async function loadDeviceSession(rawCookie: string | undefined, now: Date
     active,
     cookie: next,
     stale: rawCookie !== undefined && (next.sessionIds.length !== cookie.sessionIds.length || next.activeSessionId !== cookie.activeSessionId),
+    adminNetwork,
   };
 }
 
@@ -75,7 +78,7 @@ export function requireActive(device: DeviceSession): DeviceAccount {
 /** The active account when it is an admin; members get 403 (the proxy may also limit by address). */
 export function requireAdmin(device: DeviceSession): DeviceAccount {
   const active = requireActive(device);
-  if (!active.account.isAdmin) throw new ApiError("FORBIDDEN");
+  if (!active.account.isAdmin || !device.adminNetwork) throw new ApiError("FORBIDDEN");
   return active;
 }
 
@@ -133,6 +136,18 @@ export function writeSessionCookie(response: NextResponse, cookie: SessionCookie
 /** Cookie value after adding a new session and making it active. */
 export function withSession(cookie: SessionCookie, sessionId: string): SessionCookie {
   return { sessionIds: [...cookie.sessionIds.filter((id) => id !== sessionId), sessionId], activeSessionId: sessionId };
+}
+
+/**
+ * Adds a new session to the device cookie and revokes the oldest ones it pushes out (the cookie
+ * holds MAX_SESSIONS_PER_DEVICE): a session the device no longer lists must not stay valid in
+ * the database, where a copied old cookie could still use it.
+ */
+export async function addDeviceSession(cookie: SessionCookie, sessionId: string, now: Date = new Date()): Promise<SessionCookie> {
+  const next = withSession(cookie, sessionId);
+  const dropped = next.sessionIds.slice(0, Math.max(0, next.sessionIds.length - MAX_SESSIONS_PER_DEVICE));
+  await revokeSessions(db(), dropped, now);
+  return { ...next, sessionIds: next.sessionIds.slice(dropped.length) };
 }
 
 /** Cookie value after removing a session; the newest remaining one becomes active if needed. */

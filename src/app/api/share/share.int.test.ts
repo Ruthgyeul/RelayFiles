@@ -311,8 +311,8 @@ describe("share downloads", () => {
     expect(await res.text()).toBe("alpha");
     const counts = await prisma.node.findMany({ where: { id: { in: [a, trip.id] } }, select: { id: true, downloads: true } });
     expect(counts.map((row) => row.downloads)).toEqual([1, 1]);
-    const events = await prisma.linkEvent.findMany({ where: { nodeId: a } });
-    expect(events).toMatchObject([{ kind: "DOWNLOAD", fileName: "a.txt", device: "iPhone · Safari" }]);
+    // The event is written after the response (it must not delay the download), so wait for it.
+    await expect.poll(() => prisma.linkEvent.findMany({ where: { nodeId: a } })).toMatchObject([{ kind: "DOWNLOAD", fileName: "a.txt", device: "iPhone · Safari" }]);
 
     // The owner previewing the page is not counted; private items are not reachable.
     await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { owner: m });

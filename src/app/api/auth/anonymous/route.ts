@@ -2,7 +2,7 @@ import type { CreatedAccount } from "@/contracts/auth";
 import { createAccountSchema } from "@/contracts/auth";
 import { clientInfo } from "@/server/auth/client-info";
 import { deviceOf } from "@/server/auth/current";
-import { toSessionAccount, toSessionState, withSession, writeSessionCookie } from "@/server/auth/device-session";
+import { toSessionAccount, toSessionState, addDeviceSession, writeSessionCookie } from "@/server/auth/device-session";
 import { apiHandler, ok } from "@/server/http/api-handler";
 import { createAnonymousAccount, signupMode } from "@/server/services/auth.service";
 
@@ -19,6 +19,6 @@ export const POST = apiHandler(async ({ req }) => {
     session: await toSessionState({ accounts, active }, await signupMode()),
   };
   const response = ok(body, { status: 201 });
-  writeSessionCookie(response, withSession(device.cookie, created.sessionId));
+  writeSessionCookie(response, await addDeviceSession(device.cookie, created.sessionId));
   return response;
 });

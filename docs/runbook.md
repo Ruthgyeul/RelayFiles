@@ -135,7 +135,7 @@ $C run --rm tools npm run admin:create   # 새 관리자 계정. 이전 관리�
 
 ## 감사 로그 보기
 
-관리자 작업(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대, 관리자 토큰 보기·재발급)은 `AuditEvent`에 1년간 남는다.
+관리자 작업(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대, 관리자 토큰 보기·재발급, 공지, 테마, 장애)은 `AuditEvent`에 1년간 남는다.
 
 ```bash
 curl -s -b "rf_s=<관리자 쿠키>" https://<도메인>/api/admin/audit | jq '.data.events[:20]'
@@ -321,4 +321,4 @@ $C up -d app worker
 
 ## 의존성 업데이트
 
-Dependabot(`.github/dependabot.yml`)이 보안 수정은 바로, 나머지는 매주 월요일에 PR로 올린다. npm은 minor·patch를 한 PR로 묶고, 메이저 버전은 따로 올린다. 대상은 npm, GitHub Actions(커밋 SHA로 고정), Dockerfile 베이스 이미지, `deploy/docker-compose.yml` 이미지다. CI `Security` 잡은 런타임 의존성의 high 이상 advisory(`npm audit --omit=dev --audit-level=high`)와 커밋에 들어간 비밀값(gitleaks)을 막고, `docker` 잡은 이미지의 수정판이 있는 critical CVE(grype)를 막고, tools 이미지에 `.dockerignore` 허용 목록 밖의 파일·테스트·devDependencies가 없는지 본다. `Workflows · shell scripts` 잡은 워크플로(actionlint, 체크섬으로 고정한 릴리스)와 배포 셸 스크립트(`shellcheck -x`, 설정은 `.shellcheckrc`)를 검사한다. `arm64 images` 워크플로는 Pi 클러스터용 `app`·`tools` 이미지가 linux/arm64로 빌드되는지 QEMU로 확인한다(`main` push와 `Dockerfile`·`.dockerignore`·`deploy/`·`package*.json`을 바꾼 PR, 푸시는 하지 않는다). CodeQL은 저장소의 기본 코드 스캐닝 설정으로 돈다.
+Dependabot(`.github/dependabot.yml`)이 보안 수정은 바로, 나머지는 매주 월요일에 PR로 올린다. npm은 minor·patch를 한 PR로 묶고, 메이저 버전은 따로 올린다. 대상은 npm, GitHub Actions(커밋 SHA로 고정), Dockerfile 베이스 이미지, `deploy/docker-compose.yml` 이미지다. 이미지는 태그와 digest(`name:tag@sha256:…`)로 고정한다. 같은 태그가 다른 이미지로 바뀌어도 서버에 들어오지 않고, Dependabot이 새 digest를 PR로 올린다. CI `Security` 잡은 런타임 의존성의 high 이상 advisory(`npm audit --omit=dev --audit-level=high`)와 커밋에 들어간 비밀값(gitleaks)을 막고, `docker` 잡은 이미지의 수정판이 있는 critical CVE(grype)를 막고, tools 이미지에 `.dockerignore` 허용 목록 밖의 파일·테스트·devDependencies가 없는지 본다. `Workflows · shell scripts` 잡은 워크플로(actionlint, 체크섬으로 고정한 릴리스)와 배포 셸 스크립트(`shellcheck -x`, 설정은 `.shellcheckrc`)를 검사한다. `arm64 images` 워크플로는 Pi 클러스터용 `app`·`tools` 이미지가 linux/arm64로 빌드되는지 QEMU로 확인한다(`main` push와 `Dockerfile`·`.dockerignore`·`deploy/`·`package*.json`을 바꾼 PR, 푸시는 하지 않는다). CodeQL은 저장소의 기본 코드 스캐닝 설정으로 돈다.

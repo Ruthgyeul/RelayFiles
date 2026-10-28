@@ -7,7 +7,7 @@ import { ID_LENGTH, newAccountId, newAccountToken, newAnonName, newLinkId, newNo
 import { failureMessage } from "@/domain/lockout";
 import type { ClientInfo } from "../auth/client-info";
 import { tokenKeys } from "../auth/keys";
-import { allowSignup, clearFailures, lockoutPolicy, lockRemaining, recordFailure } from "../auth/login-limiter";
+import { allowSignup, beginTokenAttempt, lockoutPolicy, refundTokenAttempt, type TokenAttempt } from "../auth/login-limiter";
 import { decryptToken, encryptToken, needsReencryption, tokenLookups } from "../auth/token-crypto";
 import { db, Prisma } from "../db/client";
 import { ApiError } from "../http/api-error";
@@ -119,35 +119,39 @@ export function createAdminAccount(): Promise<ProvisionedAccount> {
   return provisionAccount({ isAdmin: true });
 }
 
-/** Refuses while this address is locked out of token entry. */
-async function assertNotLocked(client: ClientInfo): Promise<void> {
-  const locked = await lockRemaining(client.ipKey);
-  if (locked > 0) throw new ApiError("RATE_LIMITED", `Too many failed attempts. Try again in ${locked} s.`, { retryAfter: locked });
+/**
+ * Counts a token entry from this address before the token is looked at, and refuses it while
+ * the address is locked out (login-limiter `beginTokenAttempt`).
+ */
+async function startTokenEntry(client: ClientInfo): Promise<Extract<TokenAttempt, { failures: number }>> {
+  const attempt = await beginTokenAttempt(client.ipKey);
+  if ("locked" in attempt) throw new ApiError("RATE_LIMITED", `Too many failed attempts. Try again in ${attempt.locked} s.`, { retryAfter: attempt.locked });
+  return attempt;
 }
 
-/** Counts a wrong token toward the lockout ladder; returns the error to throw. */
-async function failedTokenEntry(token: string, client: ClientInfo): Promise<ApiError> {
-  const policy = lockoutPolicy();
-  const { failures, lockSeconds } = await recordFailure(client.ipKey, policy);
-  if (lockSeconds > 0) return new ApiError("RATE_LIMITED", "Too many failed attempts.", { retryAfter: lockSeconds });
-  return new ApiError("INVALID_TOKEN", failureMessage(token, failures, policy, ID_LENGTH.token));
+/** The error for a wrong token: the lockout this attempt started, or how many attempts are left. */
+function failedTokenEntry(token: string, attempt: Extract<TokenAttempt, { failures: number }>): ApiError {
+  if (attempt.lockSeconds > 0) return new ApiError("RATE_LIMITED", "Too many failed attempts.", { retryAfter: attempt.lockSeconds });
+  return new ApiError("INVALID_TOKEN", failureMessage(token, attempt.failures, lockoutPolicy(), ID_LENGTH.token));
 }
 
 /**
  * Signs in with a pasted token. Failures are counted per client address and lock sign-in
- * on the design's ladder (5 attempts → 30 s, 120 s, 600 s).
+ * on the design's ladder (5 attempts → 30 s, 120 s, 600 s). A correct token gives back only its
+ * own attempt: signing in to one's own account never resets the failures of guesses made from
+ * the same address.
  */
 export async function signInWithToken(token: string, client: ClientInfo, signedInAccountIds: readonly string[]): Promise<SignedIn> {
-  await assertNotLocked(client);
+  const attempt = await startTokenEntry(client);
   const keys = tokenKeys();
   const found = token.length === ID_LENGTH.token ? await findAccountByLookups(db(), tokenLookups(token, keys)) : null;
   const ttlDays = getEnv("policy").ACCOUNT_TTL_DAYS;
   const now = new Date();
 
-  if (!found || isExpired(found, ttlDays, now)) throw await failedTokenEntry(token, client);
+  if (!found || isExpired(found, ttlDays, now)) throw failedTokenEntry(token, attempt);
+  await refundTokenAttempt(client.ipKey, attempt);
   if (signedInAccountIds.includes(found.id)) throw new ApiError("ALREADY_SIGNED_IN");
 
-  await clearFailures(client.ipKey);
   const sessionId = newSessionId();
   await db().$transaction(async (tx) => {
     // Values written with a rotated-out key are upgraded on the next sign-in.
@@ -167,10 +171,10 @@ export async function signInWithToken(token: string, client: ClientInfo, signedI
  * as sign-in.
  */
 export async function reauthenticate(sessionId: string, accountId: string, token: string, client: ClientInfo): Promise<void> {
-  await assertNotLocked(client);
+  const attempt = await startTokenEntry(client);
   const found = token.length === ID_LENGTH.token ? await findAccountByLookups(db(), tokenLookups(token, tokenKeys())) : null;
-  if (found?.id !== accountId) throw await failedTokenEntry(token, client);
-  await clearFailures(client.ipKey);
+  if (found?.id !== accountId) throw failedTokenEntry(token, attempt);
+  await refundTokenAttempt(client.ipKey, attempt);
   await markReauthenticated(db(), sessionId, new Date());
 }
 

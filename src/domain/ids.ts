@@ -40,7 +40,12 @@ export const ID_PATTERN = {
   session: pattern(ID_LENGTH.session, ID_ALPHABET),
   anonName: new RegExp(`^anon-[${ID_ALPHABET}]{${ID_LENGTH.anonSuffix}}$`),
   invite: new RegExp(`^[${INVITE_ALPHABET}]{4}-[${INVITE_ALPHABET}]{4}$`),
+  /** Request ids (x-request-id) are UUIDs; anything else a client sends is replaced. */
+  requestId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
 } as const;
+
+/** The incoming request id when it is a UUID (logs and error pages must not echo arbitrary text), else null. */
+export const validRequestId = (value: string | null): string | null => (value !== null && ID_PATTERN.requestId.test(value) ? value : null);
 
 export const newAccountId = () => randomString(ID_LENGTH.account, ID_ALPHABET);
 export const newNodeId = () => randomString(ID_LENGTH.node, ID_ALPHABET);

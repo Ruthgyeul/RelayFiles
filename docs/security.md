@@ -35,11 +35,15 @@
 - **재인증**: 토큰 보기·재발급, 자기 계정 삭제(마지막 관리자는 지울 수 없다)와 관리자의 계정 관리(역할·삭제일·용량)·삭제, 가입 모드 변경은 세션이 최근 `AUTH.reauthWindowMin`(10분) 안에 로그인했거나 토큰을 다시 입력했을 때만 허용한다(`requireRecentAuth`, 아니면 403 `REAUTH_REQUIRED`). 일반 계정도 같다. 토큰은 만료되지 않고 어디서나 로그인할 수 있어서, 두고 간 기기나 페이지에 주입된 스크립트가 읽으면 계정이 영구히 넘어가기 때문이다. 새 계정은 가입 직후(창 안)에 토큰을 볼 수 있다. 입력은 `POST /api/auth/reauth`이고 로그인과 같은 잠금 단계를 쓴다.
 - **감사 로그**(`AuditEvent`): 관리자 작업(위 작업 + 정리 실행, 초대 생성·취소)을 행위자 id·이름, 대상, 짧은 설명, 마스킹한 주소와 함께 남긴다. 초대 코드는 앞 4자만 적는다. `AUTH.auditRetentionDays`(365일)가 지나면 매일 정리 작업이 지운다. 조회: `GET /api/admin/audit`.
 - **`env:check`**: 운영 모드에서 `ADMIN_ALLOWED_CIDRS`가 비어 있으면 경고한다.
-- **로그인 잠금**: 클라이언트 주소(HMAC으로 가린 키, IPv6는 `/64` 단위 — `rateLimitSubject`)마다 Redis에 실패 횟수를 센다. 5회마다 30초 → 120초 → 600초 잠금(`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_SECONDS`). 잠긴 동안에는 올바른 토큰도 429로 거부한다.
+- **관리자 역할 변경 직렬화**: 강등과 관리자 계정 삭제는 트랜잭션 안에서 advisory lock(`lockAdminRoles`)을 잡고 관리자 수를 센다. 두 관리자가 동시에 서로를 강등해도 0명이 되지 않는다.
+- **관리자 작업 기록**: 초대 생성·정리 실행은 재인증이 필요하고, 공지 게시·내리기, 테마 변경, 장애 등록·수정·삭제도 감사 로그에 남는다.
+- **관리자 Server 스트림(SSE)**: `METRICS.streamSessionCheckMs`(30초)마다 세션을 다시 읽어 로그아웃·강등·대역 밖이면 끊고, 한 연결은 `streamMaxLifetimeMs`(1시간)까지(EventSource가 다시 연결하며 다시 확인), 계정당 동시 `streamMaxPerAccount`(3)개까지.
+- **세션 정리**: 기기 쿠키는 세션 10개까지라, 새 로그인이 밀어낸 가장 오래된 세션은 DB에서도 폐기한다. 매일 정리 작업이 폐기된 세션과 가장 긴 세션 수명보다 오래된 세션 행을 지운다.
+- **로그인 잠금**: 클라이언트 주소(HMAC으로 가린 키, IPv6는 `/64` 단위 — `rateLimitSubject`)마다 Redis에 시도 횟수를 센다. 5회마다 30초 → 120초 → 600초 잠금(`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_SECONDS`). 잠긴 동안에는 올바른 토큰도 429로 거부한다. 시도는 토큰을 확인하기 **전에** Lua 스크립트 하나로 센다(잠김 확인·증가·잠금이 원자적이라 동시에 보낸 추측이 잠금 전에 모두 통과하지 못한다). 맞는 토큰은 자기 시도 하나만 돌려받고, 같은 주소의 이전 실패는 그대로 남는다(자기 계정으로 로그인해 다른 계정 추측의 실패 기록을 지울 수 없다).
 - **익명 가입 제한**: 같은 주소에서 시간당 10개(`SIGNUPS_PER_HOUR`, 기본값은 `config/policy.ts`). 크롤러가 디스크에 계정 폴더를 채우는 것을 막는다. 가입 모드(Open/Invite only/Closed)는 `ServerConfig.signupMode`, 초대 코드는 한 번만 쓸 수 있다.
 - **계정 생성의 원자성**: 계정 행, 루트 폴더 노드, 기기 세션, 볼륨의 `users/<accountId>/` 디렉터리를 `withStorageTransaction`으로 함께 만든다. 중간에 실패하면 DB는 롤백되고 디렉터리는 휴지통으로 옮긴다.
 - **클라이언트 주소**: `CF-Connecting-IP` → `X-Real-IP` 순으로 읽는다. 앱 포트는 Nginx를 통해서만 접근 가능해야 한다(직접 노출하면 헤더 위조로 잠금을 우회할 수 있음). systemd 배포는 `APP_HOST`(기본 `127.0.0.1`, 비어 있어도 루프백)로 루프백에만 열고, Docker 배포의 app 컨테이너는 포트를 공개하지 않는다. 앞단 Nginx는 방문자가 보낸 `CF-Connecting-IP`를 비워서 넘긴다. 세션에는 마스킹한 주소(`a.b.•••.•••`)와 Cloudflare 국가·도시 헤더만 저장한다.
-- **`src/proxy.ts`**: 모든 요청에 `x-request-id`를 붙이고, `ADMIN_ALLOWED_CIDRS`가 있으면 `/admin/*`·`/api/admin/*`를 그 대역에서만 허용한다(페이지는 프록시가 직접 보내는 403 HTML, API는 403 JSON. rewrite를 쓰면 상태가 200이 되고 `x-middleware-rewrite`에 내부 주소가 드러난다). 다른 사이트 Origin에서 온 API 쓰기 요청(POST 등)은 403으로 거부한다(CSRF 방어). 권한 검사는 각 핸들러에서 다시 한다.
+- **`src/proxy.ts`**: 모든 요청에 `x-request-id`를 붙이고(클라이언트가 보낸 값은 UUID일 때만 쓴다. 로그와 에러 페이지에 임의 문자열이 들어가지 않게), `ADMIN_ALLOWED_CIDRS`가 있으면 `/admin/*`·`/api/admin/*`를 그 대역에서만 허용한다(페이지는 프록시가 직접 보내는 403 HTML, API는 403 JSON. rewrite를 쓰면 상태가 200이 되고 `x-middleware-rewrite`에 내부 주소가 드러난다). 정적 파일 확장자 제외는 `/api` 밖에서만 적용한다(`.png`로 끝나는 API 경로도 CSRF·대역 검사를 받는다). 관리자 대역은 `requireAdmin`과 관리자 레이아웃에서도 다시 확인한다(`DeviceSession.adminNetwork`). 다른 사이트 Origin에서 온 API 쓰기 요청(POST 등)은 403으로 거부한다(CSRF 방어). 권한 검사는 각 핸들러에서 다시 한다.
 - **첫 관리자**: 서버에서 `npm run admin:create`. 토큰은 터미널에 한 번만 출력된다.
 
 ## 업로드
@@ -54,6 +58,7 @@
 - **복사**(`copyNodes`)는 업로드처럼 계정·볼륨·익명 전체 범위에 공간을 예약한다(동시에 보낸 복사가 모두 통과하지 못한다). 바이트는 DB 트랜잭션 밖에서 볼륨의 `system/tmp/uploads/copy-*`로 먼저 복사하고(reflink 가능), 짧은 트랜잭션에서 행 삽입과 `rename`만 한다. 큰 복사가 DB 연결을 붙잡거나 트랜잭션 제한 시간을 넘긴 뒤 롤백되지 않는다.
 - 계정당 파일·폴더 수는 `FILES.maxItemsPerAccount`(10만, 관리자는 무제한)까지다. 0바이트 파일은 쿼터를 쓰지 않으므로 개수 제한이 없으면 inode와 DB를 고갈시킬 수 있다.
 - 휴지통 항목 이름은 `<시각>-<무작위 8자>-<계정>-<이름>`이다(같은 밀리초에 같은 이름을 지워도 충돌하지 않는다).
+- tus 서버의 CORS는 `PUBLIC_URL` origin만 허용한다(기본값 `*` 대신). tus 경로는 `apiHandler`를 쓰지 않지만 예외를 잡아 내부 내용 없이 500으로 답하고, 깨진 쿠키 인코딩은 로그아웃 상태로 본다.
 - tus 경로(`/api/uploads/tus/*`)는 `proxy.ts` matcher에서 제외한다. 프록시는 요청 본문을 메모리에 복사(기본 10MB 제한)하기 때문이다. 이 경로는 쿠키(SameSite=Lax)와 배치 소유권으로 보호된다. 배치를 만드는 `POST /api/uploads`는 프록시의 Origin 검사를 거친다.
 
 ## 공유 링크·다운로드
@@ -78,7 +83,8 @@
 ## 리버스 프록시·헤더
 
 - API 쓰기 요청의 CSRF 검사(`proxy.ts`): `Sec-Fetch-Site: cross-site`이면 거부하고, Origin은 `PUBLIC_URL`의 origin 또는 브라우저가 보낸 `Host`와 같아야 한다. 클라이언트가 보낼 수 있는 `X-Forwarded-Host`는 보지 않는다.
-- Nginx는 `X-Forwarded-Host`를 `$host`로 덮어쓴다. Docker 템플릿의 `X-Forwarded-Proto`는 신뢰 피어(cloudflared, `TRUSTED_PROXY_IP`)가 보낸 `http`/`https`만 넘기고, 그 밖에는 이 홉의 scheme을 쓴다.
+- Nginx는 `X-Forwarded-Host`를 `$host`로 덮어쓴다. Docker 템플릿의 `X-Forwarded-Proto`는 신뢰 피어(cloudflared, `TRUSTED_PROXY_IP`)가 보낸 `http`/`https`만 넘기고, 그 밖에는 이 홉의 scheme을 쓴다. 호스트 Nginx 템플릿(systemd)도 같은 호스트의 cloudflared(`127.0.0.1`, `$realip_remote_addr`)가 보낸 값만 믿는다.
+- 렌더링 스크립트는 `.env` 값에 줄바꿈·`;`·`{}`·따옴표·`$`·`\`가 있으면 거부한다(`render-template.mjs`). `setup-ssd.sh`는 `STORAGE_ROOT`가 평범한 경로인지, UID·GID가 숫자인지 확인한 뒤 fstab·crypttab에 쓴다.
 - X-Accel location은 `disable_symlinks on from=<볼륨 루트>`다. 앱이 `lstat`으로 확인한 뒤 Nginx가 파일을 다시 열기 때문에, 그 사이에 생긴 심볼릭 링크를 거부한다.
 - Nginx `limit_req`(앱의 Redis 제한 앞단): `POST /api/auth/*`·`POST /api/share/*/unlock` 분당 20회(버스트 20), `POST /api/uploads` 분당 60회(버스트 30), 클라이언트 주소마다. 넘으면 API 형식 JSON 429와 `Retry-After: 60`.
 
@@ -93,5 +99,5 @@
 - SVG 미리보기는 DOMPurify(svg·svgFilters 프로필)로 스크립트·이벤트 핸들러·외부 참조를 지운 뒤 blob `<img>`로 그린다. blob URL을 새 탭에서 열어도 앱 출처에서 스크립트가 돌지 않는다.
 - 캐시: 재생·썸네일·미리보기·변환 영상은 `private, max-age=1년, immutable`, 다운로드는 `private, no-cache`, zip과 API 에러는 `no-store`.
 - ffmpeg 입력(`server/media/ffmpeg-input.ts`): 업로드 파일은 `-protocol_whitelist file -format_whitelist <MEDIA.ffmpegDemuxers>`로만 연다. HLS 플레이리스트·concat 목록처럼 다른 파일을 가리키는 형식은 이름이나 내용과 상관없이 거부되므로, 조작한 업로드로 ffmpeg가 서버의 다른 파일을 읽어 변환 결과로 돌려줄 수 없다. Docker 이미지는 `node:24-trixie-slim`(ffmpeg 7.1)이다.
-- 프로세스 격리: Compose의 app·worker는 `cap_drop: ALL`, `read_only`(쓰기는 tmpfs `/tmp`, app은 `.next/cache`도), `pids_limit: 512`, `mem_limit`/`cpus`(`APP_MEMORY_MAX`·`APP_CPUS`, `WORKER_MEMORY_MAX`·`WORKER_CPUS`)로 돈다. nginx도 `cap_drop: ALL`. systemd 배포는 같은 값을 `MemoryMax`·`CPUQuota`·`TasksMax=512`로 건다. 폭주한 변환·썸네일 작업은 자기 서비스 상한에서 멈추고 PostgreSQL을 OOM으로 끌고 가지 않는다.
+- 프로세스 격리: Compose의 app·worker·tools는 `cap_drop: ALL`, `read_only`(쓰기는 tmpfs `/tmp`, app은 `.next/cache`도), `pids_limit: 512`, `mem_limit`/`cpus`(`APP_MEMORY_MAX`·`APP_CPUS`, `WORKER_MEMORY_MAX`·`WORKER_CPUS`)로 돈다. nginx도 `cap_drop: ALL`. systemd 배포는 같은 값을 `MemoryMax`·`CPUQuota`·`TasksMax=512`로 건다. 폭주한 변환·썸네일 작업은 자기 서비스 상한에서 멈추고 PostgreSQL을 OOM으로 끌고 가지 않는다.
 - 영상 변환(`?transcode=1`)은 동시에 `VIDEO_TRANSCODE_MAX`개(0이면 끔)까지만 돌고, 넘으면 429와 `Retry-After`. 출력은 4GB에서 끊는다. ffmpeg·smartctl은 셸 없이 실행하고 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지만 받는다(`PROCESS`).
