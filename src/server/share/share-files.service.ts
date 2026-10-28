@@ -17,6 +17,7 @@ import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
 import { canStripType } from "../media/process";
 import { transcodeResponse } from "../media/transcode";
+import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
 import { findAccountById, type AccountRow } from "../repositories/account.repo";
 import { ancestorChain } from "../repositories/node-tree.repo";
 import { claimDownload, claimEachDownload, type SharedRow } from "../repositories/share.repo";
@@ -188,12 +189,16 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
   const { link, row } = file;
   if (row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
   const owner = await ownerOf(link);
-  const path = await (await driverForAccount(owner)).localPath({ accountId: owner.id, segments: file.segments });
-  if (!path) throw new ApiError("NOT_FOUND");
+  const driver = await driverForAccount(owner);
   if (req.method === "GET") {
     if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
     void markActive("stream", `${row.id}:${client.ipKey}`);
   }
+  const stored = await sendStoredTranscode(req, driver, owner.id, row);
+  if (stored) return stored;
+  const path = await driver.localPath({ accountId: owner.id, segments: file.segments });
+  if (!path) throw new ApiError("NOT_FOUND");
+  if (req.method === "GET") void notePlay(row.id);
   return transcodeResponse(req, path);
 }
 

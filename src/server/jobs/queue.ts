@@ -8,6 +8,8 @@ export const MEDIA_QUEUE = "media";
 
 export interface MediaJob {
   nodeId: string;
+  /** "process" (default): thumbnails, previews, stripped copies; "transcode": store an MP4 conversion. */
+  task?: "process" | "transcode";
 }
 
 /**
@@ -48,6 +50,15 @@ export async function enqueueMedia(nodeIds: readonly string[]): Promise<void> {
     await mediaQueue().addBulk(nodeIds.map((nodeId) => ({ name: "process", data: { nodeId }, opts: { jobId: nodeId } })));
   } catch (error) {
     logger.warn("media jobs not queued", { error, count: nodeIds.length });
+  }
+}
+
+/** Asks the worker to store an MP4 conversion of an often played video (one pending job per video). */
+export async function enqueueTranscode(nodeId: string): Promise<void> {
+  try {
+    await mediaQueue().add("transcode", { nodeId, task: "transcode" }, { jobId: `transcode-${nodeId}` });
+  } catch (error) {
+    logger.warn("transcode job not queued", { error });
   }
 }
 

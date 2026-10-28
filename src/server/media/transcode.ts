@@ -15,8 +15,8 @@ const slots = (globalForTranscode.relayTranscodes ??= { running: 0 });
 /** Conversions running now in this process. */
 export const runningTranscodes = () => slots.running;
 
-/** ffmpeg arguments: the first video and audio track as 720p H.264/AAC in fragmented MP4. */
-export function transcodeArgs(path: string): string[] {
+/** ffmpeg input and encoding: the first video and audio track as 720p H.264/AAC, without metadata. */
+function encodeArgs(path: string): string[] {
   return [
     ...["-nostdin", "-hide_banner", "-loglevel", "error"],
     // Only the file itself as a video container; a seekable file also reads MP4/MOV with the index at the end.
@@ -28,9 +28,17 @@ export function transcodeArgs(path: string): string[] {
     ...["-vf", `scale=-2:min(${TRANSCODE.maxHeightPx}\\,ih)`],
     ...["-c:v", "libx264", "-preset", TRANSCODE.preset, "-crf", String(TRANSCODE.crf), "-pix_fmt", "yuv420p"],
     ...["-c:a", "aac", "-b:a", TRANSCODE.audioBitrate],
-    // Fragmented MP4: the browser starts playing the first fragments while the rest converts.
-    ...["-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1"],
   ];
+}
+
+/** Live conversion: fragmented MP4 on stdout, so the browser starts playing the first fragments while the rest converts. */
+export function transcodeArgs(path: string): string[] {
+  return [...encodeArgs(path), ...["-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1"]];
+}
+
+/** Stored conversion: a regular MP4 with its index first (seekable with Range requests), at most maxOutputBytes. */
+export function storedTranscodeArgs(path: string, output: string): string[] {
+  return [...encodeArgs(path), ...["-movflags", "+faststart", "-fs", String(TRANSCODE.maxOutputBytes), "-f", "mp4", output]];
 }
 
 /** Passes bytes through and fails once more than `limit` went by. */
@@ -52,7 +60,7 @@ const busy = () => new ApiError("RATE_LIMITED", "The server is converting other 
 const PROCESS_ONLY: SemaphoreSlot = { release: async () => undefined };
 
 /** One of the VIDEO_TRANSCODE_MAX slots shared by every app process, or null when all are in use. */
-async function sharedSlot(limit: number): Promise<SemaphoreSlot | null> {
+export async function sharedSlot(limit: number): Promise<SemaphoreSlot | null> {
   try {
     return await acquireSlot("transcode", limit, TRANSCODE.slotLeaseMs);
   } catch (error) {
