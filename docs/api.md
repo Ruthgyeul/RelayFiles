@@ -135,6 +135,19 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 | `POST` | `/api/admin/incidents` | Status 페이지 Incident 등록 `{ title, text, severity, date, duration, resolved }` |
 | `PUT`·`DELETE` | `/api/admin/incidents/:id` | Incident 수정 / 삭제 |
 
+### 업로드 전용 링크 (File request)
+
+폴더 메뉴 "Upload links"에서 만든다. 방문자는 `/r/<id>`에서 그 폴더에 파일을 넣을 수 있지만 폴더 내용은 볼 수 없다([security.md](security.md#업로드)).
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| `GET` | `/api/file-requests?folder=root\|id` | 그 폴더의 업로드 링크(`FileRequestDto`: `url`, 제목, 비밀번호 여부, `status: open\|expired\|full`, 만료, 한도, 받은 파일 수·바이트). 로그인 필요 |
+| `POST` | `/api/file-requests` | `{ folderId, title, password\|null, expiresInDays: 1\|7\|30\|null, maxFiles\|null, maxMb\|null }` → 201. 다른 계정의 폴더는 404, 계정당 `FILE_REQUEST.maxPerAccount`(50)개 |
+| `DELETE` | `/api/file-requests/:id` | 링크 삭제(받은 파일은 남는다). 다른 계정의 링크는 404 |
+| `GET` | `/api/r/:id` | 방문자용 `FileRequestView` `{ status: open\|locked\|expired\|full, title, ownerName, filesLeft, bytesLeft, maxFileBytes }`. 없는 링크는 404 |
+| `POST` | `/api/r/:id/unlock` | `{ password }`. 맞으면 `rf_sh` 쿠키에 기록, 틀리면 403 `Wrong password`, 주소당 10분에 10회를 넘기면 429 |
+| `POST` | `/api/r/:id/uploads` | `{ files: [{ name, size }] }`(최대 100개) → `{ batchId, endpoint }`. 이후 웹 앱과 같은 tus 엔드포인트로 보낸다(배치 순서 = `index`). 잠김 401, 만료·가득 참 410, 한도 초과 400(`This link accepts 2 more files.`), 쿼터·공간 부족 507, 주소당 시간당 30배치 초과 429 |
+
 ### 공유 링크 (공개, 로그인 불필요)
 
 페이지 `/d/<linkId>`(하위 폴더는 `?f=<folderId>`)는 서버가 상태를 판정한다. 순서: 만료(링크나 위 폴더의 만료 시각이 지났거나, "다운로드 1회 후 삭제"가 사용됨, 또는 소유자 계정이 삭제일에 닿음) → 다운로드 한도 도달 → 비공개 → 비밀번호(링크와 위 폴더의 비밀번호 모두) → 열림. 비공개이거나 자기 비밀번호가 있거나 만료된 하위 항목은 목록·크기·zip에서 빠진다. 열 수 있거나 비밀번호로 열 수 있는 링크만 `name`을 보낸다([security.md](security.md#공유-링크다운로드)). 링크 소유자가 보면 "Visitor preview" 바가 붙고, 다운로드 수·활동 기록에 남지 않는다.
