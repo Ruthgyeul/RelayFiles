@@ -9,6 +9,7 @@ import { db, type DbClient } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { findAccountById, type AccountRow } from "../repositories/account.repo";
+import { deleteExpiredApiTokens } from "../repositories/api-token.repo";
 import { countAdmins, fileTotalsByAccount, listAccountsForAdmin, lockAdminRoles, updateAccountByAdmin } from "../repositories/admin.repo";
 import { purgeRetiredLinks, retireLinks } from "../repositories/link-tombstone.repo";
 import { expiredItemIds, findRootFolder } from "../repositories/node.repo";
@@ -111,5 +112,7 @@ export async function runCleanup(now: Date): Promise<CleanupResult> {
   await purgeRetiredLinks(db(), new Date(now.getTime() - SHARE.tombstoneDays * MS.day));
   // Signed out or past the longest session lifetime: those rows only grow the table.
   await purgeDeadSessions(db(), new Date(now.getTime() - Math.max(AUTH.adminSessionDays, AUTH.memberSessionDays) * MS.day));
+  // Expired API tokens are refused already; the rows only clutter the profile list.
+  await deleteExpiredApiTokens(db(), now);
   return result;
 }
