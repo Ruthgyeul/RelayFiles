@@ -14,12 +14,12 @@ C="docker compose --env-file .env -f deploy/docker-compose.yml"
 $C ps                                  # 서비스 상태 (app은 healthy여야 한다)
 curl -fsS http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/api/health
 $C logs -f --tail 100 app worker nginx
-sudo tail -f /var/log/relayfiles/error.log
+sudo tail -f /var/log/relayfiles/app-error.log      # 워커: worker-error.log, npm 스크립트: tools-error.log
 ```
 
 앱 로그(`LOG_DIR`)와 Nginx 접근 로그에는 토큰, 비밀번호, 클라이언트 IP가 남지 않는다. Nginx 에러 로그(`client: …`)에는 주소가 남으므로 공유하지 않는다. 문제를 찾을 때는 에러 화면의 요청 ID로 `combined.log`를 검색한다.
 
-로그 파일은 크기로 순환한다. `LOG_DIR`의 `error.log`·`combined.log`는 20MB × 5개(`src/config/policy.ts`의 `LOGS`), 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10MB × 5)까지만 남는다.
+로그 파일은 크기로 순환한다. `LOG_DIR`의 프로세스별 `<app|worker|tools>-error.log`·`-combined.log`(`LOG_SERVICE`)는 각각 20MB × 5개(`src/config/policy.ts`의 `LOGS`), 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10MB × 5)까지만 남는다.
 
 ### 좀비 프로세스 점검
 
