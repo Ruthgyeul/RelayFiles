@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { ShareItem, ShareView } from "@/contracts/share";
 import { formatDateTime, formatSize } from "@/domain/format";
 import { itemCount } from "@/domain/tree";
-import { kindOf } from "@/features/files/kind";
+import { kindOf } from "@/shared/ui/node-kind";
 import { MediaViewer } from "@/features/viewer/MediaViewer";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";

@@ -8,7 +8,7 @@ import { formatSize } from "@/domain/format";
 import { previewKindOf } from "@/domain/media";
 import { KIND_LABEL } from "@/domain/share";
 import { itemCount } from "@/domain/tree";
-import { kindOf } from "@/features/files/kind";
+import { kindOf } from "@/shared/ui/node-kind";
 import { ListPreview } from "@/features/viewer/ListPreview";
 import { BusyPill } from "@/shared/ui/BusyPill";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";

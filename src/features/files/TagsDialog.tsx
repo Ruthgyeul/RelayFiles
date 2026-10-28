@@ -6,7 +6,7 @@ import { ApiClientError } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { Modal, ModalHeader } from "@/shared/ui/Modal";
-import { filesApi } from "./api";
+import { filesApi } from "@/shared/lib/files-api";
 
 export interface TagsRequest {
   ids: string[];

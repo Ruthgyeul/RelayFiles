@@ -1,4 +1,4 @@
-import { filesApi } from "@/features/files/api";
+import { filesApi } from "@/shared/lib/files-api";
 import { withVisibility } from "@/features/files/settings";
 import { ApiClientError, apiFetch } from "@/shared/lib/api-client";
 
