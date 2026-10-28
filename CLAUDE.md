@@ -45,7 +45,8 @@ npm run volume:init  # STORAGE_ROOT(또는 인자로 준 경로) 볼륨 초기�
 npm run admin:create # 관리자 계정 생성, 토큰을 한 번만 출력
 npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지정 가능)
 npm run check:emoji  # 이모지 사용 검사
-npm run check        # typecheck · lint · emoji · migrations · test · build 전체
+npm run check:cycles # 기능(src/features/*) 사이 순환 import 검사
+npm run check        # typecheck · lint · emoji · cycles · migrations · test · build 전체
 npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기 (-- --previews: 큰 이미지의 뷰어 미리보기)
 npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 다시 생성
@@ -70,6 +71,7 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 
 - `src/app` 라우팅 전용 · `src/features/<기능>` 기능 단위 UI/훅/클라이언트 API · `src/shared` 공용 UI·유틸 · `src/domain` 순수 규칙 · `src/contracts` zod 계약 · `src/config` 설정·정책 상수 · `src/server` 서버 전용(DB, Redis, 스토리지).
 - 레이어 의존 방향은 `eslint-plugin-boundaries`가 강제한다. 허용 표는 `eslint.config.mjs`와 `docs/architecture.md`를 본다.
+- 기능끼리는 한 방향으로만 import한다(`npm run check:cycles`). 둘 다 쓰는 코드는 `src/shared`로, 여러 기능을 묶는 조립은 `src/app`에서 한다.
 - `src/domain`은 React, Next, Prisma, Node API에 의존하지 않는 순수 함수만 둔다. 모든 함수에 `*.test.ts`를 둔다.
 - `src/server/**` 파일은 `import "server-only"`로 시작한다.
 - 매직 넘버는 금지한다. 정책 값은 `src/config/policy.ts`, 배포별 값은 env(`src/config/env.ts`에서만 읽음)에 둔다.

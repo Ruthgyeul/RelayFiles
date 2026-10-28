@@ -23,6 +23,7 @@ src/app ──────────► features ─► shared ─┐
 | config | `src/config` | env 검증, 정책 상수, 테마 목록 | config |
 
 - 위 표는 `eslint.config.mjs`의 `boundaries/dependencies` 정책과 같다. 위반하면 `npm run lint`가 실패한다.
+- 기능 사이 import는 순환하지 않는다. `scripts/check-feature-cycles.mjs`(`npm run check:cycles`)가 기능 단위로, `import/no-cycle`이 파일 단위로 검사한다. 여러 기능이 쓰는 노드 종류 아이콘(`shared/ui/node-kind.ts`), 경로(`shared/lib/routes.ts`), 파일 API(`shared/lib/files-api.ts`)는 `src/shared`에 있고, 셸·전송 패널 조립은 `src/app/(app)/layout.tsx`가 한다.
 - npm 패키지와 Node 내장 모듈은 레이어 규칙 대상이 아니다. 대신 `src/server` 밖에서 서버 전용 패키지(Prisma, ioredis, fs)를 쓰지 않는다.
 
 ## 서버 요청 흐름

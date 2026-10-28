@@ -59,6 +59,8 @@ const eslintConfig = defineConfig([
           ],
         },
       ],
+      // File-level cycles; scripts/check-feature-cycles.mjs checks the features as a whole.
+      "import/no-cycle": ["error", { ignoreExternal: true }],
     },
   },
   {
