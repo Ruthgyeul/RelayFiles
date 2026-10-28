@@ -185,6 +185,7 @@ services:
     user: "${STORAGE_UID:-10001}:0"
     environment:
       APP_UPSTREAM: app:${APP_PORT:-3000}
+      NGINX_RESOLVER: 127.0.0.11
       SERVER_NAME: ${SERVER_NAME:-localhost}
       STORAGE_ROOT: ${STORAGE_ROOT}
       STORAGE_ACCEL_PREFIX: ${STORAGE_ACCEL_PREFIX:-/_protected/}

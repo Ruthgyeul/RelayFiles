@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, HEADERS, JOBS, LOGIN, MEDIA, NGINX, OFFSITE, STORAGE, TRANSCODE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, STORAGE, TRANSCODE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -161,6 +161,13 @@ export const ENV_GROUPS = {
     APP_CPUS: cpus.default(3),
     WORKER_MEMORY_MAX: memorySize.default("2G"),
     WORKER_CPUS: cpus.default(2),
+    /** k3s deployment (deploy/scripts/k3s/deploy.sh): GHCR image name without -app/-tools, namespace, app replicas. */
+    K3S_IMAGE_REPO: z
+      .string()
+      .regex(/^[a-z0-9.-]+(:\d+)?(\/[a-z0-9._-]+)+$/, "must be a registry path such as ghcr.io/<owner>/relayfiles")
+      .optional(),
+    K3S_NAMESPACE: z.string().regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).default("relayfiles"),
+    K3S_APP_REPLICAS: positiveInt.max(K3S.maxAppReplicas).default(1),
   }),
   offsite: z
     .object({

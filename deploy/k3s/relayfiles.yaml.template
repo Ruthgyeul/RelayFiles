@@ -1,0 +1,184 @@
+# RelayFiles on k3s (docs/deploy-k3s.md). Rendered from .env by deploy/scripts/k3s/deploy.sh;
+# edit this template and run the script again instead of editing what it applied.
+#
+# App, worker and Nginx run on the node with the storage SSD (label relayfiles/storage=true):
+# the files are host paths on that disk and Nginx sends them itself (X-Accel-Redirect).
+# PostgreSQL and Redis are in data.yaml.template. The app can run more than one replica:
+# upload locks and conversion slots are shared through Redis.
+apiVersion: v1
+kind: Service
+metadata:
+  name: relayfiles-app
+  namespace: ${K3S_NAMESPACE}
+spec:
+  selector: { app.kubernetes.io/name: relayfiles-app }
+  ports: [{ port: ${APP_PORT}, targetPort: ${APP_PORT} }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: relayfiles-app
+  namespace: ${K3S_NAMESPACE}
+spec:
+  replicas: ${K3S_APP_REPLICAS}
+  selector:
+    matchLabels: { app.kubernetes.io/name: relayfiles-app }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: relayfiles-app }
+    spec:
+      nodeSelector: { relayfiles/storage: "true" }
+      securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: ${STORAGE_GID}, runAsNonRoot: true }
+      containers:
+        - name: app
+          image: ${APP_IMAGE}
+          envFrom: [{ secretRef: { name: relayfiles-env } }]
+          # As in docker-compose.yml (x-app-env): service names instead of .env's hosts, and the
+          # offsite backup keys stay on the host.
+          env:
+            - { name: NODE_ENV, value: production }
+            - { name: POSTGRES_HOST, value: relayfiles-postgres }
+            - { name: POSTGRES_PORT, value: "5432" }
+            - { name: DATABASE_URL, value: "" }
+            - { name: REDIS_HOST, value: relayfiles-redis }
+            - { name: REDIS_PORT, value: "6379" }
+            - { name: REDIS_URL, value: "" }
+            - { name: STORAGE_ACCEL_ENABLED, value: "true" }
+            - { name: HEALTH_PROBE_URL, value: "http://relayfiles-app:${APP_PORT}" }
+            - { name: PORT, value: "${APP_PORT}" }
+            - { name: HOSTNAME, value: 0.0.0.0 }
+            - { name: RESTIC_REPOSITORY, value: "" }
+            - { name: RESTIC_PASSWORD, value: "" }
+            - { name: OFFSITE_ACCESS_KEY_ID, value: "" }
+            - { name: OFFSITE_SECRET_ACCESS_KEY, value: "" }
+          ports: [{ containerPort: ${APP_PORT} }]
+          readinessProbe:
+            httpGet: { path: /api/health, port: ${APP_PORT} }
+            periodSeconds: 5
+          resources:
+            limits: { memory: ${APP_MEMORY_MAX}, cpu: "${APP_CPUS}" }
+          securityContext: { readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: storage, mountPath: ${STORAGE_ROOT} }
+            - { name: logs, mountPath: ${LOG_DIR} }
+            - { name: tmp, mountPath: /tmp }
+            - { name: next-cache, mountPath: /app/.next/cache }
+      volumes:
+        - { name: storage, hostPath: { path: ${STORAGE_ROOT}, type: Directory } }
+        - { name: logs, hostPath: { path: ${LOG_DIR}, type: Directory } }
+        - { name: tmp, emptyDir: {} }
+        - { name: next-cache, emptyDir: {} }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: relayfiles-worker
+  namespace: ${K3S_NAMESPACE}
+spec:
+  # One worker: it schedules the daily cleanup and the samplers.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: relayfiles-worker }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: relayfiles-worker }
+    spec:
+      nodeSelector: { relayfiles/storage: "true" }
+      securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: ${STORAGE_GID}, runAsNonRoot: true }
+      # Running jobs (thumbnails, cleanup) finish before the worker exits.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: worker
+          image: ${TOOLS_IMAGE}
+          command: ["node", "--import", "tsx", "--conditions=react-server", "scripts/worker.mts"]
+          envFrom: [{ secretRef: { name: relayfiles-env } }]
+          env:
+            - { name: NODE_ENV, value: production }
+            - { name: POSTGRES_HOST, value: relayfiles-postgres }
+            - { name: POSTGRES_PORT, value: "5432" }
+            - { name: DATABASE_URL, value: "" }
+            - { name: REDIS_HOST, value: relayfiles-redis }
+            - { name: REDIS_PORT, value: "6379" }
+            - { name: REDIS_URL, value: "" }
+            - { name: STORAGE_ACCEL_ENABLED, value: "true" }
+            - { name: HEALTH_PROBE_URL, value: "http://relayfiles-app:${APP_PORT}" }
+            - { name: PORT, value: "${APP_PORT}" }
+            - { name: HOSTNAME, value: 0.0.0.0 }
+            - { name: RESTIC_REPOSITORY, value: "" }
+            - { name: RESTIC_PASSWORD, value: "" }
+            - { name: OFFSITE_ACCESS_KEY_ID, value: "" }
+            - { name: OFFSITE_SECRET_ACCESS_KEY, value: "" }
+          resources:
+            limits: { memory: ${WORKER_MEMORY_MAX}, cpu: "${WORKER_CPUS}" }
+          securityContext: { readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: storage, mountPath: ${STORAGE_ROOT} }
+            - { name: logs, mountPath: ${LOG_DIR} }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: storage, hostPath: { path: ${STORAGE_ROOT}, type: Directory } }
+        - { name: logs, hostPath: { path: ${LOG_DIR}, type: Directory } }
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: relayfiles-nginx
+  namespace: ${K3S_NAMESPACE}
+spec:
+  # k3s ServiceLB on the node's address; Local keeps the visitor's address for rate limits.
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector: { app.kubernetes.io/name: relayfiles-nginx }
+  ports: [{ port: ${NGINX_LISTEN_PORT}, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: relayfiles-nginx
+  namespace: ${K3S_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: relayfiles-nginx }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: relayfiles-nginx }
+    spec:
+      nodeSelector: { relayfiles/storage: "true" }
+      # Same account as the files on the SSD (0600), group 0 for the image's writable dirs.
+      securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: 0 }
+      containers:
+        - name: nginx
+          image: ${NGINX_IMAGE}
+          env:
+            - { name: APP_UPSTREAM, value: "relayfiles-app.${K3S_NAMESPACE}.svc.cluster.local:${APP_PORT}" }
+            - { name: NGINX_RESOLVER, value: "${NGINX_RESOLVER}" }
+            - { name: SERVER_NAME, value: "${SERVER_NAME}" }
+            - { name: STORAGE_ROOT, value: "${STORAGE_ROOT}" }
+            - { name: STORAGE_ACCEL_PREFIX, value: "${STORAGE_ACCEL_PREFIX}" }
+            # No cloudflared or host proxy next to this Nginx: 0.0.0.0 and the broadcast address are
+            # never a peer, so CF-Connecting-IP, X-Real-IP and X-Forwarded-Proto from visitors are ignored.
+            - { name: CLOUDFLARED_IP, value: 0.0.0.0 }
+            - { name: TRUSTED_PROXY_IP, value: 255.255.255.255 }
+            - { name: NGINX_MAX_BODY_MB, value: "${NGINX_MAX_BODY_MB}" }
+            - { name: NGINX_AUTH_RATE_PER_MIN, value: "${NGINX_AUTH_RATE_PER_MIN}" }
+            - { name: NGINX_AUTH_BURST, value: "${NGINX_AUTH_BURST}" }
+            - { name: NGINX_UPLOAD_RATE_PER_MIN, value: "${NGINX_UPLOAD_RATE_PER_MIN}" }
+            - { name: NGINX_UPLOAD_BURST, value: "${NGINX_UPLOAD_BURST}" }
+          ports: [{ containerPort: 8080 }]
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: templates, mountPath: /etc/nginx/templates, readOnly: true }
+            - { name: error-pages, mountPath: /usr/share/nginx/error, readOnly: true }
+            - { name: extra-volumes, mountPath: /etc/nginx/volumes, readOnly: true }
+            - { name: maintenance, mountPath: /etc/nginx/maintenance, readOnly: true }
+            - { name: storage, mountPath: ${STORAGE_ROOT}, readOnly: true }
+      volumes:
+        - { name: templates, configMap: { name: relayfiles-nginx-templates } }
+        - { name: error-pages, configMap: { name: relayfiles-error-pages } }
+        - { name: extra-volumes, configMap: { name: relayfiles-nginx-volumes } }
+        # Maintenance mode is a file on the host, like deploy/maintenance with compose.
+        - { name: maintenance, hostPath: { path: ${DATA_DIR}/maintenance, type: DirectoryOrCreate } }
+        - { name: storage, hostPath: { path: ${STORAGE_ROOT}, type: Directory } }

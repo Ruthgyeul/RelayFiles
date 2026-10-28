@@ -26,14 +26,19 @@ fi
 RELEASE_PROBE="release-probe"
 compose_images() { RELEASE_TAG="$RELEASE_PROBE" "${COMPOSE[@]}" --profile "*" config --images | sort -u; }
 
-# health_ok URL → true only when /api/health answers with the overall status "ok". A degraded
+# status_ok BODY → true only when a /api/health body says the overall status is "ok". A degraded
 # app (storage or Redis missing) still answers 200, so the HTTP status alone is not enough. The
 # flat "components" object is dropped first: its entries carry their own "status"-like values.
+status_ok() {
+  # shellcheck disable=SC2001 # a regex, which ${body//…} cannot express
+  sed 's/"components":{[^}]*}//' <<< "$1" | grep -q '"status":"ok"'
+}
+
+# health_ok URL → status_ok for the health endpoint at URL.
 health_ok() {
   local body
   body="$(curl -fsS "$1")" || return 1
-  # shellcheck disable=SC2001 # a regex, which ${body//…} cannot express
-  sed 's/"components":{[^}]*}//' <<< "$body" | grep -q '"status":"ok"'
+  status_ok "$body"
 }
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*"; }
@@ -81,4 +86,14 @@ offsite_check() {
   fi
   log "Checking $(env_value OFFSITE_CHECK_PERCENT 5)% of the offsite repository" >&2
   restic check --read-data-subset="$(env_value OFFSITE_CHECK_PERCENT 5)%" >&2 || echo "restic check failed (see backup-verify.log)"
+}
+
+# compose_image SERVICE → the pinned image of a service in docker-compose.yml, so the k3s
+# manifests run exactly what compose runs (one place to bump PostgreSQL, Redis and Nginx).
+compose_image() {
+  awk -v service="  $1:" '
+    $0 == service { found = 1; next }
+    found && /^  [a-z]/ { exit }
+    found && $1 == "image:" { print $2; exit }
+  ' "$ROOT/deploy/docker-compose.yml"
 }
