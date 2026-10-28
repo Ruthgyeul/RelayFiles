@@ -3,15 +3,13 @@
  * without accounts can be removed; the files on the disk are left alone, so wipe or unplug the
  * SSD afterwards and delete its deploy/nginx/volumes/<volumeId>.conf.
  */
-import nextEnv from "@next/env";
-
-nextEnv.loadEnvConfig(process.cwd());
+import { runScript } from "./lib/bootstrap.mjs";
 
 const { db } = await import("../src/server/db/client");
 const { deleteVolume, findVolumeWithAccounts } = await import("../src/server/repositories/volume.repo");
 
 const volumeId = process.argv[2];
-try {
+await runScript(async () => {
   if (!volumeId) throw new Error("Usage: npm run volume:remove -- <volumeId> (see npm run volume:list)");
   const volume = await findVolumeWithAccounts(db(), volumeId);
   if (!volume) throw new Error(`Volume ${volumeId} is not registered.`);
@@ -19,9 +17,4 @@ try {
   if (volume._count.accounts > 0) throw new Error(`Volume ${volumeId} still holds ${volume._count.accounts} account(s); run the drain again.`);
   await deleteVolume(db(), volumeId);
   console.log(`Volume ${volumeId} (${volume.mountPath}) removed. Its files were not touched.`);
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-} finally {
-  await db().$disconnect();
-}
+});

@@ -4,9 +4,8 @@
  * cleanup (expired accounts and items, trash, unfinished uploads). Stops cleanly on
  * SIGINT/SIGTERM so running jobs finish before the process exits.
  */
-import nextEnv from "@next/env";
-
-nextEnv.loadEnvConfig(process.cwd());
+// Loads .env before the app modules below; the worker runs until a signal, so it does not use runScript.
+import "./lib/bootstrap.mjs";
 
 const { startMediaWorker } = await import("../src/server/jobs/media.worker");
 const { startMaintenanceWorker } = await import("../src/server/jobs/maintenance");
