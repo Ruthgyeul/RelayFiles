@@ -57,6 +57,30 @@ rm deploy/maintenance/on       # 해제
 
 백업 디스크로 파일을 복사할 때 앱을 멈출 필요는 없다(파일은 원본 그대로 저장되고 업로드는 임시 폴더에서 완성된 뒤 옮겨진다). 단, DB 백업과 시점을 맞추려면 DB 백업 직후에 실행한다.
 
+## 백업 검증
+
+백업은 복원해 봐야 쓸 수 있는지 안다. 매주 `verify-backup.sh`가 최신 덤프를 운영 DB와 분리된 곳에 복원하고(`npm run backup:verify`) 다음을 확인한다.
+
+| 검사 | 실패 조건 (`src/config/policy.ts`의 `BACKUP`) |
+|---|---|
+| 덤프 시각 | `verifyMaxDumpAgeHours`(26시간)보다 오래됨 |
+| 스키마 | 복원본의 마지막 마이그레이션(`_prisma_migrations`)이 코드의 최신 마이그레이션과 다름 |
+| 행 수 | 계정·항목·공개 링크가 운영에 있는데 복원본에 0개, 또는 운영보다 `verifyMaxDriftPct`(20%) 넘게 적음 |
+| 디스크 | `storage:fsck`(보고만, `--fix` 없음)가 찾은 차이(디스크에만 있는 항목, 없어진 파일, 크기 다른 파일)가 1개 이상 |
+
+- 복원할 곳: Docker는 운영과 같은 `postgres` 이미지의 임시 컨테이너(데이터 볼륨 없음, 끝나면 지움). systemd는 로컬 PostgreSQL의 임시 DB `relayfiles_verify`(`VERIFY_DB`, 끝나면 지움).
+- 결과는 `DATA_DIR/backup-verify.log`에 한 줄 JSON으로 쌓이고, DB(`BackupCheck`, 최근 52개)에 저장돼 Server 페이지 Services의 **Backup check** 행에 보인다. 실패하면 `tools-error.log`에 `backup check failed`가 남고 스크립트가 1로 끝난다(cron 메일로 받을 수 있다).
+- fsck 차이는 백업이 아니라 운영 디스크의 문제일 수 있다. ["DB와 디스크 대조"](#db와-디스크-대조-storagefsck)로 확인한다.
+
+매주 일요일 05:15, 그날 DB 백업과 rsync가 끝난 뒤 (crontab -e):
+
+```cron
+# Docker
+15 5 * * 0 cd /home/ruthgyeul/RelayFiles && deploy/scripts/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
+# systemd (root crontab: 임시 DB를 postgres 계정으로 만들고 지운다)
+15 5 * * 0 cd /opt/relayfiles && deploy/scripts/systemd/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
+```
+
 ## DB 복구
 
 ```bash

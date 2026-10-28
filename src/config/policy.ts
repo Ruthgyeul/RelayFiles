@@ -349,6 +349,19 @@ export const TRANSCODE = {
   slotLeaseMs: 60_000,
 } as const;
 
+/** Backup verification (deploy/scripts/verify-backup.sh, npm run backup:verify). */
+export const BACKUP = {
+  /** The newest dump must be at most this old: the daily backup plus some slack. */
+  verifyMaxDumpAgeHours: 26,
+  /**
+   * Accounts, items and public links in the restored dump may be this many percent below
+   * production (it is up to a day old); a bigger gap means the dump is missing data.
+   */
+  verifyMaxDriftPct: 20,
+  /** Verification results kept for the history (one a week: a year). */
+  checksKept: 52,
+} as const;
+
 /** Server settings (admin Settings page). */
 export const SETTINGS = {
   /** The theme is read on every page; this long it comes from the cache. */
