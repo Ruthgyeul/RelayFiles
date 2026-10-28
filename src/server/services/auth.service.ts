@@ -9,7 +9,8 @@ import type { ClientInfo } from "../auth/client-info";
 import { tokenKeys } from "../auth/keys";
 import { allowSignup, beginTokenAttempt, lockoutPolicy, refundTokenAttempt, type TokenAttempt } from "../auth/login-limiter";
 import { decryptToken, encryptToken, needsReencryption, tokenLookups } from "../auth/token-crypto";
-import { db, Prisma } from "../db/client";
+import { db } from "../db/client";
+import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { createAccount, findAccountByLookups, findAccountToken, touchAccountLogin, updateAccountToken, type AccountRow } from "../repositories/account.repo";
@@ -18,9 +19,6 @@ import { consumeInvite, getServerConfig } from "../repositories/server-config.re
 import { createSession, markReauthenticated, revokeOtherSessions, revokeSession } from "../repositories/session.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { volumeForNewAccount } from "./volume.service";
-
-/** Random ids collide practically never; a unique violation is retried with fresh ids. */
-const CREATE_ATTEMPTS = 3;
 
 export interface SignedIn {
   account: AccountRow;
@@ -37,10 +35,6 @@ export interface ProvisionedAccount {
 export async function signupMode(): Promise<SignupMode> {
   const config = await getServerConfig(db());
   return config.signupMode.toLowerCase() as SignupMode;
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 /** Bytes as a fresh ArrayBuffer-backed array (the shape Prisma expects for Bytes columns). */
@@ -64,39 +58,35 @@ async function provisionAccount({ isAdmin, inviteCode, client }: ProvisionOption
   const keys = tokenKeys();
   const quotaGb = getEnv("policy").DEFAULT_QUOTA_GB;
 
-  for (let attempt = 1; ; attempt++) {
+  // Random ids collide practically never; a collision is retried with fresh ones.
+  return retryOnUniqueViolation(() => {
     const id = newAccountId();
     const name = newAnonName();
     const token = newAccountToken();
     const now = new Date();
-    try {
-      return await withStorageTransaction(db(), async (tx, undo) => {
-        if (inviteCode && !(await consumeInvite(tx, inviteCode, name, now))) throw new ApiError("INVALID_INVITE");
-        const account = await createAccount(tx, {
-          id,
-          name,
-          tokenLookup: tokenLookups(token, keys)[0]!,
-          tokenEnc: bytes(encryptToken(token, keys)),
-          color: accountColor(id),
-          isAdmin,
-          neverExpire: isAdmin,
-          quotaBytes: isAdmin ? null : BigInt(Math.round(quotaGb * BYTES_PER_GB)),
-          volumeId: driver.volumeId,
-        });
-        await createRootFolder(tx, { id: newNodeId(), accountId: id, linkId: newLinkId() });
-        const sessionId = client ? newSessionId() : null;
-        if (client && sessionId) await createSession(tx, { id: sessionId, accountId: id, ...sessionFields(client) });
-        await driver.ensureUserRoot(id);
-        undo.push("remove new account root", async () => {
-          await driver.moveToTrash({ accountId: id, segments: [] });
-        });
-        return { account, token, sessionId };
+    return withStorageTransaction(db(), async (tx, undo) => {
+      if (inviteCode && !(await consumeInvite(tx, inviteCode, name, now))) throw new ApiError("INVALID_INVITE");
+      const account = await createAccount(tx, {
+        id,
+        name,
+        tokenLookup: tokenLookups(token, keys)[0]!,
+        tokenEnc: bytes(encryptToken(token, keys)),
+        color: accountColor(id),
+        isAdmin,
+        neverExpire: isAdmin,
+        quotaBytes: isAdmin ? null : BigInt(Math.round(quotaGb * BYTES_PER_GB)),
+        volumeId: driver.volumeId,
       });
-    } catch (error) {
-      if (isUniqueViolation(error) && attempt < CREATE_ATTEMPTS) continue;
-      throw error;
-    }
-  }
+      await createRootFolder(tx, { id: newNodeId(), accountId: id, linkId: newLinkId() });
+      const sessionId = client ? newSessionId() : null;
+      if (client && sessionId) await createSession(tx, { id: sessionId, accountId: id, ...sessionFields(client) });
+      await driver.ensureUserRoot(id);
+      undo.push("remove new account root", async () => {
+        await driver.moveToTrash({ accountId: id, segments: [] });
+      });
+      return { account, token, sessionId };
+    });
+  });
 }
 
 function sessionFields(client: ClientInfo) {
@@ -201,17 +191,12 @@ export async function revealToken(accountId: string): Promise<string> {
  */
 export async function regenerateToken(accountId: string, keepSessionId: string): Promise<string> {
   const keys = tokenKeys();
-  for (let attempt = 1; ; attempt++) {
+  return retryOnUniqueViolation(async () => {
     const token = newAccountToken();
-    try {
-      await db().$transaction(async (tx) => {
-        await updateAccountToken(tx, accountId, { tokenLookup: tokenLookups(token, keys)[0]!, tokenEnc: bytes(encryptToken(token, keys)) });
-        await revokeOtherSessions(tx, accountId, keepSessionId, new Date());
-      });
-      return token;
-    } catch (error) {
-      if (isUniqueViolation(error) && attempt < CREATE_ATTEMPTS) continue;
-      throw error;
-    }
-  }
+    await db().$transaction(async (tx) => {
+      await updateAccountToken(tx, accountId, { tokenLookup: tokenLookups(token, keys)[0]!, tokenEnc: bytes(encryptToken(token, keys)) });
+      await revokeOtherSessions(tx, accountId, keepSessionId, new Date());
+    });
+    return token;
+  });
 }

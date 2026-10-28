@@ -5,9 +5,10 @@ import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { parseSearchQuery, rankByName } from "@/domain/search";
 import { busyBadge } from "@/domain/share";
-import { effectiveVisibility } from "@/domain/tree";
+import { effectiveVisibility, segmentsBelowRoot } from "@/domain/tree";
 import type { AccountRow } from "../repositories/account.repo";
-import { db, Prisma } from "../db/client";
+import { db } from "../db/client";
+import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import {
   ancestorChain,
@@ -148,9 +149,6 @@ export async function searchItems(accountId: string, raw: string): Promise<Tagge
   return withPaths(accountId, ranked.map(({ row }) => row));
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}
 
 /**
  * Creates a folder in the database and on the volume together. A taken name gets the next
@@ -167,7 +165,7 @@ export async function createFolder(account: Pick<AccountRow, "id" | "volumeId" |
   if (chain.length >= STORAGE.maxFolderDepth) throw new ApiError("BAD_REQUEST", `Folders can be nested at most ${STORAGE.maxFolderDepth} levels deep.`);
   const driver = await driverForAccount(account, "write");
   // The account root maps to users/<accountId>/, so its own name is not part of the path.
-  const parentSegments = chain.slice(1).map((row) => row.name);
+  const parentSegments = segmentsBelowRoot(chain);
 
   for (let attempt = 0; ; attempt++) {
     const name = uniqName(await listSiblingNames(db(), parent.id), wanted, false);

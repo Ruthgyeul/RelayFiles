@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  segmentsBelowRoot,
   collapseCrumbs,
   effectiveVisibility,
   emptyTitle,
@@ -112,5 +113,13 @@ describe("text", () => {
     expect(emptyTitle({ tagMode: false, wanted: [], query: "", filter: "all" })).toBe("This folder is empty");
     expect(itemCount(1)).toBe("1 item");
     expect(itemCount(0)).toBe("0 items");
+  });
+});
+
+describe("segmentsBelowRoot", () => {
+  it("drops the root and keeps the names in order", () => {
+    expect(segmentsBelowRoot([{ name: "root" }, { name: "Videos" }, { name: "2024" }])).toEqual(["Videos", "2024"]);
+    expect(segmentsBelowRoot([{ name: "root" }])).toEqual([]);
+    expect(segmentsBelowRoot([])).toEqual([]);
   });
 });

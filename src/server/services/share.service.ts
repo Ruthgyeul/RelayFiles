@@ -6,7 +6,7 @@ import type { ShareCrumb, ShareItem, SharePage, ShareView } from "@/contracts/sh
 import { deletionDate } from "@/domain/account";
 import { shareStatus, busyBadge, strictestGuard, type Busy, type ShareStatus } from "@/domain/share";
 import { downloadBlock, type DownloadBlock } from "@/domain/share-access";
-import { effectiveVisibility, settingTags, sortNodes, type NodeKind, type SettingTag, type Visibility } from "@/domain/tree";
+import { effectiveVisibility, type NodeKind, segmentsBelowRoot, type SettingTag, settingTags, sortNodes, type Visibility } from "@/domain/tree";
 import type { ClientInfo } from "../auth/client-info";
 import { cookieSecrets } from "../auth/keys";
 import { db } from "../db/client";
@@ -293,7 +293,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
         break;
     }
   }
-  return { link, row, path, segments: chain.slice(1).map((ancestor) => ancestor.name), counted, limited: guarded.length > 0, busy };
+  return { link, row, path, segments: segmentsBelowRoot(chain), counted, limited: guarded.length > 0, busy };
 }
 
 /** Visible items of a link for "Download all" (zip), with the same checks as single downloads. */
