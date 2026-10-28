@@ -1,6 +1,6 @@
 import "server-only";
 import { getEnv } from "@/config/env";
-import { AUTH, MS, SHARE } from "@/config/policy";
+import { AUTH, FILE_REQUEST, MS, SHARE } from "@/config/policy";
 import type { AdminAccounts, CleanupResult, ManageInput } from "@/contracts/admin";
 import { isExpired } from "@/domain/account";
 import { applyManage } from "@/domain/admin";
@@ -10,6 +10,7 @@ import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { findAccountById, type AccountRow } from "../repositories/account.repo";
 import { deleteExpiredApiTokens } from "../repositories/api-token.repo";
+import { deleteExpiredFileRequests } from "../repositories/file-request.repo";
 import { countAdmins, fileTotalsByAccount, listAccountsForAdmin, lockAdminRoles, updateAccountByAdmin } from "../repositories/admin.repo";
 import { purgeRetiredLinks, retireLinks } from "../repositories/link-tombstone.repo";
 import { expiredItemIds, findRootFolder } from "../repositories/node.repo";
@@ -114,5 +115,7 @@ export async function runCleanup(now: Date): Promise<CleanupResult> {
   await purgeDeadSessions(db(), new Date(now.getTime() - Math.max(AUTH.adminSessionDays, AUTH.memberSessionDays) * MS.day));
   // Expired API tokens are refused already; the rows only clutter the profile list.
   await deleteExpiredApiTokens(db(), now);
+  // Expired upload links answer "expired" for a while, then go (their files stay).
+  await deleteExpiredFileRequests(db(), new Date(now.getTime() - FILE_REQUEST.expiredKeptDays * MS.day));
   return result;
 }

@@ -367,6 +367,24 @@ export const API = {
   verifyCacheMax: 1_000,
 } as const;
 
+/** Upload-only links (file requests, /r/<id>; docs/api.md "파일 요청"). */
+export const FILE_REQUEST = {
+  /** Open requests one account may hold. */
+  maxPerAccount: 50,
+  /** Longest title shown to uploaders. */
+  titleMaxLength: 80,
+  /** Lifetimes offered when a request is created, in days; null (no expiry) is offered too. */
+  expiryDays: [1, 7, 30],
+  /** Largest "at most N files" limit the owner can set. */
+  maxFilesLimit: 10_000,
+  /** Files one visitor upload may contain (one drop or pick). */
+  maxFilesPerBatch: 100,
+  /** Upload batches one address may start per hour on one request. */
+  batchesPerHour: 30,
+  /** An expired request keeps answering "This link has expired" this long, then it is deleted. */
+  expiredKeptDays: 30,
+} as const;
+
 /** Backup verification (deploy/scripts/verify-backup.sh, npm run backup:verify). */
 export const BACKUP = {
   /** The newest dump must be at most this old: the daily backup plus some slack. */

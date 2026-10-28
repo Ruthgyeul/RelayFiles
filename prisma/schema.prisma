@@ -72,6 +72,7 @@ model Account {
   trashed              TrashedBytes[]
   traffic              TrafficDaily[]
   apiTokens            ApiToken[]
+  fileRequests         FileRequest[]
 
   @@index([volumeId])
 }
@@ -180,6 +181,7 @@ model Node {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   events        LinkEvent[]
+  fileRequests  FileRequest[]
 
   @@unique([parentId, name])
   @@index([accountId, parentId])
@@ -392,4 +394,28 @@ model ApiToken {
   lastUsedAt DateTime?
 
   @@index([accountId])
+}
+
+/// Upload-only link ("file request", /r/<id>): visitors add files to one folder of the account
+/// without seeing what is in it. Deleting the folder deletes its requests.
+model FileRequest {
+  id            String    @id
+  accountId     String
+  account       Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  folderId      String
+  folder        Node      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  /// Shown to uploaders ("Photos from the trip").
+  title         String
+  /// argon2id, like share link passwords; null = no password.
+  passwordHash  String?
+  expiresAt     DateTime?
+  /// Limits for everything received through this link; null = no limit.
+  maxFiles      Int?
+  maxBytes      BigInt?
+  filesReceived Int       @default(0)
+  bytesReceived BigInt    @default(0)
+  createdAt     DateTime  @default(now())
+
+  @@index([accountId])
+  @@index([folderId])
 }

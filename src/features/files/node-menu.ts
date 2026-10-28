@@ -8,6 +8,7 @@ export interface NodeActions {
   download?: () => void;
   downloadZip?: () => void;
   share?: () => void;
+  uploadLinks?: () => void;
   tags?: () => void;
   directLink?: () => void;
   newLink?: () => void;
@@ -38,6 +39,7 @@ export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings">
     ],
     [
       folder ? ["Share", "share-network", actions.share] : null,
+      folder ? ["Upload links", "tray-arrow-down", actions.uploadLinks] : null,
       ["Tags", "tag", actions.tags],
       ["Direct link", "link-simple", actions.directLink],
       ["New link", "arrows-clockwise", actions.newLink],

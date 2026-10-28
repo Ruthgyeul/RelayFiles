@@ -1,4 +1,5 @@
 import { getAppEnv, getEnv } from "@/config/env";
+import { BYTES_PER_MB } from "@/domain/quota";
 import { AppShell } from "@/features/shell/AppShell";
 import { ShellProvider } from "@/features/shell/ShellProvider";
 import { TransfersPanel } from "@/features/transfers/TransfersPanel";
@@ -8,7 +9,6 @@ import { toSessionState } from "@/server/auth/device-session";
 import { signupMode } from "@/server/services/auth.service";
 import { currentAnnouncement } from "@/server/services/server-settings.service";
 
-const BYTES_PER_MB = 1_000_000;
 
 /**
  * Application pages: the shell is rendered with the device's signed-in accounts. Transfers

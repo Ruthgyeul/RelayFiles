@@ -16,6 +16,8 @@ const batchSchema = z.object({
   folderId: z.string(),
   dup: z.enum(DUPLICATE_POLICIES),
   files: z.array(z.object({ rel: z.string(), size: z.number() })),
+  /** Set for a visitor upload through an upload-only link (the account is the link's owner). */
+  requestId: z.string().optional(),
 });
 
 export type UploadBatch = z.infer<typeof batchSchema>;
@@ -24,6 +26,7 @@ const HOUR_SECONDS = 3_600;
 const ttl = () => getEnv("uploads").UPLOAD_TMP_TTL_HOURS * HOUR_SECONDS;
 const batchKey = (batchId: string) => `upload:batch:${batchId}`;
 const ownerKey = (uploadId: string) => `upload:owner:${uploadId}`;
+const requestKey = (uploadId: string) => `upload:request:${uploadId}`;
 
 export async function saveBatch(batchId: string, batch: UploadBatch): Promise<void> {
   await redis().set(batchKey(batchId), JSON.stringify(batch), "EX", ttl());
@@ -45,6 +48,15 @@ export async function uploadOwner(uploadId: string): Promise<string | null> {
   return redis().get(ownerKey(uploadId));
 }
 
+/** Remembers that a tus upload comes from a visitor of an upload-only link (no signed-in owner on that device). */
+export async function setUploadRequest(uploadId: string, requestId: string): Promise<void> {
+  await redis().set(requestKey(uploadId), requestId, "EX", ttl());
+}
+
+export async function uploadRequest(uploadId: string): Promise<string | null> {
+  return redis().get(requestKey(uploadId));
+}
+
 export async function forgetUpload(uploadId: string): Promise<void> {
-  await redis().del(ownerKey(uploadId));
+  await redis().del(ownerKey(uploadId), requestKey(uploadId));
 }

@@ -24,3 +24,11 @@ export async function currentShareViewer(now: number): Promise<ShareViewer> {
   const jar = await cookies();
   return viewerOf(await currentDevice(), jar.get(UNLOCK_COOKIE)?.value, jar.get(VISITOR_COOKIE)?.value, now);
 }
+
+/** Passwords this device entered (share links and upload-only links), for a route handler. */
+export const unlocksOfRequest = (req: NextRequest, now: number) => decodeUnlocks(req.cookies.get(UNLOCK_COOKIE)?.value, cookieSecrets(), now);
+
+/** Passwords this device entered, for a server component. */
+export async function currentUnlocks(now: number) {
+  return decodeUnlocks((await cookies()).get(UNLOCK_COOKIE)?.value, cookieSecrets(), now);
+}
