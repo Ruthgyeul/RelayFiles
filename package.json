@@ -31,6 +31,7 @@
     "check:migrations": "node scripts/check-migrations.mjs",
     "storage:migrate": "tsx --conditions=react-server scripts/storage-migrate.mts",
     "storage:import": "tsx --conditions=react-server scripts/storage-import.mts",
+    "backup:verify": "tsx --conditions=react-server scripts/backup-verify.mts",
     "storage:fsck": "tsx --conditions=react-server scripts/storage-fsck.mts",
     "volume:migrate": "tsx --conditions=react-server scripts/volume-migrate.mts",
     "volume:list": "tsx --conditions=react-server scripts/volume-list.mts",
