@@ -40,6 +40,8 @@ interface Session {
 async function member(): Promise<Session> {
   // A fresh address per account keeps the tests under the per-address sign-up limit.
   const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip: randomTestIp() });
+  // The response says why when a sign-up is refused.
+  expect(res.status, JSON.stringify(res.json)).toBe(201);
   const id = res.json.data.account.id;
   accounts.push(id);
   return { id, cookie: res.cookie!, root: userRootOf(configuredVolumeRoot(), id) };
