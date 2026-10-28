@@ -51,7 +51,13 @@ export interface StorageDriver {
   createFolder(location: StorageLocation): Promise<void>;
   /** Moves a finished upload or staged copy from the temp area into place without copying bytes; the folder must exist. */
   moveIntoPlace(tempPath: string, location: StorageLocation): Promise<void>;
-  /** Copies an item into the temp area (reflink when possible) and returns its path, for {@link moveIntoPlace}. */
+  /**
+   * Places a hard link to an existing file of the same account at `to` (deduplication of a
+   * re-upload with the same SHA-256). False when that is not possible here (deduplication off,
+   * the file is gone or has another size, no hard links): the caller then places its own bytes.
+   */
+  linkExisting(from: StorageLocation, to: StorageLocation, size: number): Promise<boolean>;
+  /** Copies an item into the temp area (hard links when deduplicating, else reflinks when possible) and returns its path, for {@link moveIntoPlace}. */
   stageCopy(from: StorageLocation): Promise<string>;
   /** Removes a staged copy or upload from the temp area (missing is fine). */
   discardStaged(tempPath: string): Promise<void>;
