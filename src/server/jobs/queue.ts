@@ -56,3 +56,9 @@ export async function closeQueues(): Promise<void> {
   await globalForQueue.relayMediaQueue?.close();
   globalForQueue.relayMediaQueue = undefined;
 }
+
+/** Media jobs waiting, running and scheduled for a retry, for /metrics. */
+export async function mediaQueueCounts(): Promise<Record<"waiting" | "active" | "delayed", number>> {
+  const counts = await mediaQueue().getJobCounts("waiting", "active", "delayed");
+  return { waiting: counts.waiting ?? 0, active: counts.active ?? 0, delayed: counts.delayed ?? 0 };
+}

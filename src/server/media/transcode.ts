@@ -5,6 +5,7 @@ import { getEnv } from "@/config/env";
 import { IMMUTABLE_CACHE, TRANSCODE } from "@/config/policy";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
+import { countOne } from "../metrics/counters";
 import { acquireSlot, type SemaphoreSlot } from "../redis-semaphore";
 import { ffmpegInput } from "./ffmpeg-input";
 
@@ -77,6 +78,7 @@ export async function transcodeResponse(req: Request, path: string): Promise<Res
   if (!slot) throw busy();
 
   slots.running++;
+  void countOne("transcodes_started");
   const started = Date.now();
   const child = spawn(FFMPEG_PATH, transcodeArgs(path), { stdio: ["ignore", "pipe", "ignore"], shell: false });
   let released = false;

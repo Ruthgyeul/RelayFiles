@@ -51,3 +51,8 @@ export async function acquireSlot(name: string, limit: number, leaseMs: number):
     },
   };
 }
+
+/** Slots of `name` held right now (lapsed holders not counted), for /metrics. */
+export async function slotsHeld(name: string): Promise<number> {
+  return redis().zcount(`sem:${name}`, Date.now(), "+inf");
+}
