@@ -369,7 +369,9 @@ touch deploy/maintenance/on    # 점검 모드 (/api/health를 뺀 모든 요청
 15 5 * * 0 /opt/relayfiles/deploy/scripts/systemd/verify-backup.sh >> /srv/relayfiles/backup-verify-cron.log 2>&1
 ```
 
-다음 날 `ls -l /srv/relayfiles/backups`로 새 덤프가 생겼는지 확인한다. 사용자 파일(SSD)은 따로 다른 디스크에 `rsync`하고, 덤프·`.env`·SSD 키는 서버 밖에도 보관한다([deploy-ubuntu.md §10](deploy-ubuntu.md#10-백업-자동화), [runbook.md "백업"](runbook.md#백업)). systemd 배포에서 DB 복구는 §9의 `pg_restore` 명령을 쓴다.
+서버 밖 암호화 백업(덤프 + 원본 파일, restic): root crontab에 `45 3 * * * /opt/relayfiles/deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1`(설정은 [runbook.md "오프사이트 백업"](runbook.md#오프사이트-백업)).
+
+다음 날 `ls -l /srv/relayfiles/backups`로 새 덤프가 생겼는지 확인한다. 사용자 파일(SSD)은 따로 다른 디스크에 `rsync`하고, `.env`·SSD 키는 서버 밖에도 보관한다([deploy-ubuntu.md §10](deploy-ubuntu.md#10-백업-자동화), [runbook.md "백업"](runbook.md#백업)). systemd 배포에서 DB 복구는 §9의 `pg_restore` 명령을 쓴다.
 
 ## 9. 업데이트와 롤백
 

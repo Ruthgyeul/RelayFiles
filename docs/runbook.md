@@ -46,6 +46,7 @@ rm deploy/maintenance/on       # 해제
 |---|---|---|
 | PostgreSQL | `deploy/scripts/backup.sh` → `DATA_DIR/backups/relayfiles-*.dump` (최근 `BACKUP_KEEP`=14개) | 매일 (cron) + 릴리스마다 |
 | 파일 (SSD) | `rsync -aHAX --delete /mnt/relayfilesDB/ <백업 디스크>/relayfilesDB/` | 매일 또는 매주 |
+| DB 덤프 + 원본 파일 (서버 밖) | `deploy/scripts/offsite-backup.sh` → restic 저장소(R2·B2, 암호화·중복 제거, 아래 "오프사이트 백업") | 매일 (cron, DB 백업 뒤) |
 | `.env`, `/etc/relayfiles/ssd.key` | 서버 밖 안전한 곳 (비밀번호 관리자 등) | 바뀔 때마다 |
 | Redis | 백업하지 않는다 (캐시, 세션, 큐. 다시 만들어진다) | — |
 
@@ -57,6 +58,48 @@ rm deploy/maintenance/on       # 해제
 
 백업 디스크로 파일을 복사할 때 앱을 멈출 필요는 없다(파일은 원본 그대로 저장되고 업로드는 임시 폴더에서 완성된 뒤 옮겨진다). 단, DB 백업과 시점을 맞추려면 DB 백업 직후에 실행한다.
 
+## 오프사이트 백업
+
+같은 서버나 같은 집의 백업 디스크는 화재·도난·랜섬웨어에 함께 잃는다. `offsite-backup.sh`가 [restic](https://restic.net)으로 DB 덤프(`DATA_DIR/backups`)와 원본 파일(`STORAGE_ROOT/users`, 추가 볼륨은 `OFFSITE_EXTRA_PATHS`)을 서버 밖 저장소에 보낸다. Docker·systemd 배포 모두 같은 스크립트다(호스트의 `restic`을 쓴다).
+
+- restic이 보내기 전에 암호화하므로(`RESTIC_PASSWORD`) 저장소 운영자도 내용을 볼 수 없다. 같은 내용은 한 번만 저장되고(중복 제거) 매일 바뀐 부분만 올라간다.
+- 썸네일·미리보기·휴지통·업로드 조각(`system/`)은 보내지 않는다. 복원한 뒤 `npm run media:backfill`로 다시 만든다.
+- 보관: 실행마다 `restic forget --prune`이 날마다 `OFFSITE_KEEP_DAILY`(7)·주마다 `OFFSITE_KEEP_WEEKLY`(4)·달마다 `OFFSITE_KEEP_MONTHLY`(6)개 스냅숏만 남긴다.
+- 주간 [백업 검증](#백업-검증)이 저장소 데이터의 `OFFSITE_CHECK_PERCENT`(5%)를 내려받아 확인한다(`restic check --read-data-subset`). 실패하면 Backup check 행이 failing이 된다.
+
+설정:
+
+1. `sudo apt install restic`
+2. 저장소를 만든다. Cloudflare R2: 버킷을 만들고, 그 버킷에만 Object Read & Write 권한이 있는 API 토큰을 발급한다(Backblaze B2도 S3 API로 같다).
+3. `.env`에 넣는다. `RESTIC_PASSWORD`는 `npm run env:secrets`가 만든 값을 쓰고 **서버 밖(비밀번호 관리자)에도 보관**한다. 잃으면 백업을 열 수 없다.
+
+   ```dotenv
+   RESTIC_REPOSITORY=s3:https://<계정 id>.r2.cloudflarestorage.com/<버킷>/relayfiles
+   RESTIC_PASSWORD=…
+   OFFSITE_ACCESS_KEY_ID=…
+   OFFSITE_SECRET_ACCESS_KEY=…
+   ```
+
+4. 처음 한 번 직접 실행한다(저장소가 없으면 만든다): `sudo deploy/scripts/offsite-backup.sh`
+5. root crontab(`sudo crontab -e`)에 DB 백업(03:15) 뒤로 건다. 모든 계정의 파일을 읽어야 하므로 root로 실행한다.
+
+   ```cron
+   # Docker
+   45 3 * * * cd /home/ruthgyeul/RelayFiles && deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1
+   # systemd
+   45 3 * * * /opt/relayfiles/deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1
+   ```
+
+복원(새 서버나 디스크 교체 뒤): `.env`의 restic 값 네 개를 셸에 내보낸 뒤(`export RESTIC_REPOSITORY=… RESTIC_PASSWORD=… AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…`)
+
+```bash
+restic snapshots --host relayfiles                                   # 스냅숏 목록
+restic restore latest --host relayfiles --target /tmp/rf-restore       # 원래 절대경로 아래로 풀린다
+sudo rsync -aHAX /tmp/rf-restore/<STORAGE_ROOT>/users/ <STORAGE_ROOT>/users/
+```
+
+그다음 덤프를 ["DB 복구"](#db-복구)로 되살리고, `storage:fsck`로 대조한 뒤 `npm run media:backfill`로 썸네일을 다시 만든다.
+
 ## 백업 검증
 
 백업은 복원해 봐야 쓸 수 있는지 안다. 매주 `verify-backup.sh`가 최신 덤프를 운영 DB와 분리된 곳에 복원하고(`npm run backup:verify`) 다음을 확인한다.
@@ -67,6 +110,7 @@ rm deploy/maintenance/on       # 해제
 | 스키마 | 복원본의 마지막 마이그레이션(`_prisma_migrations`)이 코드의 최신 마이그레이션과 다름 |
 | 행 수 | 계정·항목·공개 링크가 운영에 있는데 복원본에 0개, 또는 운영보다 `verifyMaxDriftPct`(20%) 넘게 적음 |
 | 디스크 | `storage:fsck`(보고만, `--fix` 없음)가 찾은 차이(디스크에만 있는 항목, 없어진 파일, 크기 다른 파일)가 1개 이상 |
+| 오프사이트 | `RESTIC_REPOSITORY`가 있으면 `restic check --read-data-subset=OFFSITE_CHECK_PERCENT%`가 실패 |
 
 - 복원할 곳: Docker는 운영과 같은 `postgres` 이미지의 임시 컨테이너(데이터 볼륨 없음, 끝나면 지움). systemd는 로컬 PostgreSQL의 임시 DB `relayfiles_verify`(`VERIFY_DB`, 끝나면 지움).
 - 결과는 `DATA_DIR/backup-verify.log`에 한 줄 JSON으로 쌓이고, DB(`BackupCheck`, 최근 52개)에 저장돼 Server 페이지 Services의 **Backup check** 행에 보인다. 실패하면 `tools-error.log`에 `backup check failed`가 남고 스크립트가 1로 끝난다(cron 메일로 받을 수 있다).
