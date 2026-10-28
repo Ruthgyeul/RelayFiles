@@ -83,6 +83,8 @@ export const ENV_GROUPS = {
     STORAGE_ACCEL_ENABLED: bool.default(false),
     STORAGE_ACCEL_PREFIX: z.string().startsWith("/").endsWith("/").default("/_protected/"),
     VOLUME_WATCH_INTERVAL_SEC: positiveInt.default(STORAGE.volumeWatchIntervalSec),
+    /** Copies and re-uploads of the same content share their bytes (hard links on the volume). */
+    STORAGE_DEDUPE: bool.default(true),
   }),
   uploads: z.object({
     UPLOAD_CHUNK_SIZE_MB: positiveInt.max(95).default(UPLOAD.chunkSizeMb),
