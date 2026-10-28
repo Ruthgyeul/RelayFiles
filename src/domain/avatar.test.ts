@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { avatarOf } from "./avatar";
 
-/** Verbatim copy of the design prototype's `avatarOf`, used as the oracle. */
+/** Verbatim copy of the avatar function from the original design mockup, used as the oracle. */
 function designAvatarOf(seedIn: unknown): string {
   const seed = String(seedIn || "x");
   let x = 2166136261;

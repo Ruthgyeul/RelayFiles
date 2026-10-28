@@ -25,7 +25,7 @@ export interface DownloadFacts {
 
 export type DownloadBlock = "stream-only" | "limit" | "paused";
 
-/** Why visitors may not download a file now, or null when they may (design `canDl`). */
+/** Why visitors may not download a file now, or null when they may. */
 export function downloadBlock(facts: DownloadFacts): DownloadBlock | null {
   if (facts.linkStreamOnly || facts.streamOnly) return "stream-only";
   if (limitHit(facts.downloadLimit, facts.downloads) || (facts.burn && facts.downloads >= 1)) return "limit";

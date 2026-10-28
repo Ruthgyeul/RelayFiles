@@ -1,6 +1,5 @@
 /**
- * File and folder name rules, ported from the design prototype (`nameError`, `nameTaken`,
- * `uniqName`). The same rules run in the browser (instant feedback) and on the server
+ * File and folder name rules: valid names, taken names and "Name (2)" for duplicates. The same rules run in the browser (instant feedback) and on the server
  * (authoritative), and they match the ext4 limits of the storage volume.
  */
 

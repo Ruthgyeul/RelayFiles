@@ -14,7 +14,7 @@ function tlsText(tls: StatusData["server"]["tls"]): string {
   }
 }
 
-/** Server facts (design `st.server`): location, response times, certificate, 90-day uptime. */
+/** Server facts: location, response times, certificate, 90-day uptime. */
 export function ServerInfoCard({ server }: { server: StatusData["server"] }) {
   const rows = [
     { label: "Location", value: server.location },

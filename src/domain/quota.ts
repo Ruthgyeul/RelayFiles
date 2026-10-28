@@ -3,10 +3,12 @@
  * Sizes are numbers of bytes; null quota means unlimited (admins).
  */
 
-/** Banner thresholds (percent of quota). */
 /** Storage sizes are decimal like the design (1 GB = 10^9 bytes). */
 export const BYTES_PER_GB = 1_000_000_000;
+/** Largest storage limit an admin can set (1 PB): far above any disk, it only stops typos and overflow. */
+export const MAX_QUOTA_GB = 1_000_000;
 
+/** Banner thresholds (percent of quota). */
 export const QUOTA_WARN_PERCENT = 80;
 export const QUOTA_FULL_PERCENT = 95;
 /** Meter color thresholds (percent of quota). */
@@ -30,7 +32,7 @@ export function quotaLevel(used: number, quota: number | null): 0 | 1 | 2 {
   return 0;
 }
 
-/** Sidebar meter: width in percent and tone (`quotaPct`, `quotaColor` in the design). */
+/** Sidebar meter: width in percent and tone. */
 export function quotaMeter(used: number, quota: number | null): { percent: number; tone: "accent" | "warn" | "danger" } {
   if (quota === null) return { percent: UNLIMITED_METER_PERCENT, tone: "accent" };
   const percent = Math.min(100, usedPercent(used, quota));

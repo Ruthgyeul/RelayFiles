@@ -6,7 +6,7 @@ export type IconWeight = "regular" | "bold" | "fill";
 
 export interface IconProps {
   name: IconName;
-  /** `regular` = design `ph`, `bold` = `ph-bold`, `fill` = `ph-fill`. */
+  /** Phosphor weight: `regular` outlines (the default), `bold` heavier outlines, `fill` solid. */
   weight?: IconWeight;
   /** Pixel size or CSS length. Defaults to 1em so it follows the surrounding font size like the design's icon font. */
   size?: number | string;

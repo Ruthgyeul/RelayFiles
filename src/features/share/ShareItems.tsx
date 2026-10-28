@@ -43,7 +43,7 @@ interface ShareRowsProps {
   onDownload: (item: ShareItem) => void;
 }
 
-/** The list on an open share page (design `shItems`): icon, name, meta, busy badge, actions. */
+/** The list on an open share page: icon, name, meta, busy badge, actions. */
 export function ShareRows({ items, urls, folderHref, onOpen, onDownload }: ShareRowsProps) {
   return (
     <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-card-line bg-card-line">

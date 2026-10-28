@@ -1,5 +1,5 @@
 /**
- * Sign-in lockout ladder from the design prototype (`addToken`): every `maxAttempts`
+ * Sign-in lockout ladder from the design: every `maxAttempts`
  * failures lock sign-in, for 30 s, then 120 s, then 600 s for every later lockout.
  */
 

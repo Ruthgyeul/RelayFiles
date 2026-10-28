@@ -10,7 +10,7 @@ import { Modal } from "@/shared/ui/Modal";
 import { IconButton } from "@/shared/ui/IconButton";
 import { filesApi } from "@/shared/lib/files-api";
 
-/** Label, icon and color per event (design `K`). */
+/** Label, icon and color per event. */
 const EVENT: Record<LinkEventKind, { label: string; icon: IconName; color: string }> = {
   open: { label: "Opened link", icon: "globe-simple", color: "var(--accentIcon)" },
   play: { label: "Played", icon: "play", color: KIND_COLOR.audio },

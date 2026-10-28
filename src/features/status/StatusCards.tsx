@@ -1,5 +1,6 @@
 "use client";
 
+import { formatTimeOfDay, formatWeekdayHour } from "@/domain/format";
 import { STATUS } from "@/config/policy";
 import type { LatencyHourDto } from "@/contracts/status";
 import { jitterRating, latencyRating, latencySummary, latencyTone, lossTone, STATUS_TITLE, type ConnectionStats, type StatusLevel, type Tone } from "@/domain/status";
@@ -17,10 +18,10 @@ const LEVEL_LOOK: Record<StatusLevel, { box: string; color: string; icon: IconNa
   down: { box: "bg-danger-bg-strong border-danger-line", color: "text-danger-text", icon: "x-circle" },
 };
 
-/** Overall status (design `st` card): level, last check and "Check now". */
+/** Overall status card: level, last check and "Check now". */
 export function OverallCard({ level, lastCheck, onCheck }: { level: StatusLevel; lastCheck: number | null; onCheck: () => void }) {
   const look = LEVEL_LOOK[level];
-  const checked = lastCheck === null ? "Checking…" : `Last checked ${new Date(lastCheck).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
+  const checked = lastCheck === null ? "Checking…" : `Last checked ${formatTimeOfDay(lastCheck)}`;
   return (
     <section aria-label="Overall status" className={cn("flex flex-wrap items-center gap-3.5 rounded-2xl border p-5", look.box)}>
       <Icon name={look.icon} weight="fill" size={34} className={look.color} />
@@ -64,12 +65,12 @@ interface ConnectionCardProps {
   latency: LatencyHourDto[];
 }
 
-/** "Your connection": live browser checks and the 48-hour probe latency (design `st.conn`, `st.bars`). */
+/** "Your connection": live browser checks and the 48-hour probe latency. */
 export function ConnectionCard({ stats, online, connectionType, latency }: ConnectionCardProps) {
   const mounted = useMounted();
   const lastMs = stats.last?.ok ? stats.last.ms : null;
   const jitter = jitterRating(stats.jitter);
-  // The current hour shows this browser's live average once it has measured (design).
+  // The current hour shows this browser's live average once it has measured.
   const hours = latency.map((hour, i) =>
     i === latency.length - 1 && stats.avg !== null ? { ...hour, avgMs: stats.avg, failed: !!stats.last && !stats.last.ok, live: true } : { ...hour, live: false },
   );
@@ -103,7 +104,7 @@ export function ConnectionCard({ stats, online, connectionType, latency }: Conne
           label="Server latency, last 48 hours"
           className="box-border rounded-xl bg-sunk p-2"
           bars={hours.map((hour) => {
-            const when = mounted ? new Date(hour.hour).toLocaleString("en-US", { weekday: "short", hour: "numeric" }) : "";
+            const when = mounted ? formatWeekdayHour(hour.hour) : "";
             if (hour.failed) return { value: PERCENT, color: BAR_COLOR.bad, title: `${when} · unreachable` };
             if (hour.avgMs === null) return { value: null, title: `${when} · No data` };
             const tone = latencyTone(hour.avgMs);

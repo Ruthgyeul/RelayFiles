@@ -1,4 +1,4 @@
-/** Device detection for the "Signed-in devices" list, ported from the design prototype (`thisSession`). */
+/** Device detection for the "Signed-in devices" list, from the design. */
 
 export interface DeviceInfo {
   os: string;

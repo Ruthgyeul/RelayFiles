@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { NodeProperties } from "@/contracts/nodes";
-import { formatDateTime, formatLeft, formatSize } from "@/domain/format";
+import { formatCount, formatDateTime, formatLeft, formatSize } from "@/domain/format";
 import { useNow } from "@/shared/hooks/useNow";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
@@ -38,7 +38,7 @@ function rowsOf({ item, isRoot, location, effectiveVisibility, contains }: NodeP
   return [
     ["Type", folder ? "Folder" : `${TYPE_LABEL[item.kind ?? "other"]}${ext ? ` (.${ext.toLowerCase()})` : ""}`],
     ["Location", isRoot ? "Top level of this account" : location.join(" / ")],
-    ["Size", `${formatSize(size)}${folder ? "" : ` (${size.toLocaleString("en-US")} bytes)`}`],
+    ["Size", `${formatSize(size)}${folder ? "" : ` (${formatCount(size)} bytes)`}`],
     ...(contains ? [["Contains", `${plural(contains.files, "file")}, ${plural(contains.folders, "folder")}`] as [string, string]] : []),
     ["Created", formatDateTime(item.createdAt)],
     ["Visibility", effectiveVisibility === "public" ? "Public" : "Private", settings.visibility === "inherit" ? "inherited" : undefined],

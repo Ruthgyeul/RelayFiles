@@ -28,7 +28,7 @@ const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caugh
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 const labelOf = (items: NodeItem[]) => (items.length === 1 ? `"${items[0]!.name}"` : `${items.length} items`);
 
-/** Delete confirmation text from the design (`delTitle`, `delText`). */
+/** Delete confirmation text from the design. */
 export function deleteText(items: NodeItem[]): { title: string; text: string } {
   const one = items.length === 1 ? items[0]! : null;
   const size = items.reduce((sum, item) => sum + Number(item.size), 0);

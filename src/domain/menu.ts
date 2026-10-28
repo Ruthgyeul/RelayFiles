@@ -1,5 +1,5 @@
 /**
- * Popover placement from the design (`menuPlace`): open below the trigger when the menu
+ * Popover placement from the design: open below the trigger when the menu
  * fits, above when it fits there, otherwise pinned inside the viewport with a scrollable
  * max height. Kept free of DOM types so it can be unit tested.
  */

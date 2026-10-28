@@ -1,6 +1,6 @@
 import { Icon } from "./icon/Icon";
 
-/** Short confirmation pill at the top center (design `note`, shown for 1.8 s by its owner). */
+/** Short confirmation pill at the top center (shown for 1.8 s by its owner). */
 export function NoticePill({ message }: { message: string }) {
   return (
     <div

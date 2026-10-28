@@ -16,7 +16,7 @@ export interface TagsRequest {
   tags: string[];
 }
 
-/** Starter suggestions shown before the account has its own tags (design). */
+/** Starter suggestions shown before the account has its own tags. */
 const STARTER_TAGS = ["movie", "music", "photos", "work", "family", "archive"];
 const MAX_SUGGESTIONS = 8;
 

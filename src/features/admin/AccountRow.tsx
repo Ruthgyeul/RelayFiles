@@ -8,7 +8,7 @@ import { cn } from "@/shared/lib/cn";
 import { Avatar } from "@/shared/ui/Avatar";
 import { Icon } from "@/shared/ui/icon/Icon";
 
-/** Badge per status (design `ST`). */
+/** Badge per status. */
 const BADGE: Record<AccountStatus, { label: string; look: string }> = {
   admin: { label: "ADMIN", look: "bg-ok-bg text-ok-text" },
   active: { label: "ACTIVE", look: "bg-accent-soft text-accent-text" },
@@ -16,7 +16,7 @@ const BADGE: Record<AccountStatus, { label: string; look: string }> = {
   expired: { label: "PENDING DELETE", look: "bg-danger-bg text-danger-text" },
 };
 
-/** Storage shown red at 90% of the limit (design `sizeColor`). */
+/** Storage shown red at 90% of the limit. */
 const STORAGE_WARN_RATIO = 0.9;
 
 function Info({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
