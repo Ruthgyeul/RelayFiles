@@ -1,26 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
-import { Icon, type IconName } from "@/shared/ui/icon/Icon";
+import { PasswordCard } from "@/shared/ui/PasswordCard";
+import { StateCard } from "@/shared/ui/StateCard";
 import { errorText, shareApi } from "./api";
-
-/** Centered 400px card of the share page states. */
-function StateCard({ icon, iconBox, iconColor, title, gap = "gap-3", children }: { icon: IconName; iconBox: string; iconColor: string; title: string; gap?: "gap-3" | "gap-3.5"; children: ReactNode }) {
-  return (
-    <div className="flex flex-1 items-center justify-center px-4 py-6">
-      <section aria-label={title} className={cn("flex w-[min(400px,100%)] flex-col items-center rounded-2xl border border-card-line bg-card px-6 py-7 text-center", gap)}>
-        <span className={cn("flex size-14 items-center justify-center rounded-[14px]", iconBox)}>
-          <Icon name={icon} weight="fill" size={26} className={iconColor} />
-        </span>
-        <h1 className="m-0 text-[19px] font-bold">{title}</h1>
-        {children}
-      </section>
-    </div>
-  );
-}
 
 const description = "text-[14px] leading-[1.5] text-pretty text-t3";
 
@@ -73,53 +59,5 @@ export function PrivateCard({ ownerNodeId, notify }: { ownerNodeId: string | nul
 
 /** Password form; a right password reloads the page unlocked. */
 export function LockedCard({ linkId, name }: { linkId: string; name: string }) {
-  const router = useRouter();
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const submit = async () => {
-    if (!password || busy) return;
-    setBusy(true);
-    try {
-      await shareApi.unlock(linkId, password);
-      router.refresh();
-    } catch (caught) {
-      setError(errorText(caught));
-      setBusy(false);
-    }
-  };
-  return (
-    <StateCard icon="lock-simple" iconBox="bg-warn-bg-soft" iconColor="text-warn-strong" title="This folder is password protected" gap="gap-3.5">
-      <p className="m-0 text-[14px] text-t3">Enter the password you were given to view {name}.</p>
-      <form
-        className="contents"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <input
-          type="password"
-          aria-label="Password"
-          placeholder="Password"
-          value={password}
-          autoComplete="off"
-          onChange={(event) => {
-            setPassword(event.target.value);
-            setError(null);
-          }}
-          className="box-border h-11 w-full rounded-[10px] border border-ctrl bg-bg px-3.5 text-[15px] text-t1 outline-none"
-        />
-        {error && (
-          <span role="alert" className="flex items-center gap-1.5 self-start text-[13px] text-danger-text">
-            <Icon name="warning-circle" />
-            {error}
-          </span>
-        )}
-        <Button type="submit" variant="primary" size={44} disabled={busy} className="w-full justify-center border-0">
-          Unlock
-        </Button>
-      </form>
-    </StateCard>
-  );
+  return <PasswordCard title="This folder is password protected" description={`Enter the password you were given to view ${name}.`} onUnlock={(password) => shareApi.unlock(linkId, password)} />;
 }
