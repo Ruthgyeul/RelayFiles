@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ApiTokenDto } from "./api-tokens";
 
 /** A device signed in to the account (design "Signed-in devices"). */
 export interface DeviceDto {
@@ -34,6 +35,8 @@ export interface ProfileData {
   /** Bytes served per day for the last 30 days, oldest first. */
   traffic: { total: string; days: string[] };
   devices: DeviceDto[];
+  /** Personal API tokens (/api/v1), newest first. */
+  apiTokens: ApiTokenDto[];
 }
 
 export const preferencesSchema = z.object({ stripMetadataOnShare: z.boolean() });

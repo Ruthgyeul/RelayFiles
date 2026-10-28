@@ -55,6 +55,8 @@ export const AUDIT_ACTIONS = [
   "incident.post",
   "incident.edit",
   "incident.delete",
+  "apiToken.create",
+  "apiToken.revoke",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

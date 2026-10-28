@@ -71,6 +71,7 @@ model Account {
   nodes                Node[]
   trashed              TrashedBytes[]
   traffic              TrafficDaily[]
+  apiTokens            ApiToken[]
 
   @@index([volumeId])
 }
@@ -371,4 +372,24 @@ model BackupCheck {
   problems        String[]
 
   @@index([checkedAt])
+}
+
+/// Personal API token for scripts and uploaders (Authorization: Bearer on /api/v1). Shown once;
+/// only its SHA-256 is stored (256 random bits need no key, so key rotation never breaks it).
+/// Revoking deletes the row.
+model ApiToken {
+  id         String    @id
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name       String
+  /// argon2id hash of the whole token (rfp_<id>_<secret>); the token itself is never stored.
+  secretHash String
+  /// What the token may do (contracts/api-tokens.ts API_SCOPES).
+  scopes     String[]
+  createdAt  DateTime  @default(now())
+  /// Null: until revoked.
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+
+  @@index([accountId])
 }

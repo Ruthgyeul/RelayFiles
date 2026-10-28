@@ -349,6 +349,24 @@ export const TRANSCODE = {
   slotLeaseMs: 60_000,
 } as const;
 
+/** Personal API tokens and /api/v1 (docs/api.md "API v1"). */
+export const API = {
+  /** Tokens one account may hold. */
+  maxTokensPerAccount: 20,
+  /** Longest token name. */
+  nameMaxLength: 40,
+  /** Lifetimes offered when a token is created, in days; null (no expiry) is offered too. */
+  expiryDays: [7, 30, 90, 365],
+  /** Requests one token may make per minute before 429. */
+  requestsPerMinute: 120,
+  /** "Last used" is written at most this often. */
+  touchIntervalSec: 5 * 60,
+  /** A token checked against its argon2 hash is trusted this long by the same process (the row is still read). */
+  verifyCacheSec: 5 * 60,
+  /** Tokens one process remembers as checked; the oldest is dropped first. */
+  verifyCacheMax: 1_000,
+} as const;
+
 /** Backup verification (deploy/scripts/verify-backup.sh, npm run backup:verify). */
 export const BACKUP = {
   /** The newest dump must be at most this old: the daily backup plus some slack. */
