@@ -73,6 +73,36 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // Queries live in src/server/repositories. Elsewhere db() is only passed to repositories or
+    // opens a transaction ($transaction, $disconnect, $queryRaw for the health check).
+    files: ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,mts,ts}"],
+    ignores: ["src/server/repositories/**", "src/server/db/**", "**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.type='CallExpression'][object.callee.name='db'][property.name=/^[a-z]/]",
+          message: "Query the database through a function in src/server/repositories.",
+        },
+      ],
+    },
+  },
+  {
+    // Route handlers and pages reach the database only through services.
+    files: ["src/app/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@/server/db/*", "@/server/repositories/*"], message: "Call a service in src/server/services instead." },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Node scripts and tooling configs may log to the console.
     files: ["scripts/**/*.{mjs,mts,ts}", "*.config.{mjs,mts,ts}"],
     rules: { "no-console": "off" },
