@@ -125,6 +125,39 @@ sudo rsync -aHAX /tmp/rf-restore/<STORAGE_ROOT>/users/ <STORAGE_ROOT>/users/
 15 5 * * 0 cd /opt/relayfiles && deploy/scripts/systemd/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
 ```
 
+## Prometheus·Grafana
+
+`/metrics`가 서버 지표를 Prometheus 형식으로 내보낸다. 관리자 계정으로 My Profile → **API tokens**에서 `Server metrics (admins)` 범위만 있는 토큰을 만들고, Prometheus가 `ADMIN_ALLOWED_CIDRS` 안(예: LAN)에서 긁게 한다.
+
+```yaml
+scrape_configs:
+  - job_name: relayfiles
+    scheme: https            # LAN http면 http
+    metrics_path: /metrics
+    scrape_interval: 30s     # 토큰당 분당 120회 제한보다 충분히 느리게
+    authorization:
+      credentials_file: /etc/prometheus/relayfiles-token   # rfp_… 한 줄, chmod 600
+    static_configs:
+      - targets: ["files.example.com"]
+```
+
+| 지표 | 뜻 |
+|---|---|
+| `relayfiles_cpu_usage_percent`, `relayfiles_load1`, `relayfiles_memory_used_bytes` | 호스트 CPU·부하·메모리 |
+| `relayfiles_network_transmit_bytes_per_second`, `_receive_` | 지금 송수신 속도 |
+| `relayfiles_storage_used_bytes`, `relayfiles_storage_total_bytes` | 스토리지 볼륨 합계 |
+| `relayfiles_disk_read_bytes_per_second{disk}`, `_write_` | 워커의 최신 디스크 I/O 표본 |
+| `relayfiles_active_streams`, `relayfiles_active_uploads`, `relayfiles_accounts` | 최근 1분 재생·업로드, 계정 수 |
+| `relayfiles_served_bytes_today` | 오늘(UTC) 내보낸 파일 바이트(계정 합계) |
+| `relayfiles_transcodes_running`, `relayfiles_transcodes_started_total` | 실시간 영상 변환 수 |
+| `relayfiles_media_queue_jobs{state}` | 썸네일·미리보기 작업 큐(waiting·active·delayed) |
+| `relayfiles_health_up{component}` | Status 페이지 구성 요소의 최신 헬스 프로브 |
+| `relayfiles_service_up{service}` | Server 페이지 Services 행(1 = running·scheduled·healthy) |
+| `relayfiles_backup_check_ok`, `relayfiles_backup_check_timestamp_seconds` | 마지막 백업 검증 결과와 시각 |
+| `relayfiles_scrape_errors`, `relayfiles_up` | 읽지 못한 지표 묶음 수(예: Redis 장애), 앱 응답 |
+
+알림 예: `relayfiles_backup_check_ok == 0`, `time() - relayfiles_backup_check_timestamp_seconds > 8 * 86400`, `min(relayfiles_health_up) == 0`, `relayfiles_storage_used_bytes / relayfiles_storage_total_bytes > 0.9`.
+
 ## DB 복구
 
 ```bash

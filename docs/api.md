@@ -116,6 +116,12 @@
 
 ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Method `POST`, Body `Binary`, Header `Authorization: Bearer rfp_…`, URL `{json:data.url}`. curl: `curl -H "Authorization: Bearer $TOKEN" --data-binary @a.png "https://<도메인>/api/v1/files?name=a.png"`.
 
+### Prometheus 지표
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| `GET` | `/metrics` | Prometheus 텍스트(0.0.4). 관리자의 개인 API 토큰(`metrics:read`)을 `Authorization: Bearer`로, `ADMIN_ALLOWED_CIDRS`가 있으면 그 대역에서만. 토큰 없음 401, 범위 없음·멤버·대역 밖 403. 계정·파일·클라이언트를 레이블에 넣지 않는다. 지표 목록은 [runbook.md "Prometheus·Grafana"](runbook.md#prometheusgrafana) |
+
 ### 관리자 (`ADMIN_ALLOWED_CIDRS`로 접근 주소 제한 가능)
 
 | 메서드 | 경로 | 설명 |
