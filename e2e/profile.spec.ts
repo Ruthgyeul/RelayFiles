@@ -48,6 +48,37 @@ test("shows, copies and replaces the token", async ({ page }) => {
   await expect(token).not.toHaveText(first!);
 });
 
+test("creates an API token, shows it once, uses it and revokes it", async ({ page }) => {
+  await openProfile(page);
+  const tokens = page.getByRole("region", { name: "API tokens" });
+  await expect(tokens.getByText("No API tokens yet.")).toBeVisible();
+  await tokens.getByRole("button", { name: "New token" }).click();
+  const create = page.getByRole("dialog", { name: "New API token" });
+  await create.getByLabel("Name").fill("ShareX");
+  await expect(create.getByRole("checkbox", { name: /Server metrics/ })).toHaveCount(0);
+  await create.getByRole("button", { name: "Create token" }).click();
+
+  const shown = page.getByRole("dialog", { name: "Copy your API token" });
+  const value = await shown.getByLabel("New API token").textContent();
+  expect(value).toMatch(/^rfp_[A-Za-z0-9_-]{43}$/);
+  await shown.getByRole("button", { name: "Copy" }).click();
+  await expect(page.getByText("API token copied")).toBeVisible();
+  await shown.getByRole("button", { name: "Done" }).click();
+  await expect(tokens.getByText("ShareX", { exact: true })).toBeVisible();
+  await expect(tokens.getByText("files:read · files:write")).toBeVisible();
+  await expect(tokens.getByText(value!)).toHaveCount(0);
+
+  const me = await page.request.get("/api/v1/me", { headers: { authorization: `Bearer ${value}` } });
+  expect(me.status()).toBe(200);
+  // The browser's own session cookie does not open API v1.
+  expect((await page.request.get("/api/v1/me")).status()).toBe(401);
+
+  await tokens.getByRole("button", { name: "Revoke" }).click();
+  await page.getByRole("dialog", { name: "Revoke ShareX?" }).getByRole("button", { name: "Revoke" }).click();
+  await expect(tokens.getByText("No API tokens yet.")).toBeVisible();
+  expect((await page.request.get("/api/v1/me", { headers: { authorization: `Bearer ${value}` } })).status()).toBe(401);
+});
+
 test("saves preferences and purges expired items", async ({ page }) => {
   await openProfile(page);
   const preferences = page.getByRole("region", { name: "Preferences" });
