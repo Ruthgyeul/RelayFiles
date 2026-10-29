@@ -205,3 +205,12 @@ export function expiredItemIds(db: DbClient, accountId: string | null, now: Date
     select: { id: true, accountId: true },
   });
 }
+
+/** A file of the account with this content and size, other than `exceptId` (deduplication of a re-upload). */
+export function findFileWithContent(db: DbClient, accountId: string, sha256: string, size: bigint, exceptId: string | null) {
+  return db.node.findFirst({
+    where: { accountId, type: "FILE", sha256, size, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+}

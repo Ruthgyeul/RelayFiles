@@ -1,4 +1,4 @@
-import { access, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { POST as anonymous } from "@/app/api/auth/anonymous/route";
@@ -120,6 +120,11 @@ describe("move and copy", () => {
     const copy = root.children.find((c) => c.name === "Src (2)")!;
     expect(copy).toMatchObject({ tags: ["keep"], downloads: 0, itemCount: 1, size: "7" });
     expect(copy.linkId).not.toBe(src.linkId);
+    // The copied file shares its bytes with the original (STORAGE_DEDUPE), and outlives it.
+    const [original, copied2] = await Promise.all([stat(join(s.root, "Src", "Sub", "x.txt")), stat(join(s.root, "Src (2)", "Sub", "x.txt"))]);
+    expect(copied2.ino).toBe(original.ino);
+    expect((await callRoute(remove, { method: "POST", cookie: s.cookie, body: { ids: [src.id] } })).status).toBe(200);
+    expect(await readFile(join(s.root, "Src (2)", "Sub", "x.txt"), "utf8")).toBe("copy me");
   });
 
   it("refuses copies over the quota", async () => {

@@ -53,13 +53,14 @@ async function diskFamilies(): Promise<MetricFamily[]> {
 
 async function activityFamilies(now: Date): Promise<MetricFamily[]> {
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const [streams, uploads, accounts, servedToday, transcoding, transcodes] = await Promise.all([
+  const [streams, uploads, accounts, servedToday, transcoding, transcodes, deduplicated] = await Promise.all([
     activeCount("stream", now.getTime()),
     activeCount("upload", now.getTime()),
     countAccounts(db()),
     trafficTotalOn(db(), today),
     slotsHeld("transcode"),
     counterValue("transcodes_started"),
+    counterValue("deduplicated_files"),
   ]);
   return [
     gauge("relayfiles_active_streams", "Streams played within the last minute.", streams),
@@ -68,6 +69,7 @@ async function activityFamilies(now: Date): Promise<MetricFamily[]> {
     gauge("relayfiles_served_bytes_today", "Bytes served from files today (UTC), all accounts together.", Number(servedToday)),
     gauge("relayfiles_transcodes_running", "Live video conversions running now (shared VIDEO_TRANSCODE_MAX slots).", transcoding),
     { name: "relayfiles_transcodes_started_total", help: "Live video conversions started.", type: "counter", samples: [{ value: transcodes }] },
+    { name: "relayfiles_deduplicated_files_total", help: "Uploads stored as a hard link to the same content already in the account.", type: "counter", samples: [{ value: deduplicated }] },
   ];
 }
 

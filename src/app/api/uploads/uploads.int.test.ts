@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, describe, expect, it } from "vitest";
@@ -24,10 +24,10 @@ import { callRoute } from "../../../../test/route-call";
 
 const prisma = db();
 const accounts: string[] = [];
-const ip = randomTestIp();
 
 async function member() {
-  const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip });
+  // Each from its own address: anonymous sign-ups are limited per address and hour.
+  const res = await callRoute<CreatedAccount>(anonymous, { method: "POST", body: {}, ip: randomTestIp() });
   accounts.push(res.json.data.account.id);
   return { id: res.json.data.account.id, cookie: res.cookie!, root: userRootOf(configuredVolumeRoot(), res.json.data.account.id) };
 }
@@ -92,6 +92,23 @@ describe("uploads", () => {
     expect(row).toMatchObject({ kind: "OTHER", mime: "text/plain", size: 11n, sha256: createHash("sha256").update("hello world").digest("hex") });
     const root = await list(s);
     expect(root.children.map((c) => c.name).sort()).toEqual(["Docs", "notes.txt"]);
+  });
+
+  it("stores a re-upload of the same content as a hard link, which outlives the first file", async () => {
+    const s = await member();
+    const first = await upload(s, "root", [{ rel: "photo.jpg", content: "same bytes" }]);
+    const again = await upload(s, "root", [{ rel: "copy of photo.jpg", content: "same bytes" }, { rel: "other.jpg", content: "other bytes" }]);
+    expect([...first.sent, ...again.sent].map((r) => r.status)).toEqual([200, 200, 200]);
+    const [a, b, c] = await Promise.all(["photo.jpg", "copy of photo.jpg", "other.jpg"].map((name) => stat(join(s.root, name))));
+    expect(b!.ino).toBe(a!.ino);
+    expect(c!.ino).not.toBe(a!.ino);
+    // The storage limit still counts both.
+    expect((await list(s)).folder.size).toBe(String(2 * "same bytes".length + "other bytes".length));
+    // No staged bytes are left behind for the linked one.
+    expect((await readdir(layoutOf(configuredVolumeRoot()).uploads)).filter((name) => name === again.sent[0]!.id)).toEqual([]);
+
+    expect((await callRoute(remove, { method: "POST", cookie: s.cookie, body: { ids: [first.sent[0]!.file!.nodeId] } })).status).toBe(200);
+    expect(await readFile(join(s.root, "copy of photo.jpg"), "utf8")).toBe("same bytes");
   });
 
   it("names Home upload folders like the design", async () => {

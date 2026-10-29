@@ -1,7 +1,8 @@
 import "server-only";
 import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { cp, copyFile, lstat, mkdir, open, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { copyFile, link, lstat, mkdir, open, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { getEnv } from "@/config/env";
 import { basename, dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { ASSET_DIRS, DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
@@ -22,15 +23,39 @@ function trashTime(name: string): number | null {
   return Date.parse(`${date}T${hours}:${minutes}:${seconds}.${millis}Z`);
 }
 
-/** Copies a file or a folder tree to a path that must not exist yet. */
-async function copyEntry(source: string, target: string): Promise<void> {
-  const info = await stat(source);
-  if (info.isDirectory()) {
-    await cp(source, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true });
-  } else {
-    // Reflink when the filesystem supports it (instant copy), otherwise a normal copy.
-    await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+/** Errors meaning "no hard link here" (another filesystem, too many links, not supported): copy instead. */
+const NO_HARD_LINK = new Set(["EXDEV", "EMLINK", "EPERM", "ENOTSUP", "EOPNOTSUPP"]);
+const errorCode = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code ?? "";
+
+/**
+ * Whether files with the same content share their bytes (STORAGE_DEDUPE): a copy or a
+ * re-upload becomes a hard link to the existing file. Files are never changed in place, so
+ * the copies can never drift apart; deleting one leaves the others.
+ */
+const dedupe = () => getEnv("storage").STORAGE_DEDUPE;
+
+/** Copies one file to a path that must not exist yet: a hard link when deduplicating, else a reflink or a plain copy. */
+async function copyFileEntry(source: string, target: string): Promise<void> {
+  if (dedupe()) {
+    try {
+      await link(source, target);
+      return;
+    } catch (error) {
+      if (!NO_HARD_LINK.has(errorCode(error))) throw error;
+    }
   }
+  // Reflink when the filesystem supports it (instant copy), otherwise a normal copy.
+  await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+}
+
+/** Copies a file or a folder tree to a path that must not exist yet (folders are new, files as {@link copyFileEntry}). */
+async function copyEntry(source: string, target: string): Promise<void> {
+  const info = await lstat(source);
+  if (info.isFile()) return copyFileEntry(source, target);
+  // A user folder holds only folders and files; anything else (a planted link) is not followed.
+  if (!info.isDirectory()) throw new Error("Only files and folders can be copied.");
+  await mkdir(target, { mode: DIR_MODE });
+  for (const entry of await readdir(source)) await copyEntry(join(source, entry), join(target, entry));
 }
 
 /** Account and node ids (generated, lowercase alphanumerics). */
@@ -90,6 +115,21 @@ export class LocalVolumeDriver implements StorageDriver {
     // The folder must still exist: creating it again here would bring back a folder renamed or
     // deleted while the upload finished, outside the database.
     await rename(tempPath, await this.pathOf(location));
+  }
+
+  async linkExisting(from: StorageLocation, to: StorageLocation, size: number): Promise<boolean> {
+    if (!dedupe()) return false;
+    try {
+      const source = await this.pathOf(from);
+      const info = await lstat(source);
+      if (!info.isFile() || info.size !== size) return false;
+      await link(source, await this.pathOf(to));
+      return true;
+    } catch (error) {
+      // Gone meanwhile, or no hard links here: the caller places its own bytes.
+      if (errorCode(error) === "ENOENT" || NO_HARD_LINK.has(errorCode(error))) return false;
+      throw error;
+    }
   }
 
   async stageCopy(from: StorageLocation): Promise<string> {

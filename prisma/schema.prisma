@@ -186,6 +186,8 @@ model Node {
   @@unique([parentId, name])
   @@index([accountId, parentId])
   @@index([accountId, type])
+  /// Finds a file with the same content in the account (deduplication of re-uploads).
+  @@index([accountId, sha256])
   @@index([expAt])
   @@index([tags], type: Gin)
 }

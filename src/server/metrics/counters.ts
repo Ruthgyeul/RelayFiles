@@ -5,7 +5,7 @@ import { redis } from "../redis";
  * Totals that only grow (Prometheus counters), kept in Redis so every app process adds to the
  * same number. Losing Redis data resets them, which Prometheus reads as a counter reset.
  */
-export type CounterName = "transcodes_started";
+export type CounterName = "transcodes_started" | "deduplicated_files";
 const keyOf = (name: CounterName) => `metrics:counter:${name}`;
 
 /** Adds one. Never fails the request it is called from. */

@@ -12,7 +12,7 @@ import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import { createFileNode, createFolderNode, deleteNodes, findChildByName, findNode, findRootFolder, listSiblingNames, type NodeRow } from "../repositories/node.repo";
+import { createFileNode, createFolderNode, deleteNodes, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, type NodeRow } from "../repositories/node.repo";
 import { ancestorChain, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { layoutOf } from "../storage/layout";
@@ -26,6 +26,8 @@ import { createFolder } from "./node.service";
 import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
 import { assertAccountWritable, driverForAccount } from "./volume.service";
 import { enqueueMedia } from "../jobs/queue";
+import { countOne } from "../metrics/counters";
+import { locationOf } from "./node-location";
 
 type Owner = SpaceOwner;
 
@@ -200,6 +202,10 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
   const replace = batch.dup === "replace" && existing?.type === "FILE" ? existing : null;
   const name = existing && !replace ? uniqName(await listSiblingNames(db(), folder.id), fileName, true) : fileName;
   const location = { accountId: owner.id, segments: [...folder.segments, name] };
+  // The same bytes already in the account: link to them instead of keeping a second copy.
+  const twin = await findFileWithContent(db(), owner.id, sha256, BigInt(entry.size), replace?.id ?? null);
+  const twinLocation = twin ? await locationOf(owner.id, twin.id) : null;
+  let linked = false;
 
   const row = await withStorageTransaction(db(), async (tx, undo) => {
     if (replace) {
@@ -219,14 +225,19 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       sha256,
       linkId: newLinkId(),
     });
-    await driver.moveIntoPlace(tempPath, location);
+    linked = twinLocation !== null && (await driver.linkExisting(twinLocation, location, entry.size));
+    if (!linked) await driver.moveIntoPlace(tempPath, location);
     undo.push("remove placed file", async () => {
       await driver.moveToTrash(location);
     });
     return created;
   });
-  // tus keeps upload state next to the data file; the data moved, so drop the state too.
+  // tus keeps upload state next to the data file; the data moved (or was linked), so drop the state too.
   await unlink(`${tempPath}.json`).catch(() => undefined);
+  if (linked) {
+    await driver.discardStaged(tempPath);
+    void countOne("deduplicated_files");
+  }
   if (replace) await driver.removeAssets(owner.id, [replace.id]).catch(() => undefined);
   if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
   return { nodeId: row.id, name: row.name, folderId: folder.id };
