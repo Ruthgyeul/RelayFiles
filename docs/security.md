@@ -82,7 +82,7 @@
 - 공유 재생 경로(`/stream`, `streamReach`)는 뷰어가 읽는 만큼만 보낸다: 미디어와 PDF는 범위 제한 없음, 텍스트·코드·표는 앞 `DOCUMENT_PREVIEW.textMaxBytes`, SVG·폰트·Word·Excel은 앞 `assetMaxBytes`까지(넘으면 403), 미리보기가 없는 형식(압축, 실행 파일, 디스크 이미지 등)은 404. 소유자 본인에게는 적용하지 않는다.
 - **Stream only는 DRM이 아니다.** 재생할 수 있는 영상·음악·이미지·PDF는 브라우저가 받은 바이트를 저장하거나 화면을 녹화할 수 있다. 다운로드 버튼과 zip, 미리보기가 없는 형식, 문서 전체 받기를 막을 뿐이다.
 - 공개 링크 이미지는 워커가 만든 메타데이터 제거본만 보낸다. 요청 처리 중에는 이미지를 메모리에 올리거나 디코딩하지 않는다(비로그인 방문자가 큰·깨진 사진 폴더로 앱 메모리를 고갈시킬 수 있었다). 사본이 없으면 503 `MEDIA_NOT_READY` + `Retry-After`, 워커가 실패한 파일(`stripFailed`)과 제거할 수 없는 형식은 415. PNG·WebP는 허용 목록 청크만 남긴다(이미지 데이터, 색 정보, 애니메이션: C2PA `caBX`·`C2PA`, 텍스트·EXIF·XMP·개인 청크는 모두 지운다). 뷰어 미리보기도 메타데이터 없이 다시 인코딩한 WebP다.
-- 변환 재생(`?transcode=1`)은 `-map_metadata -1 -map_chapters -1`로 원본의 메타데이터(휴대폰이 기록한 촬영 위치 `©xyz` 등)를 넘기지 않는다. 변환하지 않는 원본 영상은 그대로 나간다. 원본에서 위치를 지운 공개용 사본은 변환본 캐시(기능 6)와 함께 다룬다.
+- 변환 재생(`?transcode=1`)은 `-map_metadata -1 -map_chapters -1`로 원본의 메타데이터(휴대폰이 기록한 촬영 위치 `©xyz` 등)를 넘기지 않는다. 변환하지 않는 원본 영상은 그대로 나간다. 워커가 저장하는 변환본(자주 재생되는 영상)도 같은 인자로 만들어 메타데이터가 없다.
 
 ## 리버스 프록시·헤더
 
@@ -104,4 +104,4 @@
 - 캐시: 파일 응답은 [architecture.md "미리보기 전송"](architecture.md#미리보기-전송), API 에러는 `no-store`. 다운로드는 한도·횟수 때문에 캐시하지 않는다.
 - ffmpeg 입력(`server/media/ffmpeg-input.ts`): 업로드 파일은 `-protocol_whitelist file -format_whitelist <MEDIA.ffmpegDemuxers>`로만 연다. HLS 플레이리스트·concat 목록처럼 다른 파일을 가리키는 형식은 이름이나 내용과 상관없이 거부되므로, 조작한 업로드로 ffmpeg가 서버의 다른 파일을 읽어 변환 결과로 돌려줄 수 없다. Docker 이미지는 `node:24-trixie-slim`(ffmpeg 7.1)이다.
 - 프로세스 격리: Compose의 app·worker·tools는 `cap_drop: ALL`, `read_only`(쓰기는 tmpfs `/tmp`, app은 `.next/cache`도), `pids_limit: 512`, `mem_limit`/`cpus`(`APP_MEMORY_MAX`·`APP_CPUS`, `WORKER_MEMORY_MAX`·`WORKER_CPUS`)로 돈다. nginx도 `cap_drop: ALL`. systemd 배포는 같은 값을 `MemoryMax`·`CPUQuota`·`TasksMax=512`로 건다. 폭주한 변환·썸네일 작업은 자기 서비스 상한에서 멈추고 PostgreSQL을 OOM으로 끌고 가지 않는다.
-- 영상 변환(`?transcode=1`)은 모든 앱 프로세스를 합쳐 동시에 `VIDEO_TRANSCODE_MAX`개(0이면 끔)까지만 돌고(Redis 슬롯 `redis-semaphore.ts`, 프로세스가 죽으면 `TRANSCODE.slotLeaseMs` 뒤 풀린다. Redis가 안 되면 프로세스마다 같은 수로 제한), 넘으면 429와 `Retry-After`. 출력은 4GB에서 끊는다. ffmpeg·smartctl은 셸 없이 실행하고 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지만 받는다(`PROCESS`).
+- 영상 변환(`?transcode=1`)은 모든 앱 프로세스를 합쳐 동시에 `VIDEO_TRANSCODE_MAX`개(0이면 끔)까지만 돌고(Redis 슬롯 `redis-semaphore.ts`, 프로세스가 죽으면 `TRANSCODE.slotLeaseMs` 뒤 풀린다. Redis가 안 되면 프로세스마다 같은 수로 제한), 넘으면 429와 `Retry-After`. 워커가 변환본을 저장할 때도 같은 슬롯을 쓴다. 출력은 4GB에서 끊는다(저장본은 ffmpeg `-fs`). ffmpeg·smartctl은 셸 없이 실행하고 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지만 받는다(`PROCESS`).

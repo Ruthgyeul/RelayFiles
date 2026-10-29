@@ -347,6 +347,14 @@ export const TRANSCODE = {
    * last renewal, so a crashed process frees its slots; running conversions renew every third of it.
    */
   slotLeaseMs: 60_000,
+  /**
+   * A video converted live this many times within cacheWindowSec is converted once by the
+   * worker and played from that file afterwards (system/transcoded, not counted toward quotas).
+   */
+  cacheAfterPlays: 3,
+  cacheWindowSec: 7 * 24 * 60 * 60,
+  /** Stored conversions are deleted this long after they were made (popular ones are made again). */
+  cacheKeepDays: 30,
 } as const;
 
 /** Personal API tokens and /api/v1 (docs/api.md "API v1"). */

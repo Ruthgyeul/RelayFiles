@@ -170,7 +170,7 @@ export class LocalVolumeDriver implements StorageDriver {
     await rename(trashPath, await this.pathOf(location));
   }
 
-  /** `system/<thumbs|derived|previews>/<accountId>/<nodeId>`; ids are generated, never user input. */
+  /** `system/<thumbs|derived|previews|transcoded>/<accountId>/<nodeId>`; ids are generated, never user input. */
   private assetPath(kind: AssetKind, accountId: string, nodeId: string): string {
     if (!ASSET_ID.test(accountId) || !ASSET_ID.test(nodeId)) throw new Error("Invalid asset id.");
     return join(this.layout[ASSET_DIRS[kind]], accountId, nodeId);
@@ -187,6 +187,18 @@ export class LocalVolumeDriver implements StorageDriver {
       await rm(temp, { force: true });
       throw error;
     }
+  }
+
+  async stagingPath(): Promise<string> {
+    await mkdir(this.layout.uploads, { recursive: true, mode: DIR_MODE });
+    return join(this.layout.uploads, `asset-${randomUUID()}`);
+  }
+
+  async adoptAsset({ kind, accountId, nodeId }: AssetRef, tempPath: string): Promise<void> {
+    if (!tempPath.startsWith(this.layout.uploads)) throw new Error("Generated files must come from the volume's upload area.");
+    const target = this.assetPath(kind, accountId, nodeId);
+    await mkdir(dirname(target), { recursive: true, mode: DIR_MODE });
+    await rename(tempPath, target);
   }
 
   async assetSource({ kind, accountId, nodeId }: AssetRef): Promise<ByteSource | null> {
@@ -223,7 +235,7 @@ export class LocalVolumeDriver implements StorageDriver {
     await Promise.all(nodeIds.flatMap((nodeId) => kinds.map((kind) => rm(this.assetPath(kind, accountId, nodeId), { force: true }))));
   }
 
-  async purgeSystem(trashBefore: Date, uploadsBefore: Date): Promise<{ trash: number; uploads: number }> {
+  async purgeSystem(trashBefore: Date, uploadsBefore: Date, transcodedBefore: Date): Promise<{ trash: number; uploads: number; transcoded: number }> {
     const entries = async (dir: string) => readdir(dir).catch(() => [] as string[]);
     let trash = 0;
     for (const name of await entries(this.layout.trash)) {
@@ -241,7 +253,19 @@ export class LocalVolumeDriver implements StorageDriver {
       await rm(path, { recursive: true, force: true });
       uploads++;
     }
-    return { trash, uploads };
+    // Conversions are made again after a few more plays; old ones only take space.
+    let transcoded = 0;
+    for (const account of await entries(this.layout.transcoded)) {
+      const dir = join(this.layout.transcoded, account);
+      for (const name of await entries(dir)) {
+        const path = join(dir, name);
+        const info = await lstat(path).catch(() => null);
+        if (!info || info.mtime >= transcodedBefore) continue;
+        await rm(path, { force: true });
+        transcoded++;
+      }
+    }
+    return { trash, uploads, transcoded };
   }
 
   async removeAccountAssets(accountId: string): Promise<void> {

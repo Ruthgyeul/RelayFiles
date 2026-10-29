@@ -6,6 +6,7 @@ import { sendAsset, sendThumb } from "../http/send-thumb";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { transcodeResponse } from "../media/transcode";
+import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
 import type { AccountRow } from "../repositories/account.repo";
 import { findNode } from "../repositories/node.repo";
 import { addTraffic } from "../repositories/traffic.repo";
@@ -59,8 +60,12 @@ export async function serveOwnPreview(req: Request, owner: Owner, nodeId: string
 export async function serveOwnTranscode(req: Request, owner: Owner, nodeId: string): Promise<Response> {
   const row = await findNode(db(), owner.id, nodeId);
   if (!row || row.type !== "FILE" || row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
-  const path = await (await driverForAccount(owner)).localPath(await locationOf(owner.id, row.id));
-  if (!path) throw new ApiError("NOT_FOUND");
+  const driver = await driverForAccount(owner);
   if (req.method === "GET") void markActive("stream", `${row.id}:${owner.id}`);
+  const stored = await sendStoredTranscode(req, driver, owner.id, row);
+  if (stored) return stored;
+  const path = await driver.localPath(await locationOf(owner.id, row.id));
+  if (!path) throw new ApiError("NOT_FOUND");
+  if (req.method === "GET") void notePlay(row.id);
   return transcodeResponse(req, path);
 }
