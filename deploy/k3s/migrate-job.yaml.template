@@ -1,0 +1,42 @@
+# One release's migrations (schema, data, storage layout), run by deploy/scripts/k3s/deploy.sh
+# with the new tools image before the app, worker and Nginx are rolled to it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: relayfiles-migrate-${RELEASE_ID}
+  namespace: ${K3S_NAMESPACE}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector: { relayfiles/storage: "true" }
+      securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: ${STORAGE_GID}, runAsNonRoot: true }
+      containers:
+        - name: migrate
+          image: ${TOOLS_IMAGE}
+          command: ["sh", "-c", "npm run db:deploy && npm run data:migrate && npm run storage:migrate"]
+          envFrom: [{ secretRef: { name: relayfiles-env } }]
+          env:
+            - { name: NODE_ENV, value: production }
+            - { name: LOG_SERVICE, value: tools }
+            - { name: POSTGRES_HOST, value: relayfiles-postgres }
+            - { name: POSTGRES_PORT, value: "5432" }
+            - { name: DATABASE_URL, value: "" }
+            - { name: REDIS_HOST, value: relayfiles-redis }
+            - { name: REDIS_PORT, value: "6379" }
+            - { name: REDIS_URL, value: "" }
+            - { name: RESTIC_REPOSITORY, value: "" }
+            - { name: RESTIC_PASSWORD, value: "" }
+            - { name: OFFSITE_ACCESS_KEY_ID, value: "" }
+            - { name: OFFSITE_SECRET_ACCESS_KEY, value: "" }
+          securityContext: { readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: storage, mountPath: ${STORAGE_ROOT} }
+            - { name: logs, mountPath: ${LOG_DIR} }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: storage, hostPath: { path: ${STORAGE_ROOT}, type: Directory } }
+        - { name: logs, hostPath: { path: ${LOG_DIR}, type: Directory } }
+        - { name: tmp, emptyDir: {} }

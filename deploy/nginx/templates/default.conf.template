@@ -1,9 +1,10 @@
 # RelayFiles behind Nginx (rendered by the nginx image's envsubst at start-up; values come
 # from .env through docker compose). Nginx variables ($host, $1, …) are left untouched.
 
-# Docker's DNS: the app container gets a new address whenever a release recreates it, so
-# the upstream is resolved again instead of being fixed at start-up.
-resolver 127.0.0.11 valid=10s ipv6=off;
+# The cluster's DNS (Docker: 127.0.0.11, k3s: the kube-dns service): the app gets a new
+# address whenever a release recreates it, so the upstream is resolved again instead of being
+# fixed at start-up.
+resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
 
 upstream relayfiles_app {
     zone relayfiles_app 64k;

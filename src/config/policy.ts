@@ -406,6 +406,12 @@ export const BACKUP = {
   checksKept: 52,
 } as const;
 
+/** k3s deployment (deploy/scripts/k3s/deploy.sh). */
+export const K3S = {
+  /** App replicas on the one storage node; more add memory, not storage throughput. */
+  maxAppReplicas: 4,
+} as const;
+
 /** Defaults of the offsite restic backup (deploy/scripts/offsite-backup.sh; OFFSITE_* in .env). */
 export const OFFSITE = {
   /** Snapshots `restic forget` keeps: the newest per day, week and month. */

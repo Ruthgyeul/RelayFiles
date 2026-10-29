@@ -122,7 +122,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - 정책 값(기간, 임계값, 크기)은 `src/config/policy.ts`에 이름을 붙여 둔다. 배포마다 다른 값(포트, 호스트, 경로, 도메인, 비밀값)은 env로 빼고, env는 `policy.ts`의 기본값을 덮어쓰기만 한다.
 - 앱은 `src/config/env.ts`의 그룹별 getter(`getAppEnv()`, `getEnv("database")` 등)로만 env를 읽는다. 그룹(`app`, `database`, `redis`, `storage`, `uploads`, `secrets`, `policy`, `jobs`, `observability`, `deploy`, `testing`)은 처음 쓰일 때 검증되므로, 빌드는 DB 비밀번호 없이 통과하고 실행 시 빠진 키는 목록으로 바로 실패한다.
 - 커밋되는 env 파일은 `.env.example` 하나다. 스키마의 키 집합과 `.env.example`의 키 집합이 같은지 `env.test.ts`가 검사하므로, 새 설정은 두 곳을 같은 PR에서 바꾼다.
-- compose는 `${VAR}`, Nginx 설정은 템플릿(Docker: nginx 이미지의 envsubst, systemd: `scripts/render-template.mjs`)으로 같은 `.env` 값을 쓴다. 코드·compose·Nginx 설정에 값을 하드코딩하지 않는다.
+- compose는 `${VAR}`, Nginx 설정은 템플릿(Docker·k3s: nginx 이미지의 envsubst, systemd: `scripts/render-template.mjs`), k3s 매니페스트는 `deploy/k3s/*.yaml.template`(`render-template.mjs`)으로 같은 `.env` 값을 쓴다. 코드·compose·Nginx 설정에 값을 하드코딩하지 않는다.
 - `DATABASE_URL`, `REDIS_URL`은 개별 키를 `${VAR}`로 조합한다(Next `@next/env`, Docker Compose, Prisma 설정이 같은 `.env`를 읽는다).
 
 ## 버전 관리 (호환성 규칙)
