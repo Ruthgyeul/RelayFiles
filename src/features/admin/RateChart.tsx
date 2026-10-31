@@ -5,7 +5,7 @@ import { LineChart } from "@/shared/ui/LineChart";
 const PERCENT = 100;
 const HALF = 2;
 
-/** Hourly rate line, oldest first with the current hour marked, and the time axis (design `srvBw`). */
+/** Hourly rate line, oldest first with the current hour marked, and the time axis. */
 export function RateChart({ series, height, label, color }: { series: RateSeries; height: number; label: string; color?: string }) {
   const last = series.hours.length - 1;
   const top = Math.max(0, ...series.hours.map((hour) => hour?.avg ?? 0));

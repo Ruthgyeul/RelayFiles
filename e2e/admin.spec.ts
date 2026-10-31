@@ -86,7 +86,7 @@ test("shows live server measurements", async ({ page }) => {
   await expect(main.getByRole("region", { name: "Disk activity" }).getByRole("heading", { name: "Disk read / write · last 48h" })).toBeVisible();
 
   const services = main.getByRole("region", { name: "Services" });
-  for (const name of ["Web server", "Media streaming", "Cleanup job", "Disk health"]) await expect(services.getByText(name, { exact: true })).toBeVisible();
+  for (const name of ["Web server", "Media streaming", "Cleanup job", "Disk health", "Backup check"]) await expect(services.getByText(name, { exact: true })).toBeVisible();
   await expect(services.getByText("RUNNING").first()).toBeVisible();
 
   expect((await stream).headers()["content-type"]).toBe("text/event-stream");

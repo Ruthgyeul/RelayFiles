@@ -5,11 +5,8 @@
  *   npm run storage:fsck -- --account <id>    one account
  * Exits 1 when anything was found, so it can run from cron and alert.
  */
-import nextEnv from "@next/env";
+import { runScript } from "./lib/bootstrap.mjs";
 
-nextEnv.loadEnvConfig(process.cwd());
-
-const { db } = await import("../src/server/db/client");
 const { runFsck } = await import("../src/server/services/fsck.service");
 
 const args = process.argv.slice(2);
@@ -21,19 +18,20 @@ if (accountAt >= 0 && !accountId) {
   process.exit(2);
 }
 
-const report = await runFsck({ fix, accountId });
-const list = (label: string, paths: readonly string[]) => paths.forEach((path) => console.log(`  ${label}  ${path}`));
-for (const entry of report.accounts) {
-  console.log(`account ${entry.accountId} (volume ${entry.volumeId})`);
-  list("missing on disk ", entry.missing);
-  list("only on disk    ", entry.orphans);
-  list("size differs    ", entry.sizeMismatch);
-  list("not moved (link)", entry.notMoved);
-  if (fix) console.log(`  fixed: ${entry.trashed} moved to the trash, ${entry.flagged} missing flags changed`);
-}
-for (const stray of report.strayAccounts) console.log(`volume ${stray.volumeId}: folder of unknown account ${stray.accountId}${stray.trashed ? " (moved to the trash)" : ""}`);
+await runScript(async () => {
+  const report = await runFsck({ fix, accountId });
+  const list = (label: string, paths: readonly string[]) => paths.forEach((path) => console.log(`  ${label}  ${path}`));
+  for (const entry of report.accounts) {
+    console.log(`account ${entry.accountId} (volume ${entry.volumeId})`);
+    list("missing on disk ", entry.missing);
+    list("only on disk    ", entry.orphans);
+    list("size differs    ", entry.sizeMismatch);
+    list("not moved (link)", entry.notMoved);
+    if (fix) console.log(`  fixed: ${entry.trashed} moved to the trash, ${entry.flagged} missing flags changed`);
+  }
+  for (const stray of report.strayAccounts) console.log(`volume ${stray.volumeId}: folder of unknown account ${stray.accountId}${stray.trashed ? " (moved to the trash)" : ""}`);
 
-const problems = report.accounts.length + report.strayAccounts.length;
-console.log(problems === 0 ? "storage:fsck: database and volumes agree." : `storage:fsck: ${problems} account(s) with differences${fix ? "" : " (run with --fix to repair)"}.`);
-await db().$disconnect();
-process.exitCode = problems === 0 ? 0 : 1;
+  const problems = report.accounts.length + report.strayAccounts.length;
+  console.log(problems === 0 ? "storage:fsck: database and volumes agree." : `storage:fsck: ${problems} account(s) with differences${fix ? "" : " (run with --fix to repair)"}.`);
+  return problems === 0 ? 0 : 1;
+});

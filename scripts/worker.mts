@@ -1,14 +1,19 @@
 /**
  * Background worker (separate from the web app): npm run worker
- * Builds thumbnails and metadata-stripped copies for public links, and runs the daily
- * cleanup (expired accounts and items, trash, unfinished uploads). Stops cleanly on
- * SIGINT/SIGTERM so running jobs finish before the process exits.
+ * - media queue: thumbnails, viewer previews of large photos and metadata-stripped copies
+ *   for share links (uploads, copies, media:backfill)
+ * - maintenance queue: the daily cleanup (CLEANUP_CRON: expired accounts and items, trash,
+ *   unfinished uploads, dead sessions), bandwidth samples (METRICS_SAMPLE_INTERVAL_SEC, also
+ *   the worker's heartbeat), Status page probes (HEALTH_PROBE_INTERVAL_SEC) and the volume
+ *   watch (VOLUME_WATCH_INTERVAL_SEC)
+ * Stops cleanly on SIGINT/SIGTERM so running jobs finish before the process exits.
  */
-import nextEnv from "@next/env";
+// worker-*.log in LOG_DIR. Then .env is loaded before the app modules below; the worker runs
+// until a signal, so it does not use runScript.
+process.env.LOG_SERVICE ||= "worker";
+await import("./lib/bootstrap.mjs");
 
-nextEnv.loadEnvConfig(process.cwd());
-
-const { startMediaWorker } = await import("../src/server/jobs/media.worker");
+const { startMediaWorker } = await import("../src/server/jobs/media-worker");
 const { startMaintenanceWorker } = await import("../src/server/jobs/maintenance");
 const { logger } = await import("../src/server/logger");
 const { db } = await import("../src/server/db/client");

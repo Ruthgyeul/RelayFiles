@@ -45,6 +45,28 @@ test("dialogs and error pages have no serious accessibility problems", async ({ 
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page.getByRole("dialog", { name: "Search all files" })).toBeVisible();
   await audit(page);
+  await page.keyboard.press("Escape");
+
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([1, 2].map((n) => ({ name: `copy${n}.txt`, mimeType: "text/plain", buffer: Buffer.from("same") })));
+  const transfers = page.getByRole("region", { name: "Transfers" });
+  await expect(transfers.getByText("COMPLETE")).toBeVisible();
+  await transfers.getByRole("button", { name: "Show files" }).click();
+  await audit(page);
+  await transfers.getByRole("button", { name: "Close transfers" }).click();
+  for (const [entry, title, ready] of [
+    ["Renumber files", "Renumber files", "Renumber 2 files"],
+    ["Find duplicates", "Find duplicates", "2 copies"],
+  ] as const) {
+    await page.getByRole("button", { name: "Folder menu" }).click();
+    await page.getByRole("menuitem", { name: entry }).click();
+    const dialog = page.getByRole("dialog", { name: title });
+    await expect(dialog.getByText(ready)).toBeVisible();
+    await audit(page);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  }
 
   await page.goto("/files/nothinghere1");
   await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();

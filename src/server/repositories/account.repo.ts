@@ -89,3 +89,37 @@ export async function storageBusyOf(db: DbClient, accountId: string): Promise<bo
   const row = await db.account.findUnique({ where: { id: accountId }, select: { migrating: true, volume: { select: { status: true } } } });
   return row ? row.migrating || row.volume.status === "READONLY" : null;
 }
+
+export function countAccounts(db: DbClient): Promise<number> {
+  return db.account.count();
+}
+
+/** Ids of every account (fsck: account folders on a volume that no account owns). */
+export async function allAccountIds(db: DbClient): Promise<Set<string>> {
+  return new Set((await db.account.findMany({ select: { id: true } })).map((row) => row.id));
+}
+
+/** Accounts stored on a volume, oldest first; `onlyId` narrows it to one, `settled` skips accounts being moved. */
+export async function accountIdsOnVolume(db: DbClient, volumeId: string, options: { settled?: boolean; onlyId?: string } = {}): Promise<string[]> {
+  const rows = await db.account.findMany({
+    where: { volumeId, ...(options.settled ? { migrating: false } : {}), ...(options.onlyId ? { id: options.onlyId } : {}) },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((row) => row.id);
+}
+
+/** Where an account's files are and whether a volume move is running. */
+export function findAccountPlacement(db: DbClient, accountId: string) {
+  return db.account.findUnique({ where: { id: accountId }, select: { id: true, volumeId: true, migrating: true } });
+}
+
+/** Marks a volume move as running (changes are refused) or over. */
+export async function setAccountMigrating(db: DbClient, accountId: string, migrating: boolean): Promise<void> {
+  await db.account.update({ where: { id: accountId }, data: { migrating } });
+}
+
+/** Switches an account to the volume its files were copied to, ending the move. */
+export async function switchAccountVolume(db: DbClient, accountId: string, volumeId: string): Promise<void> {
+  await db.account.update({ where: { id: accountId }, data: { volumeId, migrating: false } });
+}

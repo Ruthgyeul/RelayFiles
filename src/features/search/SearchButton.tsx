@@ -1,7 +1,7 @@
 import { Kbd } from "@/shared/ui/Display";
 import { Icon } from "@/shared/ui/icon/Icon";
 
-/** Header button that opens the global search (design `gsAvail`, File Manager only). */
+/** Header button that opens the global search (File Manager only). */
 export function SearchButton({ onClick }: { onClick: () => void }) {
   return (
     <button

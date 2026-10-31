@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { ShareItem, ShareView } from "@/contracts/share";
 import { formatDateTime, formatSize } from "@/domain/format";
 import { itemCount } from "@/domain/tree";
-import { kindOf } from "@/features/files/kind";
+import { kindOf } from "@/shared/ui/node-kind";
 import { MediaViewer } from "@/features/viewer/MediaViewer";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -22,7 +22,7 @@ interface ShareFolderProps {
   notify: (message: string) => void;
 }
 
-/** An open share link (design `shUnlocked`): path, header card, note, items and the viewer. */
+/** An open share link: path, header card, note, items and the viewer. */
 export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
   const [viewing, setViewing] = useState<string | null>(null);
   const { folder, root } = view;

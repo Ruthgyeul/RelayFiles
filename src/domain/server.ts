@@ -1,7 +1,7 @@
 import { roundDecimals } from "./format";
 
 /**
- * Server page rules (design `srv`): uptime, the cleanup schedule label, hourly bandwidth
+ * Server page rules: uptime, the cleanup schedule label, hourly bandwidth
  * and disk rates, and the network link label. Values come from real measurements, never generated.
  */
 
@@ -51,7 +51,7 @@ export interface RateSeries {
   total: number;
 }
 
-/** Average, peak (bytes/s) and total bytes of samples taken every `secondsPerSample` (design `srvBw`). */
+/** Average, peak (bytes/s) and total bytes of samples taken every `secondsPerSample`. */
 export function rateStats(samples: readonly number[], secondsPerSample: number): { avg: number; peak: number; total: number } {
   if (samples.length === 0) return { avg: 0, peak: 0, total: 0 };
   const total = samples.reduce((sum, value) => sum + value, 0);

@@ -2,15 +2,16 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { NodeProperties } from "@/contracts/nodes";
-import { formatDateTime, formatLeft, formatSize } from "@/domain/format";
+import { formatCount, formatDateTime, formatLeft, formatSize } from "@/domain/format";
 import { useNow } from "@/shared/hooks/useNow";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { IconButton } from "@/shared/ui/IconButton";
 import { Modal } from "@/shared/ui/Modal";
-import { filesApi } from "./api";
-import { kindOf } from "./kind";
+import { filesApi } from "@/shared/lib/files-api";
+import { kindOf } from "@/shared/ui/node-kind";
+import { LinkField } from "./LinkField";
 
 const TYPE_LABEL = { video: "Video", audio: "Audio", image: "Image", other: "File" } as const;
 
@@ -38,7 +39,7 @@ function rowsOf({ item, isRoot, location, effectiveVisibility, contains }: NodeP
   return [
     ["Type", folder ? "Folder" : `${TYPE_LABEL[item.kind ?? "other"]}${ext ? ` (.${ext.toLowerCase()})` : ""}`],
     ["Location", isRoot ? "Top level of this account" : location.join(" / ")],
-    ["Size", `${formatSize(size)}${folder ? "" : ` (${size.toLocaleString("en-US")} bytes)`}`],
+    ["Size", `${formatSize(size)}${folder ? "" : ` (${formatCount(size)} bytes)`}`],
     ...(contains ? [["Contains", `${plural(contains.files, "file")}, ${plural(contains.folders, "folder")}`] as [string, string]] : []),
     ["Created", formatDateTime(item.createdAt)],
     ["Visibility", effectiveVisibility === "public" ? "Public" : "Private", settings.visibility === "inherit" ? "inherited" : undefined],
@@ -118,21 +119,7 @@ export function PropertiesDialog({ nodeId, onClose, linkOf, onCopyLink, onEditTa
                 )}
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 pt-3">
-              <span className="text-[13px] text-t4">Link</span>
-              <div className="flex gap-1.5">
-                <div className="flex h-9 min-w-0 flex-1 items-center truncate rounded-[10px] border border-ctrl bg-bg px-2.5 font-mono text-[12px] text-accent-text">{url}</div>
-                <button
-                  type="button"
-                  title="Copy link"
-                  aria-label="Copy link"
-                  onClick={() => onCopyLink(url, props.effectiveVisibility)}
-                  className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-ctrl bg-btn text-t1"
-                >
-                  <Icon name="copy" />
-                </button>
-              </div>
-            </div>
+            <LinkField key={url} url={url} visibility={props.effectiveVisibility} onCopy={() => onCopyLink(url, props.effectiveVisibility)} />
           </>
         )}
       </div>

@@ -27,8 +27,6 @@ export const ERRORS = {
 
 export type ErrorCode = keyof typeof ERRORS;
 
-export const ERROR_CODES = Object.keys(ERRORS) as ErrorCode[];
-
 export function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === "string" && Object.hasOwn(ERRORS, value);
 }

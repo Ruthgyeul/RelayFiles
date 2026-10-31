@@ -1,4 +1,5 @@
 import "server-only";
+import { STATUS } from "@/config/policy";
 import { APP_VERSION } from "@/config/version";
 import type { ComponentStatus, Health } from "@/contracts/health";
 import { db } from "../db/client";
@@ -7,13 +8,11 @@ import { redis } from "../redis";
 import { configuredVolumeRoot } from "../storage/registry";
 import { readVolumeMarker } from "../storage/volume";
 
-const CHECK_TIMEOUT_MS = 2_000;
-
 async function probe(name: string, check: () => Promise<boolean>): Promise<ComponentStatus> {
   let timer: NodeJS.Timeout | undefined;
   try {
     const timeout = new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => resolve(false), CHECK_TIMEOUT_MS);
+      timer = setTimeout(() => resolve(false), STATUS.healthCheckTimeoutMs);
     });
     return (await Promise.race([check(), timeout])) ? "ok" : "down";
   } catch (error) {

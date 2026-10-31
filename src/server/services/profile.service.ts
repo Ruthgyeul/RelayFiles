@@ -1,6 +1,6 @@
 import "server-only";
 import { getEnv } from "@/config/env";
-import { MS } from "@/config/policy";
+import { ACCOUNT, MS } from "@/config/policy";
 import type { DeviceDto, Preferences, ProfileData } from "@/contracts/profile";
 import { dailySeries, deletionDate, deviceLocation, maskToken } from "@/domain/account";
 import { db, type DbClient } from "../db/client";
@@ -13,12 +13,11 @@ import { accountUsage, contentCounts, expiredItemIds } from "../repositories/nod
 import { listAccountSessions, revokeAccountSession, revokeOtherSessions } from "../repositories/session.repo";
 import { trafficSince } from "../repositories/traffic.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
+import { listApiTokens } from "./api-token.service";
 import { revealToken } from "./auth.service";
 import { deleteItems } from "./node-ops.service";
 import { driverForAccount } from "./volume.service";
 
-/** Days shown in the profile "Traffic" card. */
-const TRAFFIC_DAYS = 30;
 
 export async function listDevices(accountId: string, currentSessionId: string): Promise<DeviceDto[]> {
   const sessions = await listAccountSessions(db(), accountId);
@@ -38,16 +37,17 @@ export async function listDevices(accountId: string, currentSessionId: string): 
 /** Everything the My Profile page shows. */
 export async function profileOf(account: AccountRow, currentSessionId: string, now: Date = new Date()): Promise<ProfileData> {
   const ttlDays = getEnv("policy").ACCOUNT_TTL_DAYS;
-  const from = new Date(now.getTime() - (TRAFFIC_DAYS - 1) * MS.day);
-  const [token, usage, counts, traffic, devices, lastLoginAt] = await Promise.all([
+  const from = new Date(now.getTime() - (ACCOUNT.trafficDays - 1) * MS.day);
+  const [token, usage, counts, traffic, devices, lastLoginAt, apiTokens] = await Promise.all([
     revealToken(account.id),
     accountUsage(db(), account.id),
     contentCounts(db(), account.id),
     trafficSince(db(), account.id, new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()))),
     listDevices(account.id, currentSessionId),
     lastLoginOf(db(), account.id),
+    listApiTokens(account.id),
   ]);
-  const days = dailySeries(traffic, TRAFFIC_DAYS, now);
+  const days = dailySeries(traffic, ACCOUNT.trafficDays, now);
   return {
     account: {
       id: account.id,
@@ -65,6 +65,7 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
     usage: { usedBytes: usage.usedBytes.toString(), ...counts },
     traffic: { total: days.reduce((sum, bytes) => sum + bytes, 0n).toString(), days: days.map(String) },
     devices,
+    apiTokens,
   };
 }
 

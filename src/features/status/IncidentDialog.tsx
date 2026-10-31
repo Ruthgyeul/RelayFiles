@@ -18,7 +18,7 @@ interface IncidentDialogProps {
 
 const today = () => dayKeyIn(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone);
 
-/** Post or edit an incident (design `incOpen`). */
+/** Post or edit an incident. */
 export function IncidentDialog({ incident, busy, onSave, onClose }: IncidentDialogProps) {
   const [draft, setDraft] = useState<IncidentInput>(() => incident ?? { title: "", text: "", severity: "minor", date: today(), duration: "", resolved: false });
   const [error, setError] = useState(false);

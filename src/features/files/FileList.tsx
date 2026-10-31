@@ -5,7 +5,9 @@ import { hasFiles } from "@/features/transfers/read-drop";
 import { FILES } from "@/config/policy";
 import { cn } from "@/shared/lib/cn";
 import { EmptyFolder, NodeCard } from "./NodeCard";
-import { NodeRow, RowButton, type ItemProps } from "./NodeRow";
+import { RowButton } from "./ItemButtons";
+import type { ItemProps } from "./item-props";
+import { NodeRow } from "./NodeRow";
 import type { ListedItem } from "./useFolderItems";
 
 interface FileListProps {

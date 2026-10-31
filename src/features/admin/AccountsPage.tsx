@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { AdminAccounts, ManageInput } from "@/contracts/admin";
 import { accountStatus, ADMIN_FILTERS, matchesFilter, type AdminFilter } from "@/domain/admin";
 import { formatSize } from "@/domain/format";
-import { usePageTitle } from "@/features/shell/page-title";
+import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { useNow } from "@/shared/hooks/useNow";
@@ -36,7 +36,7 @@ function StatCard({ icon, box, color, label, value }: { icon: IconName; box: str
   );
 }
 
-/** Admin "Accounts" page (design `isAdmin`): stats, cleanup, filters, search and account rows. */
+/** Admin "Accounts" page: stats, cleanup, filters, search and account rows. */
 export function AccountsPage({ data }: { data: AdminAccounts }) {
   usePageTitle("Accounts");
   const router = useRouter();

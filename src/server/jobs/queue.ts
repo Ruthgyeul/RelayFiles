@@ -8,6 +8,11 @@ export const MEDIA_QUEUE = "media";
 
 export interface MediaJob {
   nodeId: string;
+  /**
+   * "process" (default): thumbnails, previews, stripped copies and the date taken;
+   * "transcode": store an MP4 conversion; "taken": read only the date taken.
+   */
+  task?: "process" | "transcode" | "taken";
 }
 
 /**
@@ -51,8 +56,33 @@ export async function enqueueMedia(nodeIds: readonly string[]): Promise<void> {
   }
 }
 
+/**
+ * Asks the worker to read the date taken of existing photos and videos (one pending job per
+ * file). Unlike {@link enqueueMedia} it fails when Redis is unreachable, so the release data
+ * migration that calls it stops and runs again next time instead of skipping files.
+ */
+export async function enqueueDateTaken(nodeIds: readonly string[]): Promise<void> {
+  if (nodeIds.length === 0) return;
+  await mediaQueue().addBulk(nodeIds.map((nodeId) => ({ name: "taken", data: { nodeId, task: "taken" as const }, opts: { jobId: `taken-${nodeId}` } })));
+}
+
+/** Asks the worker to store an MP4 conversion of an often played video (one pending job per video). */
+export async function enqueueTranscode(nodeId: string): Promise<void> {
+  try {
+    await mediaQueue().add("transcode", { nodeId, task: "transcode" }, { jobId: `transcode-${nodeId}` });
+  } catch (error) {
+    logger.warn("transcode job not queued", { error });
+  }
+}
+
 /** Closes the producer connection (scripts and tests that exit). */
 export async function closeQueues(): Promise<void> {
   await globalForQueue.relayMediaQueue?.close();
   globalForQueue.relayMediaQueue = undefined;
+}
+
+/** Media jobs waiting, running and scheduled for a retry, for /metrics. */
+export async function mediaQueueCounts(): Promise<Record<"waiting" | "active" | "delayed", number>> {
+  const counts = await mediaQueue().getJobCounts("waiting", "active", "delayed");
+  return { waiting: counts.waiting ?? 0, active: counts.active ?? 0, delayed: counts.delayed ?? 0 };
 }

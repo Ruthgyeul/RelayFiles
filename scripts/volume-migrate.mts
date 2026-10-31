@@ -6,29 +6,23 @@
  * in the source volume's trash for STORAGE.trashRetentionHours. Run `npm run volume:list` first.
  */
 import { parseArgs } from "node:util";
-import nextEnv from "@next/env";
-
-nextEnv.loadEnvConfig(process.cwd());
+import { runScript } from "./lib/bootstrap.mjs";
 
 const { values } = parseArgs({ options: { account: { type: "string" }, volume: { type: "string" }, to: { type: "string" } } });
-const { db } = await import("../src/server/db/client");
 const { drainVolume, moveAccountToVolume } = await import("../src/server/services/storage-migration.service");
 const log = (message: string) => console.log(message);
 
-try {
+await runScript(async () => {
   if (values.account && values.to) {
     const report = await moveAccountToVolume(values.account, values.to, log);
     console.log(report ? `Moved ${report.files} files (${report.bytes} bytes).` : "The account is already on that volume.");
-  } else if (values.volume) {
+    return 0;
+  }
+  if (values.volume) {
     const reports = await drainVolume(values.volume, values.to ?? null, log);
     console.log(`Moved ${reports.length} account(s).`);
-  } else {
-    console.error("Usage: npm run volume:migrate -- --account <id> --to <volumeId> | --volume <volumeId> [--to <volumeId>]");
-    process.exitCode = 1;
+    return 0;
   }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-} finally {
-  await db().$disconnect();
-}
+  console.error("Usage: npm run volume:migrate -- --account <id> --to <volumeId> | --volume <volumeId> [--to <volumeId>]");
+  return 1;
+});

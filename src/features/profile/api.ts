@@ -1,3 +1,4 @@
+import type { ApiTokenDto, CreateApiTokenInput, CreatedApiToken } from "@/contracts/api-tokens";
 import type { SessionState } from "@/contracts/auth";
 import type { DeviceDto, Preferences } from "@/contracts/profile";
 import { apiFetch } from "@/shared/lib/api-client";
@@ -10,5 +11,8 @@ export const profileApi = {
   newToken: () => apiFetch<{ token: string; account: { id: string; name: string } }>("/api/me/token", { method: "POST" }),
   savePreferences: (preferences: Preferences) => apiFetch<Preferences>("/api/me/preferences", { method: "PATCH", json: preferences }),
   purgeExpired: () => apiFetch<{ deleted: number }>("/api/me/purge", { method: "POST" }),
+  apiTokens: () => apiFetch<ApiTokenDto[]>("/api/me/api-tokens"),
+  createApiToken: (input: CreateApiTokenInput) => apiFetch<CreatedApiToken>("/api/me/api-tokens", { method: "POST", json: input }),
+  revokeApiToken: (id: string) => apiFetch<{ revoked: true }>(`/api/me/api-tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
   deleteAccount: () => apiFetch<SessionState>("/api/me", { method: "DELETE" }),
 };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_NAME_BYTES } from "@/domain/names";
 
 /** How to handle files that already exist in the target folder (duplicate dialog). */
 export const DUPLICATE_POLICIES = ["replace", "keep", "skip"] as const;
@@ -18,7 +19,7 @@ export const prepareUploadSchema = z.object({
     .max(MAX_FILES_PER_BATCH),
   dup: z.enum(DUPLICATE_POLICIES).optional(),
   /** Name for a Home upload of loose files, formatted in the uploader's time zone ("Upload Oct 5, 3:12 PM"). */
-  fallbackName: z.string().max(255).optional(),
+  fallbackName: z.string().max(MAX_NAME_BYTES).optional(),
 });
 
 export type PrepareUploadInput = z.infer<typeof prepareUploadSchema>;
@@ -43,5 +44,5 @@ export interface UploadedFile {
   folderId: string;
 }
 
-/** tus metadata keys sent with each file. */
-export const UPLOAD_METADATA = { batch: "batch", index: "index", filename: "filename" } as const;
+/** tus metadata keys sent with each file; `lastModified` (File.lastModified, ms) is optional for older clients. */
+export const UPLOAD_METADATA = { batch: "batch", index: "index", filename: "filename", lastModified: "lastModified" } as const;

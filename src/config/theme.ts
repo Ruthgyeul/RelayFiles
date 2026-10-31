@@ -1,5 +1,5 @@
 /**
- * Color themes from the design prototype (`applyTheme`).
+ * Color themes from the design.
  * The key is written to `<html data-theme>`; `blue` is the unscoped `:root` palette.
  */
 export const THEMES = {

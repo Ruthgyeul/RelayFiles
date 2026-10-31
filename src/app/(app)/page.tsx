@@ -2,7 +2,7 @@ import { LastUploadCard } from "@/features/home/LastUploadCard";
 import { UploadCard } from "@/features/home/UploadCard";
 import { Logo } from "@/shared/ui/Display";
 
-/** Home: hero, upload card and the link to the last upload (design). */
+/** Home: hero, upload card and the link to the last upload. */
 export default function HomePage() {
   return (
     <>

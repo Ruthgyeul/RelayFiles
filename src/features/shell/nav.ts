@@ -8,7 +8,7 @@ export interface NavItem {
   href: Route;
   label: string;
   icon: IconName;
-  /** Header title for this section (the design's `title`). */
+  /** Header title for this section. */
   title: string;
   adminOnly?: boolean;
 }

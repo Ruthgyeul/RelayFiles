@@ -1,5 +1,4 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { rm, stat, unlink } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
@@ -8,21 +7,14 @@ import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/co
 import { randomString, ID_ALPHABET, newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { folderCount, homeUploadPlan, kindFromMime, mimeFromName, uploadFallbackName } from "@/domain/upload";
-import { db, Prisma } from "../db/client";
+import { segmentsBelowRoot } from "@/domain/tree";
+import { db } from "../db/client";
+import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import {
-  ancestorChain,
-  createFileNode,
-  createFolderNode,
-  deleteNodes,
-  findChildByName,
-  findNode,
-  findRootFolder,
-  listSiblingNames,
-  relativePaths,
-  type NodeRow,
-} from "../repositories/node.repo";
+import { createFileNode, createFolderNode, deleteNodes, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, type NodeRow } from "../repositories/node.repo";
+import { ancestorChain, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
+import { sha256Of } from "../storage/hash";
 import { layoutOf } from "../storage/layout";
 import { driverFor } from "../storage/registry";
 import type { StorageDriver } from "../storage/driver";
@@ -34,6 +26,8 @@ import { createFolder } from "./node.service";
 import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
 import { assertAccountWritable, driverForAccount } from "./volume.service";
 import { enqueueMedia } from "../jobs/queue";
+import { countOne } from "../metrics/counters";
+import { locationOf } from "./node-location";
 
 type Owner = SpaceOwner;
 
@@ -44,9 +38,6 @@ const HOME_UPLOAD_DEPTH = 2;
 /** Files plus the folders their paths create, at most (existing folders are reused). */
 const newItemCount = (rels: readonly string[]) => rels.length + folderCount(rels);
 
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}
 
 /** Rejects a path with an invalid segment, naming the first problem (design wording). */
 export function checkRelPath(rel: string): void {
@@ -56,8 +47,14 @@ export function checkRelPath(rel: string): void {
   }
 }
 
+/** The volume a tus request (`/api/uploads/tus/<volumeId>/…`) writes to; null when it is unknown or offline. */
+export async function tusVolume(volumeId: string | undefined) {
+  const volume = volumeId ? await findVolume(db(), volumeId) : null;
+  return volume && volume.status !== "OFFLINE" ? volume : null;
+}
+
 /**
- * Plans an upload (design `startUpload`): validates names, reports duplicates for the
+ * Plans an upload: validates names, reports duplicates for the
  * dialog, checks quota and disk space, creates the Home upload folder, and stores the batch
  * the tus server will accept files for.
  */
@@ -131,51 +128,37 @@ export async function checkUploadStart(owner: Owner, batchId: string, slot: numb
 async function ensureFolders(owner: Owner, driver: StorageDriver, baseId: string, dirs: string[]): Promise<{ id: string; segments: string[] }> {
   const base = await ancestorChain(db(), baseId);
   let parentId = baseId;
-  const segments = base.slice(1).map((row) => row.name);
+  const segments = segmentsBelowRoot(base);
   for (const dir of dirs) {
-    for (let attempt = 0; ; attempt++) {
+    // A parallel upload may create the same folder first: the next try finds and uses it.
+    const folder = await retryOnUniqueViolation(async () => {
       const existing = await findChildByName(db(), parentId, dir);
-      if (existing?.type === "FOLDER") {
-        parentId = existing.id;
-        segments.push(dir);
-        break;
-      }
+      if (existing?.type === "FOLDER") return { id: existing.id, name: dir };
       // A file already has this name: put the folder next to it as "Name (2)".
       const name = existing ? uniqName(await listSiblingNames(db(), parentId), dir, false) : dir;
-      try {
-        const created = await withStorageTransaction(db(), async (tx, undo) => {
-          const row = await createFolderNode(tx, { id: newNodeId(), accountId: owner.id, parentId, name, linkId: newLinkId() });
-          const location = { accountId: owner.id, segments: [...segments, name] };
-          await driver.createFolder(location);
-          undo.push("remove upload folder", async () => {
-            await driver.moveToTrash(location);
-          });
-          return row;
+      const created = await withStorageTransaction(db(), async (tx, undo) => {
+        const row = await createFolderNode(tx, { id: newNodeId(), accountId: owner.id, parentId, name, linkId: newLinkId() });
+        const location = { accountId: owner.id, segments: [...segments, name] };
+        await driver.createFolder(location);
+        undo.push("remove upload folder", async () => {
+          await driver.moveToTrash(location);
         });
-        parentId = created.id;
-        segments.push(name);
-        break;
-      } catch (error) {
-        // A parallel upload created the same folder: use it.
-        if (isUniqueViolation(error) && attempt < 2) continue;
-        throw error;
-      }
-    }
+        return row;
+      });
+      return { id: created.id, name };
+    });
+    parentId = folder.id;
+    segments.push(folder.name);
   }
   return { id: parentId, segments };
 }
 
-async function sha256Of(path: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
-  return hash.digest("hex");
-}
-
 /**
- * Moves a finished upload into place and records it: content-detected type, SHA-256,
- * and the batch's duplicate policy (replace, keep both as "name (2)", or skip).
+ * Moves a finished upload into place and records it: content-detected type, SHA-256, the
+ * file's own modification time (the upload time when the sender gave none) and the batch's
+ * duplicate policy (replace, keep both as "name (2)", or skip).
  */
-export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: number, uploadId: string): Promise<UploadedFile> {
+export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: number, uploadId: string, modifiedAt: Date | null = null): Promise<UploadedFile> {
   const entry = batch.files[slot];
   if (!entry) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner, "write");
@@ -189,7 +172,7 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
     throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
   }
   try {
-    return await placeUpload(owner, driver, batch, entry, tempPath);
+    return await placeUpload(owner, driver, batch, entry, tempPath, modifiedAt ?? new Date());
   } catch (error) {
     // A refused upload (its folder was deleted meanwhile, a name clash) must not leave its
     // bytes in the temp area until the daily cleanup, where no quota sees them.
@@ -200,7 +183,7 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
 }
 
 /** Puts a received upload into its folder and records it (the second half of {@link finalizeUpload}). */
-async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBatch, entry: UploadBatch["files"][number], tempPath: string): Promise<UploadedFile> {
+async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBatch, entry: UploadBatch["files"][number], tempPath: string, modifiedAt: Date): Promise<UploadedFile> {
   const parts = entry.rel.split("/");
   const fileName = parts.at(-1)!;
   // The account's own folder never moves, so it may be (re)created; folders below it must exist.
@@ -209,11 +192,15 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
 
   const detected = await fileTypeFromFile(tempPath).catch(() => undefined);
   const mime = detected?.mime ?? mimeFromName(fileName);
-  const sha256 = await sha256Of(tempPath);
+  const sha256 = await sha256Of(createReadStream(tempPath));
   const existing = await findChildByName(db(), folder.id, fileName);
   const replace = batch.dup === "replace" && existing?.type === "FILE" ? existing : null;
   const name = existing && !replace ? uniqName(await listSiblingNames(db(), folder.id), fileName, true) : fileName;
   const location = { accountId: owner.id, segments: [...folder.segments, name] };
+  // The same bytes already in the account: link to them instead of keeping a second copy.
+  const twin = await findFileWithContent(db(), owner.id, sha256, BigInt(entry.size), replace?.id ?? null);
+  const twinLocation = twin ? await locationOf(owner.id, twin.id) : null;
+  let linked = false;
 
   const row = await withStorageTransaction(db(), async (tx, undo) => {
     if (replace) {
@@ -232,15 +219,21 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       size: BigInt(entry.size),
       sha256,
       linkId: newLinkId(),
+      modifiedAt,
     });
-    await driver.moveIntoPlace(tempPath, location);
+    linked = twinLocation !== null && (await driver.linkExisting(twinLocation, location, entry.size));
+    if (!linked) await driver.moveIntoPlace(tempPath, location);
     undo.push("remove placed file", async () => {
       await driver.moveToTrash(location);
     });
     return created;
   });
-  // tus keeps upload state next to the data file; the data moved, so drop the state too.
+  // tus keeps upload state next to the data file; the data moved (or was linked), so drop the state too.
   await unlink(`${tempPath}.json`).catch(() => undefined);
+  if (linked) {
+    await driver.discardStaged(tempPath);
+    void countOne("deduplicated_files");
+  }
   if (replace) await driver.removeAssets(owner.id, [replace.id]).catch(() => undefined);
   if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
   return { nodeId: row.id, name: row.name, folderId: folder.id };

@@ -15,7 +15,7 @@ const STATE_PILL: Record<ComponentState, string> = {
 
 const DAY_COLOR: Record<Exclude<DayLevel, "nodata">, string> = { ok: "var(--color-ok-bar)", warn: "var(--color-warn-strong)", down: "var(--color-danger-icon)" };
 
-/** Services with their current state, uptime and the last 60 days (design `st.comps`). */
+/** Services with their current state, uptime and the last 60 days. */
 export function ServicesCard({ components, level }: { components: StatusComponentDto[]; level: StatusLevel }) {
   return (
     <section aria-label="Services" className="flex flex-col gap-1 rounded-2xl border border-card-line bg-card p-5">

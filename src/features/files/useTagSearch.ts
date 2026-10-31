@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TaggedItem } from "@/contracts/nodes";
 import { parseTags } from "@/domain/tags";
-import { filesApi } from "./api";
+import { filesApi } from "@/shared/lib/files-api";
 
 /** Delay before a tag search runs while typing. */
 const DEBOUNCE_MS = 200;

@@ -6,8 +6,8 @@ import { SEARCH } from "@/config/policy";
 import type { TaggedItem } from "@/contracts/nodes";
 import { formatSize } from "@/domain/format";
 import { moveHighlight, parseSearchQuery, searchHeading } from "@/domain/search";
-import { folderHref } from "@/features/files/paths";
-import { kindOf } from "@/features/files/kind";
+import { folderHref } from "@/shared/lib/routes";
+import { kindOf } from "@/shared/ui/node-kind";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { Modal } from "@/shared/ui/Modal";
@@ -20,7 +20,7 @@ export function searchHitHref(item: TaggedItem): string {
   return item.kind && item.kind !== "other" ? `${folder}?view=${item.id}` : folder;
 }
 
-/** Global search (design `gsOpen`): every file and folder of the active account. */
+/** Global search: every file and folder of the active account. */
 export function GlobalSearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const [query, setQuery] = useState("");

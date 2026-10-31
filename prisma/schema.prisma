@@ -71,6 +71,8 @@ model Account {
   nodes                Node[]
   trashed              TrashedBytes[]
   traffic              TrafficDaily[]
+  apiTokens            ApiToken[]
+  fileRequests         FileRequest[]
 
   @@index([volumeId])
 }
@@ -178,11 +180,18 @@ model Node {
   tags          String[]    @default([])
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  /// When the file's content last changed, as the uploader reported it (File.lastModified); files without it use the disk mtime (data migration 20261101-backfill-modified-at).
+  modifiedAt    DateTime?
+  /// When the photo or video was taken, from its metadata (EXIF DateTimeOriginal, video creation_time); null when it has none or the worker has not read it yet.
+  takenAt       DateTime?
   events        LinkEvent[]
+  fileRequests  FileRequest[]
 
   @@unique([parentId, name])
   @@index([accountId, parentId])
   @@index([accountId, type])
+  /// Finds a file with the same content in the account (deduplication of re-uploads).
+  @@index([accountId, sha256])
   @@index([expAt])
   @@index([tags], type: Gin)
 }
@@ -353,4 +362,66 @@ model TrashedBytes {
 
   @@index([accountId])
   @@index([trashedAt])
+}
+
+/// One run of deploy/scripts/verify-backup.sh: the newest dump restored into a scratch database
+/// and compared with production, plus a report-only storage:fsck. The Server page shows the latest.
+model BackupCheck {
+  id              BigInt    @id @default(autoincrement())
+  checkedAt       DateTime  @default(now())
+  ok              Boolean
+  /// File name of the dump that was restored (null when none was found).
+  dumpName        String?
+  dumpAt          DateTime?
+  restoreMs       Int?
+  /// Items storage:fsck found different between the database and the volumes.
+  fsckDifferences Int?
+  /// What failed, in words for the Server page (empty when ok).
+  problems        String[]
+
+  @@index([checkedAt])
+}
+
+/// Personal API token for scripts and uploaders (Authorization: Bearer on /api/v1). Shown once;
+/// only its SHA-256 is stored (256 random bits need no key, so key rotation never breaks it).
+/// Revoking deletes the row.
+model ApiToken {
+  id         String    @id
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name       String
+  /// argon2id hash of the whole token (rfp_<id>_<secret>); the token itself is never stored.
+  secretHash String
+  /// What the token may do (contracts/api-tokens.ts API_SCOPES).
+  scopes     String[]
+  createdAt  DateTime  @default(now())
+  /// Null: until revoked.
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+
+  @@index([accountId])
+}
+
+/// Upload-only link ("file request", /r/<id>): visitors add files to one folder of the account
+/// without seeing what is in it. Deleting the folder deletes its requests.
+model FileRequest {
+  id            String    @id
+  accountId     String
+  account       Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  folderId      String
+  folder        Node      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  /// Shown to uploaders ("Photos from the trip").
+  title         String
+  /// argon2id, like share link passwords; null = no password.
+  passwordHash  String?
+  expiresAt     DateTime?
+  /// Limits for everything received through this link; null = no limit.
+  maxFiles      Int?
+  maxBytes      BigInt?
+  filesReceived Int       @default(0)
+  bytesReceived BigInt    @default(0)
+  createdAt     DateTime  @default(now())
+
+  @@index([accountId])
+  @@index([folderId])
 }

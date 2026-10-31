@@ -23,6 +23,12 @@ export function redis(): Redis {
   return globalForRedis.relayRedis;
 }
 
+/** Closes the shared connection if one was opened (scripts, so the process can exit). */
+export function closeRedis(): void {
+  globalForRedis.relayRedis?.disconnect();
+  globalForRedis.relayRedis = undefined;
+}
+
 /**
  * Increments a counter that expires `windowSeconds` after its first increment. INCR and
  * EXPIRE run in one transaction, so a crash between them cannot leave a counter that never

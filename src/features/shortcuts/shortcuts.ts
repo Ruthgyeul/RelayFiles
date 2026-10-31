@@ -1,4 +1,4 @@
-/** Keyboard shortcut reference shown in the shortcuts dialog (design `KEYS`). */
+/** Keyboard shortcut reference shown in the shortcuts dialog. */
 export interface ShortcutGroup {
   title: string;
   rows: { keys: string[]; description: string }[];

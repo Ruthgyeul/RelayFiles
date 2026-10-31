@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 
-/** 38px icon box + 17px title used by the profile sections (design). */
+/** 38px icon box + 17px title used by the profile sections. */
 export function SectionTitle({ icon, box, color, children, after }: { icon: IconName; box: string; color: string; children: ReactNode; after?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-3">

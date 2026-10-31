@@ -1,16 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { filesApi } from "@/features/files/api";
-import { folderHref } from "@/features/files/paths";
+import { useId, useState } from "react";
+import { filesApi } from "@/shared/lib/files-api";
+import { folderHref } from "@/shared/lib/routes";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useNow } from "@/shared/hooks/useNow";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
+import { TransferFileList } from "./TransferFileList";
 import { panelSummary, percentDone, transferMeta, type TransferStatus } from "./transfer-text";
-import { useTransfers, type Transfer } from "./TransfersProvider";
+import { useTransfers, type Transfer } from "./transfers-context";
 
-/** Look per status (design `badge`, `boxBg`, `icon`). */
+/** Look per status. */
 const LOOK: Record<TransferStatus, { badge: string; box: string; badgeText: string; icon: IconName; weight: "fill" | "regular" | "bold"; iconColor: string }> = {
   active: { badge: "UPLOADING", box: "bg-accent-soft", badgeText: "text-accent-text", icon: "circle-notch", weight: "regular", iconColor: "text-accent-icon animate-spin" },
   paused: { badge: "PAUSED", box: "bg-warn-bg-soft", badgeText: "text-warn-text", icon: "pause", weight: "fill", iconColor: "text-warn-text" },
@@ -25,8 +27,12 @@ function TransferCard({ transfer, now }: { transfer: Transfer; now: number }) {
   const router = useRouter();
   const { notify, config } = useShell();
   const { togglePause, remove } = useTransfers();
+  const [filesOpen, setFilesOpen] = useState(false);
+  const listId = useId();
   const look = LOOK[transfer.status];
+  const badge = transfer.status === "active" && transfer.direction === "down" ? "DOWNLOADING" : look.badge;
   const inProgress = transfer.status === "active" || transfer.status === "paused";
+  const items = transfer.items;
   const elapsed = (transfer.activeMs + (transfer.runningSince ? now - transfer.runningSince : 0)) / 1_000;
   const copyLink = async () => {
     const { item } = await filesApi.getProperties(transfer.folderId);
@@ -41,9 +47,22 @@ function TransferCard({ transfer, now }: { transfer: Transfer; now: number }) {
         </span>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate text-[15px] font-bold">{transfer.title}</span>
-          <span className={cn("shrink-0 rounded-full px-[7px] py-0.5 text-[10px] font-extrabold tracking-[.04em]", look.box, look.badgeText)}>{look.badge}</span>
+          <span className={cn("shrink-0 rounded-full px-[7px] py-0.5 text-[10px] font-extrabold tracking-[.04em]", look.box, look.badgeText)}>{badge}</span>
         </div>
-        {inProgress && (
+        {items && (
+          <button
+            type="button"
+            aria-label={filesOpen ? "Hide files" : "Show files"}
+            title={filesOpen ? "Hide files" : "Show files"}
+            aria-expanded={filesOpen}
+            aria-controls={listId}
+            onClick={() => setFilesOpen((open) => !open)}
+            className="flex size-[30px] items-center justify-center rounded-lg border-0 bg-transparent text-t2 hover:bg-btn-h"
+          >
+            <Icon name={filesOpen ? "caret-up" : "caret-down"} size={15} />
+          </button>
+        )}
+        {inProgress && transfer.direction === "up" && (
           <button type="button" title={transfer.status === "paused" ? "Resume" : "Pause"} aria-label={transfer.status === "paused" ? "Resume" : "Pause"} onClick={() => togglePause(transfer.id)} className="flex size-[30px] items-center justify-center rounded-lg border-0 bg-transparent text-t2 hover:bg-btn-h">
             <Icon name={transfer.status === "paused" ? "play" : "pause"} weight="fill" size={15} />
           </button>
@@ -58,7 +77,8 @@ function TransferCard({ transfer, now }: { transfer: Transfer; now: number }) {
         </div>
       )}
       <span className="text-[12px] text-t4">{transferMeta({ ...transfer, elapsed })}</span>
-      {transfer.status === "complete" && (
+      {items && filesOpen && <TransferFileList transfer={{ ...transfer, items }} id={listId} />}
+      {transfer.status === "complete" && transfer.direction === "up" && (
         <div className="flex gap-1.5">
           <button type="button" onClick={() => router.push(folderHref(transfer.folderId))} className="flex h-7 items-center gap-[5px] rounded-lg border border-ctrl bg-btn px-2.5 text-[12px] font-bold text-t1">
             <Icon name="folder-open" />

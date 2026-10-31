@@ -1,9 +1,8 @@
 import { z } from "zod";
 import { manageSchema } from "@/contracts/admin";
 import { ID_PATTERN } from "@/domain/ids";
-import { deviceOf } from "@/server/auth/current";
 import { clientInfo } from "@/server/auth/client-info";
-import { requireAdmin, requireRecentAuth } from "@/server/auth/device-session";
+import { requireRecentAuth } from "@/server/auth/device-session";
 import { apiHandler } from "@/server/http/api-handler";
 import { deleteAccountAsAdmin, manageAccount } from "@/server/services/admin.service";
 import { audit } from "@/server/services/audit.service";
@@ -11,8 +10,7 @@ import { audit } from "@/server/services/audit.service";
 const accountId = z.string().regex(ID_PATTERN.account);
 
 /** Manage dialog: role, deletion date, storage limit. */
-export const PATCH = apiHandler<{ updated: true }, { id: string }>(async ({ req, params }) => {
-  const admin = requireAdmin(await deviceOf(req));
+export const PATCH = apiHandler<{ updated: true }, { id: string }>({ auth: "admin" }, async ({ req, params, active: admin }) => {
   requireRecentAuth(admin);
   const id = accountId.parse(params.id);
   const input = manageSchema.parse(await req.json());
@@ -23,8 +21,7 @@ export const PATCH = apiHandler<{ updated: true }, { id: string }>(async ({ req,
 });
 
 /** Deletes a member account with all of its files. */
-export const DELETE = apiHandler<{ deleted: true }, { id: string }>(async ({ req, params }) => {
-  const admin = requireAdmin(await deviceOf(req));
+export const DELETE = apiHandler<{ deleted: true }, { id: string }>({ auth: "admin" }, async ({ req, params, active: admin }) => {
   requireRecentAuth(admin);
   const id = accountId.parse(params.id);
   const deleted = await deleteAccountAsAdmin(id);

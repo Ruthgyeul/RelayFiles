@@ -1,11 +1,10 @@
+import { MS } from "@/config/policy";
 import { BYTES_PER_GB } from "./quota";
 
 /**
  * Admin "Accounts" rules from the design: account status badges and filters, and the
  * Manage dialog (role, deletion date, storage limit) with its preview text.
  */
-
-const DAY_MS = 86_400_000;
 
 /** Accounts deleted within this many days are "Expiring soon" (design: 7). */
 export const EXPIRING_SOON_DAYS = 7;
@@ -28,16 +27,16 @@ export interface AdminLifecycle {
   neverExpire: boolean;
 }
 
-/** The calendar deletion date, ignoring exemptions (design `delAt`). */
+/** The calendar deletion date, ignoring exemptions. */
 export function scheduledDeletion(account: Pick<AdminLifecycle, "createdAt" | "expiresAt">, ttlDays: number): number {
-  return account.expiresAt ?? account.createdAt + ttlDays * DAY_MS;
+  return account.expiresAt ?? account.createdAt + ttlDays * MS.day;
 }
 
 /** Status badge and whole days left (Infinity when exempt). */
 export function accountStatus(account: AdminLifecycle, ttlDays: number, now: number): { status: AccountStatus; left: number } {
   if (account.isAdmin) return { status: "admin", left: Infinity };
   if (account.neverExpire) return { status: "active", left: Infinity };
-  const left = Math.ceil((scheduledDeletion(account, ttlDays) - now) / DAY_MS);
+  const left = Math.ceil((scheduledDeletion(account, ttlDays) - now) / MS.day);
   return { status: left <= 0 ? "expired" : left <= EXPIRING_SOON_DAYS ? "soon" : "active", left };
 }
 
@@ -74,14 +73,14 @@ export interface ManageDraft {
 }
 
 /**
- * What saving the Manage dialog does to the deletion date (design `saveManage`):
+ * What saving the Manage dialog does to the deletion date:
  * extensions are added to the current date (or today if later), "Default" clears the admin
  * date, "Never delete" exempts the account.
  */
 export function applyManage(account: AdminLifecycle, draft: ManageDraft, ttlDays: number, now: number): { expiresAt: number | null; neverExpire: boolean } {
   let expiresAt = account.expiresAt;
-  if (draft.reset) expiresAt = now + ttlDays * DAY_MS;
-  if (typeof draft.days === "number" && draft.days > 0) expiresAt = Math.max(draft.reset && expiresAt !== null ? expiresAt : scheduledDeletion(account, ttlDays), now) + draft.days * DAY_MS;
+  if (draft.reset) expiresAt = now + ttlDays * MS.day;
+  if (typeof draft.days === "number" && draft.days > 0) expiresAt = Math.max(draft.reset && expiresAt !== null ? expiresAt : scheduledDeletion(account, ttlDays), now) + draft.days * MS.day;
   if (draft.days === "default") expiresAt = null;
   return { expiresAt, neverExpire: draft.days === "never" };
 }
@@ -94,7 +93,7 @@ export function managePreview(account: AdminLifecycle, draft: ManageDraft, ttlDa
   return `Currently deletes ${format(current)}. ${next !== current ? `After saving: ${format(next)}.` : "No change."}`;
 }
 
-/** Note under the storage limit (design `mQuotaNote`); bytes are decimal GB like the design. */
+/** Note under the storage limit; bytes are decimal GB like the design. */
 export function quotaNote(usedBytes: number, quotaGb: number | null, formatSize: (bytes: number) => string): string {
   const over = quotaGb !== null && usedBytes > quotaGb * BYTES_PER_GB;
   return `Using ${formatSize(usedBytes)}${over ? ". Over the new limit: existing files stay, new uploads are blocked." : "."}`;

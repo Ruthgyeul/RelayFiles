@@ -1,5 +1,5 @@
 /**
- * Identifier formats from the design prototype (`newAcct`, `regenLink`, `genInvite`).
+ * Identifier formats from the design.
  * Generation uses Web Crypto (available in browsers and Node) with rejection sampling,
  * so every character is uniformly distributed (the prototype's modulo had a small bias).
  */
@@ -11,7 +11,13 @@ export const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 /** Upper-case invite code alphabet. */
 export const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-export const ID_LENGTH = { account: 12, node: 12, link: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4 } as const;
+export const ID_LENGTH = { account: 12, node: 12, link: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12, fileRequest: 12 } as const;
+
+/**
+ * Personal API tokens are `rfp_<token id>_<43 random characters>`: the prefix tells them apart
+ * from account tokens (and lets secret scanners find them), the id finds the row to check.
+ */
+export const API_TOKEN_PREFIX = "rfp_";
 
 type RandomSource = (bytes: Uint8Array) => Uint8Array;
 const webRandom: RandomSource = (bytes) => crypto.getRandomValues(bytes);
@@ -38,6 +44,9 @@ export const ID_PATTERN = {
   link: pattern(ID_LENGTH.link, ID_ALPHABET),
   token: pattern(ID_LENGTH.token, TOKEN_ALPHABET),
   session: pattern(ID_LENGTH.session, ID_ALPHABET),
+  apiToken: new RegExp(`^${API_TOKEN_PREFIX}([${ID_ALPHABET}]{${ID_LENGTH.apiTokenId}})_[${TOKEN_ALPHABET}]{${ID_LENGTH.apiToken}}$`),
+  apiTokenId: pattern(ID_LENGTH.apiTokenId, ID_ALPHABET),
+  fileRequest: pattern(ID_LENGTH.fileRequest, ID_ALPHABET),
   anonName: new RegExp(`^anon-[${ID_ALPHABET}]{${ID_LENGTH.anonSuffix}}$`),
   invite: new RegExp(`^[${INVITE_ALPHABET}]{4}-[${INVITE_ALPHABET}]{4}$`),
   /** Request ids (x-request-id) are UUIDs; anything else a client sends is replaced. */
@@ -53,9 +62,11 @@ export const newLinkId = () => randomString(ID_LENGTH.link, ID_ALPHABET);
 export const newAccountToken = () => randomString(ID_LENGTH.token, TOKEN_ALPHABET);
 export const newSessionId = () => randomString(ID_LENGTH.session, ID_ALPHABET);
 export const newAnonName = () => `anon-${randomString(ID_LENGTH.anonSuffix, ID_ALPHABET)}`;
+export const newApiToken = (id: string) => `${API_TOKEN_PREFIX}${id}_${randomString(ID_LENGTH.apiToken, TOKEN_ALPHABET)}`;
+export const newApiTokenId = () => randomString(ID_LENGTH.apiTokenId, ID_ALPHABET);
+export const newFileRequestId = () => randomString(ID_LENGTH.fileRequest, ID_ALPHABET);
 export const newInviteCode = () => `${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}-${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}`;
 
 export const isAccountId = (value: string) => ID_PATTERN.account.test(value);
-export const isNodeId = (value: string) => ID_PATTERN.node.test(value);
 export const isLinkId = (value: string) => ID_PATTERN.link.test(value);
 export const isSessionId = (value: string) => ID_PATTERN.session.test(value);

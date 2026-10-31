@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_QUOTA_GB } from "@/domain/quota";
 
 /** One row of the admin Accounts page. File contents are never listed here. */
 export interface AdminAccount {
@@ -29,7 +30,7 @@ export const manageSchema = z.object({
   days: z.union([z.literal(0), z.literal(7), z.literal(30), z.literal(90), z.literal(365), z.literal("default"), z.literal("never")]),
   reset: z.boolean(),
   /** GB (decimal); null = unlimited. */
-  quotaGb: z.number().positive().max(1_000_000).nullable(),
+  quotaGb: z.number().positive().max(MAX_QUOTA_GB).nullable(),
 });
 export type ManageInput = z.infer<typeof manageSchema>;
 
@@ -54,6 +55,8 @@ export const AUDIT_ACTIONS = [
   "incident.post",
   "incident.edit",
   "incident.delete",
+  "apiToken.create",
+  "apiToken.revoke",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

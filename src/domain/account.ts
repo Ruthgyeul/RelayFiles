@@ -1,12 +1,11 @@
+import { MS } from "@/config/policy";
+
 /**
- * Account lifecycle rules from the design prototype (`delAt`, profile retention text,
- * admin rows). Member accounts are deleted with their files a fixed number of days after
+ * Account lifecycle rules (deletion date, profile retention text, admin rows). Member accounts are deleted with their files a fixed number of days after
  * creation unless an admin extended them or exempted them; admins never expire.
  */
 
-const DAY_MS = 86_400_000;
-
-/** Palette for account placeholders (`newAcct` in the prototype). */
+/** Palette for account placeholders. */
 export const ACCOUNT_COLORS = ["var(--accent)", "#9b5de5", "#f15bb5", "#00a3d9", "#00a878", "#e08a00"] as const;
 
 /** Deterministic color for an account id (base-36 value of its first four characters). */
@@ -25,12 +24,12 @@ export interface Lifecycle {
 /** Date the account is deleted, or null when it never expires. */
 export function deletionDate(account: Lifecycle, ttlDays: number): Date | null {
   if (account.isAdmin || account.neverExpire) return null;
-  return account.expiresAt ?? new Date(account.createdAt.getTime() + ttlDays * DAY_MS);
+  return account.expiresAt ?? new Date(account.createdAt.getTime() + ttlDays * MS.day);
 }
 
 /** Whole days from `now` until `at` (rounded up, never negative). */
 export function daysLeftUntil(at: number, now: number): number {
-  return Math.max(0, Math.ceil((at - now) / DAY_MS));
+  return Math.max(0, Math.ceil((at - now) / MS.day));
 }
 
 /** Whole days left until deletion (rounded up, never negative); null when it never expires. */
@@ -53,7 +52,7 @@ export function maskToken(token: string): string {
   return `${token.slice(0, TOKEN_MASK.shown)}${"•".repeat(TOKEN_MASK.dots)}${token.slice(-TOKEN_MASK.shown)}`;
 }
 
-/** The retention notice under the profile card (design `retention`); `deletesOn` is already formatted. */
+/** The retention notice under the profile card; `deletesOn` is already formatted. */
 export function retentionText(account: { isAdmin: boolean; neverExpire: boolean; extended: boolean }, deletesOn: string): string {
   if (account.isAdmin) return "Admin account. It is never deleted automatically. The token below is the only way back in.";
   if (account.neverExpire) return "An admin has exempted this account from automatic deletion. The token below is the only way back in.";
@@ -69,7 +68,7 @@ export function retentionText(account: { isAdmin: boolean; neverExpire: boolean;
 export function dailySeries(rows: readonly { day: Date; bytes: bigint }[], days: number, today: Date): bigint[] {
   const end = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
   const byDay = new Map(rows.map((row) => [row.day.getTime(), row.bytes]));
-  return Array.from({ length: days }, (_, index) => byDay.get(end - (days - 1 - index) * DAY_MS) ?? 0n);
+  return Array.from({ length: days }, (_, index) => byDay.get(end - (days - 1 - index) * MS.day) ?? 0n);
 }
 
 /** Where a device signed in from: "Seoul, KR", "KR", or "Local network" without Cloudflare data. */

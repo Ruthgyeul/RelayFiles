@@ -5,34 +5,18 @@ import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { parseSearchQuery, rankByName } from "@/domain/search";
 import { busyBadge } from "@/domain/share";
-import { effectiveVisibility } from "@/domain/tree";
+import { effectiveVisibility, segmentsBelowRoot } from "@/domain/tree";
 import type { AccountRow } from "../repositories/account.repo";
-import { db, Prisma } from "../db/client";
+import { db } from "../db/client";
+import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import {
-  ancestorChain,
-  childCounts,
-  createFolderNode,
-  descendantCounts,
-  findByName,
-  findByTags,
-  findNode,
-  findRootFolder,
-  folderSizes,
-  listChildren,
-  listFolders,
-  listSiblingNames,
-  recentFiles,
-  tagUsage,
-  type NodeRow,
-} from "../repositories/node.repo";
+import { childCounts, createFolderNode, findByName, findByTags, findNode, findRootFolder, listChildren, listFolders, listSiblingNames, recentFiles, tagUsage, type NodeRow } from "../repositories/node.repo";
+import { ancestorChain, descendantCounts, folderSizes } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
 import { driverForAccount } from "./volume.service";
 
-/** Tag searches return at most this many items. */
-const TAG_SEARCH_LIMIT = 500;
 
 const VISIBILITY: Record<NodeRow["visibility"], Visibility> = { INHERIT: "inherit", PRIVATE: "private", PUBLIC: "public" };
 
@@ -44,6 +28,7 @@ export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: num
     kind: row.kind ? (row.kind.toLowerCase() as NodeItem["kind"]) : null,
     size: (extra.size ?? row.size).toString(),
     createdAt: row.createdAt.toISOString(),
+    ...(row.modifiedAt ? { modifiedAt: row.modifiedAt.toISOString() } : {}),
     downloads: row.downloads,
     itemCount: extra.itemCount ?? 0,
     fileCount: extra.fileCount ?? (row.type === "FILE" ? 1 : 0),
@@ -130,7 +115,7 @@ async function withPaths(accountId: string, rows: NodeRow[]): Promise<TaggedItem
 
 /** Items anywhere in the account that carry every tag, with their folder path. */
 export async function searchByTags(accountId: string, tags: string[]): Promise<TaggedItem[]> {
-  return withPaths(accountId, await findByTags(db(), accountId, tags, TAG_SEARCH_LIMIT));
+  return withPaths(accountId, await findByTags(db(), accountId, tags, SEARCH.tagResultLimit));
 }
 
 /**
@@ -140,16 +125,12 @@ export async function searchByTags(accountId: string, tags: string[]): Promise<T
 export async function searchItems(accountId: string, raw: string): Promise<TaggedItem[]> {
   const query = parseSearchQuery(raw);
   if (query.mode === "recent") return withPaths(accountId, await recentFiles(db(), accountId, SEARCH.recentItems));
-  const rows = query.mode === "tags" ? await findByTags(db(), accountId, query.tags, TAG_SEARCH_LIMIT) : await findByName(db(), accountId, query.text, SEARCH.nameCandidates);
+  const rows = query.mode === "tags" ? await findByTags(db(), accountId, query.tags, SEARCH.tagResultLimit) : await findByName(db(), accountId, query.text, SEARCH.nameCandidates);
   const ranked = rankByName(
     rows.map((row) => ({ row, name: row.name, type: row.type === "FOLDER" ? ("folder" as const) : ("file" as const) })),
     query.mode === "name" ? query.text : "",
   ).slice(0, SEARCH.maxResults);
   return withPaths(accountId, ranked.map(({ row }) => row));
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 /**
@@ -167,7 +148,7 @@ export async function createFolder(account: Pick<AccountRow, "id" | "volumeId" |
   if (chain.length >= STORAGE.maxFolderDepth) throw new ApiError("BAD_REQUEST", `Folders can be nested at most ${STORAGE.maxFolderDepth} levels deep.`);
   const driver = await driverForAccount(account, "write");
   // The account root maps to users/<accountId>/, so its own name is not part of the path.
-  const parentSegments = chain.slice(1).map((row) => row.name);
+  const parentSegments = segmentsBelowRoot(chain);
 
   for (let attempt = 0; ; attempt++) {
     const name = uniqName(await listSiblingNames(db(), parent.id), wanted, false);

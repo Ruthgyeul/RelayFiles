@@ -1,7 +1,7 @@
 import "server-only";
 import { Queue, Worker } from "bullmq";
 import { getEnv } from "@/config/env";
-import { MS, STORAGE } from "@/config/policy";
+import { MS, STORAGE, TRANSCODE } from "@/config/policy";
 import { db } from "../db/client";
 import { logger } from "../logger";
 import { forgetTrashedBefore } from "../repositories/trash.repo";
@@ -32,10 +32,11 @@ export async function runMaintenance(now: Date) {
   await recordCleanup({ at: now.toISOString(), ...cleanup }).catch((error: unknown) => logger.warn("cleanup result not stored", { error }));
   const trashBefore = new Date(now.getTime() - STORAGE.trashRetentionHours * MS.hour);
   const uploadsBefore = new Date(now.getTime() - getEnv("uploads").UPLOAD_TMP_TTL_HOURS * MS.hour);
+  const transcodedBefore = new Date(now.getTime() - TRANSCODE.cacheKeepDays * MS.day);
   let trash = 0;
   let uploads = 0;
   for (const volume of await listPurgeableVolumes(db())) {
-    const purged = await driverFor(volume).purgeSystem(trashBefore, uploadsBefore);
+    const purged = await driverFor(volume).purgeSystem(trashBefore, uploadsBefore, transcodedBefore);
     trash += purged.trash;
     uploads += purged.uploads;
   }
@@ -80,6 +81,6 @@ export async function startMaintenanceWorker(): Promise<{ worker: Worker; queue:
     },
     { ...queueConnection("worker"), concurrency: 1 },
   );
-  worker.on("failed", (job, error) => logger.error("maintenance job failed", { job: job?.name, error: error.message }));
+  worker.on("failed", (job, error) => logger.error("maintenance job failed", { job: job?.name, error }));
   return { worker, queue };
 }

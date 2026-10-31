@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import { cookieSecrets } from "../auth/keys";
 import { currentDevice, deviceOf } from "../auth/current";
 import type { DeviceSession } from "../auth/device-session";
-import type { ShareViewer } from "../services/share.service";
+import type { ShareViewer } from "./share.service";
 import { decodeUnlocks, UNLOCK_COOKIE } from "./unlock-cookie";
 import { VISITOR_COOKIE, visitorIdOf } from "./visitor-cookie";
 
@@ -23,4 +23,12 @@ export async function shareViewerOf(req: NextRequest, now: number): Promise<Shar
 export async function currentShareViewer(now: number): Promise<ShareViewer> {
   const jar = await cookies();
   return viewerOf(await currentDevice(), jar.get(UNLOCK_COOKIE)?.value, jar.get(VISITOR_COOKIE)?.value, now);
+}
+
+/** Passwords this device entered (share links and upload-only links), for a route handler. */
+export const unlocksOfRequest = (req: NextRequest, now: number) => decodeUnlocks(req.cookies.get(UNLOCK_COOKIE)?.value, cookieSecrets(), now);
+
+/** Passwords this device entered, for a server component. */
+export async function currentUnlocks(now: number) {
+  return decodeUnlocks((await cookies()).get(UNLOCK_COOKIE)?.value, cookieSecrets(), now);
 }

@@ -63,7 +63,7 @@ export const FIXED_COLOR = {
   memoryBg: cssVar("color-memory-bg"),
 } as const;
 
-/** File kind colors (`KIND` in the design). */
+/** File kind colors. */
 export const KIND_COLOR = {
   folder: cssVar("color-kind-folder"),
   video: cssVar("color-kind-video"),
@@ -90,5 +90,3 @@ export const TONE = {
   danger: { bg: FIXED_COLOR.dangerBg, border: FIXED_COLOR.dangerLine, text: FIXED_COLOR.dangerText, icon: FIXED_COLOR.dangerIcon },
   info: { bg: FIXED_COLOR.infoBg, border: FIXED_COLOR.infoLine, text: FIXED_COLOR.infoText, icon: FIXED_COLOR.infoText },
 } as const satisfies Record<Tone, { bg: string; border: string; text: string; icon: string }>;
-
-export type PaletteRef = (typeof THEME_COLOR)[keyof typeof THEME_COLOR] | (typeof FIXED_COLOR)[keyof typeof FIXED_COLOR];
