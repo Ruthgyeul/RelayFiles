@@ -84,7 +84,8 @@ test("adds a second account, switches between them and signs one out", async ({ 
   await expect(page.getByText(/^Switched to anon-/)).toBeVisible();
 
   nav = await openNavigation(page);
-  await nav.getByRole("button", { name: first, exact: true }).click();
+  // The account button is named by its visible text: the account name, then its role.
+  await nav.getByRole("button", { name: new RegExp(`^${first}( |$)`) }).click();
   await expect(page.getByText(`Switched to ${first}`)).toBeVisible();
 
   if (isDesktop(page)) {

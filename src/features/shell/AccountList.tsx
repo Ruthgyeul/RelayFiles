@@ -68,7 +68,8 @@ export function AccountList({ variant, collapsed = false, onNavigate }: AccountL
               <button
                 type="button"
                 title={account.name}
-                aria-label={account.name}
+                // Expanded, the visible name and role are the accessible name (label in name); collapsed, only the avatar shows.
+                aria-label={collapsed ? account.name : undefined}
                 aria-current={active ? "true" : undefined}
                 onClick={() => select(account)}
                 className={cn("flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent p-0 text-left text-t1", collapsed && "justify-center")}
