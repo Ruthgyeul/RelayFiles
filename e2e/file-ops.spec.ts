@@ -39,7 +39,7 @@ test("moves, copies and deletes through the dialogs", async ({ page }) => {
   await expect(page.locator('[data-item="Archive (2)"]')).toContainText("1 item");
 
   await page.getByRole("checkbox", { name: "Select all" }).click();
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "Delete 2 items?" });
   await expect(confirm.getByText("0 files · 0 B will be permanently deleted. Share links to them stop working. This can't be undone.")).toBeVisible();
   await confirm.getByRole("button", { name: "Delete" }).click();
