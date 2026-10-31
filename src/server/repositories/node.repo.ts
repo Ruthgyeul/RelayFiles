@@ -266,3 +266,18 @@ export function filesWithoutSha256(db: DbClient, take: number, afterId: string |
 export async function setFileFacts(db: DbClient, nodeId: string, data: { modifiedAt?: Date; sha256?: string }): Promise<void> {
   await db.node.update({ where: { id: nodeId }, data });
 }
+
+/**
+ * Renames many children of one folder in a single statement (renumbering) and returns how many
+ * rows changed (fewer when one was deleted or moved meanwhile). Each new name must be free when
+ * its row is written: the unique index is checked row by row.
+ */
+export async function renameChildren(tx: DbClient, folderId: string, renames: readonly { id: string; name: string }[]): Promise<number> {
+  if (renames.length === 0) return 0;
+  const ids = renames.map((rename) => rename.id);
+  const names = renames.map((rename) => rename.name);
+  return tx.$executeRaw`
+    UPDATE "Node" AS n SET name = v.name, "updatedAt" = now()
+    FROM unnest(${ids}::text[], ${names}::text[]) AS v(id, name)
+    WHERE n.id = v.id AND n."parentId" = ${folderId}`;
+}

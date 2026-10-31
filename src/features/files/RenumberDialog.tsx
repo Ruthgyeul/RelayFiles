@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { RenumberPreview } from "@/contracts/nodes";
 import { formatCount } from "@/domain/format";
-import type { RenumberOrder, RenumberSort } from "@/domain/renumber";
+import { renumberChanges, type RenumberOrder, type RenumberSort } from "@/domain/renumber";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { filesApi } from "@/shared/lib/files-api";
@@ -25,7 +25,11 @@ const ORDER_LABEL: Record<RenumberSort, Record<RenumberOrder, string>> = {
   modified: { asc: "Oldest first", desc: "Newest first" },
 };
 const files = (count: number) => `${formatCount(count)} ${count === 1 ? "file" : "files"}`;
-const errorOf = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+/** A refused request (400 with field errors) gets a message that says what to do next. */
+const errorOf = (caught: unknown) => {
+  if (!(caught instanceof ApiClientError)) return "Something went wrong.";
+  return caught.code === "BAD_REQUEST" && caught.fields ? "Couldn't renumber: the request was refused. Reload the page and try again." : caught.message;
+};
 
 /** Summary under the list: "12 files · 2 already numbered · 1 hidden kept". */
 function summaryOf(preview: RenumberPreview): string {
@@ -77,7 +81,8 @@ export function RenumberDialog({ request, onClose, onDone }: { request: Renumber
     if (!request || !preview || busy) return;
     setBusy(true);
     try {
-      const result = await filesApi.renumber(request.folderId, sort, order, preview.entries.map(({ id, to }) => ({ id, to })));
+      const changed = renumberChanges(preview).map(({ id, to }) => ({ id, to }));
+      const result = await filesApi.renumber(request.folderId, sort, order, changed, preview.entries.length);
       onDone(`Renumbered ${files(result.renamed)}`);
       close();
     } catch (caught) {

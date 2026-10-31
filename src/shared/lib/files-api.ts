@@ -45,8 +45,9 @@ export const filesApi = {
   activity: (id: string) => apiFetch<LinkEventDto[]>(`${node(id)}/activity`),
   setPaused: (id: string, paused: boolean) => apiFetch<NodeItem>(`${node(id)}/pause`, { method: "PUT", json: { paused } }),
   renumberPreview: (folderId: string, sort: RenumberSort, order: RenumberOrder) => apiFetch<RenumberPreview>(`${node(folderId)}/renumber?sort=${sort}&order=${order}`),
-  renumber: (folderId: string, sort: RenumberSort, order: RenumberOrder, expect: { id: string; to: string }[]) =>
-    apiFetch<RenumberResult>(`${node(folderId)}/renumber`, { method: "POST", json: { sort, order, expect } }),
+  /** `expect` = the files whose name changes (plan order), `count` = files the plan numbered. */
+  renumber: (folderId: string, sort: RenumberSort, order: RenumberOrder, expect: { id: string; to: string }[], count: number) =>
+    apiFetch<RenumberResult>(`${node(folderId)}/renumber`, { method: "POST", json: { sort, order, expect, count } }),
   duplicates: (folderId: string, recursive: boolean) => apiFetch<DuplicatesResult>(`${node(folderId)}/duplicates?recursive=${recursive ? 1 : 0}`),
   searchTags: (tags: string[]) => apiFetch<TaggedItem[]>(`/api/search?tags=${encodeURIComponent(tags.join(","))}`),
 };

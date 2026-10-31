@@ -1,4 +1,5 @@
 import "server-only";
+import { getEnv } from "@/config/env";
 import { DUPLICATES } from "@/config/policy";
 import type { DuplicateFile, DuplicatesResult, NodeItem } from "@/contracts/nodes";
 import { groupDuplicates } from "@/domain/duplicates";
@@ -17,8 +18,9 @@ export async function findDuplicates(owner: NodeOwner, folderRef: string, recurs
   const rootId = folder.parentId === null ? folder.id : (await findRootFolder(db(), owner.id))?.id;
   const folders = recursive ? await folderPathsBelow(db(), folder.id) : [{ id: folder.id, path: "" }];
   const pathOf = new Map(folders.map((entry) => [entry.id, entry.path]));
-  const rows = await filesInFolders(db(), owner.id, [...pathOf.keys()], DUPLICATES.maxScan + 1);
-  const scanned = rows.slice(0, DUPLICATES.maxScan);
+  const maxScan = getEnv("policy").DUPLICATES_MAX_SCAN;
+  const rows = await filesInFolders(db(), owner.id, [...pathOf.keys()], maxScan + 1);
+  const scanned = rows.slice(0, maxScan);
 
   const { groups, unchecked } = groupDuplicates(
     scanned.map((row) => ({
@@ -48,6 +50,6 @@ export async function findDuplicates(owner: NodeOwner, folderRef: string, recurs
     })),
     scanned: scanned.length,
     unchecked,
-    truncated: rows.length > DUPLICATES.maxScan || groups.length > DUPLICATES.maxGroups,
+    truncated: rows.length > maxScan || groups.length > DUPLICATES.maxGroups,
   };
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MAX_DOWNLOAD_LIMIT, MAX_SHARE_NOTE_LENGTH, type BusyBadge } from "@/domain/share";
-import { FILES, RENUMBER, SEARCH } from "@/config/policy";
+import { FILES, SEARCH } from "@/config/policy";
 import { RENUMBER_ORDERS, RENUMBER_SORTS, type RenumberEntry, type RenumberSkipReason } from "@/domain/renumber";
 
 export type NodeKind = "video" | "audio" | "image" | "other";
@@ -148,9 +148,15 @@ export const pauseSchema = z.object({ paused: z.boolean() });
 /** GET /api/nodes/:id/renumber — how the files would be renamed. */
 export const renumberQuerySchema = z.object({ sort: z.enum(RENUMBER_SORTS), order: z.enum(RENUMBER_ORDERS) });
 
-/** POST /api/nodes/:id/renumber — runs the reviewed plan (refused when the folder changed since). */
+/**
+ * POST /api/nodes/:id/renumber — runs the reviewed plan (refused when the folder changed since).
+ * `expect` = the files whose name changes, in plan order; `count` = how many files the plan
+ * numbered. Without `count`, `expect` is the whole plan (the first release's clients). There is
+ * no file limit: a folder holds at most FILES.maxItemsPerAccount items for members.
+ */
 export const renumberApplySchema = renumberQuerySchema.extend({
-  expect: z.array(z.object({ id: nodeIdSchema, to: z.string().max(1024) })).max(RENUMBER.maxFiles),
+  expect: z.array(z.object({ id: nodeIdSchema, to: z.string().max(1024) })),
+  count: z.number().int().nonnegative().optional(),
 });
 
 export interface RenumberPreview {

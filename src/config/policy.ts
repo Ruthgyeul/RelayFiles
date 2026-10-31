@@ -69,19 +69,22 @@ export const FILES = {
 export const RENUMBER = {
   /** Numbers are padded to at least this many digits ("01"); more files get more digits. */
   minDigits: 2,
+  /** Default for RENUMBER_MAX_FILES: most files one run renames. */
+  maxFiles: 10_000,
   /**
-   * Most files one run renames. Each file is renamed twice (to a temporary name, then to its
-   * number) inside one storage transaction, which must finish within STORAGE.transactionTimeoutSec.
+   * Each file is renamed twice on disk (to a temporary name, then to its number) inside one
+   * storage transaction, whose time limit grows by this much per changed file beyond
+   * STORAGE.transactionTimeoutSec (a slow USB disk included).
    */
-  maxFiles: 2_000,
+  transactionMsPerFile: 20,
   /** Temporary names between the two steps; hidden (dot) names, so no run ever renumbers them. */
   tempPrefix: ".relayfiles-renumber-",
 } as const;
 
 /** "Find duplicates": files with the same content (SHA-256 and size). */
 export const DUPLICATES = {
-  /** Most files one scan reads; a larger folder tree reports the result as truncated. */
-  maxScan: 20_000,
+  /** Default for DUPLICATES_MAX_SCAN: most files one scan compares; a larger tree is reported as truncated. */
+  maxScan: 10_000,
   /** Most duplicate groups returned, the ones wasting the most space first. */
   maxGroups: 500,
 } as const;

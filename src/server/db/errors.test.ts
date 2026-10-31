@@ -4,11 +4,15 @@ import { Prisma } from "./client";
 import { isUniqueViolation, retryOnUniqueViolation } from "./errors";
 
 const unique = () => new Prisma.PrismaClientKnownRequestError("Unique constraint failed", { code: "P2002", clientVersion: "test" });
+const rawFailure = (kind: string) =>
+  new Prisma.PrismaClientKnownRequestError("Raw query failed", { code: "P2010", clientVersion: "test", meta: { driverAdapterError: { name: "DriverAdapterError", cause: { kind, originalCode: "23505" } } } });
 const missing = () => new Prisma.PrismaClientKnownRequestError("Record not found", { code: "P2025", clientVersion: "test" });
 
 describe("unique violations", () => {
-  it("recognises only P2002", () => {
+  it("recognises P2002 and a raw query's unique constraint violation only", () => {
     expect(isUniqueViolation(unique())).toBe(true);
+    expect(isUniqueViolation(rawFailure("UniqueConstraintViolation"))).toBe(true);
+    expect(isUniqueViolation(rawFailure("ForeignKeyConstraintViolation"))).toBe(false);
     expect(isUniqueViolation(missing())).toBe(false);
     expect(isUniqueViolation(new Error("P2002"))).toBe(false);
   });

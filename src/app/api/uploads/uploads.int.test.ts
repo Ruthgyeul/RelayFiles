@@ -11,6 +11,7 @@ import { POST as remove } from "@/app/api/nodes/delete/route";
 import { POST as prepare } from "@/app/api/uploads/route";
 import * as tus from "@/app/api/uploads/tus/[...path]/route";
 import type { CreatedAccount } from "@/contracts/auth";
+import { getEnv } from "@/config/env";
 import { STORAGE } from "@/config/policy";
 import type { CreatedFolder, DuplicatesResult, FolderView } from "@/contracts/nodes";
 import type { PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
@@ -122,6 +123,17 @@ describe("uploads", () => {
 
     const other = await member();
     expect((await callRoute(duplicates, { cookie: other.cookie, params: { id: root }, query: "?recursive=1" })).status).toBe(404);
+
+    // DUPLICATES_MAX_SCAN limits how many files one scan compares; the rest is reported as truncated.
+    const policy = getEnv("policy") as { DUPLICATES_MAX_SCAN: number };
+    const saved = policy.DUPLICATES_MAX_SCAN;
+    policy.DUPLICATES_MAX_SCAN = 2;
+    try {
+      const partial = (await callRoute<DuplicatesResult, { id: string }>(duplicates, { cookie: s.cookie, params: { id: root }, query: "?recursive=1" })).json.data;
+      expect(partial).toMatchObject({ scanned: 2, truncated: true });
+    } finally {
+      policy.DUPLICATES_MAX_SCAN = saved;
+    }
   });
 
   it("stores files byte for byte with folders, type and checksum", async () => {

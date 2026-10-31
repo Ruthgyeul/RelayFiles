@@ -8,6 +8,7 @@ import { GET as preview, POST as apply } from "@/app/api/nodes/[id]/renumber/rou
 import type { CreatedAccount } from "@/contracts/auth";
 import type { CreatedFolder, FolderView, RenumberPreview, RenumberResult } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
+import { getEnv } from "@/config/env";
 import { db } from "@/server/db/client";
 import { redis } from "@/server/redis";
 import { LocalVolumeDriver } from "@/server/storage/local-volume";
@@ -43,9 +44,12 @@ async function file(s: Session, parentId: string, segments: string[], name: stri
 }
 
 const plan = async (s: Session, id: string, sort: string, order = "asc") => callRoute<RenumberPreview, { id: string }>(preview, { cookie: s.cookie, params: { id }, query: `?sort=${sort}&order=${order}` });
-const run = async (s: Session, id: string, sort: string, expect: { id: string; to: string }[], order = "asc") =>
-  callRoute<RenumberResult, { id: string }>(apply, { method: "POST", cookie: s.cookie, params: { id }, body: { sort, order, expect } });
+const run = async (s: Session, id: string, sort: string, expect: { id: string; to: string }[], count?: number, order = "asc") =>
+  callRoute<RenumberResult, { id: string }>(apply, { method: "POST", cookie: s.cookie, params: { id }, body: { sort, order, expect, ...(count === undefined ? {} : { count }) } });
+/** The whole reviewed plan (the request format of the first release, still accepted). */
 const reviewed = (p: RenumberPreview) => p.entries.map(({ id, to }) => ({ id, to }));
+/** Only the files whose name changes, as the dialog sends them. */
+const changes = (p: RenumberPreview) => p.entries.filter((entry) => entry.from !== entry.to).map(({ id, to }) => ({ id, to }));
 
 afterAll(async () => {
   for (const id of accounts) await rm(userRootOf(configuredVolumeRoot(), id), { recursive: true, force: true });
@@ -144,6 +148,67 @@ describe("renumber files", () => {
     expect(await readFile(join(s.root, "c.jpg"), "utf8")).toBe("bytes of c.jpg");
     const rows = await prisma.node.findMany({ where: { id: { in: ids } }, select: { name: true } });
     expect(rows.map((row) => row.name).sort()).toEqual(["a.jpg", "b.jpg", "c.jpg"]);
+  });
+
+  it("renumbers a large folder that was mostly numbered already, with no file limit", async () => {
+    const s = await member();
+    const root = await rootOf(s);
+    const big = await folder(s, root, "Big");
+    const count = 2_500;
+    const numbered = Array.from({ length: count }, (_, i) => `${String(i + 1).padStart(4, "0")}.jpg`);
+    await prisma.node.createMany({
+      data: numbered.map((name, i) => ({ id: newNodeId(), accountId: s.id, parentId: big.id, type: "FILE" as const, kind: "IMAGE" as const, name, size: 1n, linkId: newLinkId(), createdAt: new Date(Date.now() - (count - i) * 1_000) })),
+    });
+    await Promise.all(numbered.map((name) => writeFile(join(s.root, "Big", name), "x")));
+    const added = await file(s, big.id, ["Big"], "new.jpg", 0);
+
+    // Already numbered by name: only the new file changes, but the folder holds more than 2,000 files.
+    const byName = (await plan(s, big.id, "name")).json.data;
+    expect(byName).toMatchObject({ changes: 1, conflict: null });
+    const once = await run(s, big.id, "name", changes(byName), byName.entries.length);
+    expect(once.status, JSON.stringify(once.json)).toBe(200);
+    expect(once.json.data).toEqual({ renamed: 1, unchanged: count });
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: added } })).name).toBe("2501.jpg");
+
+    // Newest first renames every file but the one in the middle: well past the old 2,000 limit.
+    const reversed = (await plan(s, big.id, "created", "desc")).json.data;
+    expect(reversed).toMatchObject({ changes: count, conflict: null });
+    const all = await run(s, big.id, "created", changes(reversed), reversed.entries.length, "desc");
+    expect(all.status, JSON.stringify(all.json)).toBe(200);
+    expect(all.json.data).toEqual({ renamed: count, unchanged: 1 });
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: added } })).name).toBe("0001.jpg");
+    expect(await readFile(join(s.root, "Big", "0001.jpg"), "utf8")).toBe("bytes of new.jpg");
+    expect((await readdir(join(s.root, "Big"))).length).toBe(count + 1);
+  }, 120_000);
+
+  it("refuses more changes than RENUMBER_MAX_FILES allows", async () => {
+    const policy = getEnv("policy") as { RENUMBER_MAX_FILES: number };
+    const saved = policy.RENUMBER_MAX_FILES;
+    policy.RENUMBER_MAX_FILES = 2;
+    try {
+      const s = await member();
+      const root = await rootOf(s);
+      for (const [index, name] of ["c.jpg", "b.jpg", "a.jpg"].entries()) await file(s, root, [], name, index + 1);
+      const previewed = (await plan(s, root, "name")).json.data;
+      expect(previewed.conflict).toBe("3 files would be renamed. Renumber at most 2 at a time.");
+      const refused = await run(s, root, "name", changes(previewed), previewed.entries.length);
+      expect(refused.status).toBe(400);
+      expect(refused.json.error).toBe("3 files would be renamed. Renumber at most 2 at a time.");
+      expect((await readdir(s.root)).sort()).toEqual(["a.jpg", "b.jpg", "c.jpg"]);
+    } finally {
+      policy.RENUMBER_MAX_FILES = saved;
+    }
+  });
+
+  it("refuses the reviewed changes when a file was added meanwhile", async () => {
+    const s = await member();
+    const root = await rootOf(s);
+    await file(s, root, [], "01.jpg", 3);
+    await file(s, root, [], "b.jpg", 2);
+    const previewed = (await plan(s, root, "created")).json.data;
+    await file(s, root, [], "zz.jpg", 1);
+    const stale = await run(s, root, "created", changes(previewed), previewed.entries.length);
+    expect(stale.status).toBe(409);
   });
 
   it("hides other accounts' folders", async () => {
