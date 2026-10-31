@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, DUPLICATES, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, RENUMBER, STORAGE, TRANSCODE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, DUPLICATES, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, RENUMBER, SHUTDOWN, STORAGE, TRANSCODE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -137,6 +137,7 @@ export const ENV_GROUPS = {
     TLS_CERT_PATH: z.string().optional(),
   }),
   deploy: z.object({
+    /** Nginx server_name: the host names served (space-separated); other names get 444, "_" serves every name. */
     SERVER_NAME: z.string().default("localhost"),
     /** Host address Nginx is published on: 127.0.0.1 when another proxy on the host sits in front. */
     NGINX_LISTEN_HOST: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("0.0.0.0"),
@@ -147,6 +148,9 @@ export const ENV_GROUPS = {
     NGINX_AUTH_BURST: positiveInt.default(NGINX.authBurst),
     NGINX_UPLOAD_RATE_PER_MIN: positiveInt.default(NGINX.uploadRatePerMin),
     NGINX_UPLOAD_BURST: positiveInt.default(NGINX.uploadBurst),
+    /** Personal API token requests (/api/v1/, /metrics) per client address per minute, and the burst. */
+    NGINX_API_RATE_PER_MIN: positiveInt.default(NGINX.apiRatePerMin),
+    NGINX_API_BURST: positiveInt.default(NGINX.apiBurst),
     CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
     /** Host directory for PostgreSQL, Redis and backups (docker compose). */
     DATA_DIR: z.string().startsWith("/").default("/srv/relayfiles"),
@@ -165,6 +169,12 @@ export const ENV_GROUPS = {
     APP_CPUS: cpus.default(3),
     WORKER_MEMORY_MAX: memorySize.default("2G"),
     WORKER_CPUS: cpus.default(2),
+    /**
+     * Seconds a stopping app or worker gets to finish requests or jobs before it is killed (compose
+     * stop_grace_period, systemd TimeoutStopSec, k3s terminationGracePeriodSeconds).
+     */
+    APP_STOP_GRACE_SEC: positiveInt.default(SHUTDOWN.appStopGraceSec),
+    WORKER_STOP_GRACE_SEC: positiveInt.default(SHUTDOWN.workerStopGraceSec),
     /** k3s deployment (deploy/scripts/k3s/deploy.sh): GHCR image name without -app/-tools, namespace, app replicas. */
     K3S_IMAGE_REPO: z
       .string()

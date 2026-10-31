@@ -127,6 +127,9 @@ services:
     tmpfs: [/tmp, /app/.next/cache]
     mem_limit: ${APP_MEMORY_MAX:-2G}
     cpus: ${APP_CPUS:-3}
+    # On stop (release, restart) tini passes SIGTERM to Node, which stops accepting connections and
+    # finishes the requests in flight (streams, zips, upload chunks) for this long before the kill.
+    stop_grace_period: ${APP_STOP_GRACE_SEC:-30}s
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
     volumes: *storage
     networks: [relay]
@@ -144,8 +147,8 @@ services:
     logging: *logging
     mem_limit: ${WORKER_MEMORY_MAX:-2G}
     cpus: ${WORKER_CPUS:-2}
-    # Running jobs (thumbnails, cleanup) finish before the worker exits (systemd: TimeoutStopSec=60).
-    stop_grace_period: 60s
+    # Running jobs (thumbnails, cleanup) finish before the worker exits (systemd: TimeoutStopSec).
+    stop_grace_period: ${WORKER_STOP_GRACE_SEC:-90}s
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
     command: *worker-command
     volumes: *storage
@@ -183,6 +186,8 @@ services:
     pids_limit: 512
     # Same account as the files on the SSD (0600), group 0 for the image's writable dirs.
     user: "${STORAGE_UID:-10001}:0"
+    # The image stops Nginx with SIGQUIT (graceful): downloads it is sending finish like the app's.
+    stop_grace_period: ${APP_STOP_GRACE_SEC:-30}s
     environment:
       APP_UPSTREAM: app:${APP_PORT:-3000}
       NGINX_RESOLVER: 127.0.0.11
@@ -197,6 +202,8 @@ services:
       NGINX_AUTH_BURST: ${NGINX_AUTH_BURST:-20}
       NGINX_UPLOAD_RATE_PER_MIN: ${NGINX_UPLOAD_RATE_PER_MIN:-60}
       NGINX_UPLOAD_BURST: ${NGINX_UPLOAD_BURST:-30}
+      NGINX_API_RATE_PER_MIN: ${NGINX_API_RATE_PER_MIN:-120}
+      NGINX_API_BURST: ${NGINX_API_BURST:-60}
     ports:
       - "${NGINX_LISTEN_HOST:-0.0.0.0}:${NGINX_LISTEN_PORT:-80}:8080"
     volumes:

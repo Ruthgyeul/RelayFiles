@@ -1,0 +1,13 @@
+# Default server of the host Nginx's RelayFiles port (systemd deployment, docs/deploy-systemd.md):
+# requests whose Host is none of the enabled sites' names, such as a page on another domain that
+# resolves to this server (DNS rebinding) or a scanner using the bare address, get the connection
+# closed without an answer instead of reaching whichever site Nginx would pick first. Rendered by
+# deploy/scripts/systemd/install.sh into /etc/nginx/sites-available/relayfiles-catchall.conf, and
+# enabled only when SERVER_NAME is not "_" and no other enabled site is the port's default server.
+server {
+    listen ${NGINX_LISTEN_PORT} default_server;
+    server_name _;
+    server_tokens off;
+    access_log off;
+    return 444;
+}

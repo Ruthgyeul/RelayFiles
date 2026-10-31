@@ -10,7 +10,10 @@ Docker Compose([deploy-ubuntu.md](deploy-ubuntu.md))·systemd([deploy-systemd.md
 | 템플릿 | `deploy/k3s/data.yaml.template`(PostgreSQL·Redis), `migrate-job.yaml.template`(마이그레이션 Job), `relayfiles.yaml.template`(app·worker·Nginx). `.env` 값으로 `scripts/render-template.mjs`가 렌더링한다 |
 | 배치 | 모든 Pod가 `relayfiles/storage=true` 라벨이 붙은 노드 하나(SSD가 연결된 노드)에서 돈다. 파일·DB·Redis 데이터는 그 노드의 호스트 경로(`STORAGE_ROOT`, `DATA_DIR/pg`, `DATA_DIR/redis`, `LOG_DIR`)이고, Compose와 같은 디렉터리라 같은 디스크를 그대로 옮겨 쓸 수 있다 |
 | 설정 | `.env` 전체가 Secret `relayfiles-env`가 된다. Nginx 템플릿·에러 페이지·추가 볼륨 설정은 ConfigMap이다. 오프사이트 백업 키(`RESTIC_*`, `OFFSITE_*`)는 컨테이너에서 비운다 |
-| 노출 | Service `relayfiles-nginx`(LoadBalancer, k3s ServiceLB, `externalTrafficPolicy: Local`로 방문자 주소 유지)가 노드의 `NGINX_LISTEN_PORT`에서 받는다. 앱은 Compose처럼 Nginx를 거쳐서만 열린다 |
+| 노출 | Service `relayfiles-nginx`(LoadBalancer, k3s ServiceLB, `externalTrafficPolicy: Local`로 방문자 주소 유지)가 노드의 `NGINX_LISTEN_PORT`에서 받는다. 앱은 Compose처럼 Nginx를 거쳐서만 열린다. `SERVER_NAME`에 없는 호스트 이름은 Nginx가 끊는다(444, `_`면 모든 이름) |
+| 네트워크 정책 | NetworkPolicy `relayfiles-app`: 앱 Pod는 Nginx Pod와 워커(Status 페이지 프로브)에서 오는 `APP_PORT` 연결만 받는다. 다른 Pod가 앱에 직접 `X-Real-IP`·`CF-Connecting-IP`를 꾸며 보내 관리자 대역(`ADMIN_ALLOWED_CIDRS`)과 로그인·잠금 해제 제한을 피하지 못하게 한다. k3s에 내장된 정책 컨트롤러(kube-router)가 적용하므로 k3s 서버를 `--disable-network-policy`로 띄웠다면 적용되지 않는다. 클러스터 안의 Prometheus는 `relayfiles-nginx`로 `/metrics`를 긁는다 |
+| 프로브 | 앱: `startupProbe`(최대 2분)·`livenessProbe`는 `HEAD /api/health`(이미지의 `healthcheck.mjs`, DB·Redis를 보지 않으므로 DB 장애로 앱이 재시작되지 않는다), `readinessProbe`는 `GET /api/health`(DB가 내려가면 503이라 트래픽을 받지 않는다). Nginx: TCP `readinessProbe`(HTTP 프로브는 Pod 주소를 Host로 보내 444가 된다) |
+| 종료 | 앱·Nginx는 `preStop`에서 `K3S_PRESTOP_SEC`(기본 5초) 기다려 Service 엔드포인트에서 먼저 빠진 뒤 SIGTERM을 받는다. 앱은 진행 중인 요청을 `APP_STOP_GRACE_SEC`(30초) 동안 마무리한다(`terminationGracePeriodSeconds` = 둘의 합). 워커는 `WORKER_STOP_GRACE_SEC`(90초) |
 | 복제본 | 앱은 `K3S_APP_REPLICAS`(기본 1, 최대 4)개. 업로드 잠금과 변환 슬롯이 Redis로 공유되므로 2개 이상도 된다. 워커는 1개(매일 정리와 표본 수집을 예약한다) |
 
 ## 2. 준비
@@ -55,11 +58,13 @@ deploy/scripts/k3s/deploy.sh            # 지금 체크아웃한 커밋의 sha-<
 deploy/scripts/k3s/deploy.sh v1.4.0     # 버전 태그
 ```
 
-순서: 네임스페이스 → Secret(`.env`)·ConfigMap → PostgreSQL·Redis(준비될 때까지 대기) → 새 tools 이미지로 마이그레이션 Job(`db:deploy` → `data:migrate` → `storage:migrate`, 실패하면 앱은 그대로 두고 로그를 보여 준 뒤 멈춘다) → app·worker·Nginx 롤링 → `/api/health`가 `"status":"ok"`인지 확인.
+순서: 네임스페이스 → Secret(`.env`)·ConfigMap → PostgreSQL·Redis(준비될 때까지 대기) → 새 tools 이미지로 마이그레이션 Job(`db:deploy` → `data:migrate` → `storage:migrate`, 실패하면 앱은 그대로 두고 로그를 보여 준 뒤 멈춘다) → app·worker·Nginx 롤링(각각 `K3S_ROLLOUT_TIMEOUT`, 기본 `10m`) → `/api/health`가 `"status":"ok"`인지 확인(2초 간격 `HEALTH_TRIES`=30번).
+
+- **자동 롤백**: 롤아웃이 시간 안에 끝나지 않거나 헬스 체크가 `ok`가 아니면, 이번 실행에서 새 리비전이 된 Deployment만 `kubectl rollout undo --to-revision=<이전>`으로 되돌리고 실패로 끝난다. Secret·ConfigMap은 이번 값 그대로이고, DB 스키마도 마이그레이션된 그대로다(expand라 이전 버전이 동작한다). 원인은 `kubectl -n relayfiles describe pod -l app.kubernetes.io/name=relayfiles-app`(프로브 실패), `kubectl -n relayfiles logs deployment/relayfiles-app`로 본다.
 
 - 이미지가 아직 없으면(Actions 빌드 중) Pod가 `ImagePullBackOff`로 기다린다. Actions의 **Images** 실행이 끝난 뒤 다시 실행한다.
 - 마이그레이션 동안 이전 버전이 계속 서비스한다. 스키마 변경은 expand → migrate → contract로 나눠 넣으므로(CLAUDE.md) 이전 버전이 새 스키마에서도 동작한다.
-- 롤백: 이전 태그로 같은 명령을 실행한다. 파괴적 변경(contract)이 들어간 릴리스는 그 직전 DB 백업으로 되돌린다([runbook.md "DB 복구"](runbook.md#db-복구)).
+- 롤백(손으로): 이전 태그로 같은 명령을 실행한다. 파괴적 변경(contract)이 들어간 릴리스는 그 직전 DB 백업으로 되돌린다([runbook.md "DB 복구"](runbook.md#db-복구)).
 - 점검 모드: 저장소 노드에서 `sudo touch /srv/relayfiles/maintenance/on`(지우면 해제). Nginx가 정적 503 페이지를 보여 준다.
 
 ## 4. 운영

@@ -28,12 +28,23 @@ map "$request_method $uri" $relayfiles_upload_limit {
     "POST /api/uploads" $binary_remote_addr;
     default "";
 }
+# Personal API token requests: a token with a known id but a wrong secret costs an argon2 check
+# in the app before its own per-token limit, so Nginx limits them per client address first.
+map $uri $relayfiles_api_limit {
+    "~^/api/v1/" $binary_remote_addr;
+    "/metrics"   $binary_remote_addr;
+    default "";
+}
 limit_req_zone $relayfiles_auth_limit zone=relayfiles_auth:10m rate=${NGINX_AUTH_RATE_PER_MIN}r/m;
 limit_req_zone $relayfiles_upload_limit zone=relayfiles_uploads:10m rate=${NGINX_UPLOAD_RATE_PER_MIN}r/m;
+limit_req_zone $relayfiles_api_limit zone=relayfiles_api:10m rate=${NGINX_API_RATE_PER_MIN}r/m;
 
 # No client addresses in the access log (same rule as the app's logs).
 log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
 
+# Requests naming any other host go to the port's default server: relayfiles-catchall.conf
+# (closes them, 444) when install.sh found no other default site, so a page on another domain
+# that resolves to this server (DNS rebinding) never reaches the app.
 server {
     listen ${NGINX_LISTEN_PORT};
     server_name ${SERVER_NAME};
@@ -94,6 +105,7 @@ server {
         if ($relay_maintenance) { return 503; }
         limit_req zone=relayfiles_auth burst=${NGINX_AUTH_BURST} nodelay;
         limit_req zone=relayfiles_uploads burst=${NGINX_UPLOAD_BURST} nodelay;
+        limit_req zone=relayfiles_api burst=${NGINX_API_BURST} nodelay;
         proxy_pass http://relayfiles_app;
         # Next.js internals the browser never needs (a proxy rewrite names the upstream address).
         proxy_hide_header X-Middleware-Rewrite;
