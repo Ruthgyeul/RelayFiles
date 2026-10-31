@@ -9,7 +9,7 @@ export interface DuplicateRequest {
   folderName: string;
 }
 
-/** Names listed before "and N more" (design). */
+/** Names listed before "and N more". */
 const SHOWN_NAMES = 5;
 
 const OPTIONS: { policy: DuplicatePolicy; label: string; description: string; icon: IconName }[] = [

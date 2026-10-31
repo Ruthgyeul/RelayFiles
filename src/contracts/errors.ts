@@ -20,13 +20,12 @@ export const ERRORS = {
   INTERNAL: { status: 500, message: "Something went wrong." },
   MAINTENANCE: { status: 503, message: "The server is under maintenance." },
   STORAGE_OFFLINE: { status: 503, message: "Storage is temporarily unavailable." },
+  MEDIA_NOT_READY: { status: 503, message: "This photo is still being prepared for sharing. Try again in a moment." },
   STORAGE_BUSY: { status: 503, message: "Your files are being moved to new storage. Changes are paused for a few minutes; browsing and downloads still work." },
   INSUFFICIENT_STORAGE: { status: 507, message: "Not enough space on the server." },
 } as const satisfies Record<string, { status: number; message: string }>;
 
 export type ErrorCode = keyof typeof ERRORS;
-
-export const ERROR_CODES = Object.keys(ERRORS) as ErrorCode[];
 
 export function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === "string" && Object.hasOwn(ERRORS, value);

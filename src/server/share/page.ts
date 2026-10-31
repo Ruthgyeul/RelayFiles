@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import type { SharePage } from "@/contracts/share";
 import { clientInfo } from "../auth/client-info";
-import { retiredSharePage, sharePage } from "../services/share.service";
+import { retiredSharePage, sharePage } from "./share.service";
 import { logLinkEvent } from "./events";
 import { currentShareViewer } from "./viewer";
 

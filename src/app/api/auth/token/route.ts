@@ -1,7 +1,7 @@
 import { tokenSignInSchema } from "@/contracts/auth";
 import { clientInfo } from "@/server/auth/client-info";
 import { deviceOf } from "@/server/auth/current";
-import { toSessionState, withSession, writeSessionCookie } from "@/server/auth/device-session";
+import { toSessionState, addDeviceSession, writeSessionCookie } from "@/server/auth/device-session";
 import { apiHandler, ok } from "@/server/http/api-handler";
 import { signInWithToken, signupMode } from "@/server/services/auth.service";
 
@@ -16,6 +16,6 @@ export const POST = apiHandler(async ({ req }) => {
   );
   const accounts = [...device.accounts, signedIn];
   const response = ok(await toSessionState({ accounts, active: signedIn }, await signupMode()));
-  writeSessionCookie(response, withSession(device.cookie, signedIn.sessionId));
+  writeSessionCookie(response, await addDeviceSession(device.cookie, signedIn.sessionId));
   return response;
 });

@@ -1,7 +1,7 @@
 import { readLocalSetting, writeLocalSetting } from "@/shared/lib/local-setting";
 
 /**
- * Playback positions per file (design `relay.resume`): saved after 3 s of playback,
+ * Playback positions per file: saved after 3 s of playback,
  * forgotten within the last 5 s, written at most every 800 ms.
  */
 export interface ResumePoint {
@@ -36,7 +36,7 @@ function save() {
 
 export const resumeStore = {
   get: (id: string): ResumePoint | undefined => store()[id],
-  /** Records the position of a playing media element (design `trackTime`). */
+  /** Records the position of a playing media element. */
   track(id: string, media: HTMLMediaElement) {
     if (!media.duration || !Number.isFinite(media.duration)) return;
     if (media.duration - media.currentTime <= END_MARGIN_SECONDS) delete store()[id];
@@ -44,7 +44,7 @@ export const resumeStore = {
     else return;
     save();
   },
-  /** Seeks to the saved position; returns it when it did (design `restoreTime`). */
+  /** Seeks to the saved position; returns it when it did. */
   restore(id: string, media: HTMLMediaElement): number | null {
     const point = store()[id];
     if (!point || !media.duration || point.t >= media.duration - END_MARGIN_SECONDS) return null;

@@ -6,7 +6,7 @@ import { uniqName } from "@/domain/names";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
-import { filesApi } from "./api";
+import { filesApi } from "@/shared/lib/files-api";
 
 /** "New folder" dialog: suggests a free name and reports when the server picked another. */
 export function useNewFolder(parentRef: string, siblingNames: string[]) {

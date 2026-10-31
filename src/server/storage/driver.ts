@@ -31,6 +31,14 @@ export interface ByteSource {
   open(range?: { start: number; end: number }): Promise<Readable>;
 }
 
+/** {@link StorageDriver.renameNoReplace} found something at the target name. */
+export class StorageTargetExistsError extends Error {
+  constructor() {
+    super("The target name already exists on the volume.");
+    this.name = "StorageTargetExistsError";
+  }
+}
+
 export interface SpaceInfo {
   total: bigint;
   available: bigint;
@@ -49,9 +57,24 @@ export interface StorageDriver {
   stat(location: StorageLocation): Promise<StorageStat | null>;
   createReadStream(location: StorageLocation, range?: { start: number; end: number }): Promise<Readable>;
   createFolder(location: StorageLocation): Promise<void>;
-  /** Moves a finished upload from the temp area into place without copying bytes. */
+  /** Moves a finished upload or staged copy from the temp area into place without copying bytes; the folder must exist. */
   moveIntoPlace(tempPath: string, location: StorageLocation): Promise<void>;
+  /**
+   * Places a hard link to an existing file of the same account at `to` (deduplication of a
+   * re-upload with the same SHA-256). False when that is not possible here (deduplication off,
+   * the file is gone or has another size, no hard links): the caller then places its own bytes.
+   */
+  linkExisting(from: StorageLocation, to: StorageLocation, size: number): Promise<boolean>;
+  /** Copies an item into the temp area (hard links when deduplicating, else reflinks when possible) and returns its path, for {@link moveIntoPlace}. */
+  stageCopy(from: StorageLocation): Promise<string>;
+  /** Removes a staged copy or upload from the temp area (missing is fine). */
+  discardStaged(tempPath: string): Promise<void>;
   rename(from: StorageLocation, to: StorageLocation): Promise<void>;
+  /**
+   * Renames a file only if nothing exists at `to` (a plain rename replaces it). Throws
+   * {@link StorageTargetExistsError} when the name is taken, leaving both files untouched.
+   */
+  renameNoReplace(from: StorageLocation, to: StorageLocation): Promise<void>;
   copy(from: StorageLocation, to: StorageLocation): Promise<void>;
   /** Moves an item (or a whole account root when segments is empty) to the trash area. */
   moveToTrash(location: StorageLocation): Promise<string>;
@@ -60,6 +83,10 @@ export interface StorageDriver {
   space(): Promise<SpaceInfo>;
   /** Writes a generated file atomically (temp file + rename), replacing an older one. */
   writeAsset(asset: AssetRef, data: Uint8Array): Promise<void>;
+  /** Moves a generated file written in the temp area (a video conversion) into place, replacing an older one. */
+  adoptAsset(asset: AssetRef, tempPath: string): Promise<void>;
+  /** A path in the temp area for a generated file that is too large to hold in memory. */
+  stagingPath(): Promise<string>;
   /** Reads a generated file, or null when it does not exist. */
   readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null>;
   /** A generated file as a ranged source (nothing stays open until it is read), or null when missing. */
@@ -70,7 +97,7 @@ export interface StorageDriver {
    * Permanently removes trash entries moved there before `trashBefore` and unfinished uploads
    * last written before `uploadsBefore`. Returns how many entries were removed.
    */
-  purgeSystem(trashBefore: Date, uploadsBefore: Date): Promise<{ trash: number; uploads: number }>;
+  purgeSystem(trashBefore: Date, uploadsBefore: Date, transcodedBefore: Date): Promise<{ trash: number; uploads: number; transcoded: number }>;
   /** Removes every generated file of an account (account deletion). */
   removeAccountAssets(accountId: string): Promise<void>;
   /** True when the upload staging area accepts a write (Status page probe). */

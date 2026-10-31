@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { names, openFiles } from "./helpers";
 
 const file = (name: string, content: string, mimeType = "text/plain") => ({ name, mimeType, buffer: Buffer.from(content) });
@@ -60,4 +61,31 @@ test("pauses while offline and resumes by itself", async ({ page, context }) => 
   await context.setOffline(false);
   await expect(panel.getByText("COMPLETE")).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => names(page)).toEqual(["big.bin"]);
+});
+
+test("lists each file of a batch and cancels one while the others finish", async ({ page }) => {
+  await openFiles(page);
+  // Hold the first file's body so it is still sending when it is cancelled.
+  let held = 0;
+  await page.route("**/api/uploads/tus/**", async (route) => {
+    if (route.request().method() === "PATCH" && held++ === 0) await new Promise((resolve) => setTimeout(resolve, 3_000));
+    await route.continue().catch(() => undefined);
+  });
+  await choose(page, () => page.getByRole("button", { name: "Upload", exact: true }).click(), [
+    file("first.bin", "x".repeat(200_000), "application/octet-stream"),
+    file("second.txt", "two"),
+    file("third.txt", "three"),
+  ]);
+  const panel = page.getByRole("region", { name: "Transfers" });
+  await panel.getByRole("button", { name: "Show files" }).click();
+  const list = panel.getByRole("list", { name: /^Files in / });
+  await expect(list.getByRole("listitem")).toHaveCount(3);
+  await expect(list.getByRole("meter", { name: "first.bin progress" })).toBeVisible();
+  await list.getByRole("button", { name: "Cancel third.txt" }).click();
+  await list.getByRole("button", { name: "Cancel first.bin" }).click();
+
+  await expect(panel.getByText("COMPLETE")).toBeVisible({ timeout: 15_000 });
+  await expect(panel.getByText("1 OF 1 FILE · 2 CANCELLED")).toBeVisible();
+  await expect(list.getByRole("listitem").filter({ hasText: "second.txt" })).toContainText("Uploaded");
+  await expect.poll(() => names(page)).toEqual(["second.txt"]);
 });

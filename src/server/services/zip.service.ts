@@ -3,12 +3,14 @@ import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { zipEntryName } from "@/domain/archive";
 import { contentDisposition, zipName } from "@/domain/serving";
+import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
-import { LazyReadable } from "../files/lazy-readable";
+import { LazyReadable } from "../http/lazy-readable";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
-import { ancestorChain, findNode, subtreeRows } from "../repositories/node.repo";
+import { findNode } from "../repositories/node.repo";
+import { ancestorChain, subtreeRows } from "../repositories/node-tree.repo";
 import { addTraffic } from "../repositories/traffic.repo";
 import { topLevel } from "./node-ops.service";
 import { driverForAccount } from "./volume.service";
@@ -71,7 +73,7 @@ export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
   const entries: ZipEntry[] = [];
   let bytes = 0n;
   for (const item of items) {
-    const base = (await ancestorChain(db(), item.id)).slice(1).map((row) => row.name);
+    const base = segmentsBelowRoot(await ancestorChain(db(), item.id));
     const rows = await subtreeRows(db(), item.id);
     const pathOf = new Map<string, string[]>([[item.id, base]]);
     for (const row of rows) {

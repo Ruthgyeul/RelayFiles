@@ -38,7 +38,7 @@ interface ActionMenuProps {
   /** Entries for a standard action menu; or pass custom children (sort menu). */
   entries?: MenuEntry[];
   children?: ReactNode;
-  /** `auto` = design `menuPlace` (below, above or pinned); `below` = sort menu. */
+  /** `auto` opens below the trigger, above it when there is no room, or pinned on small screens; `below` always opens below (sort menu). */
   placement?: "auto" | "below";
   itemCount?: number;
 }

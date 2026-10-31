@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { newFolder, openFiles } from "./helpers";
 
 /** 1×1 PNG, detected as an image by the server. */

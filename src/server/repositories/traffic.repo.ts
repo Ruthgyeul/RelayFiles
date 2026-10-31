@@ -15,3 +15,9 @@ export async function addTraffic(db: DbClient, accountId: string, bytes: bigint,
 export function trafficSince(db: DbClient, accountId: string, from: Date) {
   return db.trafficDaily.findMany({ where: { accountId, day: { gte: from } }, select: { day: true, bytes: true } });
 }
+
+/** Bytes served to everyone on one UTC day (no account split), for /metrics. */
+export async function trafficTotalOn(db: DbClient, day: Date): Promise<bigint> {
+  const total = await db.trafficDaily.aggregate({ where: { day }, _sum: { bytes: true } });
+  return total._sum.bytes ?? 0n;
+}

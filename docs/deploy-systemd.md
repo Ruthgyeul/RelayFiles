@@ -74,7 +74,7 @@
 ├── deploy/maintenance/on        있으면 점검 모드
 └── scripts/worker.mts           워커는 번들이 아니라 체크아웃의 소스로 돈다
 /mnt/relayfilesDB/               STORAGE_ROOT (relayfiles 0700): users/, system/
-/var/log/relayfiles/             LOG_DIR (relayfiles 0750): error.log, combined.log
+/var/log/relayfiles/             LOG_DIR (relayfiles 0750): app-·worker-·tools-error.log / -combined.log
 /srv/relayfiles/                 DATA_DIR (배포 사용자 0700): backups/, releases.log
 /var/lib/relayfiles/             relayfiles 계정의 홈 (npm 캐시)
 /etc/systemd/system/relayfiles-{app,worker}.service   렌더링된 유닛 (직접 고치지 않는다)
@@ -236,7 +236,8 @@ sudo deploy/scripts/systemd/install.sh
 | 설정 | 의미 |
 |---|---|
 | `User=relayfiles`, `UMask=0077` | SSD에 쓰는 파일·폴더가 `0600`/`0700`이 된다 |
-| `NoNewPrivileges`, `ProtectSystem=full`, `ProtectHome`, `PrivateTmp` | 서비스가 `/usr`·`/etc`와 홈 디렉터리를 바꾸거나 읽지 못하고, 자기 `/tmp`를 따로 쓴다 |
+| `NoNewPrivileges`, `ProtectSystem=strict` + `ReadWritePaths`, `ProtectHome`, `PrivateTmp` | 서비스는 SSD(`STORAGE_ROOT`), `LOG_DIR`, 서비스 홈, (앱) `.app/`에만 쓸 수 있고 홈 디렉터리를 읽지 못하며 자기 `/tmp`를 따로 쓴다. SSD를 하나 더 붙이면 `sudo systemctl edit relayfiles-app`(worker도)에서 `[Service]` 아래 `ReadWritePaths=<마운트 경로>`를 더한다 |
+| `ProtectKernel*`, `ProtectControlGroups`, `ProtectClock`, `RestrictAddressFamilies`, `RestrictNamespaces`, `RestrictSUIDSGID`, `LockPersonality`, `SystemCallArchitectures=native` | 커널 설정·모듈·로그, cgroup, 시계를 바꾸지 못하고, 네트워크는 Unix·IPv4·IPv6(와 네트워크 인터페이스 목록용 netlink)만, 새 네임스페이스·setuid·다른 아키텍처 시스템 콜을 쓰지 못한다 |
 | `MemoryMax`, `CPUQuota`, `TasksMax=512` | 영상 변환·썸네일 작업이 폭주해도 자기 상한에서 멈춘다(PostgreSQL을 굶기지 않는다) |
 | `Restart=on-failure`, `RestartSec=5` | 비정상 종료 시 5초 뒤 다시 시작 |
 | 워커 `TimeoutStopSec=60` | 멈출 때 진행 중인 작업이 끝날 시간을 준다 |
@@ -342,7 +343,7 @@ sudo ufw status verbose
 ```bash
 sudo systemctl restart relayfiles-app relayfiles-worker
 journalctl -u relayfiles-app -u relayfiles-worker -f       # 표준 출력
-sudo tail -f /var/log/relayfiles/error.log                  # 앱 로그 (LOG_DIR)
+sudo tail -f /var/log/relayfiles/app-error.log              # 앱 로그 (LOG_DIR; 워커는 worker-*.log)
 sudo tail -f /var/log/nginx/relayfiles.error.log
 touch deploy/maintenance/on    # 점검 모드 (/api/health를 뺀 모든 요청에 503 정적 페이지), rm으로 해제
 ```
@@ -351,7 +352,7 @@ touch deploy/maintenance/on    # 점검 모드 (/api/health를 뺀 모든 요청
 |---|---|
 | 상태 한 번에 보기 | `systemctl status relayfiles-app relayfiles-worker nginx postgresql redis-server cloudflared` |
 | 최근 에러만 | `journalctl -u relayfiles-app -p warning -n 100` |
-| 요청 ID로 찾기 | `sudo grep <요청 ID> /var/log/relayfiles/combined.log` |
+| 요청 ID로 찾기 | `sudo grep <요청 ID> /var/log/relayfiles/app-combined.log` |
 | `.env`를 바꾼 뒤 | `sudo systemctl restart relayfiles-app relayfiles-worker` (포트·도메인·자원 상한을 바꿨다면 먼저 `sudo deploy/scripts/systemd/install.sh`) |
 | 일회성 명령 | `deploy/scripts/systemd/rf.sh <npm 스크립트> [-- 인자]` |
 | DB에 접속 | `PGPASSWORD=… psql -h 127.0.0.1 -U relayfiles relayfiles` |
@@ -362,7 +363,15 @@ touch deploy/maintenance/on    # 점검 모드 (/api/health를 뺀 모든 요청
 15 3 * * * /opt/relayfiles/deploy/scripts/systemd/backup.sh >> /srv/relayfiles/backup.log 2>&1
 ```
 
-다음 날 `ls -l /srv/relayfiles/backups`로 새 덤프가 생겼는지 확인한다. 사용자 파일(SSD)은 따로 다른 디스크에 `rsync`하고, 덤프·`.env`·SSD 키는 서버 밖에도 보관한다([deploy-ubuntu.md §10](deploy-ubuntu.md#10-백업-자동화), [runbook.md "백업"](runbook.md#백업)). systemd 배포에서 DB 복구는 §9의 `pg_restore` 명령을 쓴다.
+매주 백업 검증 (`sudo crontab -e`, root: 임시 DB `relayfiles_verify`를 `postgres` 계정으로 만들고 지운다. 무엇을 확인하는지는 [runbook.md "백업 검증"](runbook.md#백업-검증)):
+
+```cron
+15 5 * * 0 /opt/relayfiles/deploy/scripts/systemd/verify-backup.sh >> /srv/relayfiles/backup-verify-cron.log 2>&1
+```
+
+서버 밖 암호화 백업(덤프 + 원본 파일, restic): root crontab에 `45 3 * * * /opt/relayfiles/deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1`(설정은 [runbook.md "오프사이트 백업"](runbook.md#오프사이트-백업)).
+
+다음 날 `ls -l /srv/relayfiles/backups`로 새 덤프가 생겼는지 확인한다. 사용자 파일(SSD)은 따로 다른 디스크에 `rsync`하고, `.env`·SSD 키는 서버 밖에도 보관한다([deploy-ubuntu.md §10](deploy-ubuntu.md#10-백업-자동화), [runbook.md "백업"](runbook.md#백업)). systemd 배포에서 DB 복구는 §9의 `pg_restore` 명령을 쓴다.
 
 ## 9. 업데이트와 롤백
 
@@ -406,8 +415,8 @@ deploy/scripts/systemd/rollback.sh              # 바로 이전 번들로
 deploy/scripts/systemd/rollback.sh <번들 이름>    # ls .app
 ```
 
-롤백할 때는 다음을 알아 둔다.
-- 앱 번들만 바뀐다. DB 스키마는 expand → contract로 나눠 넣으므로 바로 이전 릴리스는 새 스키마에서도 동작한다.
+롤백할 때는 다음을 알아 둔다(DB 스키마 규칙은 [runbook.md "롤백"](runbook.md#롤백)).
+- 앱 번들만 바뀐다.
 - 파괴적 변경이 있었다면 [runbook.md "DB 복구"](runbook.md#db-복구)대로 그 릴리스 직전 백업을 복구한다. systemd 배포에서는 `$C exec -T postgres pg_restore …` 대신 아래를 쓴다.
 
   ```bash

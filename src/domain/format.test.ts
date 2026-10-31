@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { formatAgo, formatClock, formatCountdown, formatDateTime, formatLeft, formatShortDate, formatSize , formatSeen, formatMetricSize, formatPercent, roundDecimals } from "./format";
+import {
+  formatAgo,
+  formatClock,
+  formatCount,
+  formatCountdown,
+  formatDateTime,
+  formatLeft,
+  formatLongDate,
+  formatMetricSize,
+  formatPercent,
+  formatSeen,
+  formatShortDate,
+  formatShortDateTime,
+  formatSize,
+  formatTimeOfDay,
+  formatWeekdayHour,
+  roundDecimals,
+} from "./format";
 
 describe("formatClock (prototype fmtT)", () => {
   it("formats minutes and hours", () => {
@@ -58,6 +75,23 @@ describe("dates", () => {
     const at = new Date(2026, 9, 19, 15, 12);
     expect(formatShortDate(at)).toBe("Oct 19");
     expect(formatDateTime(at)).toBe("Oct 19, 2026, 3:12 PM");
+    expect(formatLongDate(at)).toBe("Oct 19, 2026");
+    expect(formatShortDateTime(at)).toBe("Oct 19, 3:12 PM");
+    expect(formatTimeOfDay(new Date(2026, 9, 19, 15, 12, 8))).toBe("3:12:08 PM");
+    expect(formatWeekdayHour(at)).toBe("Mon 3 PM");
+  });
+
+  it("takes another locale where one is passed", () => {
+    const at = new Date(2026, 9, 19, 15, 12);
+    expect(formatLongDate(at, "de-DE")).toBe("19. Okt. 2026");
+    expect(formatCount(1234567, "de-DE")).toBe("1.234.567");
+  });
+});
+
+describe("formatCount", () => {
+  it("adds thousands separators", () => {
+    expect(formatCount(0)).toBe("0");
+    expect(formatCount(1234567)).toBe("1,234,567");
   });
 });
 

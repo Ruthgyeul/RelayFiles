@@ -6,8 +6,9 @@ import { LOSSLESS_STRIP_TYPES, stripImageMetadata } from "@/domain/image-metadat
 import { db } from "../db/client";
 import { logger } from "../logger";
 import { findAccountById } from "../repositories/account.repo";
-import { ancestorChain, findNodeForJob, updateNode } from "../repositories/node.repo";
+import { findNodeForJob, updateNode } from "../repositories/node.repo";
 import { driverForAccount } from "../services/volume.service";
+import { locationOf } from "../services/node-location";
 import { imagePreview, imageThumbnail, videoThumbnail, wantsPreview } from "./thumbnail";
 
 /** Image types sharp can rewrite in the same format (metadata is dropped on output). */
@@ -41,7 +42,7 @@ async function attempt<T>(step: string, nodeId: string, run: () => Promise<T>): 
   try {
     return await run();
   } catch (error) {
-    logger.warn("media step failed", { step, nodeId, error: error instanceof Error ? error.message : String(error) });
+    logger.warn("media step failed", { step, nodeId, error });
     return null;
   }
 }
@@ -56,8 +57,7 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
   const account = await findAccountById(db(), row.accountId);
   if (!account) return null;
   const driver = await driverForAccount(account, "write");
-  const chain = await ancestorChain(db(), row.id);
-  const path = await driver.localPath({ accountId: row.accountId, segments: chain.slice(1).map((ancestor) => ancestor.name) });
+  const path = await driver.localPath(await locationOf(row.accountId, row.id));
   if (!path) throw new Error("Media processing needs a local volume.");
   const mime = row.mime ?? "";
   const asset = { accountId: row.accountId, nodeId: row.id };
@@ -79,6 +79,9 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
     return null;
   }
   const result = { thumb: thumb !== null, derived: derived !== null, preview: keepPreview };
-  await updateNode(db(), row.id, { hasThumb: result.thumb, hasDerived: result.derived });
+  // An image that should have been cleaned but was not (undecodable, too large) is not tried
+  // again for every visitor: share routes answer 415 for it until the file changes.
+  const stripFailed = row.kind === "IMAGE" && !result.derived && canStripType(mime);
+  await updateNode(db(), row.id, { hasThumb: result.thumb, hasDerived: result.derived, stripFailed });
   return result;
 }

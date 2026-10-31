@@ -17,16 +17,18 @@ export interface DownloadFacts {
   streamOnly: boolean;
   downloadLimit: number | null;
   downloads: number;
+  /** Delete after the first download: once downloaded, no more downloads. */
+  burn: boolean;
   /** 0 normal, 1 throttled, 2 paused (see `busyOf`). */
   busyLevel: 0 | 1 | 2;
 }
 
 export type DownloadBlock = "stream-only" | "limit" | "paused";
 
-/** Why visitors may not download a file now, or null when they may (design `canDl`). */
+/** Why visitors may not download a file now, or null when they may. */
 export function downloadBlock(facts: DownloadFacts): DownloadBlock | null {
   if (facts.linkStreamOnly || facts.streamOnly) return "stream-only";
-  if (limitHit(facts.downloadLimit, facts.downloads)) return "limit";
+  if (limitHit(facts.downloadLimit, facts.downloads) || (facts.burn && facts.downloads >= 1)) return "limit";
   if (facts.busyLevel === 2) return "paused";
   return null;
 }
@@ -52,6 +54,18 @@ export function downloadDecision(request: DownloadRequest): DownloadDecision {
   if (request.owner || request.method !== "GET" || request.range === "unsatisfiable") return "allow";
   if (request.range === null || request.range.start === 0) return "count";
   return request.granted ? "allow" : "deny";
+}
+
+/**
+ * Playback of a file under a download limit or delete-after-download is counted too (else the
+ * player would be an uncounted way to get it), once per browser: a request starting at the
+ * first byte counts and grants; the same browser's later requests (seeking, a player probing
+ * `bytes=0-1` before `bytes=0-`) are allowed while the grant lasts; anyone else starting later
+ * in the file is refused.
+ */
+export function limitedStreamDecision(request: Omit<DownloadRequest, "owner">): DownloadDecision {
+  if (request.method !== "GET" || request.range === "unsatisfiable" || request.granted) return "allow";
+  return request.range === null || request.range.start === 0 ? "count" : "deny";
 }
 
 /**

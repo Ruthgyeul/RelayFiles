@@ -14,3 +14,8 @@ release) disables that cache. Delete that line from older `<volumeId>.conf` file
 Each location also needs `disable_symlinks on from=<volume root>;` (Nginx opens the file again
 after the app checked it; this refuses a symlink placed in between). `volume:init` writes it;
 add it by hand to `<volumeId>.conf` files written before this release.
+
+Each location also passes the app's ETag (`etag off; add_header ETag $upstream_http_etag;`):
+Nginx's own mtime-size ETag would never match the If-Range of a resumed share download, so
+every resume would count as a new download. Add both lines to `<volumeId>.conf` files written
+before this release.

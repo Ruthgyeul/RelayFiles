@@ -2,10 +2,11 @@ import "server-only";
 import { getAppEnv, getEnv } from "@/config/env";
 import { METRICS, MS } from "@/config/policy";
 import type { ServiceRow } from "@/contracts/server-metrics";
-import { formatAgo, formatSize } from "@/domain/format";
+import { formatAgo, formatClock, formatSize } from "@/domain/format";
 import { cronLabel } from "@/domain/server";
 import { db } from "../db/client";
 import { CommandError, runCommand } from "../process/run-command";
+import { latestBackupCheck } from "../repositories/backup-check.repo";
 import { listActiveVolumes } from "../repositories/volume.repo";
 import { checkVolume } from "../storage/volume";
 import { lastCleanup, workerAlive } from "./history";
@@ -38,12 +39,25 @@ export function parseSmart(json: string, device: string): ServiceRow {
   }
 }
 
-/** The Services card (design `srv.services`), measured, never assumed. */
+/** The last backup verification (deploy/scripts/verify-backup.sh), or a hint to set it up. */
+export async function backupRow(now: Date): Promise<ServiceRow> {
+  const check = await latestBackupCheck(db());
+  if (!check) return { name: "Backup check", detail: "never run (deploy/scripts/verify-backup.sh, weekly cron)", status: "unknown" };
+  const when = `checked ${formatAgo(check.checkedAt.getTime(), now.getTime())}`;
+  if (!check.ok) return { name: "Backup check", detail: [when, ...check.problems].join(" · "), status: "failing" };
+  const parts = [when];
+  if (check.dumpAt) parts.push(`dump from ${formatAgo(check.dumpAt.getTime(), now.getTime())}`);
+  if (check.restoreMs !== null) parts.push(`restored in ${formatClock(check.restoreMs / MS.second)}`);
+  parts.push("storage matches the database");
+  return { name: "Backup check", detail: parts.join(" · "), status: "healthy" };
+}
+
+/** The Services card, measured, never assumed. */
 export async function serviceRows(now: Date): Promise<ServiceRow[]> {
   const volumes = await listActiveVolumes(db());
   const states = await Promise.all(volumes.map((volume) => checkVolume(volume.mountPath, volume.id)));
   const offline = states.filter((state) => state.state !== "online").length;
-  const [alive, cleanup, disk] = await Promise.all([workerAlive(), lastCleanup(), diskHealth()]);
+  const [alive, cleanup, disk, backup] = await Promise.all([workerAlive(), lastCleanup(), diskHealth(), backupRow(now)]);
   const jobs = getEnv("jobs");
 
   const cleanupDetail = [cronLabel(jobs.CLEANUP_CRON)];
@@ -60,5 +74,6 @@ export async function serviceRows(now: Date): Promise<ServiceRow[]> {
     },
     { name: "Cleanup job", detail: cleanupDetail.join(" · "), status: alive ? "scheduled" : "stopped" },
     disk,
+    backup,
   ];
 }

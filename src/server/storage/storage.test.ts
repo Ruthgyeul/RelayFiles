@@ -11,6 +11,7 @@ const { UnsafePathError, resolveInsideUserRoot } = await import("./safe-path");
 const { checkVolume, initVolume, readVolumeMarker } = await import("./volume");
 const { withStorageTransaction } = await import("./storage-transaction");
 const { layoutOf } = await import("./layout");
+const { StorageTargetExistsError } = await import("./driver");
 
 const ACCOUNT = "abcdefghjkmn";
 const OTHER = "pqrstuvwxyz2";
@@ -104,6 +105,32 @@ describe("LocalVolumeDriver", () => {
     expect(await readFile(join(root, "users", ACCOUNT, "B", "A2", "f.txt"), "utf8")).toBe("x");
   });
 
+  it("renames without replacing an existing file (renumbering swaps names)", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    const user = join(root, "users", ACCOUNT);
+    await writeFile(join(user, "a.txt"), "A");
+    await writeFile(join(user, "b.txt"), "B");
+    await expect(driver.renameNoReplace(at("a.txt"), at("b.txt"))).rejects.toBeInstanceOf(StorageTargetExistsError);
+    expect(await readFile(join(user, "a.txt"), "utf8")).toBe("A");
+    expect(await readFile(join(user, "b.txt"), "utf8")).toBe("B");
+
+    await driver.renameNoReplace(at("a.txt"), at("c.txt"));
+    expect(await readFile(join(user, "c.txt"), "utf8")).toBe("A");
+    await expect(stat(join(user, "a.txt"))).rejects.toThrow();
+  });
+
+  it("renames a hard-linked (deduplicated) file without touching its other link", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    const user = join(root, "users", ACCOUNT);
+    await writeFile(join(user, "a.txt"), "same");
+    expect(await driver.linkExisting(at("a.txt"), at("b.txt"), 4)).toBe(true);
+    await driver.renameNoReplace(at("b.txt"), at("01.txt"));
+    expect(await readFile(join(user, "a.txt"), "utf8")).toBe("same");
+    expect((await stat(join(user, "01.txt"))).nlink).toBe(2);
+  });
+
   it("copies files and folders without overwriting", async () => {
     const driver = new LocalVolumeDriver("vol-1", root);
     await driver.ensureUserRoot(ACCOUNT);
@@ -111,6 +138,29 @@ describe("LocalVolumeDriver", () => {
     await driver.copy(at("a.txt"), at("b.txt"));
     expect(await readFile(join(root, "users", ACCOUNT, "b.txt"), "utf8")).toBe("hello");
     await expect(driver.copy(at("a.txt"), at("b.txt"))).rejects.toThrow();
+  });
+
+  it("copies by hard link, folders included, and links a re-upload to an existing file of the same size", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    const user = join(root, "users", ACCOUNT);
+    await mkdir(join(user, "A", "B"), { recursive: true });
+    await writeFile(join(user, "A", "B", "f.txt"), "same");
+    await driver.copy(at("A"), at("A2"));
+    expect((await stat(join(user, "A2", "B", "f.txt"))).ino).toBe((await stat(join(user, "A", "B", "f.txt"))).ino);
+
+    expect(await driver.linkExisting(at("A", "B", "f.txt"), at("g.txt"), 4)).toBe(true);
+    expect((await stat(join(user, "g.txt"))).nlink).toBe(3);
+    expect(await driver.linkExisting(at("A", "B", "f.txt"), at("h.txt"), 5)).toBe(false);
+    expect(await driver.linkExisting(at("gone.txt"), at("h.txt"), 4)).toBe(false);
+  });
+
+  it("refuses to copy a folder with a symbolic link inside", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    await mkdir(join(root, "users", ACCOUNT, "A"));
+    await symlink("/etc", join(root, "users", ACCOUNT, "A", "etc"));
+    await expect(driver.copy(at("A"), at("A2"))).rejects.toThrow("Only files and folders can be copied.");
   });
 
   it("refuses to follow symbolic links planted inside an account", async () => {

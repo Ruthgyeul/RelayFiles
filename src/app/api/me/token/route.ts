@@ -16,7 +16,7 @@ export const GET = apiHandler(async ({ req }) => {
   const device = await deviceOf(req);
   const target = accountId ? device.accounts.find((item) => item.account.id === accountId) : requireActive(device);
   if (!target) throw new ApiError("NOT_FOUND");
-  // An admin token opens every account: shown only after a recent token entry, and logged.
+  // Shown only after a recent sign-in or token entry; an admin token (opens every account) is logged too.
   requireRecentAuth(target);
   const token = await revealToken(target.account.id);
   if (target.account.isAdmin) await audit(target, clientInfo(req.headers), "token.reveal", { id: target.account.id });
@@ -24,8 +24,7 @@ export const GET = apiHandler(async ({ req }) => {
 });
 
 /** "Generate a new token": the old one stops working and other devices are signed out. */
-export const POST = apiHandler(async ({ req }) => {
-  const active = requireActive(await deviceOf(req));
+export const POST = apiHandler({ auth: "active" }, async ({ req, active }) => {
   requireRecentAuth(active);
   const { account, sessionId } = active;
   const token = await regenerateToken(account.id, sessionId);

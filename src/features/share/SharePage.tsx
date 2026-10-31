@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { SharePage as SharePageData } from "@/contracts/share";
-import { folderHref } from "@/features/files/paths";
+import { folderHref } from "@/shared/lib/routes";
 import { useNotice } from "@/shared/hooks/useNotice";
 import { Logo } from "@/shared/ui/Display";
 import { Icon } from "@/shared/ui/icon/Icon";

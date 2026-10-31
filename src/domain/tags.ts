@@ -1,5 +1,5 @@
 /**
- * Tag rules from the design prototype (`parseTags`, `hasAllTags`, tag editor).
+ * Tag rules: parsing a "#tag" query, matching items that carry every tag, and normalizing new tags.
  * Tags are lowercase words; the search box switches to tag mode when it starts with "#".
  */
 
@@ -25,4 +25,14 @@ export function normalizeTag(input: string): string {
     .replace(/\s+/g, "-")
     .replace(/[#,]/g, "")
     .slice(0, MAX_TAG_LENGTH);
+}
+
+/**
+ * The search query after clicking a tag chip: a tag search gets the tag added (unless it is
+ * already there), any other text is replaced by a search for that tag.
+ */
+export function withTagQuery(query: string, tag: string): string {
+  const trimmed = query.trim();
+  if (!trimmed.startsWith("#")) return `#${tag}`;
+  return parseTags(trimmed).includes(tag) ? trimmed : `${trimmed} #${tag}`;
 }

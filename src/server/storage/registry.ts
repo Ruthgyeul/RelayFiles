@@ -12,16 +12,20 @@ export interface VolumeRecord {
   status: "ACTIVE" | "READONLY" | "DRAINING" | "OFFLINE";
 }
 
-const drivers = new Map<string, StorageDriver>();
+const drivers = new Map<string, { mountPath: string; driver: StorageDriver }>();
 
-/** Returns the storage driver for a volume row (one instance per volume). */
+/**
+ * Returns the storage driver for a volume row (one instance per volume). A volume registered
+ * again at another path (npm run volume:init after a remount) gets a new driver for that path,
+ * without restarting the app.
+ */
 export function driverFor(volume: VolumeRecord): StorageDriver {
   if (volume.status === "OFFLINE") throw new ApiError("STORAGE_OFFLINE");
   const existing = drivers.get(volume.id);
-  if (existing) return existing;
+  if (existing?.mountPath === volume.mountPath) return existing.driver;
   if (volume.driver !== "LOCAL") throw new ApiError("INTERNAL", "This storage driver is not available.");
   const driver = new LocalVolumeDriver(volume.id, volume.mountPath);
-  drivers.set(volume.id, driver);
+  drivers.set(volume.id, { mountPath: volume.mountPath, driver });
   return driver;
 }
 

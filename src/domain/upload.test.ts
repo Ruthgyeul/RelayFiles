@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { folderCount, homeUploadPlan, kindFromMime, mimeFromName, uploadFallbackName } from "./upload";
+import { clientModifiedAt, folderCount, homeUploadPlan, kindFromMime, mimeFromName, uploadFallbackName } from "./upload";
 
 describe("homeUploadPlan (design startUpload)", () => {
   it("uses a single top-level folder as the upload folder", () => {
@@ -27,5 +27,22 @@ describe("helpers", () => {
     expect(kindFromMime("application/pdf")).toBe("other");
     expect(mimeFromName("Song.MP3")).toBe("audio/mpeg");
     expect(mimeFromName("noext")).toBe("application/octet-stream");
+  });
+});
+
+describe("clientModifiedAt", () => {
+  const now = new Date("2026-10-31T00:00:00Z");
+
+  it("accepts a past time in ms", () => {
+    expect(clientModifiedAt("1700000000000", now)?.toISOString()).toBe("2023-11-14T22:13:20.000Z");
+  });
+
+  it("ignores missing, malformed, zero and future values", () => {
+    expect(clientModifiedAt(undefined, now)).toBeNull();
+    expect(clientModifiedAt("", now)).toBeNull();
+    expect(clientModifiedAt("12.5", now)).toBeNull();
+    expect(clientModifiedAt("-1", now)).toBeNull();
+    expect(clientModifiedAt("0", now)).toBeNull();
+    expect(clientModifiedAt(String(now.getTime() + 1), now)).toBeNull();
   });
 });

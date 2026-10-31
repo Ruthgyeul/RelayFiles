@@ -17,17 +17,19 @@ import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
 import { processMedia } from "@/server/media/process";
 import { getFolderView } from "@/server/services/node.service";
-import { retiredSharePage, sharePage } from "@/server/services/share.service";
+import { retiredSharePage, sharePage } from "@/server/share/share.service";
 import { purgeExpired } from "@/server/services/profile.service";
 import { findAccountById } from "@/server/repositories/account.repo";
 import { purgeRetiredLinks } from "@/server/repositories/link-tombstone.repo";
-import { UNLOCK_COOKIE, type Unlocks } from "@/server/share/unlock-cookie";
+import { cookieSecrets } from "@/server/auth/keys";
+import { decodeUnlocks, UNLOCK_COOKIE, type Unlocks } from "@/server/share/unlock-cookie";
+import { VISITOR_COOKIE } from "@/server/share/visitor-cookie";
 import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
 
 const { prisma, member, addFile, cleanup } = fileFixtures();
-const noViewer = { accountIds: [], unlocks: new Map() as Unlocks };
+const noViewer = { accountIds: [], unlocks: new Map() as Unlocks, visitorId: null };
 
 afterAll(async () => {
   await closeQueues();
@@ -73,6 +75,10 @@ async function sharedTrip(data: Record<string, unknown> = {}) {
 }
 
 const fileParams = (linkId: string, id: string) => ({ linkId, id });
+/** The unlocks in an `rf_sh=<value>` pair, as the share page would read them. */
+const decodeUnlocksForTest = (pair: string) => decodeUnlocks(pair.slice(pair.indexOf("=") + 1), cookieSecrets(), Date.now());
+/** The `rf_dv=<id>` pair a response set (the browser that a counted download start belongs to). */
+const visitorCookie = (res: Response) => res.headers.getSetCookie().find((line) => line.startsWith(`${VISITOR_COOKIE}=`))!.split(";")[0]!;
 const path = (linkId: string, id: string, mode: string) => `/api/share/${linkId}/files/${id}/${mode}`;
 
 describe("share page", () => {
@@ -150,6 +156,95 @@ describe("share page", () => {
   });
 });
 
+describe("settings on the way to a file", () => {
+  const linkOf = async (id: string) => (await prisma.node.findUniqueOrThrow({ where: { id } })).linkId;
+  const unlockCookie = (res: Response) => res.headers.getSetCookie().find((line) => line.startsWith(`${UNLOCK_COOKIE}=`))!.split(";")[0]!;
+
+  it("keeps items with their own password or a past expiry out of the folder's link", async () => {
+    const { trip, a, day, b } = await sharedTrip();
+    await prisma.node.update({ where: { id: day.id }, data: { passwordHash: await hash("day pass") } });
+    await prisma.node.update({ where: { id: a }, data: { expAt: new Date(Date.now() - 1_000) } });
+    const names = (await sharePage(trip.linkId, null, noViewer, Date.now()))!.page.view!.items.map((item) => item.name);
+    expect(names).not.toContain("Day1");
+    expect(names).not.toContain("a.txt");
+    expect((await visit(shareDownload, path(trip.linkId, b, "download"), fileParams(trip.linkId, b))).status).toBe(404);
+    expect((await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a))).status).toBe(404);
+    // Through its own link the folder asks for its password.
+    const dayLink = await linkOf(day.id);
+    expect((await visit(shareDownload, path(dayLink, b, "download"), fileParams(dayLink, b))).status).toBe(401);
+  });
+
+  it("makes a file's own link follow the password and expiry of the folders above it", async () => {
+    const { trip, a } = await sharedTrip({ passwordHash: await hash("trip pass") });
+    const fileLink = await linkOf(a);
+    await prisma.node.update({ where: { id: a }, data: { visibility: "PUBLIC" } });
+    expect((await sharePage(fileLink, null, noViewer, Date.now()))!.page.status).toBe("locked");
+    expect((await visit(shareDownload, path(fileLink, a, "download"), fileParams(fileLink, a))).status).toBe(401);
+    // The folder's password unlocks the file's own link (and the folder's).
+    const right = await visit(unlock, `/api/share/${fileLink}/unlock`, { linkId: fileLink }, { method: "POST", body: { password: "trip pass" } });
+    expect(right.status).toBe(200);
+    const cookie = unlockCookie(right);
+    expect((await visit(shareDownload, path(fileLink, a, "download"), fileParams(fileLink, a), { cookies: [cookie] })).status).toBe(200);
+    expect((await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { cookies: [cookie] })).status).toBe(200);
+
+    await prisma.node.update({ where: { id: trip.id }, data: { passwordHash: null, expAt: new Date(Date.now() - 1_000) } });
+    expect((await sharePage(fileLink, null, noViewer, Date.now()))!.page.status).toBe("expired");
+  });
+
+  it("asks for every password on the way, one at a time", async () => {
+    const { a } = await sharedTrip({ passwordHash: await hash("trip pass") });
+    await prisma.node.update({ where: { id: a }, data: { visibility: "PUBLIC", passwordHash: await hash("file pass") } });
+    const fileLink = await linkOf(a);
+    const first = await visit(unlock, `/api/share/${fileLink}/unlock`, { linkId: fileLink }, { method: "POST", body: { password: "file pass" } });
+    const unlocks = (cookie: string) => decodeUnlocksForTest(cookie);
+    expect((await sharePage(fileLink, null, { ...noViewer, unlocks: unlocks(unlockCookie(first)) }, Date.now()))!.page.status).toBe("locked");
+    const second = await visit(unlock, `/api/share/${fileLink}/unlock`, { linkId: fileLink }, { method: "POST", body: { password: "trip pass" }, cookies: [unlockCookie(first)] });
+    expect((await sharePage(fileLink, null, { ...noViewer, unlocks: unlocks(unlockCookie(second)) }, Date.now()))!.page.status).toBe("open");
+  });
+
+  it("downloads a delete-after-download file in a folder link only once", async () => {
+    const { trip, a } = await sharedTrip();
+    await prisma.node.update({ where: { id: a }, data: { burn: true } });
+    expect((await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a))).status).toBe(200);
+    const again = await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a));
+    expect([again.status, ((await again.json()) as { error: string }).error]).toEqual([403, "Download limit reached"]);
+    const item = (await sharePage(trip.linkId, null, noViewer, Date.now()))!.page.view!.items.find((entry) => entry.name === "a.txt")!;
+    expect(item.canDownload).toBe(false);
+  });
+
+  it("counts playback of a limited file once per browser", async () => {
+    const { trip, a } = await sharedTrip();
+    await prisma.node.update({ where: { id: a }, data: { downloadLimit: 1 } });
+    const stream = (cookies: string[] = []) => visit(shareStream, path(trip.linkId, a, "stream"), fileParams(trip.linkId, a), { cookies });
+    const first = await stream();
+    expect(first.status).toBe(200);
+    const visitor = visitorCookie(first);
+    expect((await stream([visitor])).status).toBe(200);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: a } })).downloads).toBe(1);
+    // Another browser would be the second "download" of a file limited to one.
+    expect((await stream()).status).toBe(403);
+  });
+
+  it("closes the links of an account that reached its deletion date", async () => {
+    const { m, trip } = await sharedTrip();
+    await prisma.account.update({ where: { id: m.id }, data: { expiresAt: new Date(Date.now() - 1_000) } });
+    expect((await sharePage(trip.linkId, null, noViewer, Date.now()))!.page.status).toBe("expired");
+  });
+
+  it("names the item only on links a visitor may open or unlock", async () => {
+    const now = Date.now();
+    const nameOf = async (data: Record<string, unknown>) => {
+      const { trip } = await sharedTrip(data);
+      return (await sharePage(trip.linkId, null, noViewer, now))!.page.name;
+    };
+    expect(await nameOf({})).toBe("Trip");
+    expect(await nameOf({ passwordHash: await hash("x") })).toBe("Trip");
+    expect(await nameOf({ visibility: "INHERIT" })).toBe("");
+    expect(await nameOf({ expAt: new Date(now - 1_000) })).toBe("");
+    expect(await nameOf({ downloadLimit: 1, downloads: 1 })).toBe("");
+  });
+});
+
 describe("share previews", () => {
   it("locks out devices that unlocked with a password that has since changed", async () => {
     const { trip, a } = await sharedTrip({ passwordHash: await hash("first") });
@@ -216,8 +311,8 @@ describe("share downloads", () => {
     expect(await res.text()).toBe("alpha");
     const counts = await prisma.node.findMany({ where: { id: { in: [a, trip.id] } }, select: { id: true, downloads: true } });
     expect(counts.map((row) => row.downloads)).toEqual([1, 1]);
-    const events = await prisma.linkEvent.findMany({ where: { nodeId: a } });
-    expect(events).toMatchObject([{ kind: "DOWNLOAD", fileName: "a.txt", device: "iPhone · Safari" }]);
+    // The event is written after the response (it must not delay the download), so wait for it.
+    await expect.poll(() => prisma.linkEvent.findMany({ where: { nodeId: a } })).toMatchObject([{ kind: "DOWNLOAD", fileName: "a.txt", device: "iPhone · Safari" }]);
 
     // The owner previewing the page is not counted; private items are not reachable.
     await visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { owner: m });
@@ -245,6 +340,11 @@ describe("share downloads", () => {
 
   it("sends images without camera data unless the owner turned that off", async () => {
     const { m, trip, photo } = await sharedTrip();
+    // Nothing is decoded in the request: until the worker made the clean copy, visitors wait.
+    const early = await visit(shareDownload, path(trip.linkId, photo, "download"), fileParams(trip.linkId, photo));
+    expect([early.status, early.headers.get("retry-after")]).toEqual([503, String(MEDIA.stripPendingRetrySec)]);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: photo } })).downloads).toBe(0);
+    await processMedia(photo);
     const cleaned = Buffer.from(await (await visit(shareDownload, path(trip.linkId, photo, "download"), fileParams(trip.linkId, photo))).arrayBuffer());
     expect(cleaned.includes(Buffer.from("RelayCam"))).toBe(false);
     expect((await sharp(cleaned).metadata()).width).toBe(8);
@@ -252,6 +352,14 @@ describe("share downloads", () => {
     await prisma.account.update({ where: { id: m.id }, data: { stripMetadataOnShare: false } });
     const original = Buffer.from(await (await visit(shareStream, path(trip.linkId, photo, "stream"), fileParams(trip.linkId, photo))).arrayBuffer());
     expect(original.includes(Buffer.from("RelayCam"))).toBe(true);
+  });
+
+  it("answers 415 for a photo the worker could not clean, without trying again per request", async () => {
+    const { m, trip } = await sharedTrip();
+    const broken = await addFile(m, trip.id, ["Trip"], "broken.jpg", Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x10, 1, 2]), "image/jpeg", "IMAGE");
+    await processMedia(broken);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: broken } })).stripFailed).toBe(true);
+    expect((await visit(shareStream, path(trip.linkId, broken, "stream"), fileParams(trip.linkId, broken))).status).toBe(415);
   });
 
   it("streams the worker's stripped copy from disk, range by range", async () => {
@@ -339,22 +447,48 @@ describe("share downloads", () => {
     expect((await prisma.node.findUniqueOrThrow({ where: { id: trip.id } })).downloads).toBe(1);
   });
 
-  it("counts suffix ranges and serves later ranges only after a counted start", async () => {
+  it("counts suffix ranges and serves later ranges only to the browser whose start was counted", async () => {
     const { trip, a } = await sharedTrip({ downloadLimit: 3 });
     const ip = visitorIp();
-    const get = (range: string, from = ip) => visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { headers: { range }, ip: from });
+    const get = (range: string, cookies: string[] = []) => visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { headers: { range }, ip, cookies });
     const downloads = async () => (await prisma.node.findUniqueOrThrow({ where: { id: a } })).downloads;
 
     // A suffix range that covers the whole file is a download like any other.
     const whole = await get("bytes=-99999999999");
     expect([whole.status, await whole.text()]).toEqual([206, "alpha"]);
     expect(await downloads()).toBe(1);
+    const visitor = visitorCookie(whole);
+    expect(visitor).toMatch(new RegExp(`^${VISITOR_COOKIE}=[0-9a-f]{32}$`));
 
-    // Resuming is served to the visitor who started; anyone else has to start (and be counted).
-    const resumed = await get("bytes=1-");
+    // Resuming is served to the browser that started; another one behind the same address
+    // (a shared NAT) has to start, and be counted.
+    const resumed = await get("bytes=1-", [visitor]);
     expect([resumed.status, await resumed.text()]).toEqual([206, "lpha"]);
-    expect((await get("bytes=1-", visitorIp())).status).toBe(403);
+    expect((await get("bytes=1-")).status).toBe(403);
     expect(await downloads()).toBe(1);
+  });
+
+  it("judges a made-up If-Range as a request for the whole file", async () => {
+    const { m, trip, a } = await sharedTrip({ downloadLimit: 5 });
+    const log = await addFile(m, trip.id, ["Trip"], "big.log", Buffer.alloc(DOCUMENT_PREVIEW.textMaxBytes + 10, "x"), "text/plain");
+    const sha = (await prisma.node.findUniqueOrThrow({ where: { id: a } })).sha256!;
+    const downloads = async () => (await prisma.node.findUniqueOrThrow({ where: { id: a } })).downloads;
+    const download = (headers: Record<string, string>, cookies: string[] = []) => visit(shareDownload, path(trip.linkId, a, "download"), fileParams(trip.linkId, a), { headers, cookies });
+
+    // Nginx ignores Range for a non-matching If-Range and sends everything: no way past the
+    // preview limit of the stream route...
+    const peek = await visit(shareStream, path(trip.linkId, log, "stream"), fileParams(trip.linkId, log), { headers: { range: "bytes=0-10", "if-range": '"x"' } });
+    expect(peek.status).toBe(403);
+    // ...and no uncounted full download with a later range.
+    const first = await download({});
+    const visitor = visitorCookie(first);
+    expect(await downloads()).toBe(1);
+    expect((await download({ range: "bytes=1-1", "if-range": '"x"' }, [visitor])).status).toBe(200);
+    expect(await downloads()).toBe(2);
+    // A real resume sends the file's own ETag and keeps its range, uncounted.
+    const resumed = await download({ range: "bytes=1-", "if-range": `"${sha}"` }, [visitor]);
+    expect([resumed.status, await resumed.text()]).toEqual([206, "lpha"]);
+    expect(await downloads()).toBe(2);
   });
 
   it("expires a delete-after-download link after one download, whatever the range", async () => {

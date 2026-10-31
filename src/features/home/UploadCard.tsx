@@ -2,7 +2,7 @@
 
 import { useState, type DragEvent } from "react";
 import { entriesFromDrop, hasFiles } from "@/features/transfers/read-drop";
-import { useTransfers } from "@/features/transfers/TransfersProvider";
+import { useTransfers } from "@/features/transfers/transfers-context";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
 
@@ -32,7 +32,7 @@ export function UploadCard() {
         </div>
       </div>
       <div className="p-5">
-        {/* A click anywhere picks files (design); keyboard users get the two buttons inside. */}
+        {/* A click anywhere picks files; keyboard users get the two buttons inside. */}
         <div
           onClick={() => pickFiles(HOME)}
           onDragOver={(event) => {

@@ -1,0 +1,80 @@
+# PostgreSQL and Redis on k3s (docs/deploy-k3s.md), rendered by deploy/scripts/k3s/deploy.sh.
+# They run on the storage node with their data in DATA_DIR/pg and DATA_DIR/redis, the same
+# directories docker compose uses, so a server can move between the two.
+apiVersion: v1
+kind: Service
+metadata:
+  name: relayfiles-postgres
+  namespace: ${K3S_NAMESPACE}
+spec:
+  selector: { app.kubernetes.io/name: relayfiles-postgres }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: relayfiles-postgres
+  namespace: ${K3S_NAMESPACE}
+spec:
+  serviceName: relayfiles-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: relayfiles-postgres }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: relayfiles-postgres }
+    spec:
+      nodeSelector: { relayfiles/storage: "true" }
+      containers:
+        - name: postgres
+          image: ${POSTGRES_IMAGE}
+          env:
+            - { name: POSTGRES_DB, valueFrom: { secretKeyRef: { name: relayfiles-env, key: POSTGRES_DB } } }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: relayfiles-env, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: relayfiles-env, key: POSTGRES_PASSWORD } } }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""] }
+            periodSeconds: 5
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+      volumes:
+        - { name: data, hostPath: { path: ${DATA_DIR}/pg, type: Directory } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: relayfiles-redis
+  namespace: ${K3S_NAMESPACE}
+spec:
+  selector: { app.kubernetes.io/name: relayfiles-redis }
+  ports: [{ port: 6379, targetPort: 6379 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: relayfiles-redis
+  namespace: ${K3S_NAMESPACE}
+spec:
+  serviceName: relayfiles-redis
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: relayfiles-redis }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: relayfiles-redis }
+    spec:
+      nodeSelector: { relayfiles/storage: "true" }
+      containers:
+        - name: redis
+          image: ${REDIS_IMAGE}
+          env:
+            - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: relayfiles-env, key: REDIS_PASSWORD } } }
+            - { name: REDISCLI_AUTH, valueFrom: { secretKeyRef: { name: relayfiles-env, key: REDIS_PASSWORD } } }
+          args: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)", "--appendonly", "yes", "--appendfsync", "everysec"]
+          ports: [{ containerPort: 6379 }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "redis-cli ping | grep PONG"] }
+            periodSeconds: 5
+          volumeMounts: [{ name: data, mountPath: /data }]
+      volumes:
+        - { name: data, hostPath: { path: ${DATA_DIR}/redis, type: Directory } }

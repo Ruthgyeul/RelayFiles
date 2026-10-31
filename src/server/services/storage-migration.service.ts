@@ -3,7 +3,8 @@ import { appendFile, mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { STORAGE } from "@/config/policy";
 import { db } from "../db/client";
-import { findVolume } from "../repositories/volume.repo";
+import { accountIdsOnVolume, findAccountPlacement, setAccountMigrating, switchAccountVolume } from "../repositories/account.repo";
+import { findVolume, setVolumeLayout, setVolumeStatus } from "../repositories/volume.repo";
 import { ASSET_DIRS, DIR_MODE, layoutOf } from "../storage/layout";
 import { LAYOUT_MIGRATIONS, layoutPlan, type LayoutMigration } from "../storage/layout-migrations";
 import { availableAboveReserve, driverFor } from "../storage/registry";
@@ -34,7 +35,7 @@ export async function migrateVolumeLayout(volumeId: string, log: Log = () => und
 
   const journal = join(layoutOf(volume.mountPath).system, "migration.journal");
   const record = (entry: object) => appendFile(journal, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`);
-  await db().storageVolume.update({ where: { id: volumeId }, data: { status: "READONLY" } });
+  await setVolumeStatus(db(), volumeId, "READONLY");
   let current = marker.layoutVersion;
   for (const step of plan) {
     log(`${volumeId}: layout ${step.from} → ${step.to}: ${step.description}`);
@@ -45,7 +46,7 @@ export async function migrateVolumeLayout(volumeId: string, log: Log = () => und
     current = step.to;
   }
   // Back to service only when every step finished; a failure leaves the volume READONLY.
-  await db().storageVolume.update({ where: { id: volumeId }, data: { status: volume.status === "READONLY" ? "ACTIVE" : volume.status, layoutVersion: current } });
+  await setVolumeLayout(db(), volumeId, current, volume.status === "READONLY" ? "ACTIVE" : volume.status);
   return { from: marker.layoutVersion, to: current };
 }
 
@@ -65,7 +66,7 @@ export interface MoveReport {
  * Share links, tokens and node ids do not change.
  */
 export async function moveAccountToVolume(accountId: string, targetVolumeId: string, log: Log = () => undefined): Promise<MoveReport | null> {
-  const account = await db().account.findUnique({ where: { id: accountId }, select: { id: true, volumeId: true, migrating: true } });
+  const account = await findAccountPlacement(db(), accountId);
   if (!account) throw new Error(`Account ${accountId} not found.`);
   if (account.volumeId === targetVolumeId) return null;
   const [source, target] = await Promise.all([findVolume(db(), account.volumeId), findVolume(db(), targetVolumeId)]);
@@ -79,7 +80,7 @@ export async function moveAccountToVolume(accountId: string, targetVolumeId: str
   const from = userRootOf(source.mountPath, accountId);
   const to = userRootOf(target.mountPath, accountId);
   // Changes stop before the original is hashed, so the copy is compared with a fixed tree.
-  await db().account.update({ where: { id: accountId }, data: { migrating: true } });
+  await setAccountMigrating(db(), accountId, true);
   let files: Awaited<ReturnType<typeof hashTree>>;
   let bytes: number;
   try {
@@ -102,10 +103,10 @@ export async function moveAccountToVolume(accountId: string, targetVolumeId: str
     }
     const problems = treeDifferences(files, await hashTree(to));
     if (problems.length > 0) throw new Error(`Copy does not match the original (${problems.length}): ${problems.slice(0, 5).join(", ")}`);
-    await db().account.update({ where: { id: accountId }, data: { volumeId: target.id, migrating: false } });
+    await switchAccountVolume(db(), accountId, target.id);
   } catch (error) {
     await rm(to, { recursive: true, force: true }).catch(() => undefined);
-    await db().account.update({ where: { id: accountId }, data: { migrating: false } });
+    await setAccountMigrating(db(), accountId, false);
     throw error;
   }
 
@@ -121,10 +122,10 @@ export async function moveAccountToVolume(accountId: string, targetVolumeId: str
  * account on it moves to `targetVolumeId`, or to the ACTIVE volume with the most free space.
  */
 export async function drainVolume(sourceVolumeId: string, targetVolumeId: string | null, log: Log = () => undefined): Promise<MoveReport[]> {
-  await db().storageVolume.update({ where: { id: sourceVolumeId }, data: { status: "DRAINING" } });
-  const accounts = await db().account.findMany({ where: { volumeId: sourceVolumeId }, select: { id: true }, orderBy: { createdAt: "asc" } });
+  await setVolumeStatus(db(), sourceVolumeId, "DRAINING");
+  const accounts = await accountIdsOnVolume(db(), sourceVolumeId);
   const reports: MoveReport[] = [];
-  for (const { id } of accounts) {
+  for (const id of accounts) {
     const target = targetVolumeId ?? (await volumeForNewAccount()).volumeId;
     const report = await moveAccountToVolume(id, target, log);
     if (report) reports.push(report);

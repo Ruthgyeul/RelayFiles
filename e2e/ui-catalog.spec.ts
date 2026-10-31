@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /** Computed style of the first element matched by the locator. */
 async function css(locator: Locator, property: string): Promise<string> {

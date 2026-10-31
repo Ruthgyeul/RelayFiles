@@ -5,6 +5,7 @@
 #   sudo deploy/scripts/setup-ssd.sh /dev/sdX            # asks before formatting
 #   sudo deploy/scripts/setup-ssd.sh /dev/sdX --dry-run  # only prints the commands
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 DEVICE="${1:-}"
@@ -16,6 +17,10 @@ MOUNT="$(env_value STORAGE_ROOT /mnt/relayfilesDB)"
 UID_="$(env_value STORAGE_UID 10001)"
 GID_="$(env_value STORAGE_GID 10001)"
 case "$MOUNT" in /*) ;; *) echo "STORAGE_ROOT must be an absolute path in production (now: $MOUNT)." >&2; exit 1 ;; esac
+# These values end up in shell commands, /etc/fstab and /etc/crypttab: nothing but a plain path
+# and numeric ids, so a stray quote or space in .env cannot change what runs as root.
+[[ "$MOUNT" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "STORAGE_ROOT may only contain letters, digits and . _ / - (now: $MOUNT)." >&2; exit 1; }
+[[ "$UID_" =~ ^[0-9]+$ && "$GID_" =~ ^[0-9]+$ ]] || { echo "STORAGE_UID and STORAGE_GID must be numbers." >&2; exit 1; }
 NAME="relayfilesDB"
 KEY=/etc/relayfiles/ssd.key
 
@@ -48,7 +53,7 @@ run cryptsetup open --key-file "$KEY" "$DEVICE" "$NAME"
 log "ext4 filesystem (no reserved blocks; the app keeps STORAGE_RESERVE_PERCENT free)"
 run mkfs.ext4 -L "$NAME" -m 0 "/dev/mapper/$NAME"
 
-LUKS_UUID="$( [ "$DRY_RUN" = true ] && echo '<luks-uuid>' || blkid -s UUID -o value "$DEVICE")"
+if [ "$DRY_RUN" = true ]; then LUKS_UUID="<luks-uuid>"; else LUKS_UUID="$(blkid -s UUID -o value "$DEVICE")"; fi
 log "Unlock and mount at boot ($MOUNT)"
 run sh -c "grep -q '^$NAME ' /etc/crypttab || echo '$NAME UUID=$LUKS_UUID $KEY luks,discard,nofail' >> /etc/crypttab"
 run sh -c "grep -q ' $MOUNT ' /etc/fstab || echo '/dev/mapper/$NAME $MOUNT ext4 defaults,noatime,nodev,nosuid,noexec,nofail,x-systemd.device-timeout=10s 0 2' >> /etc/fstab"

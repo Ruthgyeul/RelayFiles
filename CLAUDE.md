@@ -45,7 +45,8 @@ npm run volume:init  # STORAGE_ROOT(또는 인자로 준 경로) 볼륨 초기�
 npm run admin:create # 관리자 계정 생성, 토큰을 한 번만 출력
 npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지정 가능)
 npm run check:emoji  # 이모지 사용 검사
-npm run check        # typecheck · lint · emoji · migrations · test · build 전체
+npm run check:cycles # 기능(src/features/*) 사이 순환 import 검사
+npm run check        # typecheck · lint · emoji · cycles · migrations · test · build 전체
 npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기 (-- --previews: 큰 이미지의 뷰어 미리보기)
 npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 다시 생성
@@ -55,12 +56,13 @@ npm run check:migrations # 파괴적 SQL 마이그레이션에 contract 표시�
 npm run storage:migrate  # 볼륨 디렉터리 레이아웃을 코드 버전으로 올림(READONLY + 저널, 재개 가능)
 npm run storage:import   # -- --account <id> [--to <폴더>] [--ignore-quota], stdin의 tar를 계정에 복사(재실행 = 이어하기)
 npm run storage:fsck     # DB와 볼륨 대조(보고만). -- --fix: 디스크에만 있는 항목 휴지통, 없어진 파일 missing 표시
+npm run backup:verify    # 복원한 덤프와 운영 DB 비교 + fsck 보고, 결과 저장 (deploy/scripts/verify-backup.sh가 실행)
 npm run volume:list      # 볼륨 상태·계정 수·여유 공간
 npm run volume:migrate   # -- --account <id> --to <vol> | --volume <vol> [--to <vol>] (복사 → SHA-256 대조 → 전환)
 npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해제
 ```
 
-운영 배포는 두 가지다. Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃, 컨테이너 Nginx `deploy/nginx/templates`) — 절차 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 업데이트 `git pull && deploy/scripts/release.sh`(끝나면 `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시 정리). 또는 systemd 서비스 + 호스트 Nginx(`deploy/systemd/`, `deploy/nginx/host/`, `deploy/scripts/systemd/`) — 절차 [`docs/deploy-systemd.md`](docs/deploy-systemd.md), 업데이트 `git pull && deploy/scripts/systemd/release.sh`. 운영 작업은 [`docs/runbook.md`](docs/runbook.md).
+운영 배포는 두 가지다. Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃, 컨테이너 Nginx `deploy/nginx/templates`) — 절차 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 업데이트 `git pull && deploy/scripts/release.sh`(끝나면 `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시 정리). 또는 systemd 서비스 + 호스트 Nginx(`deploy/systemd/`, `deploy/nginx/host/`, `deploy/scripts/systemd/`) — 절차 [`docs/deploy-systemd.md`](docs/deploy-systemd.md), 업데이트 `git pull && deploy/scripts/systemd/release.sh`. k3s(Pi 클러스터)는 GHCR 멀티 아키텍처 이미지(`.github/workflows/images.yml`)와 `deploy/k3s/` 템플릿을 쓴다 — 절차 [`docs/deploy-k3s.md`](docs/deploy-k3s.md), 업데이트 `deploy/scripts/k3s/deploy.sh [태그]`. 운영 작업은 [`docs/runbook.md`](docs/runbook.md).
 
 결과물을 전달하기 전에 `npm run check`를 통과시킨다. DB나 스토리지를 건드리면 `npm run test:integration`도 통과시킨다.
 
@@ -70,6 +72,7 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 
 - `src/app` 라우팅 전용 · `src/features/<기능>` 기능 단위 UI/훅/클라이언트 API · `src/shared` 공용 UI·유틸 · `src/domain` 순수 규칙 · `src/contracts` zod 계약 · `src/config` 설정·정책 상수 · `src/server` 서버 전용(DB, Redis, 스토리지).
 - 레이어 의존 방향은 `eslint-plugin-boundaries`가 강제한다. 허용 표는 `eslint.config.mjs`와 `docs/architecture.md`를 본다.
+- 기능끼리는 한 방향으로만 import한다(`npm run check:cycles`). 둘 다 쓰는 코드는 `src/shared`로, 여러 기능을 묶는 조립은 `src/app`에서 한다.
 - `src/domain`은 React, Next, Prisma, Node API에 의존하지 않는 순수 함수만 둔다. 모든 함수에 `*.test.ts`를 둔다.
 - `src/server/**` 파일은 `import "server-only"`로 시작한다.
 - 매직 넘버는 금지한다. 정책 값은 `src/config/policy.ts`, 배포별 값은 env(`src/config/env.ts`에서만 읽음)에 둔다.
@@ -96,7 +99,9 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 ## API · 보안
 
 - 응답 형식: `{ success: true, data }` / `{ success: false, error, code }`. 스택 트레이스, 쿼리, 내부 경로를 노출하지 않는다.
-- 모든 route handler는 `apiHandler()`(try-catch, 로깅, 에러 마스킹, request id)를 거친다.
+- 모든 route handler는 `apiHandler()`(try-catch, 로깅, 에러 마스킹, request id)를 거친다. 예외는 tus 업로드 라우트 하나다(자체 프로토콜, 마스킹은 직접 한다).
+- 로그인이 필요한 라우트는 `apiHandler({ auth: "active" | "admin" }, …)`로 쓰고 핸들러는 `active`를 받는다. 스크립트는 `scripts/lib/bootstrap.mts`의 `runScript`로 시작·종료한다.
+- 쿼리는 `src/server/repositories`에만 쓴다(`db().<model>` 직접 호출은 lint 오류).
 - 파일 경로는 클라이언트에서 받지 않는다(nodeId → 서버가 계산). 해석한 경로가 사용자 루트 하위인지 항상 검사한다.
 - 다른 계정의 리소스는 404로 응답한다.
 - 원본 파일은 수정하지 않는다. SSD는 LUKS2로 전체 암호화하고, 앱에서 파일 단위 암호화는 하지 않는다.

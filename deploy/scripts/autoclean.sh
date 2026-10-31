@@ -12,6 +12,7 @@
 # release.sh runs it after a healthy release (AUTOCLEAN=0 skips it). Run alone:
 #   deploy/scripts/autoclean.sh [--dry-run]
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 KEEP="${IMAGE_KEEP:-3}"

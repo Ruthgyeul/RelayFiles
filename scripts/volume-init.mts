@@ -7,47 +7,43 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import nextEnv from "@next/env";
-
-nextEnv.loadEnvConfig(process.cwd());
+import { runScript } from "./lib/bootstrap.mjs";
 
 const { getEnv } = await import("../src/config/env");
 const { db } = await import("../src/server/db/client");
+const { registerVolume } = await import("../src/server/repositories/volume.repo");
 const { initVolume, readVolumeMarker } = await import("../src/server/storage/volume");
 
-const storage = getEnv("storage");
-const root = resolve(process.argv[2] ?? storage.STORAGE_ROOT);
-await mkdir(root, { recursive: true });
+await runScript(async () => {
+  const storage = getEnv("storage");
+  const root = resolve(process.argv[2] ?? storage.STORAGE_ROOT);
+  await mkdir(root, { recursive: true });
 
-const marker = (await readVolumeMarker(root)) ?? (await initVolume(root, randomUUID()));
-const existing = await db().storageVolume.findUnique({ where: { id: marker.volumeId }, select: { status: true } });
-await db().storageVolume.upsert({
-  where: { id: marker.volumeId },
-  create: { id: marker.volumeId, mountPath: root, layoutVersion: marker.layoutVersion, reservePct: Math.round(storage.STORAGE_RESERVE_PERCENT) },
-  // A remount brings an OFFLINE volume back; READONLY and DRAINING belong to a running migration.
-  update: { mountPath: root, ...(existing?.status === "OFFLINE" ? { status: "ACTIVE" as const } : {}) },
-});
+  const marker = (await readVolumeMarker(root)) ?? (await initVolume(root, randomUUID()));
+  await registerVolume(db(), { id: marker.volumeId, mountPath: root, layoutVersion: marker.layoutVersion, reservePct: Math.round(storage.STORAGE_RESERVE_PERCENT) });
 
-console.log(`Volume ${marker.volumeId} ready at ${root} (layout v${marker.layoutVersion}).`);
+  console.log(`Volume ${marker.volumeId} ready at ${root} (layout v${marker.layoutVersion}).`);
 
-// Volumes other than STORAGE_ROOT need their own X-Accel location in Nginx.
-if (root !== resolve(storage.STORAGE_ROOT)) {
-  const prefix = storage.STORAGE_ACCEL_PREFIX;
-  const name = `deploy/nginx/volumes/${marker.volumeId}.conf`;
-  const location =
-    `# ${root} (volume ${marker.volumeId}), written by npm run volume:init\n` +
-    `location ~ ^${prefix}${marker.volumeId}/(.+)$ {\n    internal;\n    alias ${root}/users/$1;\n` +
-    // Nginx opens the file again after the app's lstat check: refuse symlinks below the volume root.
-    `    disable_symlinks on from=${root};\n` +
-    // Cache-Control comes from the app (kept by X-Accel-Redirect); a second one would disable caching.
-    `    add_header X-Content-Type-Options nosniff always;\n}\n`;
-  try {
-    await writeFile(new URL(`../${name}`, import.meta.url), location);
-    console.log(`Nginx location written to ${name}.`);
-  } catch {
-    // The tools container may not be allowed to write the repository; print it instead.
-    console.log(`Save the following as ${name}:\n\n${location}`);
+  // Volumes other than STORAGE_ROOT need their own X-Accel location in Nginx.
+  if (root !== resolve(storage.STORAGE_ROOT)) {
+    const prefix = storage.STORAGE_ACCEL_PREFIX;
+    const name = `deploy/nginx/volumes/${marker.volumeId}.conf`;
+    const location =
+      `# ${root} (volume ${marker.volumeId}), written by npm run volume:init\n` +
+      `location ~ ^${prefix}${marker.volumeId}/(.+)$ {\n    internal;\n    alias ${root}/users/$1;\n` +
+      // Nginx opens the file again after the app's lstat check: refuse symlinks below the volume root.
+      `    disable_symlinks on from=${root};\n` +
+      // Cache-Control comes from the app (kept by X-Accel-Redirect); a second one would disable caching.
+      `    add_header X-Content-Type-Options nosniff always;\n` +
+      // The app's ETag, which resumed downloads send back in If-Range (see default.conf.template).
+      `    etag off;\n    add_header ETag $upstream_http_etag;\n}\n`;
+    try {
+      await writeFile(new URL(`../${name}`, import.meta.url), location);
+      console.log(`Nginx location written to ${name}.`);
+    } catch {
+      // The tools container may not be allowed to write the repository; print it instead.
+      console.log(`Save the following as ${name}:\n\n${location}`);
+    }
+    console.log(`Mount ${root} into app, worker, tools and nginx (deploy/docker-compose.volumes.yml), then restart them.`);
   }
-  console.log(`Mount ${root} into app, worker, tools and nginx (deploy/docker-compose.volumes.yml), then restart them.`);
-}
-await db().$disconnect();
+});

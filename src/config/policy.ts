@@ -5,9 +5,17 @@
 
 export const MS = { second: 1_000, minute: 60_000, hour: 3_600_000, day: 86_400_000 } as const;
 
+/** Writes that pick a random id or token, or create a row a parallel request may create too. */
+export const DB_WRITE = {
+  /** Tries in all when a unique index refuses the write (an id collision or a lost race). */
+  uniqueRetryAttempts: 3,
+} as const;
+
 export const ACCOUNT = {
   /** Member accounts are deleted with their files this many days after creation. */
   ttlDays: 14,
+  /** Days shown in the profile "Traffic" card. */
+  trafficDays: 30,
   /** Storage quota for new member accounts, in GB (decimal, 1 GB = 1e9 bytes like the design). */
   defaultQuotaGb: 5,
 } as const;
@@ -26,13 +34,9 @@ export const STORAGE = {
   reservePercent: 5,
   /** How often the volume marker file is checked, in seconds. */
   volumeWatchIntervalSec: 30,
-  /** Upload/quota warning levels (percent of quota). */
-  quotaWarnPercent: 80,
-  quotaFullPercent: 95,
   /** Deleted items stay in the volume's trash this long before they are removed for good. */
   trashRetentionHours: 24,
-  /** Filesystem limits (ext4). */
-  maxNameBytes: 255,
+  /** Filesystem limits (ext4; the name limit is domain/names MAX_NAME_BYTES). */
   maxPathBytes: 4096,
   maxFolderDepth: 32,
   /**
@@ -52,6 +56,48 @@ export const FILES = {
   rowEstimatePx: 68,
   /** The same for rows with a media preview (288px square or audio player under the name). */
   previewRowEstimatePx: 370,
+  /**
+   * Files and folders one member account may hold (admins: no limit). Empty files cost no
+   * quota, so without a count millions of them could use up the volume's inodes and the database.
+   */
+  maxItemsPerAccount: 100_000,
+  /** Tags one item can carry. */
+  maxTagsPerItem: 20,
+} as const;
+
+/** "Renumber files": renames the files of one folder to 01, 02, 03, … (docs/architecture.md "순번 정리"). */
+export const RENUMBER = {
+  /** Numbers are padded to at least this many digits ("01"); more files get more digits. */
+  minDigits: 2,
+  /** Default for RENUMBER_MAX_FILES: most files one run renames. */
+  maxFiles: 10_000,
+  /**
+   * Each file is renamed twice on disk (to a temporary name, then to its number) inside one
+   * storage transaction, whose time limit grows by this much per changed file beyond
+   * STORAGE.transactionTimeoutSec (a slow USB disk included).
+   */
+  transactionMsPerFile: 20,
+  /** Temporary names between the two steps; hidden (dot) names, so no run ever renumbers them. */
+  tempPrefix: ".relayfiles-renumber-",
+} as const;
+
+/** "Find duplicates": files with the same content (SHA-256 and size). */
+export const DUPLICATES = {
+  /** Default for DUPLICATES_MAX_SCAN: most files one scan compares; a larger tree is reported as truncated. */
+  maxScan: 10_000,
+  /** Most duplicate groups returned, the ones wasting the most space first. */
+  maxGroups: 500,
+} as const;
+
+/** Transfer panel per-file list. */
+export const TRANSFERS = {
+  /** Per-file list (dropdown) for batches with at least this many files. */
+  fileListMin: 2,
+  /** Speed samples kept for the per-file sparkline, one per speedSampleMs. */
+  speedSamples: 30,
+  speedSampleMs: 1_000,
+  /** Per-file byte counts are applied to the panel at most this often (large batches stay smooth). */
+  progressFlushMs: 150,
 } as const;
 
 /** Global search (design `gs*`, Ctrl/⌘ K). */
@@ -66,6 +112,8 @@ export const SEARCH = {
   maxQueryLength: 200,
   /** Delay before a query runs while typing. */
   debounceMs: 150,
+  /** Items a tag search (File Manager "#tag", global search) returns at most. */
+  tagResultLimit: 500,
 } as const;
 
 export const UPLOAD = {
@@ -73,6 +121,14 @@ export const UPLOAD = {
   chunkSizeMb: 50,
   /** Incomplete upload chunks older than this are removed. */
   tmpTtlHours: 6,
+  /**
+   * tus upload locks live in Redis so every app process sees them: a lock lapses this long after
+   * its last renewal (a crashed process cannot hold it for good), and a request waits at most
+   * lockAcquireMs for one, asking the holder to let go every lockRetryMs.
+   */
+  lockLeaseMs: 30_000,
+  lockAcquireMs: 30_000,
+  lockRetryMs: 250,
 } as const;
 
 export const SHARE = {
@@ -92,6 +148,10 @@ export const SHARE = {
   eventDedupeSec: 1_800,
   /** Link activity entries kept per item (design: 200). */
   eventsKeptPerNode: 200,
+  /** Entries the Activity dialog shows; a folder's log merges everything inside it. */
+  activityListLimit: 200,
+  /** Password unlocks one device remembers; the oldest are dropped first. */
+  unlockCookieMaxLinks: 50,
   /** Links of expired items keep answering "This link has expired" for this long. */
   tombstoneDays: 90,
   /**
@@ -102,6 +162,8 @@ export const SHARE = {
 } as const;
 
 export const MEDIA = {
+  /** Retry-After for a shared photo whose metadata-stripped copy the worker has not made yet. */
+  stripPendingRetrySec: 5,
   /** Longest side of generated thumbnails (2x the 288px list preview). */
   thumbSizePx: 576,
   thumbQuality: 72,
@@ -175,6 +237,12 @@ export const DOCUMENT_PREVIEW = {
 export const METRICS = {
   /** The Server page stream sends a snapshot this often (design: 1.5 s). */
   streamIntervalMs: 1_500,
+  /** A stream re-reads its session this often and ends when the admin was signed out or demoted. */
+  streamSessionCheckMs: 30_000,
+  /** A stream ends after this long; the browser's EventSource reconnects (and is checked again). */
+  streamMaxLifetimeMs: 60 * 60 * 1_000,
+  /** Server page streams one account may hold open at once (each one samples the server). */
+  streamMaxPerAccount: 3,
   /** Bandwidth and disk read/write history shown on the Server page, one bar per hour. */
   historyHours: 48,
   /** The hourly history changes once per sample, so the stream reuses it this long. */
@@ -193,8 +261,10 @@ export const METRICS = {
   linkCacheSec: 300,
 } as const;
 
-/** Status page (design `isStatus`): browser checks, history ranges and the rating thresholds. */
+/** Status page: browser checks, history ranges and the rating thresholds. */
 export const STATUS = {
+  /** /api/health gives up on PostgreSQL, Redis or the volume after this long and reports it down. */
+  healthCheckTimeoutMs: 2_000,
   /** The browser checks the server this often while the page is open (design: 2.5 s). */
   pingIntervalMs: 2_500,
   /** Browser checks kept for the averages (design: last 40). */
@@ -265,6 +335,12 @@ export const AUTH = {
   reauthWindowMin: 10,
   /** Admin audit entries are kept this long. */
   auditRetentionDays: 365,
+  /** Audit entries the admin page loads at once. */
+  auditListLimit: 200,
+  /** The device cookie lives a year; the sessions inside it end with their own lifetimes. */
+  sessionCookieMaxAgeSec: 365 * 24 * 60 * 60,
+  /** Accounts signed in on one device at most. */
+  maxSessionsPerDevice: 10,
 } as const;
 
 /** Production log files (LOG_DIR): rotated by size so a busy server cannot fill the disk. */
@@ -301,4 +377,111 @@ export const TRANSCODE = {
   maxOutputBytes: 4 * 1024 * 1024 * 1024,
   /** Retry-After sent while every conversion slot is in use. */
   busyRetrySec: 10,
+  /**
+   * A conversion slot (shared by every app process through Redis) lapses this long after its
+   * last renewal, so a crashed process frees its slots; running conversions renew every third of it.
+   */
+  slotLeaseMs: 60_000,
+  /**
+   * A video converted live this many times within cacheWindowSec is converted once by the
+   * worker and played from that file afterwards (system/transcoded, not counted toward quotas).
+   */
+  cacheAfterPlays: 3,
+  cacheWindowSec: 7 * 24 * 60 * 60,
+  /** Stored conversions are deleted this long after they were made (popular ones are made again). */
+  cacheKeepDays: 30,
+} as const;
+
+/** Personal API tokens and /api/v1 (docs/api.md "API v1"). */
+export const API = {
+  /** Tokens one account may hold. */
+  maxTokensPerAccount: 20,
+  /** Longest token name. */
+  nameMaxLength: 40,
+  /** Lifetimes offered when a token is created, in days; null (no expiry) is offered too. */
+  expiryDays: [7, 30, 90, 365],
+  /** Requests one token may make per minute before 429. */
+  requestsPerMinute: 120,
+  /** "Last used" is written at most this often. */
+  touchIntervalSec: 5 * 60,
+  /** A token checked against its argon2 hash is trusted this long by the same process (the row is still read). */
+  verifyCacheSec: 5 * 60,
+  /** Tokens one process remembers as checked; the oldest is dropped first. */
+  verifyCacheMax: 1_000,
+} as const;
+
+/** Upload-only links (file requests, /r/<id>; docs/api.md "파일 요청"). */
+export const FILE_REQUEST = {
+  /** Open requests one account may hold. */
+  maxPerAccount: 50,
+  /** Longest title shown to uploaders. */
+  titleMaxLength: 80,
+  /** Lifetimes offered when a request is created, in days; null (no expiry) is offered too. */
+  expiryDays: [1, 7, 30],
+  /** Largest "at most N files" limit the owner can set. */
+  maxFilesLimit: 10_000,
+  /** Files one visitor upload may contain (one drop or pick). */
+  maxFilesPerBatch: 100,
+  /** Upload batches one address may start per hour on one request. */
+  batchesPerHour: 30,
+  /** An expired request keeps answering "This link has expired" this long, then it is deleted. */
+  expiredKeptDays: 30,
+} as const;
+
+/** Backup verification (deploy/scripts/verify-backup.sh, npm run backup:verify). */
+export const BACKUP = {
+  /** The newest dump must be at most this old: the daily backup plus some slack. */
+  verifyMaxDumpAgeHours: 26,
+  /**
+   * Accounts, items and public links in the restored dump may be this many percent below
+   * production (it is up to a day old); a bigger gap means the dump is missing data.
+   */
+  verifyMaxDriftPct: 20,
+  /** Verification results kept for the history (one a week: a year). */
+  checksKept: 52,
+} as const;
+
+/** k3s deployment (deploy/scripts/k3s/deploy.sh). */
+export const K3S = {
+  /** App replicas on the one storage node; more add memory, not storage throughput. */
+  maxAppReplicas: 4,
+} as const;
+
+/** Defaults of the offsite restic backup (deploy/scripts/offsite-backup.sh; OFFSITE_* in .env). */
+export const OFFSITE = {
+  /** Snapshots `restic forget` keeps: the newest per day, week and month. */
+  keepDaily: 7,
+  keepWeekly: 4,
+  keepMonthly: 6,
+  /** Share of the repository's data the weekly check downloads and verifies. */
+  checkPercent: 5,
+  /** Shortest repository password accepted (it encrypts every offsite copy). */
+  passwordMinLength: 16,
+} as const;
+
+/** Server settings (admin Settings page). */
+export const SETTINGS = {
+  /** The theme is read on every page; this long it comes from the cache. */
+  themeCacheSec: 60,
+} as const;
+
+/** Defaults of the Nginx request limits (deploy env NGINX_*; both Nginx templates use them). */
+export const NGINX = {
+  /** Largest request body; tus chunks (UPLOAD_CHUNK_SIZE_MB, at most 95) must fit. */
+  maxBodyMb: 100,
+  /** Sign-in and account requests per client address per minute, and the burst allowed above it. */
+  authRatePerMin: 20,
+  authBurst: 20,
+  /** Upload preparations per client address per minute, and the burst allowed above it. */
+  uploadRatePerMin: 60,
+  uploadBurst: 30,
+} as const;
+
+export const HEADERS = {
+  /** Default for HSTS_MAX_AGE_SEC: one year, the minimum browsers' preload lists accept. */
+  hstsMaxAgeSec: 365 * 24 * 60 * 60,
+  /** Largest CSP violation report the app reads; browsers send a few hundred bytes. */
+  cspReportMaxBytes: 16 * 1024,
+  /** The same violation (directive + blocked resource) is logged at most once per this window. */
+  cspReportDedupeSec: 60 * 60,
 } as const;

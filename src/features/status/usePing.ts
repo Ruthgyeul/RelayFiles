@@ -24,7 +24,7 @@ function connectionType(): string | null {
 }
 
 /**
- * Checks the server from this browser every 2.5 s while mounted (design `ping`): a HEAD
+ * Checks the server from this browser every 2.5 s while mounted: a HEAD
  * request to the health endpoint, which does no backend work, timed end to end.
  */
 export function usePing() {

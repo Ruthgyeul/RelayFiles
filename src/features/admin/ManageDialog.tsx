@@ -28,7 +28,7 @@ interface ManageDialogProps {
 const label = "text-[13px] font-semibold text-t3";
 const note = "text-[12px] text-t4";
 
-/** Manage an account: role, deletion date, storage limit (design `manageOpen`). */
+/** Manage an account: role, deletion date, storage limit. */
 export function ManageDialog({ account, ttlDays, now, lastAdmin, busy, onSave, onClose }: ManageDialogProps) {
   const quotaGb = account.quotaBytes === null ? null : Number(account.quotaBytes) / BYTES_PER_GB;
   const [isAdmin, setIsAdmin] = useState(account.isAdmin);

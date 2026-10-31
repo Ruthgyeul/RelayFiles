@@ -1,23 +1,72 @@
 import "server-only";
 import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { cp, copyFile, lstat, mkdir, open, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { copyFile, link, lstat, mkdir, open, readdir, rename, rm, stat, statfs, unlink, writeFile } from "node:fs/promises";
+import { getEnv } from "@/config/env";
 import { basename, dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { ASSET_DIRS, DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
 import type { DiskEntry } from "@/domain/fsck";
-import type { AssetKind, AssetRef, ByteSource, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
+import { StorageTargetExistsError, type AssetKind, type AssetRef, type ByteSource, type SpaceInfo, type StorageDriver, type StorageLocation, type StorageStat } from "./driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path";
 
 /** "2026-10-06T03-12-00-000Z": when an item was moved to the trash (filename-safe ISO time). */
 const trashStamp = (at: Date) => at.toISOString().replace(/[:.]/g, "-");
 const TRASH_STAMP = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-/;
+/** Hex characters of the random part of a trash entry name. */
+const TRASH_NONCE_LENGTH = 8;
 
 function trashTime(name: string): number | null {
   const match = TRASH_STAMP.exec(name);
   if (!match) return null;
   const [, date, hours, minutes, seconds, millis] = match;
   return Date.parse(`${date}T${hours}:${minutes}:${seconds}.${millis}Z`);
+}
+
+/** Errors meaning "no hard link here" (another filesystem, too many links, not supported): copy instead. */
+const NO_HARD_LINK = new Set(["EXDEV", "EMLINK", "EPERM", "ENOTSUP", "EOPNOTSUPP"]);
+const errorCode = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code ?? "";
+
+/** True when something (a file, folder or link) exists at `path`. */
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/**
+ * Whether files with the same content share their bytes (STORAGE_DEDUPE): a copy or a
+ * re-upload becomes a hard link to the existing file. Files are never changed in place, so
+ * the copies can never drift apart; deleting one leaves the others.
+ */
+const dedupe = () => getEnv("storage").STORAGE_DEDUPE;
+
+/** Copies one file to a path that must not exist yet: a hard link when deduplicating, else a reflink or a plain copy. */
+async function copyFileEntry(source: string, target: string): Promise<void> {
+  if (dedupe()) {
+    try {
+      await link(source, target);
+      return;
+    } catch (error) {
+      if (!NO_HARD_LINK.has(errorCode(error))) throw error;
+    }
+  }
+  // Reflink when the filesystem supports it (instant copy), otherwise a normal copy.
+  await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
+}
+
+/** Copies a file or a folder tree to a path that must not exist yet (folders are new, files as {@link copyFileEntry}). */
+async function copyEntry(source: string, target: string): Promise<void> {
+  const info = await lstat(source);
+  if (info.isFile()) return copyFileEntry(source, target);
+  // A user folder holds only folders and files; anything else (a planted link) is not followed.
+  if (!info.isDirectory()) throw new Error("Only files and folders can be copied.");
+  await mkdir(target, { mode: DIR_MODE });
+  for (const entry of await readdir(source)) await copyEntry(join(source, entry), join(target, entry));
 }
 
 /** Account and node ids (generated, lowercase alphanumerics). */
@@ -74,9 +123,37 @@ export class LocalVolumeDriver implements StorageDriver {
 
   async moveIntoPlace(tempPath: string, location: StorageLocation): Promise<void> {
     if (!tempPath.startsWith(this.layout.uploads)) throw new Error("Uploads must come from the volume's upload area.");
-    const target = await this.pathOf(location);
-    await mkdir(dirname(target), { recursive: true, mode: DIR_MODE });
-    await rename(tempPath, target);
+    // The folder must still exist: creating it again here would bring back a folder renamed or
+    // deleted while the upload finished, outside the database.
+    await rename(tempPath, await this.pathOf(location));
+  }
+
+  async linkExisting(from: StorageLocation, to: StorageLocation, size: number): Promise<boolean> {
+    if (!dedupe()) return false;
+    try {
+      const source = await this.pathOf(from);
+      const info = await lstat(source);
+      if (!info.isFile() || info.size !== size) return false;
+      await link(source, await this.pathOf(to));
+      return true;
+    } catch (error) {
+      // Gone meanwhile, or no hard links here: the caller places its own bytes.
+      if (errorCode(error) === "ENOENT" || NO_HARD_LINK.has(errorCode(error))) return false;
+      throw error;
+    }
+  }
+
+  async stageCopy(from: StorageLocation): Promise<string> {
+    const source = await this.pathOf(from);
+    const target = join(this.layout.uploads, `copy-${randomUUID()}`);
+    await mkdir(this.layout.uploads, { recursive: true, mode: DIR_MODE });
+    await copyEntry(source, target);
+    return target;
+  }
+
+  async discardStaged(tempPath: string): Promise<void> {
+    if (!tempPath.startsWith(this.layout.uploads)) throw new Error("Only the volume's upload area holds staged files.");
+    await rm(tempPath, { recursive: true, force: true });
   }
 
   async rename(from: StorageLocation, to: StorageLocation): Promise<void> {
@@ -84,20 +161,31 @@ export class LocalVolumeDriver implements StorageDriver {
     await rename(source, target);
   }
 
+  async renameNoReplace(from: StorageLocation, to: StorageLocation): Promise<void> {
+    const [source, target] = await Promise.all([this.pathOf(from), this.pathOf(to)]);
+    try {
+      // link() fails with EEXIST instead of replacing: the check and the rename are one step.
+      await link(source, target);
+    } catch (error) {
+      if (errorCode(error) === "EEXIST") throw new StorageTargetExistsError();
+      if (!NO_HARD_LINK.has(errorCode(error))) throw error;
+      // No hard links here (or the link count is at its limit): check, then rename.
+      if (await pathExists(target)) throw new StorageTargetExistsError();
+      await rename(source, target);
+      return;
+    }
+    await unlink(source);
+  }
+
   async copy(from: StorageLocation, to: StorageLocation): Promise<void> {
     const [source, target] = await Promise.all([this.pathOf(from), this.pathOf(to)]);
-    const info = await stat(source);
-    if (info.isDirectory()) {
-      await cp(source, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true });
-    } else {
-      // Reflink when the filesystem supports it (instant copy), otherwise a normal copy.
-      await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
-    }
+    await copyEntry(source, target);
   }
 
   async moveToTrash(location: StorageLocation): Promise<string> {
     const source = await this.pathOf(location);
-    const name = `${trashStamp(new Date())}-${location.accountId}-${basename(source)}`;
+    // A random part after the time: two items with the same name trashed in the same millisecond must not collide.
+    const name = `${trashStamp(new Date())}-${randomUUID().slice(0, TRASH_NONCE_LENGTH)}-${location.accountId}-${basename(source)}`;
     const target = join(this.layout.trash, name);
     await mkdir(this.layout.trash, { recursive: true, mode: DIR_MODE });
     await rename(source, target);
@@ -109,7 +197,7 @@ export class LocalVolumeDriver implements StorageDriver {
     await rename(trashPath, await this.pathOf(location));
   }
 
-  /** `system/<thumbs|derived|previews>/<accountId>/<nodeId>`; ids are generated, never user input. */
+  /** `system/<thumbs|derived|previews|transcoded>/<accountId>/<nodeId>`; ids are generated, never user input. */
   private assetPath(kind: AssetKind, accountId: string, nodeId: string): string {
     if (!ASSET_ID.test(accountId) || !ASSET_ID.test(nodeId)) throw new Error("Invalid asset id.");
     return join(this.layout[ASSET_DIRS[kind]], accountId, nodeId);
@@ -126,6 +214,18 @@ export class LocalVolumeDriver implements StorageDriver {
       await rm(temp, { force: true });
       throw error;
     }
+  }
+
+  async stagingPath(): Promise<string> {
+    await mkdir(this.layout.uploads, { recursive: true, mode: DIR_MODE });
+    return join(this.layout.uploads, `asset-${randomUUID()}`);
+  }
+
+  async adoptAsset({ kind, accountId, nodeId }: AssetRef, tempPath: string): Promise<void> {
+    if (!tempPath.startsWith(this.layout.uploads)) throw new Error("Generated files must come from the volume's upload area.");
+    const target = this.assetPath(kind, accountId, nodeId);
+    await mkdir(dirname(target), { recursive: true, mode: DIR_MODE });
+    await rename(tempPath, target);
   }
 
   async assetSource({ kind, accountId, nodeId }: AssetRef): Promise<ByteSource | null> {
@@ -162,7 +262,7 @@ export class LocalVolumeDriver implements StorageDriver {
     await Promise.all(nodeIds.flatMap((nodeId) => kinds.map((kind) => rm(this.assetPath(kind, accountId, nodeId), { force: true }))));
   }
 
-  async purgeSystem(trashBefore: Date, uploadsBefore: Date): Promise<{ trash: number; uploads: number }> {
+  async purgeSystem(trashBefore: Date, uploadsBefore: Date, transcodedBefore: Date): Promise<{ trash: number; uploads: number; transcoded: number }> {
     const entries = async (dir: string) => readdir(dir).catch(() => [] as string[]);
     let trash = 0;
     for (const name of await entries(this.layout.trash)) {
@@ -180,7 +280,19 @@ export class LocalVolumeDriver implements StorageDriver {
       await rm(path, { recursive: true, force: true });
       uploads++;
     }
-    return { trash, uploads };
+    // Conversions are made again after a few more plays; old ones only take space.
+    let transcoded = 0;
+    for (const account of await entries(this.layout.transcoded)) {
+      const dir = join(this.layout.transcoded, account);
+      for (const name of await entries(dir)) {
+        const path = join(dir, name);
+        const info = await lstat(path).catch(() => null);
+        if (!info || info.mtime >= transcodedBefore) continue;
+        await rm(path, { force: true });
+        transcoded++;
+      }
+    }
+    return { trash, uploads, transcoded };
   }
 
   async removeAccountAssets(accountId: string): Promise<void> {

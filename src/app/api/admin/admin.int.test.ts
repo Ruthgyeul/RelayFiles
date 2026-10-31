@@ -91,6 +91,22 @@ describe("admin accounts", () => {
     }
   });
 
+  it("never lets two admins demoting each other at once leave no admin", async () => {
+    const first = await signedInAdmin();
+    const second = await signedInAdmin();
+    const others = await prisma.account.findMany({ where: { isAdmin: true, id: { notIn: [first.id, second.id] } }, select: { id: true } });
+    await prisma.account.updateMany({ where: { id: { in: others.map((other) => other.id) } }, data: { isAdmin: false } });
+    try {
+      const demote = (by: { cookie: string }, id: string) => callRoute(manage, { method: "PATCH", cookie: by.cookie, params: { id }, body: { isAdmin: false, days: 0, reset: false, quotaGb: null } });
+      const results = await Promise.all([demote(first, second.id), demote(second, first.id)]);
+      // The loser gets 400 (last admin) or, if the winner already committed, 403 (no longer an admin).
+      expect(results.filter((res) => res.status === 200)).toHaveLength(1);
+      expect(await prisma.account.count({ where: { isAdmin: true } })).toBe(1);
+    } finally {
+      await prisma.account.updateMany({ where: { id: { in: [...others.map((other) => other.id), first.id, second.id] } }, data: { isAdmin: true } });
+    }
+  });
+
   it("deletes members but not admins", async () => {
     const admin = await signedInAdmin();
     const m = await member();
@@ -212,9 +228,13 @@ describe("admin sessions", () => {
     expect(events.map((event) => [event.action, event.targetId])).toEqual([["account.delete", admin.id]]);
   });
 
-  it("never asks members for their token again", async () => {
+  it("asks members for their token again on an older session, but not right after sign-up", async () => {
     const m = await member();
+    expect((await callRoute(revealToken, { cookie: m.cookie })).status).toBe(200);
+    const token = (await callRoute<{ token: string }>(revealToken, { cookie: m.cookie })).json.data.token;
     await signedInAgo(m.id, (AUTH.reauthWindowMin + 1) * MS.minute);
+    expect((await callRoute(revealToken, { cookie: m.cookie })).json.code).toBe("REAUTH_REQUIRED");
+    expect((await callRoute(reauth, { method: "POST", cookie: m.cookie, body: { token }, ip: randomTestIp() })).status).toBe(200);
     expect((await callRoute(revealToken, { cookie: m.cookie })).status).toBe(200);
   });
 });

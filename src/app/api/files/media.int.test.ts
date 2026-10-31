@@ -10,9 +10,9 @@ import { GET as stream } from "@/app/api/files/[id]/stream/route";
 import { GET as thumb } from "@/app/api/files/[id]/thumb/route";
 import { POST as removeNodes } from "@/app/api/nodes/delete/route";
 import { getEnv } from "@/config/env";
-import { IMMUTABLE_CACHE, MEDIA } from "@/config/policy";
+import { IMMUTABLE_CACHE, MEDIA, TRANSCODE } from "@/config/policy";
 import { exifOrientation } from "@/domain/image-metadata";
-import { startMediaWorker } from "@/server/jobs/media.worker";
+import { startMediaWorker } from "@/server/jobs/media-worker";
 import { closeQueues, enqueueMedia } from "@/server/jobs/queue";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { layoutOf } from "@/server/storage/layout";
@@ -20,10 +20,12 @@ import { callRoute } from "../../../../test/route-call";
 import { fileFixtures } from "../../../../test/file-fixtures";
 import { processMedia } from "@/server/media/process";
 import { runningTranscodes } from "@/server/media/transcode";
+import { storeTranscode } from "@/server/media/transcode-cache";
+import { redis } from "@/server/redis";
 
 const { prisma, member, addFile, get, cleanup } = fileFixtures();
 const run = promisify(execFile);
-const assetFile = (kind: "thumbs" | "derived" | "previews", accountId: string, nodeId: string) => join(layoutOf(configuredVolumeRoot())[kind], accountId, nodeId);
+const assetFile = (kind: "thumbs" | "derived" | "previews" | "transcoded", accountId: string, nodeId: string) => join(layoutOf(configuredVolumeRoot())[kind], accountId, nodeId);
 const exists = (path: string) => stat(path).then(() => true, () => false);
 
 afterAll(async () => {
@@ -161,6 +163,43 @@ describe("media processing", () => {
     const original = await get(preview, m, small);
     expect(original.headers.get("content-type")).toBe("image/jpeg");
     expect((await get(preview, await member(), id)).status).toBe(404);
+  });
+
+  it("stores a conversion of an often played video and plays it with Range requests", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "relay-media-"));
+    try {
+      const clip = join(dir, "clip.avi");
+      await run(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x180:rate=10", "-c:v", "mpeg4", clip]);
+      const m = await member();
+      const id = await addFile(m, m.rootId, [], "clip.avi", await readFile(clip), "video/vnd.avi", "VIDEO");
+
+      for (let play = 0; play < TRANSCODE.cacheAfterPlays; play++) {
+        const live = await get(stream, m, id, {}, "?transcode=1");
+        expect(live.headers.get("accept-ranges")).toBeNull();
+        await live.arrayBuffer();
+      }
+      await expect.poll(runningTranscodes).toBe(0);
+      expect(Number(await redis().get(`transcode:plays:${id}`))).toBe(TRANSCODE.cacheAfterPlays);
+
+      // What the worker runs once the plays are counted.
+      expect(await storeTranscode(id)).toBe(true);
+      const stored = await readFile(assetFile("transcoded", m.id, id));
+      expect(stored.subarray(4, 8).toString()).toBe("ftyp");
+      // faststart: the index (moov) comes before the media data.
+      expect(stored.indexOf(Buffer.from("moov"))).toBeLessThan(stored.indexOf(Buffer.from("mdat")));
+
+      const part = await get(stream, m, id, { range: "bytes=0-99" }, "?transcode=1");
+      expect(part.status).toBe(206);
+      expect(part.headers.get("content-type")).toBe("video/mp4");
+      expect(part.headers.get("content-range")).toBe(`bytes 0-99/${stored.length}`);
+      expect(Buffer.from(await part.arrayBuffer())).toEqual(stored.subarray(0, 100));
+
+      // Deleting the video removes its stored conversion.
+      expect((await callRoute(removeNodes, { method: "POST", cookie: m.cookie, body: { ids: [id] } })).status).toBe(200);
+      expect(await exists(assetFile("transcoded", m.id, id))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("converts videos browsers cannot play while they stream", async () => {

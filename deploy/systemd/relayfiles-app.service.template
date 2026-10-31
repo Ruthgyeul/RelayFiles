@@ -26,8 +26,24 @@ MemoryMax=${MEMORY_MAX}
 CPUQuota=${CPU_QUOTA}
 TasksMax=512
 PrivateTmp=true
-ProtectSystem=full
+# Read-only everywhere except the SSD, the log directory, the service home and (app) the
+# release bundles' .next/cache. An extra SSD needs its own line: sudo systemctl edit <unit>,
+# [Service] ReadWritePaths=<mount> (docs/deploy-systemd.md).
+ProtectSystem=strict
+ReadWritePaths=${STORAGE_ROOT} ${LOG_DIR} ${STORAGE_HOME} ${APP_DIR}/.app
 ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=multi-user.target

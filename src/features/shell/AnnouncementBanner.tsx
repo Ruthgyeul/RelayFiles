@@ -9,7 +9,7 @@ import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { IconButton } from "@/shared/ui/IconButton";
 
-/** Look per level (design `AL`). */
+/** Look per level. */
 export const ANNOUNCEMENT_LOOK: Record<AnnouncementLevel, { label: string; icon: IconName; box: string; text: string }> = {
   info: { label: "Notice", icon: "megaphone", box: "border-accent-soft-line bg-accent-soft", text: "text-accent-text" },
   warn: { label: "Warning", icon: "warning", box: "border-warn-line bg-warn-bg", text: "text-warn-text" },
@@ -30,7 +30,7 @@ const dismissedStore = {
   },
 };
 
-/** The admin announcement at the top of the File Manager until dismissed (design `annShow`). */
+/** The admin announcement at the top of the File Manager until dismissed. */
 export function AnnouncementBanner({ announcement }: { announcement: AnnouncementDto }) {
   const dismissed = useSyncExternalStore(dismissedStore.subscribe, dismissedStore.get, () => "");
   const mounted = useMounted();

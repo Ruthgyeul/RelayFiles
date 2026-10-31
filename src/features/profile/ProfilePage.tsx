@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useState } from "react";
 import type { DeviceDto, ProfileData } from "@/contracts/profile";
-import { usePageTitle } from "@/features/shell/page-title";
+import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { AccessCard } from "./AccessCard";
+import { ApiTokensCard } from "./ApiTokensCard";
 import { profileApi } from "./api";
 import { DevicesCard } from "./DevicesCard";
 import { DeleteAccountCard, PreferencesCard } from "./PreferencesCard";
@@ -19,7 +20,7 @@ type Confirm = { kind: "token" } | { kind: "others" } | { kind: "delete" } | nul
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
-/** My Profile (`/settings`): profile, usage, access, devices, preferences and account deletion. */
+/** My Profile (`/settings`): profile, usage, access, API tokens, devices, preferences and account deletion. */
 export function ProfilePage({ data }: { data: ProfileData }) {
   usePageTitle("My Profile");
   const router = useRouter();
@@ -74,6 +75,7 @@ export function ProfilePage({ data }: { data: ProfileData }) {
       <ProfileCard account={data.account} />
       <UsageCards data={data} />
       <AccessCard key={data.maskedToken} accountId={data.account.id} maskedToken={data.maskedToken} notify={notify} onRegenerate={() => setConfirm({ kind: "token" })} />
+      <ApiTokensCard tokens={data.apiTokens} isAdmin={data.account.isAdmin} notify={notify} refresh={() => router.refresh()} />
       <DevicesCard devices={data.devices} onSignOut={signOutDevice} onSignOutOthers={() => setConfirm({ kind: "others" })} />
       <PreferencesCard
         busy={busy}

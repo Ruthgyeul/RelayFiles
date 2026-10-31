@@ -66,7 +66,7 @@ LAN ─────────────── :NGINX_LISTEN_PORT ───�
 | tools | `tools` 타깃 (`--profile tools`) | 없음 | 마이그레이션, `volume:init`, `admin:create` 같은 일회성 명령 |
 | cloudflared | `cloudflare/cloudflared:2026.10.0` (`--profile tunnel`) | 없음 (아웃바운드만) | 없음 |
 
-app·worker·nginx는 모두 저장소 계정(`STORAGE_UID`, 기본 10001)으로 실행한다. SSD의 파일은 이 계정만 읽을 수 있다(디렉터리 `0700`, 파일 `0600`). app·tools 이미지는 tini를 PID 1로 실행해 고아 프로세스를 회수하고, 모든 서비스의 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10m × 5)까지만 남는다.
+app·worker·nginx는 모두 저장소 계정(`STORAGE_UID`, 기본 10001)으로 실행한다. SSD의 파일은 이 계정만 읽을 수 있다(디렉터리 `0700`, 파일 `0600`). 빌드 컨텍스트는 `.dockerignore` 허용 목록(Dockerfile이 쓰는 파일만)이라 `.env`, `.app/`, 인증서 같은 파일은 이미지에 들어가지 않는다. tools 이미지는 운영 의존성만 설치한다(`npm ci --omit=dev`). app·tools 이미지는 tini를 PID 1로 실행해 고아 프로세스를 회수하고, 모든 서비스의 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10m × 5)까지만 남는다.
 
 compose 명령은 항상 **저장소 루트에서** `--env-file .env -f deploy/docker-compose.yml`로 실행한다(§5의 `$C`). `deploy/` 안에서 그냥 `docker compose`를 실행하면 루트의 `.env`를 읽지 못해 `STORAGE_ROOT`가 없다는 오류로 멈춘다.
 
@@ -215,7 +215,8 @@ nano .env
 | `ANON_TOTAL_QUOTA_GB` | 없음 | 익명 가입을 열어 둘 때. 디스크 크기보다 작게 잡아 낯선 사용자가 디스크를 채우지 못하게 한다 |
 | `DEFAULT_QUOTA_GB` / `ACCOUNT_TTL_DAYS` | 5 / 14 | 새 계정의 용량과 자동 삭제일 |
 | `UPLOAD_MAX_FILE_SIZE_GB` | 없음 | 파일 하나의 최대 크기 |
-| `UPLOAD_CHUNK_SIZE_MB` | 50 | Cloudflare를 쓰면 100 미만으로 둔다 (Nginx `client_max_body_size`는 100m) |
+| `UPLOAD_CHUNK_SIZE_MB` | 50 | Cloudflare를 쓰면 100 미만으로 둔다 (Nginx `client_max_body_size`는 `NGINX_MAX_BODY_MB`, 기본 100) |
+| `NGINX_MAX_BODY_MB`, `NGINX_AUTH_RATE_PER_MIN`, `NGINX_AUTH_BURST`, `NGINX_UPLOAD_RATE_PER_MIN`, `NGINX_UPLOAD_BURST` | 100, 20, 20, 60, 30 | 두 Nginx 템플릿(compose·호스트)의 요청 크기와 주소별 요청 수 제한. 바꾸면 nginx를 다시 만든다(`docker compose up -d nginx`, systemd는 `install.sh`) |
 | `APP_MEMORY_MAX`·`APP_CPUS`·`WORKER_MEMORY_MAX`·`WORKER_CPUS` | 2G·3·2G·2 | 서버 사양에 맞춰. 둘의 합이 전체 메모리의 절반 정도면 PostgreSQL이 여유 있다 |
 | `VIDEO_TRANSCODE_MAX` | 2 | 동시 영상 변환 수. CPU가 약하면 1, 끄려면 0 |
 | `JOBS_TIMEZONE`·`CLEANUP_CRON` | `Asia/Seoul`·`0 4 * * *` | 매일 정리 작업 시각 |
@@ -510,14 +511,11 @@ deploy/scripts/release.sh
 
 ### 롤백
 
-```bash
-tail -5 "$(grep ^DATA_DIR= .env | cut -d= -f2)/releases.log"   # 이전 태그 확인
-RELEASE_TAG=<이전 태그> $C up -d --no-build app worker
-```
-
-DB 스키마는 expand → contract로 나눠 넣으므로 바로 이전 릴리스는 새 스키마에서도 동작한다. 파괴적 변경이 들어간 릴리스를 되돌릴 때는 그 릴리스 직전 백업을 복구한다. 자세한 내용은 [runbook.md "롤백"](runbook.md#롤백)과 ["DB 복구"](runbook.md#db-복구).
+절차와 DB 스키마 규칙은 [runbook.md "롤백"](runbook.md#롤백)에 있다(이전 이미지 태그로 `app`·`worker`를 다시 띄운다).
 
 ### 특정 릴리스에서 한 번만 할 일
+
+순번 정리·중복 찾기·파일별 전송 진행률 릴리스는 추가 작업이 없다(`release.sh`가 컬럼 추가와 기존 파일 백필까지 한다). 단계별 설명과 확인 방법은 [upgrade/folder-tools-transfers.md](upgrade/folder-tools-transfers.md).
 
 뷰어 미리보기가 들어간 릴리스로 처음 올릴 때는 한 번 `$C --profile tools run --rm tools npm run media:backfill -- --previews`를 실행한다(그전에 올린 사진의 미리보기 생성). SSD를 더 붙였다면 `deploy/nginx/volumes/*.conf`에 남아 있는 `add_header Cache-Control …` 줄을 지우고 `$C restart nginx`(재생 캐시가 동작하도록, `deploy/nginx/volumes/README.md`).
 
@@ -571,7 +569,7 @@ PostgreSQL 메이저 버전(16 → 17)은 데이터 디렉터리를 그대로 �
   | 코드, `.env`, 점검 플래그 | `~/RelayFiles` (`deploy/maintenance/on`) |
   | 사용자 파일, 썸네일·미리보기, 업로드 임시 조각, 휴지통 | `STORAGE_ROOT` (`users/`, `system/`) |
   | PostgreSQL, Redis, DB 백업, 릴리스 기록 | `DATA_DIR` (`pg/`, `redis/`, `backups/`, `releases.log`) |
-  | 앱·워커 로그 | `LOG_DIR` (`error.log`, `combined.log`, 20MB × 5개 순환) |
+  | 앱·워커 로그 | `LOG_DIR` (프로세스마다 `app-`·`worker-`·`tools-` + `error.log`·`combined.log`, 20MB × 5개 순환) |
   | nginx 접근 로그, 컨테이너 표준 출력 | `$C logs <서비스>` (Docker data-root 안) |
   | Docker 이미지·빌드 캐시 | `DOCKER_DATA_ROOT` |
   | SSD 키 | `/etc/relayfiles/ssd.key` (서버 밖에도 보관) |
@@ -589,16 +587,18 @@ crontab -e      # docker 그룹에 속한 배포 사용자로
 15 3 * * * cd /home/<사용자>/RelayFiles && deploy/scripts/backup.sh >> /home/<사용자>/relayfiles-backup.log 2>&1
 # 매일 03:45 사용자 파일을 다른 디스크로 (DB 덤프 직후라 시점이 맞는다)
 45 3 * * * sudo rsync -aHAX --delete <STORAGE_ROOT>/ /mnt/<백업 디스크>/relayfilesDB/ >> /home/<사용자>/relayfiles-rsync.log 2>&1
+# 매주 일요일 05:15 백업 검증: 최신 덤프를 임시 컨테이너에 복원해 운영과 비교 + fsck 보고 (runbook.md "백업 검증")
+15 5 * * 0 cd /home/<사용자>/RelayFiles && deploy/scripts/verify-backup.sh >> /home/<사용자>/relayfiles-verify.log 2>&1
 ```
 
 - cron에는 `PATH`가 짧으므로 `docker`를 못 찾으면 crontab 맨 위에 `PATH=/usr/local/bin:/usr/bin:/bin`을 넣는다.
 - `rsync`를 cron에서 `sudo`로 쓰려면 그 명령만 비밀번호 없이 허용한다(`sudo visudo -f /etc/sudoers.d/relayfiles-backup`에 `<사용자> ALL=(root) NOPASSWD: /usr/bin/rsync`). 아니면 root의 crontab(`sudo crontab -e`)에 넣는다.
-- 백업 디스크가 같은 서버에 붙어 있으면 서버 고장·도난에는 소용이 없다. `DATA_DIR/backups`의 덤프와 `.env`, SSD 키는 주기적으로 서버 밖(다른 기기, 클라우드의 암호화된 저장소)에도 둔다.
+- 백업 디스크가 같은 서버에 붙어 있으면 서버 고장·도난에는 소용이 없다. 덤프와 원본 파일은 `deploy/scripts/offsite-backup.sh`(restic, R2·B2에 암호화)로 서버 밖에도 보낸다. root crontab에 `45 3 * * * cd /home/<사용자>/RelayFiles && deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1`(설정은 [runbook.md "오프사이트 백업"](runbook.md#오프사이트-백업)). `.env`와 SSD 키는 비밀번호 관리자 같은 곳에 따로 둔다.
 - **복원 연습**을 한 번 해 둔다. 덤프가 있어도 복원해 본 적이 없으면 백업이 아니다([runbook.md "DB 복구"](runbook.md#db-복구)).
 
 ## 11. 문제 해결
 
-먼저 볼 것: `$C ps`(상태), `$C logs --tail 100 app worker nginx`(로그), `curl -fsS http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/api/health`(구성 요소별 상태), 에러 화면의 요청 ID로 `LOG_DIR/combined.log` 검색.
+먼저 볼 것: `$C ps`(상태), `$C logs --tail 100 app worker nginx`(로그), `curl -fsS http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/api/health`(구성 요소별 상태), 에러 화면의 요청 ID로 `LOG_DIR/app-combined.log` 검색.
 
 | 증상 | 원인 | 해결 |
 |---|---|---|

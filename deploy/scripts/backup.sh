@@ -4,6 +4,7 @@
 # docs/runbook.md); Redis holds only data that can be rebuilt.
 #   deploy/scripts/backup.sh
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 KEEP="${BACKUP_KEEP:-14}"
@@ -17,5 +18,5 @@ log "Backing up the database to $FILE"
 mv "$FILE.partial" "$FILE"
 chmod 600 "$FILE"
 
-keep_newest "$DIR/relayfiles-*.dump" "$KEEP"
+keep_newest "$KEEP" "$DIR"/relayfiles-*.dump
 log "Backup done ($(du -h "$FILE" | cut -f1))."

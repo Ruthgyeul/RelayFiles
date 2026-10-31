@@ -1,16 +1,27 @@
-# Everything the image build does not need. Secrets never enter the image: .env is
-# passed at run time by docker compose.
-.git
-.github
-.next
-.data
-node_modules
-test-results
-playwright-report
-coverage
-*.log
-*.tsbuildinfo
-.env
-.env.*
-!.env.example
-deploy/backups
+# Allowlist: only what the Dockerfile copies. Everything else (secrets such as .env, *.pem or
+# .npmrc, the systemd bundles in .app/, docs, e2e tests) stays out of the build context, so a
+# new file never enters an image by default. .env is passed at run time by docker compose.
+*
+
+# deps stage: install and generate the Prisma client
+!package.json
+!package-lock.json
+!prisma.config.ts
+!prisma/
+# build stage: next build and the standalone bundle
+!src/
+!next.config.ts
+!tsconfig.json
+!postcss.config.mjs
+# tools image: worker, migrations and admin scripts (tsx resolves @/ through tsconfig.json)
+!scripts/
+# both images
+!deploy/docker-entrypoint.sh
+!deploy/healthcheck.mjs
+
+# Re-excluded inside allowed folders. The host's generated Prisma client would overwrite the
+# one the deps stage generated for the image (COPY . . in build and tools).
+src/server/db/generated/
+# Tests need test/ and vitest, which the images do not have; CI typechecks them separately.
+**/*.test.ts
+**/*.test.tsx

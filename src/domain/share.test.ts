@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { busyBadge, busyOf, EXPIRY_MS, isExpiryOption, limitHit, nextExpiry, shareStatus, type LinkFacts } from "./share";
+import { busyBadge, busyOf, EXPIRY_MS, isExpiryOption, limitHit, nextExpiry, shareStatus, strictestGuard, type LinkFacts, type PathGuard } from "./share";
 
 describe("expiry", () => {
   const now = 1_000_000;
@@ -61,5 +61,25 @@ describe("busy level", () => {
     expect(busyBadge(busyOf(times(6), false, now, limits), now, "share")).toEqual({ level: 1, label: "Busy · slower downloads", tip: "6 downloads in the last 10 min · downloads are throttled" });
     expect(busyBadge(busyOf([], true, now, limits), now, "share")?.label).toBe("Downloads paused");
     expect(busyBadge(busyOf([], false, now, limits), now, "app")).toBeNull();
+  });
+});
+
+describe("strictestGuard", () => {
+  const open: PathGuard = { expAt: null, burn: false, downloads: 0, hasPassword: false, unlocked: false };
+
+  it("is open when nothing on the way is set", () => {
+    expect(strictestGuard([open, open], null)).toEqual({ expAt: null, burnUsed: false, hasPassword: false, unlocked: true });
+  });
+
+  it("takes the earliest expiry, including the owner's account", () => {
+    expect(strictestGuard([{ ...open, expAt: 5_000 }, { ...open, expAt: 3_000 }], null).expAt).toBe(3_000);
+    expect(strictestGuard([{ ...open, expAt: 5_000 }], 4_000).expAt).toBe(4_000);
+  });
+
+  it("needs every password on the way and notices a used delete-after-download item", () => {
+    const locked = strictestGuard([{ ...open, hasPassword: true, unlocked: true }, { ...open, hasPassword: true, unlocked: false }], null);
+    expect([locked.hasPassword, locked.unlocked]).toEqual([true, false]);
+    expect(strictestGuard([{ ...open, burn: true, downloads: 1 }, open], null).burnUsed).toBe(true);
+    expect(strictestGuard([{ ...open, burn: true }], null).burnUsed).toBe(false);
   });
 });

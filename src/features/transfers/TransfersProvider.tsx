@@ -1,78 +1,40 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { DuplicatePolicy } from "@/contracts/uploads";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { TRANSFERS } from "@/config/policy";
+import type { DuplicatePolicy, PrepareUploadResult } from "@/contracts/uploads";
 import { nameError } from "@/domain/names";
 import { folderCount, uploadFallbackName } from "@/domain/upload";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError, apiFetch } from "@/shared/lib/api-client";
-import type { PrepareUploadResult } from "@/contracts/uploads";
 import { DuplicateDialog, type DuplicateRequest } from "./DuplicateDialog";
-import { entriesFromList, type UploadEntry } from "./read-drop";
-import type { TransferStatus } from "./transfer-text";
+import { canSaveToFolder, FolderDownloader, pickSaveFolder } from "./download-runner";
+import type { UploadEntry } from "./read-drop";
+import { initialItems } from "./transfer-items";
+import { TransfersContext, type DownloadRequest, type FolderDownloadRequest, type Transfer, type TransfersContextValue, type UploadTarget } from "./transfers-context";
 import { BatchUploader } from "./upload-runner";
-
-/** Where an upload goes: "home" (new folder at the root), "root", or a folder id. */
-export interface UploadTarget {
-  ref: string;
-  name: string;
-}
-
-/** A download handed to the browser: what the panel shows about it. */
-export interface DownloadRequest {
-  url: string;
-  title: string;
-  files: number;
-  total: number;
-}
-
-export interface Transfer {
-  id: string;
-  direction: "up" | "down";
-  title: string;
-  folderId: string;
-  fromHome: boolean;
-  files: number;
-  folders: number;
-  total: number;
-  done: number;
-  status: TransferStatus;
-  auto: boolean;
-  error?: string;
-  /** Time spent transferring before the current run, and when the current run started. */
-  activeMs: number;
-  runningSince: number | null;
-}
-
-interface TransfersContextValue {
-  transfers: Transfer[];
-  panelOpen: boolean;
-  panelExpanded: boolean;
-  lastUpload: { folderId: string; name: string } | null;
-  pickFiles: (target: UploadTarget) => void;
-  pickFolder: (target: UploadTarget) => void;
-  upload: (entries: UploadEntry[], target: UploadTarget) => void;
-  download: (request: DownloadRequest) => void;
-  togglePause: (id: string) => void;
-  remove: (id: string) => void;
-  clearFinished: () => void;
-  setPanel: (open: boolean, expanded?: boolean) => void;
-}
-
-const TransfersContext = createContext<TransfersContextValue | null>(null);
-
-export function useTransfers(): TransfersContextValue {
-  const value = useContext(TransfersContext);
-  if (!value) throw new Error("useTransfers must be used inside <TransfersProvider>.");
-  return value;
-}
+import { useItemProgress } from "./useItemProgress";
+import { useFilePickers } from "./useFilePickers";
+import { useOfflinePause } from "./useOfflinePause";
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+/** Per-file list only for batches of several files. */
+const itemsFor = (files: readonly { name: string; size: number }[]) => (files.length >= TRANSFERS.fileListMin ? initialItems(files) : undefined);
+const failedText = (failed: number, files: number, firstError?: string) => `${failed} of ${files} ${files === 1 ? "file" : "files"} failed${firstError ? ` · ${firstError}` : ""}`;
+
+/** What the provider needs from a running batch (uploads also pause). */
+interface Runner {
+  cancel: () => void;
+  cancelFile: (slot: number) => boolean;
+  pause?: () => void;
+  resume?: () => void;
+}
 
 /**
- * Upload state for the whole app: file pickers, prepare + duplicate dialog, tus batches,
- * pause/resume (automatic while offline) and the transfers panel data.
+ * Transfer state for the whole app: file pickers, prepare + duplicate dialog, tus batches,
+ * pause/resume (automatic while offline), downloads into a picked folder, per-file progress and
+ * cancel, and the transfers panel data.
  */
 export function TransfersProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -81,10 +43,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
   const [panel, setPanelState] = useState({ open: false, expanded: true });
   const [lastUpload, setLastUpload] = useState<{ folderId: string; name: string } | null>(null);
   const [duplicate, setDuplicate] = useState<(DuplicateRequest & { entries: UploadEntry[]; target: UploadTarget }) | null>(null);
-  const runners = useRef(new Map<string, BatchUploader>());
-  const fileInput = useRef<HTMLInputElement>(null);
-  const folderInput = useRef<HTMLInputElement>(null);
-  const pickTarget = useRef<UploadTarget | null>(null);
+  const runners = useRef(new Map<string, Runner>());
   // crypto.randomUUID() exists only in secure contexts; plain-http LAN access must work too.
   const downloadSeq = useRef(0);
 
@@ -92,6 +51,16 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
     setTransfers((list) => list.map((transfer) => (transfer.id === id ? { ...transfer, ...patch(transfer) } : transfer)));
   }, []);
   const stopClock = (transfer: Transfer) => ({ activeMs: transfer.activeMs + (transfer.runningSince ? Date.now() - transfer.runningSince : 0), runningSince: null });
+  const fileEvents = useItemProgress(setTransfers);
+  /** Ends a batch: complete, or failed when some files failed (the others are done). */
+  const finish = useCallback(
+    (id: string, failed: number, firstError?: string) => {
+      runners.current.delete(id);
+      update(id, (current) => (failed > 0 ? { status: "error", error: failedText(failed, current.files, firstError), ...stopClock(current) } : { status: "complete", done: current.total, ...stopClock(current) }));
+      if (failed > 0) notify(failedText(failed, failed, firstError));
+    },
+    [notify, update],
+  );
 
   const start = useCallback(
     (entries: UploadEntry[], target: UploadTarget, dup?: DuplicatePolicy) => {
@@ -119,21 +88,28 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
             auto: false,
             activeMs: 0,
             runningSince: Date.now(),
+            items: itemsFor(plan.files.map((file) => ({ name: file.rel, size: file.size }))),
           };
-          const runner = new BatchUploader(plan, files, config.uploadChunkBytes, {
-            onProgress: (done) => update(id, () => ({ done })),
-            onComplete: () => {
-              runners.current.delete(id);
-              update(id, (current) => ({ status: "complete", done: current.total, ...stopClock(current) }));
-              if (transfer.fromHome) setLastUpload({ folderId: transfer.folderId, name: transfer.title });
-              router.refresh();
+          const runner = new BatchUploader(
+            plan,
+            files,
+            config.uploadChunkBytes,
+            {
+              ...fileEvents(id),
+              onProgress: (done) => update(id, () => ({ done })),
+              onComplete: (failed, firstError) => {
+                finish(id, failed, firstError);
+                if (transfer.fromHome && failed < files.length) setLastUpload({ folderId: transfer.folderId, name: transfer.title });
+                router.refresh();
+              },
+              onError: (message) => {
+                update(id, (current) => ({ status: "error", error: message, ...stopClock(current) }));
+                notify(message);
+                router.refresh();
+              },
             },
-            onError: (message) => {
-              update(id, (current) => ({ status: "error", error: message, ...stopClock(current) }));
-              notify(message);
-              router.refresh();
-            },
-          });
+            { continueOnError: true },
+          );
           runners.current.set(id, runner);
           setTransfers((list) => [transfer, ...list]);
           setPanelState({ open: true, expanded: true });
@@ -143,7 +119,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
         }
       })();
     },
-    [config.uploadChunkBytes, notify, router, update],
+    [config.uploadChunkBytes, fileEvents, finish, notify, router, update],
   );
 
   const upload = useCallback(
@@ -186,36 +162,64 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
     setPanelState({ open: true, expanded: true });
   }, []);
 
+  const downloadToFolder = useCallback(
+    (request: FolderDownloadRequest, fallback: () => void) => {
+      if (!canSaveToFolder()) return false;
+      // The picker opens before the first await, while the click still counts as a user gesture.
+      const picking = pickSaveFolder();
+      void (async () => {
+        let dir: FileSystemDirectoryHandle | null;
+        try {
+          dir = await picking;
+        } catch {
+          return fallback();
+        }
+        if (!dir) return;
+        const id = `download-${(downloadSeq.current += 1)}`;
+        const runner = new FolderDownloader(dir, request.items, { ...fileEvents(id), onProgress: (done) => update(id, () => ({ done })), onComplete: (failed, firstError) => finish(id, failed, firstError) });
+        const transfer: Transfer = {
+          id,
+          direction: "down",
+          title: request.title,
+          folderId: "",
+          fromHome: false,
+          files: request.items.length,
+          folders: 0,
+          total: request.items.reduce((sum, item) => sum + item.size, 0),
+          done: 0,
+          status: "active",
+          auto: false,
+          activeMs: 0,
+          runningSince: Date.now(),
+          items: itemsFor(request.items),
+        };
+        runners.current.set(id, runner);
+        setTransfers((list) => [transfer, ...list]);
+        setPanelState({ open: true, expanded: true });
+        runner.start();
+      })();
+      return true;
+    },
+    [fileEvents, finish, update],
+  );
+
   const pause = useCallback(
     (id: string, auto: boolean) => {
-      runners.current.get(id)?.pause();
+      runners.current.get(id)?.pause?.();
       update(id, (current) => ({ status: "paused", auto, ...stopClock(current) }));
     },
     [update],
   );
   const resume = useCallback(
     (id: string) => {
-      runners.current.get(id)?.resume();
+      runners.current.get(id)?.resume?.();
       update(id, () => ({ status: "active", auto: false, runningSince: Date.now() }));
     },
     [update],
   );
 
-  // Pause everything while offline and continue once the connection is back (design).
-  const latest = useRef(transfers);
-  useEffect(() => {
-    latest.current = transfers;
-  });
-  useEffect(() => {
-    const onOffline = () => latest.current.filter((transfer) => transfer.status === "active").forEach((transfer) => pause(transfer.id, true));
-    const onOnline = () => latest.current.filter((transfer) => transfer.status === "paused" && transfer.auto).forEach((transfer) => resume(transfer.id));
-    window.addEventListener("offline", onOffline);
-    window.addEventListener("online", onOnline);
-    return () => {
-      window.removeEventListener("offline", onOffline);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [pause, resume]);
+  useOfflinePause(transfers, pause, resume);
+  const pickers = useFilePickers(upload);
 
   const value = useMemo<TransfersContextValue>(
     () => ({
@@ -225,14 +229,9 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
       lastUpload,
       upload,
       download,
-      pickFiles: (target) => {
-        pickTarget.current = target;
-        fileInput.current?.click();
-      },
-      pickFolder: (target) => {
-        pickTarget.current = target;
-        folderInput.current?.click();
-      },
+      downloadToFolder,
+      pickFiles: pickers.pickFiles,
+      pickFolder: pickers.pickFolder,
       togglePause: (id) => {
         const transfer = transfers.find((entry) => entry.id === id);
         if (transfer?.status === "active") pause(id, false);
@@ -243,34 +242,19 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
         runners.current.delete(id);
         setTransfers((list) => list.filter((entry) => entry.id !== id));
       },
+      cancelItem: (id, key) => {
+        runners.current.get(id)?.cancelFile(key);
+      },
       clearFinished: () => setTransfers((list) => list.filter((entry) => entry.status === "active" || entry.status === "paused")),
       setPanel: (open, expanded) => setPanelState((current) => ({ open, expanded: expanded ?? current.expanded })),
     }),
-    [transfers, panel, lastUpload, upload, download, pause, resume],
+    [transfers, panel, lastUpload, upload, download, downloadToFolder, pause, resume, pickers.pickFiles, pickers.pickFolder],
   );
-
-  const onPicked = (list: FileList | null) => {
-    const target = pickTarget.current;
-    if (list && list.length && target) upload(entriesFromList(list), target);
-  };
 
   return (
     <TransfersContext value={value}>
       {children}
-      <input ref={fileInput} type="file" multiple hidden aria-hidden onChange={(event) => (onPicked(event.target.files), (event.target.value = ""))} />
-      <input
-        ref={(element) => {
-          folderInput.current = element;
-          // Folder pickers are not standard attributes in React's typings.
-          element?.setAttribute("webkitdirectory", "");
-          element?.setAttribute("directory", "");
-        }}
-        type="file"
-        multiple
-        hidden
-        aria-hidden
-        onChange={(event) => (onPicked(event.target.files), (event.target.value = ""))}
-      />
+      {pickers.inputs}
       <DuplicateDialog request={duplicate} onChoose={(policy) => duplicate && start(duplicate.entries, duplicate.target, policy)} onClose={() => setDuplicate(null)} />
     </TransfersContext>
   );

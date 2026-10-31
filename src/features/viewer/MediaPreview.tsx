@@ -10,7 +10,7 @@ import { useVideoSource } from "./useVideoSource";
 
 const PERCENT = 100;
 
-/** Thin progress bar for a saved playback position (design `resumePct`). */
+/** Thin progress bar for a saved playback position. */
 export function ResumeBar({ id }: { id: string }) {
   const point = useResume(id);
   if (!point) return null;

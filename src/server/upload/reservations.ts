@@ -8,11 +8,17 @@ import { redis } from "../redis";
  * Quota and free-space checks see only finished files, so without these, uploads started at
  * the same time would each pass the check and together overrun the quota or the disk.
  *
- * Each scope (an account, a volume, all anonymous accounts) is a sorted set of upload ids
+ * Each scope (an account, a volume, all anonymous accounts, an upload-only link) is a sorted set of upload ids
  * scored by when the promise lapses, plus a hash of their sizes. A reservation lapses after
  * UPLOAD_TMP_TTL_HOURS, when the maintenance job removes the unfinished chunks anyway.
  */
-export type ReservationScope = { kind: "account"; id: string } | { kind: "volume"; id: string } | { kind: "anon" };
+export type ReservationScope =
+  | { kind: "account"; id: string }
+  | { kind: "volume"; id: string }
+  | { kind: "anon" }
+  /** An upload-only link's own limits: bytes, and files (each upload reserves 1). */
+  | { kind: "request-bytes"; id: string }
+  | { kind: "request-files"; id: string };
 
 const scopeName = (scope: ReservationScope) => (scope.kind === "anon" ? "anon" : `${scope.kind}:${scope.id}`);
 const keysOf = (scope: ReservationScope) => [`quota:resv:${scopeName(scope)}:at`, `quota:resv:${scopeName(scope)}:size`];

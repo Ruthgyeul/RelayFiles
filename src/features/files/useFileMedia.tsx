@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TRANSFERS } from "@/config/policy";
 import type { NodeItem } from "@/contracts/nodes";
 import { zipName } from "@/domain/serving";
 import { useShell } from "@/features/shell/ShellProvider";
-import { useTransfers } from "@/features/transfers/TransfersProvider";
+import { useTransfers } from "@/features/transfers/transfers-context";
 import { MediaViewer, type ViewerItem } from "@/features/viewer/MediaViewer";
-import { fileUrls } from "./api";
+import { fileUrls } from "@/shared/lib/files-api";
 
 type Item = Pick<NodeItem, "id" | "type" | "name" | "kind" | "size" | "fileCount"> & Partial<Pick<NodeItem, "hasThumb">>;
 
@@ -71,8 +72,24 @@ export function useFileMedia(listed: Item[], folderName: string, initialView?: s
     preview: (item: Item) => setViewing(item.id),
     download,
     zip,
-    /** Selection "Download": each file and folder separately, like the design. */
-    downloadEach: (items: Item[]) => items.forEach(download),
+    /**
+     * Selection "Download": each file and folder (as a zip) separately, like the design. Where the
+     * browser can, they are saved into a folder the user picks, with per-file progress and cancel.
+     */
+    downloadEach: (items: Item[]) => {
+      const each = () => items.forEach(download);
+      if (items.length < TRANSFERS.fileListMin) return each();
+      const saved = transfers.downloadToFolder(
+        {
+          title: `${items.length} items from ${folderName}`,
+          items: items.map((item) =>
+            item.type === "folder" ? { url: fileUrls.zip([item.id]), name: `${item.name}.zip`, size: Number(item.size) } : { url: fileUrls.download(item.id), name: item.name, size: Number(item.size) },
+          ),
+        },
+        each,
+      );
+      if (!saved) each();
+    },
     viewer,
   };
 }

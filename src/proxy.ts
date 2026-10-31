@@ -2,12 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAppEnv, getEnv } from "@/config/env";
 import { REQUEST_ID_HEADER, type ApiFailure } from "@/contracts/api";
 import { ERRORS, type ErrorCode } from "@/contracts/errors";
+import { validRequestId } from "@/domain/ids";
 import { clientIp, ipInCidrs } from "@/domain/network";
+import { contentSecurityPolicy, CSP_REPORT_GROUP, CSP_REPORT_PATH, strictTransportSecurity } from "@/domain/security-headers";
 import { ERROR_PRESETS } from "@/features/errors/presets";
 
 /**
  * Runs before every page and API request (Next.js 16 `proxy.ts`, formerly middleware):
  * - assigns the request id shown on error pages and in logs,
+ * - sets a per-request Content-Security-Policy nonce (Next.js reads it from the request header
+ *   and adds it to its own scripts) and Strict-Transport-Security on the https site,
  * - limits admin pages and APIs to ADMIN_ALLOWED_CIDRS when it is set,
  * - rejects cross-site writes to the API (cookie-authenticated, so a foreign Origin or a
  *   cross-site Sec-Fetch-Site is refused).
@@ -55,27 +59,66 @@ function isCrossSite(req: NextRequest): boolean {
   }
 }
 
+interface SecurityHeaders {
+  /** Header name the policy goes in: enforced, or report-only while violations are being collected. */
+  cspHeader: "content-security-policy" | "content-security-policy-report-only";
+  csp: string;
+  hsts: string | null;
+}
+
+function securityHeaders(req: NextRequest): SecurityHeaders {
+  const env = getAppEnv();
+  // 128 random bits, base64 like the Next.js CSP guide.
+  const nonce = btoa(crypto.randomUUID());
+  return {
+    cspHeader: env.CSP_MODE === "enforce" ? "content-security-policy" : "content-security-policy-report-only",
+    csp: contentSecurityPolicy({ nonce, dev: env.NODE_ENV === "development" }),
+    hsts: strictTransportSecurity({ publicUrl: env.PUBLIC_URL, host: req.headers.get("host"), maxAgeSec: env.HSTS_MAX_AGE_SEC, includeSubDomains: env.HSTS_INCLUDE_SUBDOMAINS }),
+  };
+}
+
+/**
+ * Next.js copies these response headers onto the request it renders, so only the one policy
+ * goes here: a second, enforced `content-security-policy` (say, frame-ancestors only) would be
+ * read first and hide the nonce. Report-only ignores frame-ancestors; framing stays refused by
+ * X-Frame-Options: DENY (next.config.ts).
+ */
+function withSecurityHeaders<R extends NextResponse>(response: R, security: SecurityHeaders): R {
+  response.headers.set(security.cspHeader, security.csp);
+  response.headers.set("reporting-endpoints", `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`);
+  if (security.hsts) response.headers.set("strict-transport-security", security.hsts);
+  return response;
+}
+
 export function proxy(req: NextRequest) {
-  const requestId = req.headers.get(REQUEST_ID_HEADER) ?? crypto.randomUUID();
+  const requestId = validRequestId(req.headers.get(REQUEST_ID_HEADER)) ?? crypto.randomUUID();
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
+  const security = securityHeaders(req);
 
-  if (isApi && !SAFE_METHODS.has(req.method) && isCrossSite(req)) return apiFailure("FORBIDDEN", requestId);
+  if (isApi && !SAFE_METHODS.has(req.method) && isCrossSite(req)) return withSecurityHeaders(apiFailure("FORBIDDEN", requestId), security);
 
   const allowed = getEnv("app").ADMIN_ALLOWED_CIDRS;
   if (allowed.length > 0 && ADMIN_PATH.test(pathname) && !ipInCidrs(clientIp(req.headers), allowed)) {
-    return isApi ? apiFailure("FORBIDDEN", requestId) : deniedPage(requestId);
+    return withSecurityHeaders(isApi ? apiFailure("FORBIDDEN", requestId) : deniedPage(requestId), security);
   }
 
   const headers = new Headers(req.headers);
   headers.set(REQUEST_ID_HEADER, requestId);
+  // Only the full policy on the request: Next.js takes the nonce from the first CSP header it finds.
+  headers.delete("content-security-policy");
+  headers.delete("content-security-policy-report-only");
+  headers.set(security.cspHeader, security.csp);
   const response = NextResponse.next({ request: { headers } });
   response.headers.set(REQUEST_ID_HEADER, requestId);
-  return response;
+  return withSecurityHeaders(response, security);
 }
 
 export const config = {
-  // Skip build assets and static files, and tus uploads (the proxy would buffer their bodies);
-  // everything else (pages and API) goes through the proxy.
-  matcher: ["/((?!_next/static|_next/image|api/uploads/tus|favicon.ico|icon.svg|.*\\.(?:woff2?|png|jpe?g|webp|svg|ico)$).*)"],
+  // Skip build assets and static files, and uploads (the proxy would buffer their bodies): tus
+  // and API v1's whole-body upload, which is Bearer-only, so the cross-site check has nothing to
+  // protect there. Everything else (pages and API) goes through the proxy.
+  // Static file names are skipped only outside /api: an API path ending in ".png" must still get
+  // the CSRF and admin-range checks.
+  matcher: ["/((?!_next/static|_next/image|api/uploads/tus|api/v1/files$|favicon.ico|icon.svg|(?!api/).*\\.(?:woff2?|png|jpe?g|webp|svg|ico)$).*)"],
 };

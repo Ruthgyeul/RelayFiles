@@ -6,7 +6,7 @@ import { collapseCrumbs, CRUMB_LIMIT, pathString } from "@/domain/tree";
 import { useViewport } from "@/shared/hooks/useViewport";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
-import { folderHref } from "./paths";
+import { folderHref } from "@/shared/lib/routes";
 import type { DropTargetProps } from "./useDragMove";
 
 const crumbClass = "flex h-8 max-w-[200px] items-center gap-1.5 rounded-lg border border-transparent bg-transparent px-2 text-[13px] whitespace-nowrap no-underline";

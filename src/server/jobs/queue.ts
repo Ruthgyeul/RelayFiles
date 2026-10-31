@@ -8,6 +8,8 @@ export const MEDIA_QUEUE = "media";
 
 export interface MediaJob {
   nodeId: string;
+  /** "process" (default): thumbnails, previews, stripped copies; "transcode": store an MP4 conversion. */
+  task?: "process" | "transcode";
 }
 
 /**
@@ -51,8 +53,23 @@ export async function enqueueMedia(nodeIds: readonly string[]): Promise<void> {
   }
 }
 
+/** Asks the worker to store an MP4 conversion of an often played video (one pending job per video). */
+export async function enqueueTranscode(nodeId: string): Promise<void> {
+  try {
+    await mediaQueue().add("transcode", { nodeId, task: "transcode" }, { jobId: `transcode-${nodeId}` });
+  } catch (error) {
+    logger.warn("transcode job not queued", { error });
+  }
+}
+
 /** Closes the producer connection (scripts and tests that exit). */
 export async function closeQueues(): Promise<void> {
   await globalForQueue.relayMediaQueue?.close();
   globalForQueue.relayMediaQueue = undefined;
+}
+
+/** Media jobs waiting, running and scheduled for a retry, for /metrics. */
+export async function mediaQueueCounts(): Promise<Record<"waiting" | "active" | "delayed", number>> {
+  const counts = await mediaQueue().getJobCounts("waiting", "active", "delayed");
+  return { waiting: counts.waiting ?? 0, active: counts.active ?? 0, delayed: counts.delayed ?? 0 };
 }

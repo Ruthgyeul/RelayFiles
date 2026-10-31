@@ -1,24 +1,23 @@
 import "server-only";
 import { getEnv } from "@/config/env";
-import { MS } from "@/config/policy";
+import { ACCOUNT, MS } from "@/config/policy";
 import type { DeviceDto, Preferences, ProfileData } from "@/contracts/profile";
 import { dailySeries, deletionDate, deviceLocation, maskToken } from "@/domain/account";
-import { db } from "../db/client";
+import { db, type DbClient } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { deleteAccountRow, lastLoginOf, updatePreferences, type AccountRow } from "../repositories/account.repo";
-import { countAdmins } from "../repositories/admin.repo";
+import { countAdmins, lockAdminRoles } from "../repositories/admin.repo";
 import { retireLinks } from "../repositories/link-tombstone.repo";
 import { accountUsage, contentCounts, expiredItemIds } from "../repositories/node.repo";
 import { listAccountSessions, revokeAccountSession, revokeOtherSessions } from "../repositories/session.repo";
 import { trafficSince } from "../repositories/traffic.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
+import { listApiTokens } from "./api-token.service";
 import { revealToken } from "./auth.service";
 import { deleteItems } from "./node-ops.service";
 import { driverForAccount } from "./volume.service";
 
-/** Days shown in the profile "Traffic" card. */
-const TRAFFIC_DAYS = 30;
 
 export async function listDevices(accountId: string, currentSessionId: string): Promise<DeviceDto[]> {
   const sessions = await listAccountSessions(db(), accountId);
@@ -38,16 +37,17 @@ export async function listDevices(accountId: string, currentSessionId: string): 
 /** Everything the My Profile page shows. */
 export async function profileOf(account: AccountRow, currentSessionId: string, now: Date = new Date()): Promise<ProfileData> {
   const ttlDays = getEnv("policy").ACCOUNT_TTL_DAYS;
-  const from = new Date(now.getTime() - (TRAFFIC_DAYS - 1) * MS.day);
-  const [token, usage, counts, traffic, devices, lastLoginAt] = await Promise.all([
+  const from = new Date(now.getTime() - (ACCOUNT.trafficDays - 1) * MS.day);
+  const [token, usage, counts, traffic, devices, lastLoginAt, apiTokens] = await Promise.all([
     revealToken(account.id),
     accountUsage(db(), account.id),
     contentCounts(db(), account.id),
     trafficSince(db(), account.id, new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()))),
     listDevices(account.id, currentSessionId),
     lastLoginOf(db(), account.id),
+    listApiTokens(account.id),
   ]);
-  const days = dailySeries(traffic, TRAFFIC_DAYS, now);
+  const days = dailySeries(traffic, ACCOUNT.trafficDays, now);
   return {
     account: {
       id: account.id,
@@ -65,6 +65,7 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
     usage: { usedBytes: usage.usedBytes.toString(), ...counts },
     traffic: { total: days.reduce((sum, bytes) => sum + bytes, 0n).toString(), days: days.map(String) },
     devices,
+    apiTokens,
   };
 }
 
@@ -98,13 +99,19 @@ export async function purgeExpired(owner: AccountRow, now: Date): Promise<{ dele
  * left without anyone able to manage accounts, sign-ups or storage.
  */
 export async function deleteOwnAccount(owner: AccountRow): Promise<void> {
-  if (owner.isAdmin && (await countAdmins(db())) <= 1) throw new ApiError("BAD_REQUEST", "Keep at least one admin");
-  await deleteAccount(owner);
+  await deleteAccount(owner, async (tx) => {
+    if (!owner.isAdmin) return;
+    // Serialized with demotions and other admins' deletions (lockAdminRoles).
+    await lockAdminRoles(tx);
+    if ((await countAdmins(tx)) <= 1) throw new ApiError("BAD_REQUEST", "Keep at least one admin");
+  });
 }
 
-export async function deleteAccount(owner: AccountRow): Promise<void> {
+/** Deletes an account with its files; `guard` runs first in the same transaction and may refuse. */
+export async function deleteAccount(owner: AccountRow, guard?: (tx: DbClient) => Promise<void>): Promise<void> {
   const driver = await driverForAccount(owner, "write");
   await withStorageTransaction(db(), async (tx, undo) => {
+    await guard?.(tx);
     await deleteAccountRow(tx, owner.id);
     const location = { accountId: owner.id, segments: [] };
     const trashed = await driver.moveToTrash(location);

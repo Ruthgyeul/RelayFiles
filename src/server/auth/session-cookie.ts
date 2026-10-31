@@ -1,4 +1,5 @@
 import "server-only";
+import { AUTH } from "@/config/policy";
 import { z } from "zod";
 import { decodeSigned, encodeSigned } from "./signed-cookie";
 
@@ -9,10 +10,8 @@ import { decodeSigned, encodeSigned } from "./signed-cookie";
  * database lookup, so signing out on another device takes effect immediately.
  */
 export const SESSION_COOKIE = "rf_s";
-/** One year; the sessions inside expire with their accounts. */
-export const SESSION_COOKIE_MAX_AGE = 365 * 24 * 60 * 60;
-/** Upper bound on accounts signed in on one device. */
-export const MAX_SESSIONS_PER_DEVICE = 10;
+export const SESSION_COOKIE_MAX_AGE = AUTH.sessionCookieMaxAgeSec;
+export const MAX_SESSIONS_PER_DEVICE = AUTH.maxSessionsPerDevice;
 
 const payloadSchema = z.object({
   v: z.literal(1),

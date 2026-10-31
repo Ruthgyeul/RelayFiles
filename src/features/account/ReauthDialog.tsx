@@ -15,7 +15,7 @@ export interface ReauthDialogProps {
   api?: Pick<AccountApi, "reauthenticate">;
 }
 
-/** "Confirm it's you": an admin enters their token again before an account or token action. */
+/** "Confirm it's you": the token entered again before showing or replacing it, or deleting an account. */
 export function ReauthDialog({ open, onConfirmed, onCancel, api = accountApi }: ReauthDialogProps) {
   const [token, setToken] = useState("");
   const [error, setError] = useState("");
@@ -46,7 +46,7 @@ export function ReauthDialog({ open, onConfirmed, onCancel, api = accountApi }: 
     <Modal open={open} onClose={() => close(false)} width={420} layer="subdialog">
       <ModalHeader title="Confirm it's you" titleSize={17} onClose={() => close(false)} />
       <ModalBody className="gap-3.5">
-        <p className="m-0 text-[14px] leading-[1.5] text-pretty text-t2">This admin action needs your account token again.</p>
+        <p className="m-0 text-[14px] leading-[1.5] text-pretty text-t2">This action needs your account token again.</p>
         <form onSubmit={submit} className="flex flex-col gap-3.5">
           <label className="flex flex-col gap-1.5 text-[13px] font-bold text-t2">
             Account token

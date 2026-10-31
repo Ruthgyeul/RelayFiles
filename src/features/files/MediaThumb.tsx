@@ -2,7 +2,7 @@
 
 import type { NodeItem } from "@/contracts/nodes";
 import { MediaPreview } from "@/features/viewer/MediaPreview";
-import { fileUrls } from "./api";
+import { fileUrls } from "@/shared/lib/files-api";
 
 export { ResumeBar } from "@/features/viewer/MediaPreview";
 

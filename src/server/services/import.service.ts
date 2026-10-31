@@ -7,7 +7,8 @@ import type { UploadedFile } from "@/contracts/uploads";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import type { AccountRow } from "../repositories/account.repo";
-import { findNode, findRootFolder, relativePaths } from "../repositories/node.repo";
+import { findNode, findRootFolder } from "../repositories/node.repo";
+import { relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { DIR_MODE, FILE_MODE, layoutOf } from "../storage/layout";
 import { driverFor } from "../storage/registry";
@@ -41,7 +42,7 @@ export async function openImportTarget(owner: Owner, ignoreQuota: boolean): Prom
  * already at the same path with the same size is skipped, so an interrupted import can be
  * re-run; a different file with that name is kept next to it as "name (2)".
  */
-export async function importFile(target: ImportTarget, rel: string, size: number, source: AsyncIterable<Uint8Array>): Promise<ImportResult> {
+export async function importFile(target: ImportTarget, rel: string, size: number, source: AsyncIterable<Uint8Array>, modifiedAt: Date | null = null): Promise<ImportResult> {
   checkRelPath(rel);
   const current = target.existing.get(rel);
   if (current?.type === "FILE" && (await findNode(db(), target.owner.id, current.id))?.size === BigInt(size)) {
@@ -62,7 +63,7 @@ export async function importFile(target: ImportTarget, rel: string, size: number
     await pipeline(source, createWriteStream(tempPath, { flags: "wx", mode: FILE_MODE }));
     if ((await stat(tempPath)).size !== size) throw new Error(`Short read for ${rel}`);
     const batch: UploadBatch = { accountId: target.owner.id, volumeId: volume.id, folderId: target.rootId, fromHome: false, dup: "keep", files: [{ rel, size }] };
-    return { status: "imported", file: await finalizeUpload(target.owner, batch, 0, uploadId) };
+    return { status: "imported", file: await finalizeUpload(target.owner, batch, 0, uploadId, modifiedAt) };
   } catch (error) {
     await unlink(tempPath).catch(() => undefined);
     throw error;

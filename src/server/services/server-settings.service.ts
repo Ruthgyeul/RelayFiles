@@ -1,12 +1,14 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { SETTINGS } from "@/config/policy";
 import { getAppEnv } from "@/config/env";
 import { isThemeKey, type ThemeKey } from "@/config/theme";
 import type { SignupMode } from "@/contracts/auth";
 import type { AnnouncementDto, AnnouncementLevel, ServerSettings } from "@/contracts/server-settings";
 import { newInviteCode } from "@/domain/ids";
 import { cached, invalidate } from "../cache/cached";
-import { db, Prisma } from "../db/client";
+import { db } from "../db/client";
+import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { latestAnnouncement, liveAnnouncement, publishAnnouncement, takeDownAnnouncements } from "../repositories/announcement.repo";
@@ -14,8 +16,6 @@ import { createInvite, getServerConfig, listInvites, revokeInvite, updateServerC
 
 /** The theme is read on every page render, so it is cached briefly. */
 const THEME_CACHE_KEY = "settings:theme";
-const THEME_CACHE_SEC = 60;
-const INVITE_ATTEMPTS = 5;
 
 type AnnouncementRow = NonNullable<Awaited<ReturnType<typeof latestAnnouncement>>>;
 const toAnnouncement = (row: AnnouncementRow): AnnouncementDto => ({
@@ -30,7 +30,7 @@ const toAnnouncement = (row: AnnouncementRow): AnnouncementDto => ({
 export async function currentTheme(): Promise<ThemeKey> {
   const fallback = getAppEnv().DEFAULT_THEME;
   try {
-    const stored = await cached(THEME_CACHE_KEY, THEME_CACHE_SEC, async () => (await getServerConfig(db())).theme);
+    const stored = await cached(THEME_CACHE_KEY, SETTINGS.themeCacheSec, async () => (await getServerConfig(db())).theme);
     return stored && isThemeKey(stored) ? stored : fallback;
   } catch (error) {
     logger.warn("theme not loaded, using the default", { error });
@@ -77,18 +77,14 @@ export async function takeDownAnnouncement(): Promise<void> {
   await takeDownAnnouncements(db());
 }
 
-/** A new one-time invite code (design `genInvite`, XXXX-XXXX). */
+/** A new one-time invite code (XXXX-XXXX). */
 export async function generateInvite(): Promise<string> {
-  for (let attempt = 1; ; attempt++) {
+  // A code that is already taken is drawn again.
+  return retryOnUniqueViolation(async () => {
     const code = newInviteCode();
-    try {
-      await createInvite(db(), code);
-      return code;
-    } catch (error) {
-      const taken = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-      if (!taken || attempt >= INVITE_ATTEMPTS) throw error;
-    }
-  }
+    await createInvite(db(), code);
+    return code;
+  });
 }
 
 export async function revokeInviteCode(code: string): Promise<void> {

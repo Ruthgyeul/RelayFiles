@@ -5,7 +5,7 @@ import { buildNodeMenu, type NodeActions } from "./node-menu";
 const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
 const noop = () => undefined;
 const all: Required<NodeActions> = Object.fromEntries(
-  ["open", "preview", "download", "downloadZip", "share", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rename", "copy", "move", "delete", "properties"].map((key) => [key, noop]),
+  ["open", "preview", "download", "downloadZip", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rename", "copy", "move", "delete", "renumber", "duplicates", "properties"].map((key) => [key, noop]),
 ) as Required<NodeActions>;
 
 const folder: Pick<NodeItem, "type" | "kind" | "settings"> = { type: "folder", kind: null, settings };
@@ -14,11 +14,12 @@ const video: Pick<NodeItem, "type" | "kind" | "settings"> = { type: "file", kind
 const labels = (entries: ReturnType<typeof buildNodeMenu>) => entries.map((entry) => `${entry.separator ? "| " : ""}${entry.label}`);
 
 describe("buildNodeMenu (design nodeMenu)", () => {
-  it("builds the folder menu in four groups", () => {
+  it("builds the folder menu in its groups, folder tools before properties", () => {
     expect(labels(buildNodeMenu(folder, false, false, all))).toEqual([
       "Open",
       "Download",
       "| Share",
+      "Upload links",
       "Tags",
       "Direct link",
       "New link",
@@ -28,6 +29,8 @@ describe("buildNodeMenu (design nodeMenu)", () => {
       "Copy",
       "Move",
       "Delete",
+      "| Renumber files",
+      "Find duplicates",
       "| Properties",
     ]);
   });
@@ -38,6 +41,7 @@ describe("buildNodeMenu (design nodeMenu)", () => {
     expect(labels(entries)).toContain("Expiry & access");
     expect(labels(entries)).toContain("Resume downloads");
     expect(entries.find((entry) => entry.label === "Delete")?.danger).toBe(true);
+    expect(labels(entries)).not.toContain("Renumber files");
   });
 
   it("hides root-only exclusions, other-file preview and missing actions", () => {

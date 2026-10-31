@@ -14,12 +14,12 @@ C="docker compose --env-file .env -f deploy/docker-compose.yml"
 $C ps                                  # 서비스 상태 (app은 healthy여야 한다)
 curl -fsS http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/api/health
 $C logs -f --tail 100 app worker nginx
-sudo tail -f /var/log/relayfiles/error.log
+sudo tail -f /var/log/relayfiles/app-error.log      # 워커: worker-error.log, npm 스크립트: tools-error.log
 ```
 
 앱 로그(`LOG_DIR`)와 Nginx 접근 로그에는 토큰, 비밀번호, 클라이언트 IP가 남지 않는다. Nginx 에러 로그(`client: …`)에는 주소가 남으므로 공유하지 않는다. 문제를 찾을 때는 에러 화면의 요청 ID로 `combined.log`를 검색한다.
 
-로그 파일은 크기로 순환한다. `LOG_DIR`의 `error.log`·`combined.log`는 20MB × 5개(`src/config/policy.ts`의 `LOGS`), 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10MB × 5)까지만 남는다.
+로그 파일은 크기로 순환한다. `LOG_DIR`의 프로세스별 `<app|worker|tools>-error.log`·`-combined.log`(`LOG_SERVICE`)는 각각 20MB × 5개(`src/config/policy.ts`의 `LOGS`), 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10MB × 5)까지만 남는다.
 
 ### 좀비 프로세스 점검
 
@@ -46,6 +46,7 @@ rm deploy/maintenance/on       # 해제
 |---|---|---|
 | PostgreSQL | `deploy/scripts/backup.sh` → `DATA_DIR/backups/relayfiles-*.dump` (최근 `BACKUP_KEEP`=14개) | 매일 (cron) + 릴리스마다 |
 | 파일 (SSD) | `rsync -aHAX --delete /mnt/relayfilesDB/ <백업 디스크>/relayfilesDB/` | 매일 또는 매주 |
+| DB 덤프 + 원본 파일 (서버 밖) | `deploy/scripts/offsite-backup.sh` → restic 저장소(R2·B2, 암호화·중복 제거, 아래 "오프사이트 백업") | 매일 (cron, DB 백업 뒤) |
 | `.env`, `/etc/relayfiles/ssd.key` | 서버 밖 안전한 곳 (비밀번호 관리자 등) | 바뀔 때마다 |
 | Redis | 백업하지 않는다 (캐시, 세션, 큐. 다시 만들어진다) | — |
 
@@ -56,6 +57,106 @@ rm deploy/maintenance/on       # 해제
 ```
 
 백업 디스크로 파일을 복사할 때 앱을 멈출 필요는 없다(파일은 원본 그대로 저장되고 업로드는 임시 폴더에서 완성된 뒤 옮겨진다). 단, DB 백업과 시점을 맞추려면 DB 백업 직후에 실행한다.
+
+## 오프사이트 백업
+
+같은 서버나 같은 집의 백업 디스크는 화재·도난·랜섬웨어에 함께 잃는다. `offsite-backup.sh`가 [restic](https://restic.net)으로 DB 덤프(`DATA_DIR/backups`)와 원본 파일(`STORAGE_ROOT/users`, 추가 볼륨은 `OFFSITE_EXTRA_PATHS`)을 서버 밖 저장소에 보낸다. Docker·systemd 배포 모두 같은 스크립트다(호스트의 `restic`을 쓴다).
+
+- restic이 보내기 전에 암호화하므로(`RESTIC_PASSWORD`) 저장소 운영자도 내용을 볼 수 없다. 같은 내용은 한 번만 저장되고(중복 제거) 매일 바뀐 부분만 올라간다.
+- 썸네일·미리보기·휴지통·업로드 조각(`system/`)은 보내지 않는다. 복원한 뒤 `npm run media:backfill`로 다시 만든다.
+- 보관: 실행마다 `restic forget --prune`이 날마다 `OFFSITE_KEEP_DAILY`(7)·주마다 `OFFSITE_KEEP_WEEKLY`(4)·달마다 `OFFSITE_KEEP_MONTHLY`(6)개 스냅숏만 남긴다.
+- 주간 [백업 검증](#백업-검증)이 저장소 데이터의 `OFFSITE_CHECK_PERCENT`(5%)를 내려받아 확인한다(`restic check --read-data-subset`). 실패하면 Backup check 행이 failing이 된다.
+
+설정:
+
+1. `sudo apt install restic`
+2. 저장소를 만든다. Cloudflare R2: 버킷을 만들고, 그 버킷에만 Object Read & Write 권한이 있는 API 토큰을 발급한다(Backblaze B2도 S3 API로 같다).
+3. `.env`에 넣는다. `RESTIC_PASSWORD`는 `npm run env:secrets`가 만든 값을 쓰고 **서버 밖(비밀번호 관리자)에도 보관**한다. 잃으면 백업을 열 수 없다.
+
+   ```dotenv
+   RESTIC_REPOSITORY=s3:https://<계정 id>.r2.cloudflarestorage.com/<버킷>/relayfiles
+   RESTIC_PASSWORD=…
+   OFFSITE_ACCESS_KEY_ID=…
+   OFFSITE_SECRET_ACCESS_KEY=…
+   ```
+
+4. 처음 한 번 직접 실행한다(저장소가 없으면 만든다): `sudo deploy/scripts/offsite-backup.sh`
+5. root crontab(`sudo crontab -e`)에 DB 백업(03:15) 뒤로 건다. 모든 계정의 파일을 읽어야 하므로 root로 실행한다.
+
+   ```cron
+   # Docker
+   45 3 * * * cd /home/ruthgyeul/RelayFiles && deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1
+   # systemd
+   45 3 * * * /opt/relayfiles/deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1
+   ```
+
+복원(새 서버나 디스크 교체 뒤): `.env`의 restic 값 네 개를 셸에 내보낸 뒤(`export RESTIC_REPOSITORY=… RESTIC_PASSWORD=… AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…`)
+
+```bash
+restic snapshots --host relayfiles                                   # 스냅숏 목록
+restic restore latest --host relayfiles --target /tmp/rf-restore       # 원래 절대경로 아래로 풀린다
+sudo rsync -aHAX /tmp/rf-restore/<STORAGE_ROOT>/users/ <STORAGE_ROOT>/users/
+```
+
+그다음 덤프를 ["DB 복구"](#db-복구)로 되살리고, `storage:fsck`로 대조한 뒤 `npm run media:backfill`로 썸네일을 다시 만든다.
+
+## 백업 검증
+
+백업은 복원해 봐야 쓸 수 있는지 안다. 매주 `verify-backup.sh`가 최신 덤프를 운영 DB와 분리된 곳에 복원하고(`npm run backup:verify`) 다음을 확인한다.
+
+| 검사 | 실패 조건 (`src/config/policy.ts`의 `BACKUP`) |
+|---|---|
+| 덤프 시각 | `verifyMaxDumpAgeHours`(26시간)보다 오래됨 |
+| 스키마 | 복원본의 마지막 마이그레이션(`_prisma_migrations`)이 코드의 최신 마이그레이션과 다름 |
+| 행 수 | 계정·항목·공개 링크가 운영에 있는데 복원본에 0개, 또는 운영보다 `verifyMaxDriftPct`(20%) 넘게 적음 |
+| 디스크 | `storage:fsck`(보고만, `--fix` 없음)가 찾은 차이(디스크에만 있는 항목, 없어진 파일, 크기 다른 파일)가 1개 이상 |
+| 오프사이트 | `RESTIC_REPOSITORY`가 있으면 `restic check --read-data-subset=OFFSITE_CHECK_PERCENT%`가 실패 |
+
+- 복원할 곳: Docker는 운영과 같은 `postgres` 이미지의 임시 컨테이너(데이터 볼륨 없음, 끝나면 지움). systemd는 로컬 PostgreSQL의 임시 DB `relayfiles_verify`(`VERIFY_DB`, 끝나면 지움).
+- 결과는 `DATA_DIR/backup-verify.log`에 한 줄 JSON으로 쌓이고, DB(`BackupCheck`, 최근 52개)에 저장돼 Server 페이지 Services의 **Backup check** 행에 보인다. 실패하면 `tools-error.log`에 `backup check failed`가 남고 스크립트가 1로 끝난다(cron 메일로 받을 수 있다).
+- fsck 차이는 백업이 아니라 운영 디스크의 문제일 수 있다. ["DB와 디스크 대조"](#db와-디스크-대조-storagefsck)로 확인한다.
+
+매주 일요일 05:15, 그날 DB 백업과 rsync가 끝난 뒤 (crontab -e):
+
+```cron
+# Docker
+15 5 * * 0 cd /home/ruthgyeul/RelayFiles && deploy/scripts/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
+# systemd (root crontab: 임시 DB를 postgres 계정으로 만들고 지운다)
+15 5 * * 0 cd /opt/relayfiles && deploy/scripts/systemd/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
+```
+
+## Prometheus·Grafana
+
+`/metrics`가 서버 지표를 Prometheus 형식으로 내보낸다. 관리자 계정으로 My Profile → **API tokens**에서 `Server metrics (admins)` 범위만 있는 토큰을 만들고, Prometheus가 `ADMIN_ALLOWED_CIDRS` 안(예: LAN)에서 긁게 한다.
+
+```yaml
+scrape_configs:
+  - job_name: relayfiles
+    scheme: https            # LAN http면 http
+    metrics_path: /metrics
+    scrape_interval: 30s     # 토큰당 분당 120회 제한보다 충분히 느리게
+    authorization:
+      credentials_file: /etc/prometheus/relayfiles-token   # rfp_… 한 줄, chmod 600
+    static_configs:
+      - targets: ["files.example.com"]
+```
+
+| 지표 | 뜻 |
+|---|---|
+| `relayfiles_cpu_usage_percent`, `relayfiles_load1`, `relayfiles_memory_used_bytes` | 호스트 CPU·부하·메모리 |
+| `relayfiles_network_transmit_bytes_per_second`, `_receive_` | 지금 송수신 속도 |
+| `relayfiles_storage_used_bytes`, `relayfiles_storage_total_bytes` | 스토리지 볼륨 합계 |
+| `relayfiles_disk_read_bytes_per_second{disk}`, `_write_` | 워커의 최신 디스크 I/O 표본 |
+| `relayfiles_active_streams`, `relayfiles_active_uploads`, `relayfiles_accounts` | 최근 1분 재생·업로드, 계정 수 |
+| `relayfiles_served_bytes_today` | 오늘(UTC) 내보낸 파일 바이트(계정 합계) |
+| `relayfiles_transcodes_running`, `relayfiles_transcodes_started_total` | 실시간 영상 변환 수 |
+| `relayfiles_media_queue_jobs{state}` | 썸네일·미리보기 작업 큐(waiting·active·delayed) |
+| `relayfiles_health_up{component}` | Status 페이지 구성 요소의 최신 헬스 프로브 |
+| `relayfiles_service_up{service}` | Server 페이지 Services 행(1 = running·scheduled·healthy) |
+| `relayfiles_backup_check_ok`, `relayfiles_backup_check_timestamp_seconds` | 마지막 백업 검증 결과와 시각 |
+| `relayfiles_scrape_errors`, `relayfiles_up` | 읽지 못한 지표 묶음 수(예: Redis 장애), 앱 응답 |
+
+알림 예: `relayfiles_backup_check_ok == 0`, `time() - relayfiles_backup_check_timestamp_seconds > 8 * 86400`, `min(relayfiles_health_up) == 0`, `relayfiles_storage_used_bytes / relayfiles_storage_total_bytes > 0.9`.
 
 ## DB 복구
 
@@ -135,7 +236,7 @@ $C run --rm tools npm run admin:create   # 새 관리자 계정. 이전 관리�
 
 ## 감사 로그 보기
 
-관리자 작업(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대, 관리자 토큰 보기·재발급)은 `AuditEvent`에 1년간 남는다.
+관리자 작업(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대, 관리자 토큰 보기·재발급, 공지, 테마, 장애)은 `AuditEvent`에 1년간 남는다.
 
 ```bash
 curl -s -b "rf_s=<관리자 쿠키>" https://<도메인>/api/admin/audit | jq '.data.events[:20]'
@@ -162,6 +263,13 @@ $C exec postgres psql -U relayfiles -c 'SELECT at, "actorName", action, "targetI
 1. `src/server/migrations/<날짜>-<이름>.ts`에 `DataMigrationStep`을 만든다. `id`는 바꾸지 않는다.
 2. `run({ db, cursor, save })`는 `MIGRATION.batchSize`(1,000)행씩 처리하고 배치마다 `save(cursor)`를 부른다. 다시 실행해도 결과가 같아야 한다.
 3. `src/server/migrations/registry.ts`의 `DATA_MIGRATIONS` 끝에 추가한다.
+
+등록된 데이터 마이그레이션:
+
+| id | 하는 일 | 시간 |
+|---|---|---|
+| `20261101-backfill-modified-at` | 수정 시각(`modifiedAt`)이 없는 파일에 디스크 mtime을 채운다(파일이 없으면 생성 시각). OFFLINE 볼륨의 파일은 건너뛰고 경고 로그 | 파일 1만 개당 수 초(행마다 경로 조회 + `stat`) |
+| `20261101-backfill-sha256` | SHA-256이 없는 파일을 해시한다. 업로드는 처음부터 해시를 기록했으므로 보통 대상이 0개다. 없거나 크기가 다른 파일은 비워 두고 경고 로그(`storage:fsck`로 확인) | 대상 파일 크기만큼 읽는다(SSD 기준 수백 MB/s) |
 
 진행 상황은 `DataMigration` 테이블에 남는다. 중간에 멈추면 다음 실행이 저장된 커서 다음부터 이어 간다. 끝난 마이그레이션은 다시 실행하지 않는다.
 
@@ -321,4 +429,4 @@ $C up -d app worker
 
 ## 의존성 업데이트
 
-Dependabot(`.github/dependabot.yml`)이 보안 수정은 바로, 나머지는 매주 월요일에 PR로 올린다. npm은 minor·patch를 한 PR로 묶고, 메이저 버전은 따로 올린다. 대상은 npm, GitHub Actions(커밋 SHA로 고정), Dockerfile 베이스 이미지, `deploy/docker-compose.yml` 이미지다. CI `Security` 잡은 런타임 의존성의 high 이상 advisory(`npm audit --omit=dev --audit-level=high`)와 커밋에 들어간 비밀값(gitleaks)을 막고, `docker` 잡은 이미지의 수정판이 있는 critical CVE(grype)를 막는다. CodeQL은 저장소의 기본 코드 스캐닝 설정으로 돈다.
+Dependabot(`.github/dependabot.yml`)이 보안 수정은 바로, 나머지는 매주 월요일에 PR로 올린다. npm은 minor·patch를 한 PR로 묶고, 메이저 버전은 따로 올린다. 대상은 npm, GitHub Actions(커밋 SHA로 고정), Dockerfile 베이스 이미지, `deploy/docker-compose.yml` 이미지다. 이미지는 태그와 digest(`name:tag@sha256:…`)로 고정한다. 같은 태그가 다른 이미지로 바뀌어도 서버에 들어오지 않고, Dependabot이 새 digest를 PR로 올린다. CI `Security` 잡은 런타임 의존성의 high 이상 advisory(`npm audit --omit=dev --audit-level=high`)와 커밋에 들어간 비밀값(gitleaks)을 막고, `docker` 잡은 이미지의 수정판이 있는 critical CVE(grype)를 막고, tools 이미지에 `.dockerignore` 허용 목록 밖의 파일·테스트·devDependencies가 없는지 본다. `Workflows · shell scripts` 잡은 워크플로(actionlint, 체크섬으로 고정한 릴리스)와 배포 셸 스크립트(`shellcheck -x`, 설정은 `.shellcheckrc`)를 검사한다. `arm64 images` 워크플로는 Pi 클러스터용 `app`·`tools` 이미지가 linux/arm64로 빌드되는지 QEMU로 확인한다(`main` push와 `Dockerfile`·`.dockerignore`·`deploy/`·`package*.json`을 바꾼 PR, 푸시는 하지 않는다). CodeQL은 저장소의 기본 코드 스캐닝 설정으로 돈다.
