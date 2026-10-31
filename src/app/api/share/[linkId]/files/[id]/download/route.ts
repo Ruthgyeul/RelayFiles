@@ -2,7 +2,7 @@ import { nodeIdSchema } from "@/contracts/nodes";
 import { linkIdSchema } from "@/contracts/share";
 import { clientInfo } from "@/server/auth/client-info";
 import { apiHandler } from "@/server/http/api-handler";
-import { serveSharedFile } from "@/server/services/share-files.service";
+import { serveSharedFile } from "@/server/share/share-files.service";
 import { shareViewerOf } from "@/server/share/viewer";
 
 /** A visitor's download of a file in a share link (counted; images: metadata removed). */

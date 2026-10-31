@@ -27,8 +27,7 @@ async function stillAdmin(req: NextRequest): Promise<boolean> {
  * most METRICS.streamMaxLifetimeMs (EventSource reconnects through the same checks), and an
  * account holds at most METRICS.streamMaxPerAccount at once.
  */
-export const GET = apiHandler<Response>(async ({ req }) => {
-  const admin = requireAdmin(await deviceOf(req));
+export const GET = apiHandler<Response>({ auth: "admin" }, async ({ req, active: admin }) => {
   const accountId = admin.account.id;
   if ((openStreams.get(accountId) ?? 0) >= METRICS.streamMaxPerAccount) throw new ApiError("RATE_LIMITED", "Too many open Server pages.");
   openStreams.set(accountId, (openStreams.get(accountId) ?? 0) + 1);

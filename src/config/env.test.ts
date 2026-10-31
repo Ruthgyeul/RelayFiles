@@ -96,3 +96,19 @@ describe("logLevelOf", () => {
     expect(logLevelOf("production", parseEnvGroup("observability", { LOG_LEVEL: "info" }))).toBe("info");
   });
 });
+
+describe("offsite backup settings", () => {
+  it("is off without a repository and keeps the default retention", () => {
+    expect(parseEnvGroup("offsite", {})).toEqual({ OFFSITE_KEEP_DAILY: 7, OFFSITE_KEEP_WEEKLY: 4, OFFSITE_KEEP_MONTHLY: 6, OFFSITE_CHECK_PERCENT: 5 });
+  });
+
+  it("needs a password with a repository, a known backend and absolute extra paths", () => {
+    const repo = "s3:https://acc.r2.cloudflarestorage.com/bucket/relayfiles";
+    expect(() => parseEnvGroup("offsite", { RESTIC_REPOSITORY: repo })).toThrow(EnvError);
+    expect(parseEnvGroup("offsite", { RESTIC_REPOSITORY: repo, RESTIC_PASSWORD: "p".repeat(16) }).RESTIC_REPOSITORY).toBe(repo);
+    expect(() => parseEnvGroup("offsite", { RESTIC_REPOSITORY: "/local/dir", RESTIC_PASSWORD: "p".repeat(16) })).toThrow(EnvError);
+    expect(() => parseEnvGroup("offsite", { RESTIC_PASSWORD: "short" })).toThrow(EnvError);
+    expect(parseEnvGroup("offsite", { OFFSITE_EXTRA_PATHS: "/mnt/a/users /mnt/b/users" }).OFFSITE_EXTRA_PATHS).toBe("/mnt/a/users /mnt/b/users");
+    expect(() => parseEnvGroup("offsite", { OFFSITE_EXTRA_PATHS: "relative/users" })).toThrow(EnvError);
+  });
+});

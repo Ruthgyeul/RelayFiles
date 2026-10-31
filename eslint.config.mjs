@@ -59,6 +59,8 @@ const eslintConfig = defineConfig([
           ],
         },
       ],
+      // File-level cycles; scripts/check-feature-cycles.mjs checks the features as a whole.
+      "import/no-cycle": ["error", { ignoreExternal: true }],
     },
   },
   {
@@ -69,6 +71,36 @@ const eslintConfig = defineConfig([
       "no-restricted-properties": [
         "error",
         { object: "crypto", property: "randomUUID", message: "Not available over plain http (secure contexts only); use a counter or useId()." },
+      ],
+    },
+  },
+  {
+    // Queries live in src/server/repositories. Elsewhere db() is only passed to repositories or
+    // opens a transaction ($transaction, $disconnect, $queryRaw for the health check).
+    files: ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,mts,ts}"],
+    ignores: ["src/server/repositories/**", "src/server/db/**", "**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.type='CallExpression'][object.callee.name='db'][property.name=/^[a-z]/]",
+          message: "Query the database through a function in src/server/repositories.",
+        },
+      ],
+    },
+  },
+  {
+    // Route handlers and pages reach the database only through services.
+    files: ["src/app/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@/server/db/*", "@/server/repositories/*"], message: "Call a service in src/server/services instead." },
+          ],
+        },
       ],
     },
   },

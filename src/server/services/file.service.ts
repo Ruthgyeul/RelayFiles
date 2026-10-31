@@ -1,15 +1,17 @@
 import "server-only";
 import { mimeFromName } from "@/domain/upload";
 import { db } from "../db/client";
-import { sendFile } from "../files/send-file";
-import { sendAsset, sendThumb } from "../files/send-thumb";
+import { sendFile } from "../http/send-file";
+import { sendAsset, sendThumb } from "../http/send-thumb";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { transcodeResponse } from "../media/transcode";
+import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
 import type { AccountRow } from "../repositories/account.repo";
-import { ancestorChain, findNode } from "../repositories/node.repo";
+import { findNode } from "../repositories/node.repo";
 import { addTraffic } from "../repositories/traffic.repo";
 import { driverForAccount } from "./volume.service";
+import { locationOf } from "./node-location";
 import { markActive } from "../metrics/activity";
 
 type Owner = Pick<AccountRow, "id" | "volumeId">;
@@ -18,9 +20,8 @@ type Owner = Pick<AccountRow, "id" | "volumeId">;
 export async function serveOwnFile(req: Request, owner: Owner, nodeId: string, mode: "download" | "stream"): Promise<Response> {
   const row = await findNode(db(), owner.id, nodeId);
   if (!row || row.type !== "FILE") throw new ApiError("NOT_FOUND");
-  const chain = await ancestorChain(db(), row.id);
   const driver = await driverForAccount(owner);
-  const location = { accountId: owner.id, segments: chain.slice(1).map((ancestor) => ancestor.name) };
+  const location = await locationOf(owner.id, row.id);
   if (mode === "stream" && req.method === "GET") void markActive("stream", `${row.id}:${owner.id}`);
   return sendFile(req, {
     driver,
@@ -59,9 +60,12 @@ export async function serveOwnPreview(req: Request, owner: Owner, nodeId: string
 export async function serveOwnTranscode(req: Request, owner: Owner, nodeId: string): Promise<Response> {
   const row = await findNode(db(), owner.id, nodeId);
   if (!row || row.type !== "FILE" || row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
-  const chain = await ancestorChain(db(), row.id);
-  const path = await (await driverForAccount(owner)).localPath({ accountId: owner.id, segments: chain.slice(1).map((ancestor) => ancestor.name) });
-  if (!path) throw new ApiError("NOT_FOUND");
+  const driver = await driverForAccount(owner);
   if (req.method === "GET") void markActive("stream", `${row.id}:${owner.id}`);
+  const stored = await sendStoredTranscode(req, driver, owner.id, row);
+  if (stored) return stored;
+  const path = await driver.localPath(await locationOf(owner.id, row.id));
+  if (!path) throw new ApiError("NOT_FOUND");
+  if (req.method === "GET") void notePlay(row.id);
   return transcodeResponse(req, path);
 }

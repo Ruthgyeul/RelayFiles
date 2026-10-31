@@ -8,6 +8,8 @@ export type TransferStatus = "active" | "paused" | "complete" | "error" | "hande
 
 export interface TransferProgress {
   status: TransferStatus;
+  /** Downloads into a folder finish as "saved"; uploads as "uploaded". */
+  direction?: "up" | "down";
   files: number;
   folders: number;
   total: number;
@@ -21,12 +23,12 @@ export interface TransferProgress {
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
-/** Whole percent done (design `pct`). */
+/** Whole percent done. */
 export function percentDone(progress: Pick<TransferProgress, "done" | "total">): number {
   return progress.total > 0 ? Math.floor((progress.done / progress.total) * 100) : 100;
 }
 
-/** Second line of a transfer card (design `meta`). */
+/** Second line of a transfer card. */
 export function transferMeta(progress: TransferProgress): string {
   const head = `${progress.folders ? `${plural(progress.folders, "folder")} · ` : ""}${plural(progress.files, "file")} · ${formatSize(progress.total)}`;
   const percent = percentDone(progress);
@@ -40,7 +42,7 @@ export function transferMeta(progress: TransferProgress): string {
     case "handed":
       return `${head} · saving in your browser`;
     default:
-      return `${head} · in ${formatClock(progress.elapsed)} · uploaded`;
+      return `${head} · in ${formatClock(progress.elapsed)} · ${progress.direction === "down" ? "saved" : "uploaded"}`;
   }
 }
 

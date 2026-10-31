@@ -72,6 +72,13 @@ test("selection, menu and properties", async ({ page }) => {
   await expect(dialog.getByText("0 files, 0 folders")).toBeVisible();
   await expect(dialog.getByText("Deleted with account")).toBeVisible();
   await expect(dialog.getByText(/\/d\/[a-z0-9]{10}$/)).toBeVisible();
+  // The QR code is drawn in the page for the same link.
+  const link = (await dialog.getByText(/\/d\/[a-z0-9]{10}$/).textContent())!;
+  await dialog.getByRole("button", { name: "QR code" }).click();
+  const qr = dialog.getByRole("img", { name: `QR code for ${link}` });
+  await expect(qr).toBeVisible();
+  expect(await qr.locator("path").getAttribute("d")).toMatch(/^M\d+ \d+h\d+v1h-\d+z/);
+  await expect(dialog.getByText("Private link: it opens only where you are signed in")).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Folder menu" }).click();

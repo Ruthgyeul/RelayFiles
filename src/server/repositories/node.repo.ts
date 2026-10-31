@@ -55,6 +55,7 @@ export const NODE_SELECT = {
   downloads: true,
   tags: true,
   createdAt: true,
+  modifiedAt: true,
 } as const;
 
 export type NodeRow = NonNullable<Awaited<ReturnType<typeof findNode>>>;
@@ -122,44 +123,11 @@ export function listFolders(db: DbClient, accountId: string) {
   return db.node.findMany({ where: { accountId, type: "FOLDER" }, select: { id: true, name: true, parentId: true, visibility: true } });
 }
 
-export interface AncestorRow {
-  id: string;
-  name: string;
-  visibility: "INHERIT" | "PRIVATE" | "PUBLIC";
-}
-
-/** The chain from the account root down to `nodeId` (inclusive). */
-export async function ancestorChain(db: DbClient, nodeId: string): Promise<AncestorRow[]> {
-  const rows = await db.$queryRaw<(AncestorRow & { depth: number })[]>`
-    WITH RECURSIVE chain AS (
-      SELECT id, "parentId", name, visibility, 0 AS depth FROM "Node" WHERE id = ${nodeId}
-      UNION ALL
-      SELECT n.id, n."parentId", n.name, n.visibility, c.depth + 1 FROM "Node" n JOIN chain c ON n.id = c."parentId"
-    )
-    SELECT id, name, visibility::text AS visibility, depth FROM chain ORDER BY depth DESC`;
-  return rows.map(({ id, name, visibility }) => ({ id, name, visibility }));
-}
-
 /** Direct child counts for folders. */
 export async function childCounts(db: DbClient, parentIds: string[]): Promise<Map<string, number>> {
   if (parentIds.length === 0) return new Map();
   const rows = await db.node.groupBy({ by: ["parentId"], where: { parentId: { in: parentIds } }, _count: { _all: true } });
   return new Map(rows.map((row) => [row.parentId!, row._count._all]));
-}
-
-/** Total file bytes and file count below each folder (recursive). */
-export async function folderSizes(db: DbClient, folderIds: string[]): Promise<Map<string, { size: bigint; files: number }>> {
-  if (folderIds.length === 0) return new Map();
-  const rows = await db.$queryRaw<{ id: string; size: bigint; files: bigint }[]>`
-    WITH RECURSIVE sub AS (
-      SELECT id AS top, id FROM "Node" WHERE id = ANY(${folderIds})
-      UNION ALL
-      SELECT s.top, n.id FROM "Node" n JOIN sub s ON n."parentId" = s.id
-    )
-    SELECT s.top AS id, COALESCE(SUM(n.size), 0)::bigint AS size, COUNT(n.id)::bigint AS files
-    FROM sub s JOIN "Node" n ON n.id = s.id AND n.type = 'FILE'
-    GROUP BY s.top`;
-  return new Map(rows.map((row) => [row.id, { size: BigInt(row.size), files: Number(row.files) }]));
 }
 
 /** Tags used in an account with how many items carry each, most used first. */
@@ -181,38 +149,6 @@ export function createFolderNode(db: DbClient, data: NewFolder) {
   return db.node.create({ data: { ...data, type: "FOLDER" }, select: NODE_SELECT });
 }
 
-/** Files and folders anywhere below a folder. */
-export async function descendantCounts(db: DbClient, folderId: string): Promise<{ files: number; folders: number }> {
-  const [row] = await db.$queryRaw<{ files: bigint; folders: bigint }[]>`
-    WITH RECURSIVE sub AS (
-      SELECT id, type FROM "Node" WHERE "parentId" = ${folderId}
-      UNION ALL
-      SELECT n.id, n.type FROM "Node" n JOIN sub s ON n."parentId" = s.id
-    )
-    SELECT COUNT(*) FILTER (WHERE type = 'FILE') AS files, COUNT(*) FILTER (WHERE type = 'FOLDER') AS folders FROM sub`;
-  return { files: Number(row?.files ?? 0), folders: Number(row?.folders ?? 0) };
-}
-
-/** Ids of every node below a folder (not including it). */
-export async function descendantIds(db: DbClient, folderId: string): Promise<string[]> {
-  const rows = await db.$queryRaw<{ id: string }[]>`
-    WITH RECURSIVE sub AS (
-      SELECT id FROM "Node" WHERE "parentId" = ${folderId}
-      UNION ALL
-      SELECT n.id FROM "Node" n JOIN sub s ON n."parentId" = s.id
-    )
-    SELECT id FROM sub`;
-  return rows.map((row) => row.id);
-}
-
-/** Full rows of a node and everything below it, parents before children (for copying). */
-export async function subtreeRows(db: DbClient, nodeId: string) {
-  const ids = [nodeId, ...(await descendantIds(db, nodeId))];
-  const rows = await db.node.findMany({ where: { id: { in: ids } } });
-  const order = new Map(ids.map((id, index) => [id, index]));
-  return rows.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-}
-
 export function findNodes(db: DbClient, accountId: string, ids: string[]) {
   return db.node.findMany({ where: { accountId, id: { in: ids } }, select: NODE_SELECT });
 }
@@ -229,55 +165,9 @@ export async function insertNodes(db: DbClient, rows: Prisma.NodeCreateManyInput
   await db.node.createMany({ data: rows });
 }
 
-/** "Apply to all subfolders and files": everything inside follows the folder again. */
-export async function inheritVisibilityBelow(db: DbClient, folderId: string): Promise<void> {
-  const ids = await descendantIds(db, folderId);
-  if (ids.length) await db.node.updateMany({ where: { id: { in: ids } }, data: { visibility: "INHERIT" } });
-}
-
-/** Newest link events of nodes (a folder's log includes everything inside it). */
-export function listLinkEvents(db: DbClient, nodeIds: string[], limit: number) {
-  return db.linkEvent.findMany({ where: { nodeId: { in: nodeIds } }, orderBy: { at: "desc" }, take: limit, select: { kind: true, fileName: true, device: true, ipMasked: true, country: true, at: true } });
-}
-
-export async function addLinkEvent(db: DbClient, data: Prisma.LinkEventUncheckedCreateInput): Promise<void> {
-  await db.linkEvent.create({ data });
-}
-
-/** Keeps the newest `keep` events of a node. */
-export async function trimLinkEvents(db: DbClient, nodeId: string, keep: number): Promise<void> {
-  await db.$executeRaw`
-    DELETE FROM "LinkEvent" WHERE "nodeId" = ${nodeId} AND id NOT IN (
-      SELECT id FROM "LinkEvent" WHERE "nodeId" = ${nodeId} ORDER BY at DESC, id DESC LIMIT ${keep}
-    )`;
-}
-
 /** A child with this exact name, if any. */
 export function findChildByName(db: DbClient, parentId: string, name: string) {
   return db.node.findFirst({ where: { parentId, name }, select: NODE_SELECT });
-}
-
-/** Every node below a folder with its path relative to it ("Photos/a.jpg"). */
-export async function relativePaths(db: DbClient, folderId: string): Promise<Map<string, { id: string; type: "FILE" | "FOLDER" }>> {
-  const rows = await db.$queryRaw<{ id: string; path: string; type: "FILE" | "FOLDER" }[]>`
-    WITH RECURSIVE sub AS (
-      SELECT id, name::text AS path, type FROM "Node" WHERE "parentId" = ${folderId}
-      UNION ALL
-      SELECT n.id, s.path || '/' || n.name, n.type FROM "Node" n JOIN sub s ON n."parentId" = s.id
-    )
-    SELECT id, path, type::text AS type FROM sub`;
-  return new Map(rows.map((row) => [row.path, { id: row.id, type: row.type }]));
-}
-
-/** Every item below a folder with its path, size and "missing" flag (npm run storage:fsck). */
-export function treeEntries(db: DbClient, folderId: string) {
-  return db.$queryRaw<{ id: string; path: string; type: "FILE" | "FOLDER"; size: bigint; missing: boolean }[]>`
-    WITH RECURSIVE sub AS (
-      SELECT id, name::text AS path FROM "Node" WHERE "parentId" = ${folderId}
-      UNION ALL
-      SELECT n.id, s.path || '/' || n.name FROM "Node" n JOIN sub s ON n."parentId" = s.id
-    )
-    SELECT n.id, sub.path, n.type::text AS type, n.size, n.missing FROM sub JOIN "Node" n ON n.id = sub.id`;
 }
 
 /** Marks files found missing on disk (or found again). */
@@ -296,6 +186,8 @@ export interface NewFile {
   size: bigint;
   sha256: string;
   linkId: string;
+  /** The file's own modification time (the uploader's File.lastModified, or the upload time). */
+  modifiedAt: Date;
 }
 
 export function createFileNode(db: DbClient, data: NewFile) {
@@ -314,5 +206,88 @@ export function expiredItemIds(db: DbClient, accountId: string | null, now: Date
   return db.node.findMany({
     where: { ...(accountId ? { accountId } : {}), parentId: { not: null }, OR: [{ expAt: { lte: now } }, { burn: true, downloads: { gte: 1 } }] },
     select: { id: true, accountId: true },
+  });
+}
+
+/** A file of the account with this content and size, other than `exceptId` (deduplication of a re-upload). */
+export function findFileWithContent(db: DbClient, accountId: string, sha256: string, size: bigint, exceptId: string | null) {
+  return db.node.findFirst({
+    where: { accountId, type: "FILE", sha256, size, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+}
+
+/** Direct children with what "Renumber files" sorts and checks by. */
+export function listChildrenForRenumber(db: DbClient, parentId: string) {
+  return db.node.findMany({ where: { parentId }, select: { id: true, name: true, type: true, createdAt: true, modifiedAt: true, takenAt: true, missing: true } });
+}
+
+/**
+ * Serializes renumbering runs of one folder inside a transaction: a second run waits for the
+ * first to commit, then plans again from the names it left.
+ */
+export async function lockFolderForRenumber(tx: DbClient, folderId: string): Promise<void> {
+  const key = `renumber:${folderId}`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+}
+
+/** Files in these folders with their content hash, for "Find duplicates" (at most `take`). */
+export function filesInFolders(db: DbClient, accountId: string, folderIds: string[], take: number) {
+  return db.node.findMany({
+    where: { accountId, type: "FILE", parentId: { in: folderIds } },
+    select: { id: true, name: true, parentId: true, kind: true, size: true, sha256: true, hasThumb: true, createdAt: true, modifiedAt: true },
+    orderBy: { id: "asc" },
+    take,
+  });
+}
+
+/** Files without a modification time, by id, for the backfill data migration. */
+export function filesWithoutModifiedAt(db: DbClient, take: number, afterId: string | null) {
+  return db.node.findMany({
+    where: { type: "FILE", modifiedAt: null, ...(afterId ? { id: { gt: afterId } } : {}) },
+    select: { id: true, accountId: true, createdAt: true, missing: true, account: { select: { volumeId: true } } },
+    orderBy: { id: "asc" },
+    take,
+  });
+}
+
+/** Files without a content hash, by id, for the backfill data migration. */
+export function filesWithoutSha256(db: DbClient, take: number, afterId: string | null) {
+  return db.node.findMany({
+    where: { type: "FILE", sha256: null, ...(afterId ? { id: { gt: afterId } } : {}) },
+    select: { id: true, accountId: true, size: true, missing: true, account: { select: { volumeId: true } } },
+    orderBy: { id: "asc" },
+    take,
+  });
+}
+
+/** Records a value a backfill computed. */
+export async function setFileFacts(db: DbClient, nodeId: string, data: { modifiedAt?: Date; sha256?: string; takenAt?: Date }): Promise<void> {
+  await db.node.update({ where: { id: nodeId }, data });
+}
+
+/**
+ * Renames many children of one folder in a single statement (renumbering) and returns how many
+ * rows changed (fewer when one was deleted or moved meanwhile). Each new name must be free when
+ * its row is written: the unique index is checked row by row.
+ */
+export async function renameChildren(tx: DbClient, folderId: string, renames: readonly { id: string; name: string }[]): Promise<number> {
+  if (renames.length === 0) return 0;
+  const ids = renames.map((rename) => rename.id);
+  const names = renames.map((rename) => rename.name);
+  return tx.$executeRaw`
+    UPDATE "Node" AS n SET name = v.name, "updatedAt" = now()
+    FROM unnest(${ids}::text[], ${names}::text[]) AS v(id, name)
+    WHERE n.id = v.id AND n."parentId" = ${folderId}`;
+}
+
+/** Photos and videos whose date taken was never read, by id (the release data migration queues them). */
+export function mediaWithoutDateTaken(db: DbClient, take: number, afterId: string | null) {
+  return db.node.findMany({
+    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, takenAt: null, missing: false, ...(afterId ? { id: { gt: afterId } } : {}) },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take,
   });
 }

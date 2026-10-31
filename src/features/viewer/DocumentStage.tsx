@@ -2,7 +2,7 @@
 
 import { lazy, Suspense } from "react";
 import type { FileFormat } from "@/domain/file-format";
-import { FORMAT_ICON } from "@/features/files/kind";
+import { FORMAT_ICON } from "@/shared/ui/node-kind";
 import { FontView } from "./FontView";
 import { LoadingPreview, PreviewMessage } from "./PreviewMessage";
 import { SvgView } from "./SvgView";

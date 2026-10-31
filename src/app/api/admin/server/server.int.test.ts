@@ -57,7 +57,7 @@ describe("server metrics", () => {
     expect(snapshot.memory.totalBytes).toBeGreaterThan(snapshot.memory.usedBytes);
     expect(snapshot.disk?.totalBytes).toBeGreaterThan(0);
     expect(snapshot.live.accounts).toBeGreaterThan(0);
-    expect(snapshot.services.map((service) => service.name)).toEqual(["Web server", "Media streaming", "Cleanup job", "Disk health"]);
+    expect(snapshot.services.map((service) => service.name)).toEqual(["Web server", "Media streaming", "Cleanup job", "Disk health", "Backup check"]);
     expect(snapshot.services[1]!.status).toBe("running");
   });
 
@@ -98,7 +98,7 @@ describe("server metrics", () => {
     expect(status).toBe(200);
     expect(type).toBe("text/event-stream");
     const snapshot = JSON.parse(event.replace(/^data: /, "").trim()) as ServerSnapshot;
-    expect(snapshot.services).toHaveLength(4);
+    expect(snapshot.services).toHaveLength(5);
   });
 
   it("holds at most METRICS.streamMaxPerAccount streams per account", async () => {

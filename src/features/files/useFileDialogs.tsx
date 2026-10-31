@@ -10,8 +10,9 @@ import { ApiClientError } from "@/shared/lib/api-client";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { ActivityDialog, type ActivityRequest } from "./ActivityDialog";
-import { filesApi } from "./api";
-import { kindOf } from "./kind";
+import { FileRequestsDialog, type FileRequestsRequest } from "./FileRequestsDialog";
+import { filesApi } from "@/shared/lib/files-api";
+import { kindOf } from "@/shared/ui/node-kind";
 import { MoveDialog, type MoveRequest } from "./MoveDialog";
 import { SettingsDialog, type SettingsRequest } from "./SettingsDialog";
 import { TagsDialog, type TagsRequest } from "./TagsDialog";
@@ -28,7 +29,7 @@ const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caugh
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 const labelOf = (items: NodeItem[]) => (items.length === 1 ? `"${items[0]!.name}"` : `${items.length} items`);
 
-/** Delete confirmation text from the design (`delTitle`, `delText`). */
+/** Delete confirmation text from the design. */
 export function deleteText(items: NodeItem[]): { title: string; text: string } {
   const one = items.length === 1 ? items[0]! : null;
   const size = items.reduce((sum, item) => sum + Number(item.size), 0);
@@ -42,7 +43,7 @@ export function deleteText(items: NodeItem[]): { title: string; text: string } {
 
 /**
  * State and dialogs for file operations: rename, move/copy, delete, tags, share settings,
- * new link, activity and the admin download pause. Returns the openers and the dialogs.
+ * new link, activity, upload links and the admin download pause. Returns the openers and the dialogs.
  */
 export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }: Context) {
   const router = useRouter();
@@ -54,6 +55,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
   const [settings, setSettings] = useState<SettingsRequest | null>(null);
   const [activity, setActivity] = useState<ActivityRequest | null>(null);
   const [relink, setRelink] = useState<NodeItem | null>(null);
+  const [uploadLinks, setUploadLinks] = useState<FileRequestsRequest | null>(null);
   const [busy, setBusy] = useState(false);
 
   const changed = (message?: string) => {
@@ -75,6 +77,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
     settings: (item: NodeItem, isRoot: boolean, parentVisibility: "private" | "public") => setSettings({ item, isRoot, parentVisibility }),
     activity: (item: NodeItem) => setActivity({ id: item.id, name: item.name, url: linkOf(item.linkId) }),
     newLink: (item: NodeItem) => setRelink(item),
+    uploadLinks: (item: NodeItem) => setUploadLinks({ folderId: item.id, name: item.name }),
     togglePause: async (item: NodeItem) => {
       try {
         await filesApi.setPaused(item.id, !item.settings.dlPaused);
@@ -164,6 +167,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
         />
       )}
       <ActivityDialog request={activity} onClose={() => setActivity(null)} />
+      {uploadLinks && <FileRequestsDialog key={uploadLinks.folderId} request={uploadLinks} notify={notify} onClose={() => setUploadLinks(null)} />}
       <ConfirmDialog
         open={relink !== null}
         tone="accent"

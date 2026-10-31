@@ -1,7 +1,6 @@
 import { ERRORS } from "@/contracts/errors";
-import { db } from "@/server/db/client";
 import { logger } from "@/server/logger";
-import { findVolume } from "@/server/repositories/volume.repo";
+import { tusVolume } from "@/server/services/upload.service";
 import { tusServerFor } from "@/server/upload/tus";
 
 /**
@@ -11,9 +10,8 @@ import { tusServerFor } from "@/server/upload/tus";
  */
 async function handle(req: Request, { params }: { params: Promise<{ path: string[] }> }): Promise<Response> {
   try {
-    const [volumeId] = (await params).path;
-    const volume = volumeId ? await findVolume(db(), volumeId) : null;
-    if (!volume || volume.status === "OFFLINE") return new Response(ERRORS.STORAGE_OFFLINE.message, { status: ERRORS.STORAGE_OFFLINE.status });
+    const volume = await tusVolume((await params).path[0]);
+    if (!volume) return new Response(ERRORS.STORAGE_OFFLINE.message, { status: ERRORS.STORAGE_OFFLINE.status });
     return await tusServerFor(volume).handleWeb(req);
   } catch (error) {
     // tus speaks plain text; like apiHandler, nothing internal reaches the client.

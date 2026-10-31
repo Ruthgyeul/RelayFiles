@@ -1,7 +1,8 @@
-import { STATUS } from "@/config/policy";
+import { MS, STATUS } from "@/config/policy";
+import { UI_LOCALE } from "./format";
 
 /**
- * Service status levels from the design's Status page (`LV`). The footer and the Status
+ * Service status levels from the design's Status page. The footer and the Status
  * page use the same wording.
  */
 export type StatusLevel = "ok" | "warn" | "down";
@@ -23,7 +24,7 @@ export function levelOfHealth(status: "ok" | "degraded" | "down" | null): Status
 // Browser checks ("Your connection")
 // ---------------------------------------------------------------------------
 
-/** One browser check of the server (design `ping`). */
+/** One browser check of the server. */
 export interface Ping {
   ms: number;
   ok: boolean;
@@ -52,7 +53,7 @@ export function connectionStats(pings: readonly Ping[]): ConnectionStats {
   return { last: pings.at(-1) ?? null, avg, jitter, loss, checks: pings.length, okChecks: ok.length };
 }
 
-/** Overall card level (design `lvl`): down when offline or the last check failed. */
+/** Overall card level: down when offline or the last check failed. */
 export function connectionLevel(stats: ConnectionStats, online: boolean): StatusLevel {
   if (!online || (stats.last && !stats.last.ok)) return "down";
   if ((stats.avg !== null && stats.avg > STATUS.degradedAvgMs) || stats.loss > STATUS.degradedLossPercent) return "warn";
@@ -162,7 +163,7 @@ export const COMPONENT_STATE_LABEL: Record<ComponentState, string> = {
 /**
  * Current state of a component: this browser can't reach the server → unreachable; no recent
  * probe → no data; the latest probe failed → outage; a slow connection slows every network
- * feature (design: `SLOW` for all but Storage).
+ * feature except Storage (they show slow).
  */
 export function componentState(key: ComponentKey, clientLevel: StatusLevel, latestOk: boolean | null): ComponentState {
   if (clientLevel === "down") return "unreachable";
@@ -189,14 +190,14 @@ export function latencySummary(hours: readonly LatencyHour[]): { avg: number | n
 export const INCIDENT_SEVERITIES = ["minor", "major", "maint"] as const;
 export type IncidentSeverity = (typeof INCIDENT_SEVERITIES)[number];
 
-/** Badge text and chooser label (design `SV`, `incSevOpts`). */
+/** Badge text and chooser label. */
 export const SEVERITY_LABEL: Record<IncidentSeverity, { badge: string; option: string }> = {
   minor: { badge: "MINOR", option: "Minor" },
   major: { badge: "MAJOR", option: "Major" },
   maint: { badge: "MAINTENANCE", option: "Maintenance" },
 };
 
-/** "Oct 2, 2026 · 25 min · Resolved" (design `when`); the date part is formatted by the caller. */
+/** "Oct 2, 2026 · 25 min · Resolved"; the date part is formatted by the caller. */
 export function incidentWhen(date: string, duration: string, resolved: boolean): string {
   return [date, duration.trim(), resolved ? "Resolved" : "Ongoing"].filter(Boolean).join(" · ");
 }
@@ -210,15 +211,13 @@ export function dayKeyIn(at: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
 }
 
-const DAY_MS = 86_400_000;
-
 /** The `count` days ending with `lastDay`, oldest first. */
 export function dayKeysEndingWith(lastDay: string, count: number): string[] {
   const last = Date.parse(`${lastDay}T00:00:00Z`);
-  return Array.from({ length: count }, (_, i) => new Date(last - (count - 1 - i) * DAY_MS).toISOString().slice(0, 10));
+  return Array.from({ length: count }, (_, i) => new Date(last - (count - 1 - i) * MS.day).toISOString().slice(0, 10));
 }
 
 /** "Oct 5" / "Oct 5, 2026" for a calendar day, independent of the viewer's time zone. */
 export function formatDayKey(day: string, withYear = false): string {
-  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", ...(withYear ? { year: "numeric" } : {}) });
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString(UI_LOCALE, { timeZone: "UTC", month: "short", day: "numeric", ...(withYear ? { year: "numeric" } : {}) });
 }

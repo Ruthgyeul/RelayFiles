@@ -10,6 +10,7 @@
 | 계정 id 위조 | 계정 id는 12자 base32 형식(`domain/ids.ts`)만 허용한다 |
 | 심볼릭 링크 | 계정 루트부터 대상까지 모든 구성요소를 `lstat`으로 확인해 링크가 있으면 거부한다. 파일은 `O_NOFOLLOW`로 연다 |
 | 업로드 경로 | 완료된 업로드는 볼륨의 `system/tmp/uploads` 아래에서만 `rename`으로 옮긴다 |
+| 중복 제거 | 하드 링크는 같은 계정의 파일 사이에만 만들고, 원본 경로도 같은 경로 검사(`pathOf`)를 거친다. 폴더 복사는 일반 파일과 폴더만 따라가고 그 밖의 항목(심볼릭 링크 등)이 있으면 거부한다. 재업로드는 DB의 SHA-256과 디스크의 크기가 모두 같을 때만 링크한다 |
 | 권한 | 디렉터리 `0700`, 마커 파일 `0600`. 운영에서는 전용 계정(uid 10001)이 소유한다 |
 | SSD 미마운트 | `.relayfiles-volume` 마커가 없으면 볼륨을 offline으로 판단하고 쓰지 않는다. 마커가 다른 볼륨이거나 레이아웃 버전이 다르면 사용하지 않는다 |
 | DB·디스크 불일치 | `withStorageTransaction`이 DB 트랜잭션 실패 시 파일 변경을 역순으로 되돌린다. 되돌리기 실패는 `storage rollback step failed` 에러 로그로 남는다. `npm run storage:fsck`가 DB와 디스크를 대조해 디스크에만 있는 항목(휴지통으로 이동), DB에만 있는 파일(`missing` 표시), 크기가 다른 파일을 찾는다(기본은 보고만, `--fix`로 정리) |
@@ -44,12 +45,15 @@
 - **계정 생성의 원자성**: 계정 행, 루트 폴더 노드, 기기 세션, 볼륨의 `users/<accountId>/` 디렉터리를 `withStorageTransaction`으로 함께 만든다. 중간에 실패하면 DB는 롤백되고 디렉터리는 휴지통으로 옮긴다.
 - **클라이언트 주소**: `CF-Connecting-IP` → `X-Real-IP` 순으로 읽는다. 앱 포트는 Nginx를 통해서만 접근 가능해야 한다(직접 노출하면 헤더 위조로 잠금을 우회할 수 있음). systemd 배포는 `APP_HOST`(기본 `127.0.0.1`, 비어 있어도 루프백)로 루프백에만 열고, Docker 배포의 app 컨테이너는 포트를 공개하지 않는다. 앞단 Nginx는 방문자가 보낸 `CF-Connecting-IP`를 비워서 넘긴다. 세션에는 마스킹한 주소(`a.b.•••.•••`)와 Cloudflare 국가·도시 헤더만 저장한다.
 - **`src/proxy.ts`**: 모든 요청에 `x-request-id`를 붙이고(클라이언트가 보낸 값은 UUID일 때만 쓴다. 로그와 에러 페이지에 임의 문자열이 들어가지 않게), `ADMIN_ALLOWED_CIDRS`가 있으면 `/admin/*`·`/api/admin/*`를 그 대역에서만 허용한다(페이지는 프록시가 직접 보내는 403 HTML, API는 403 JSON. rewrite를 쓰면 상태가 200이 되고 `x-middleware-rewrite`에 내부 주소가 드러난다). 정적 파일 확장자 제외는 `/api` 밖에서만 적용한다(`.png`로 끝나는 API 경로도 CSRF·대역 검사를 받는다). 관리자 대역은 `requireAdmin`과 관리자 레이아웃에서도 다시 확인한다(`DeviceSession.adminNetwork`). 다른 사이트 Origin에서 온 API 쓰기 요청(POST 등)은 403으로 거부한다(CSRF 방어). 권한 검사는 각 핸들러에서 다시 한다.
+- **개인 API 토큰**(`/api/v1`): `rfp_<토큰 id 12자>_<난수 43자>`(약 250비트). 평문은 만들 때 한 번만 보여 주고 `ApiToken.secretHash` = argon2id 해시만 저장한다(DB가 새도 토큰을 되살리거나 대조할 수 없다). 요청은 토큰 id로 행을 찾아 argon2로 확인하고, 같은 프로세스는 확인한 토큰을 `API.verifyCacheSec`(5분) 동안 기억해 요청마다 해시하지 않는다(행은 매 요청 다시 읽으므로 폐기·만료는 즉시 반영된다). 없는 id는 해시 계산 없이 401이라 추측 요청으로 CPU를 쓰게 할 수 없다. 키를 쓰지 않으므로 `TOKEN_HMAC_KEY` 교체와 무관하다. `Authorization: Bearer`로만 받고 쿠키는 읽지 않으므로 다른 사이트가 브라우저를 통해 호출할 수 없다(그래서 `/api/v1/files` 업로드는 본문을 버퍼링하지 않게 `proxy.ts`를 거치지 않는다). 범위(`files:read`·`files:write`·`metrics:read`, 마지막은 관리자만)를 매 요청 확인하고, 토큰마다 분당 `API.requestsPerMinute`(120)회, 계정당 `API.maxTokensPerAccount`(20)개. 만료일(7·30·90·365일 또는 없음)이 지난 토큰은 거부하고 매일 정리 작업이 지운다. 계정이 삭제일에 닿으면 토큰도 무효. 만들기는 재인증이 필요하고 만들기·폐기는 감사 로그에 남는다. 계정 토큰과 달리 로그인에는 쓸 수 없다.
+- **`/metrics`**: 관리자 계정의 `metrics:read` 토큰과 `ADMIN_ALLOWED_CIDRS`(설정된 경우)를 매 요청 확인한다. 토큰을 만든 뒤 멤버로 강등되면 그 토큰으로도 읽지 못한다. 레이블에는 서비스·구성 요소 이름, 디스크 장치 이름, 작업 상태만 쓴다(계정 id·이름, 파일 이름, 주소는 넣지 않는다).
 - **첫 관리자**: 서버에서 `npm run admin:create`. 토큰은 터미널에 한 번만 출력된다.
 
 ## 업로드
 
 - 업로드는 `POST /api/uploads`로 배치를 만든 뒤 tus로 보낸다. 배치(계정, 볼륨, 대상 폴더, 파일 목록, 중복 처리 방식)는 Redis에 `UPLOAD_TMP_TTL_HOURS` 동안 저장되고, tus 업로드는 시작할 때 크기를 밝혀야 하고(`Upload-Defer-Length` 불가) 배치에 적힌 크기와 같아야 시작된다. 그 크기로 용량·여유 공간을 검사하고, 완료 시 받은 바이트 수를 다시 대조한다.
 - **진행 중인 업로드 예약**(`server/upload/reservations.ts`, `space.service.ts`): 확정된 파일만 보면 동시에 시작한 업로드가 각각 검사를 통과해 쿼터나 디스크를 넘는다. tus 업로드를 시작할 때 계정·볼륨·익명 계정 전체(`ANON_TOTAL_QUOTA_GB`) 범위마다 남은 공간과 진행 중 예약 합계를 Lua 스크립트 하나로 확인하고 예약한다. 완료(파일이 사용량에 들어감)·거부·취소(tus DELETE) 때 풀고, 남은 예약은 `UPLOAD_TMP_TTL_HOURS` 뒤 저절로 소멸한다(그때 조각도 정리된다). 배치 준비(`POST /api/uploads`)도 예약을 포함해 검사한다.
+- 파일별 취소는 보내는 중인 파일에 tus DELETE를 보내므로 그 파일의 예약이 바로 풀린다(위와 같은 경로). 아직 시작하지 않은 파일은 서버에 아무것도 만들지 않는다.
 - tus 업로드 id마다 소유 계정을 Redis에 기록하고, 이어 올리기·조회·취소 요청은 같은 기기에 그 계정이 로그인해 있을 때만 허용한다(다른 계정은 404).
 - 조각은 볼륨의 `system/tmp/uploads/`에 쌓이고, 완료되면 같은 파일시스템 안에서 `rename`으로 사용자 폴더에 들어간다(복사 없음). 파일 종류는 내용(매직 바이트)으로 판정하고, SHA-256을 기록한다.
 - 완료 처리가 실패하면(그 사이 대상 폴더가 지워짐, 이름 충돌 등) 받은 조각을 바로 지운다. 6시간 뒤 정리를 기다리는 동안 어떤 용량 검사에도 잡히지 않기 때문이다. `moveIntoPlace`는 상위 폴더를 다시 만들지 않는다(완료 중 이름이 바뀐 폴더의 옛 경로가 디스크에 되살아나지 않게). 계정 루트 폴더만 다시 만든다.
@@ -60,6 +64,14 @@
 - 휴지통 항목 이름은 `<시각>-<무작위 8자>-<계정>-<이름>`이다(같은 밀리초에 같은 이름을 지워도 충돌하지 않는다).
 - tus 서버의 CORS는 `PUBLIC_URL` origin만 허용한다(기본값 `*` 대신). tus 경로는 `apiHandler`를 쓰지 않지만 예외를 잡아 내부 내용 없이 500으로 답하고, 깨진 쿠키 인코딩은 로그아웃 상태로 본다.
 - tus 경로(`/api/uploads/tus/*`)는 `proxy.ts` matcher에서 제외한다. 프록시는 요청 본문을 메모리에 복사(기본 10MB 제한)하기 때문이다. 이 경로는 쿠키(SameSite=Lax)와 배치 소유권으로 보호된다. 배치를 만드는 `POST /api/uploads`는 프록시의 Origin 검사를 거친다.
+- **업로드 전용 링크**(`/r/<id>`, `FileRequest`): 방문자(계정 없음)가 소유자의 폴더 하나에 파일을 넣는다. 방문자에게는 제목·소유자 이름·남은 한도만 보이고 폴더 id·이름·내용은 보내지 않는다(tus 완료 응답도 파일 이름만). 파일은 이름만 받고(폴더 구조 없음) 같은 이름이 있으면 "name (2)"로 둔다. 비밀번호는 공유 링크와 같이 argon2로 저장하고, 입력한 기기는 `rf_sh` 쿠키에 `req:<id>` 항목(비밀번호 해시 태그 포함)으로 기억한다. 틀린 비밀번호는 요청·주소당 `SHARE.unlockMaxAttempts`회까지. 업로드 배치는 요청·주소당 시간당 `FILE_REQUEST.batchesPerHour`(30)개, 한 번에 `maxFilesPerBatch`(100)개까지. 소유자의 쿼터·항목 수·볼륨 공간이 그대로 적용되고, 링크 자체의 "파일 N개까지"·"총 X MB까지"는 업로드 예약과 같은 Lua 예약(`request-files`·`request-bytes` 범위)으로 지켜 동시에 시작한 업로드가 한도를 함께 넘지 못한다. tus 이어 올리기·완료는 업로드 id에 기록된 요청이 아직 받을 수 있고 이 기기가 비밀번호를 입력했을 때만 허용한다(배치 id만 알아서는 보낼 수 없다). 링크를 지우거나 만료되면 진행 중인 업로드도 멈춘다. 만료된 링크는 `FILE_REQUEST.expiredKeptDays`(30일) 동안 "expired"로 답한 뒤 매일 정리에서 지워지고, 받은 파일은 폴더에 남는다. 소유자 계정이 삭제일에 닿으면 링크도 만료로 본다.
+
+## 순번 정리·중복 찾기
+
+- 두 기능 모두 활성 계정의 폴더만 다룬다(다른 계정 폴더는 404). 경로는 서버가 노드 id로 계산하고, 클라이언트가 보내는 것은 정렬 방식과 미리보기에서 받은 `{ id, to }` 목록뿐이다. 서버는 그 목록을 믿지 않고 잠금 뒤 계획을 다시 계산해 같을 때만 실행한다.
+- 이름 변경은 대상 이름이 있으면 실패하는 `renameNoReplace`로만 한다(어떤 경우에도 다른 파일을 덮어쓰지 않는다). 실패하면 모든 이름을 되돌린다.
+- 볼륨 이동·레이아웃 마이그레이션 중에는 다른 변경처럼 `STORAGE_BUSY`(503)로 거절한다.
+- 폴더로 저장하는 다운로드는 사용자가 고른 폴더에만 쓰고, 이미 있는 파일을 덮어쓰지 않는다. 요청은 같은 출처의 다운로드 URL(`/api/files/<id>/download`, `/api/zip`)만 쓰므로 서버 쪽 권한·제한은 그대로다.
 
 ## 공유 링크·다운로드
 
@@ -78,7 +90,7 @@
 - 공유 재생 경로(`/stream`, `streamReach`)는 뷰어가 읽는 만큼만 보낸다: 미디어와 PDF는 범위 제한 없음, 텍스트·코드·표는 앞 `DOCUMENT_PREVIEW.textMaxBytes`, SVG·폰트·Word·Excel은 앞 `assetMaxBytes`까지(넘으면 403), 미리보기가 없는 형식(압축, 실행 파일, 디스크 이미지 등)은 404. 소유자 본인에게는 적용하지 않는다.
 - **Stream only는 DRM이 아니다.** 재생할 수 있는 영상·음악·이미지·PDF는 브라우저가 받은 바이트를 저장하거나 화면을 녹화할 수 있다. 다운로드 버튼과 zip, 미리보기가 없는 형식, 문서 전체 받기를 막을 뿐이다.
 - 공개 링크 이미지는 워커가 만든 메타데이터 제거본만 보낸다. 요청 처리 중에는 이미지를 메모리에 올리거나 디코딩하지 않는다(비로그인 방문자가 큰·깨진 사진 폴더로 앱 메모리를 고갈시킬 수 있었다). 사본이 없으면 503 `MEDIA_NOT_READY` + `Retry-After`, 워커가 실패한 파일(`stripFailed`)과 제거할 수 없는 형식은 415. PNG·WebP는 허용 목록 청크만 남긴다(이미지 데이터, 색 정보, 애니메이션: C2PA `caBX`·`C2PA`, 텍스트·EXIF·XMP·개인 청크는 모두 지운다). 뷰어 미리보기도 메타데이터 없이 다시 인코딩한 WebP다.
-- 변환 재생(`?transcode=1`)은 `-map_metadata -1 -map_chapters -1`로 원본의 메타데이터(휴대폰이 기록한 촬영 위치 `©xyz` 등)를 넘기지 않는다. 변환하지 않는 원본 영상은 그대로 나간다. 원본에서 위치를 지운 공개용 사본은 변환본 캐시(기능 6)와 함께 다룬다.
+- 변환 재생(`?transcode=1`)은 `-map_metadata -1 -map_chapters -1`로 원본의 메타데이터(휴대폰이 기록한 촬영 위치 `©xyz` 등)를 넘기지 않는다. 변환하지 않는 원본 영상은 그대로 나간다. 워커가 저장하는 변환본(자주 재생되는 영상)도 같은 인자로 만들어 메타데이터가 없다.
 
 ## 리버스 프록시·헤더
 
@@ -86,7 +98,7 @@
 - Nginx는 `X-Forwarded-Host`를 `$host`로 덮어쓴다. Docker 템플릿의 `X-Forwarded-Proto`는 신뢰 피어(cloudflared, `TRUSTED_PROXY_IP`)가 보낸 `http`/`https`만 넘기고, 그 밖에는 이 홉의 scheme을 쓴다. 호스트 Nginx 템플릿(systemd)도 같은 호스트의 cloudflared(`127.0.0.1`, `$realip_remote_addr`)가 보낸 값만 믿는다.
 - 렌더링 스크립트는 `.env` 값에 줄바꿈·`;`·`{}`·따옴표·`$`·`\`가 있으면 거부한다(`render-template.mjs`). `setup-ssd.sh`는 `STORAGE_ROOT`가 평범한 경로인지, UID·GID가 숫자인지 확인한 뒤 fstab·crypttab에 쓴다.
 - X-Accel location은 `disable_symlinks on from=<볼륨 루트>`다. 앱이 `lstat`으로 확인한 뒤 Nginx가 파일을 다시 열기 때문에, 그 사이에 생긴 심볼릭 링크를 거부한다.
-- Nginx `limit_req`(앱의 Redis 제한 앞단): `POST /api/auth/*`·`POST /api/share/*/unlock` 분당 20회(버스트 20), `POST /api/uploads` 분당 60회(버스트 30), 클라이언트 주소마다. 넘으면 API 형식 JSON 429와 `Retry-After: 60`.
+- Nginx `limit_req`(앱의 Redis 제한 앞단): `POST /api/auth/*`·`POST /api/share/*/unlock` 분당 20회(버스트 20, `NGINX_AUTH_RATE_PER_MIN`·`NGINX_AUTH_BURST`), `POST /api/uploads` 분당 60회(버스트 30, `NGINX_UPLOAD_RATE_PER_MIN`·`NGINX_UPLOAD_BURST`), 클라이언트 주소마다. 요청 본문은 `NGINX_MAX_BODY_MB`(100)까지. 넘으면 API 형식 JSON 429와 `Retry-After: 60`.
 
 ## 응답 헤더·자원 제한
 
@@ -97,7 +109,7 @@
   - 클라이언트가 보낸 CSP 요청 헤더는 지우고 프록시가 만든 것만 넘긴다(nonce 위조 방지).
 - **Strict-Transport-Security**: `PUBLIC_URL`이 https이고 요청 Host가 그 호스트일 때만 `max-age=HSTS_MAX_AGE_SEC`(기본 1년)를 보낸다. LAN의 `http://192.168.0.100` 접속에는 보내지 않는다. `HSTS_INCLUDE_SUBDOMAINS=true`는 같은 도메인의 모든 서브도메인이 https일 때만 켠다. Cloudflare에서 HSTS를 켰다면 `HSTS_MAX_AGE_SEC=0`으로 한 곳에서만 보낸다.
 - SVG 미리보기는 DOMPurify(svg·svgFilters 프로필)로 스크립트·이벤트 핸들러·외부 참조를 지운 뒤 blob `<img>`로 그린다. blob URL을 새 탭에서 열어도 앱 출처에서 스크립트가 돌지 않는다.
-- 캐시: 재생·썸네일·미리보기·변환 영상은 `private, max-age=1년, immutable`, 다운로드는 `private, no-cache`, zip과 API 에러는 `no-store`.
+- 캐시: 파일 응답은 [architecture.md "미리보기 전송"](architecture.md#미리보기-전송), API 에러는 `no-store`. 다운로드는 한도·횟수 때문에 캐시하지 않는다.
 - ffmpeg 입력(`server/media/ffmpeg-input.ts`): 업로드 파일은 `-protocol_whitelist file -format_whitelist <MEDIA.ffmpegDemuxers>`로만 연다. HLS 플레이리스트·concat 목록처럼 다른 파일을 가리키는 형식은 이름이나 내용과 상관없이 거부되므로, 조작한 업로드로 ffmpeg가 서버의 다른 파일을 읽어 변환 결과로 돌려줄 수 없다. Docker 이미지는 `node:24-trixie-slim`(ffmpeg 7.1)이다.
 - 프로세스 격리: Compose의 app·worker·tools는 `cap_drop: ALL`, `read_only`(쓰기는 tmpfs `/tmp`, app은 `.next/cache`도), `pids_limit: 512`, `mem_limit`/`cpus`(`APP_MEMORY_MAX`·`APP_CPUS`, `WORKER_MEMORY_MAX`·`WORKER_CPUS`)로 돈다. nginx도 `cap_drop: ALL`. systemd 배포는 같은 값을 `MemoryMax`·`CPUQuota`·`TasksMax=512`로 건다. 폭주한 변환·썸네일 작업은 자기 서비스 상한에서 멈추고 PostgreSQL을 OOM으로 끌고 가지 않는다.
-- 영상 변환(`?transcode=1`)은 동시에 `VIDEO_TRANSCODE_MAX`개(0이면 끔)까지만 돌고, 넘으면 429와 `Retry-After`. 출력은 4GB에서 끊는다. ffmpeg·smartctl은 셸 없이 실행하고 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지만 받는다(`PROCESS`).
+- 영상 변환(`?transcode=1`)은 모든 앱 프로세스를 합쳐 동시에 `VIDEO_TRANSCODE_MAX`개(0이면 끔)까지만 돌고(Redis 슬롯 `redis-semaphore.ts`, 프로세스가 죽으면 `TRANSCODE.slotLeaseMs` 뒤 풀린다. Redis가 안 되면 프로세스마다 같은 수로 제한), 넘으면 429와 `Retry-After`. 워커가 변환본을 저장할 때도 같은 슬롯을 쓴다. 출력은 4GB에서 끊는다(저장본은 ffmpeg `-fs`). ffmpeg·smartctl은 셸 없이 실행하고 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지만 받는다(`PROCESS`).

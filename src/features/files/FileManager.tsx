@@ -3,33 +3,34 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FolderView, NodeItem } from "@/contracts/nodes";
-import { parseTags } from "@/domain/tags";
+import { withTagQuery } from "@/domain/tags";
 import { emptyTitle, itemCount, type FilterKey } from "@/domain/tree";
-import { usePageTitle } from "@/features/shell/page-title";
+import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
-import { entriesFromDrop } from "@/features/transfers/read-drop";
-import { useTransfers } from "@/features/transfers/TransfersProvider";
+import { useTransfers } from "@/features/transfers/transfers-context";
 import { useNow } from "@/shared/hooks/useNow";
-import { ApiClientError } from "@/shared/lib/api-client";
 import { ActionMenu, anchorOf, type AnchorRect } from "./ActionMenu";
-import { filesApi } from "./api";
 import { FilterBar } from "./FilterBar";
 import { FolderHeader } from "./FolderHeader";
-import { buildNodeMenu, type NodeActions } from "./node-menu";
-import type { ItemProps } from "./NodeRow";
+import { buildNodeMenu } from "./node-menu";
+import type { ItemProps } from "./item-props";
 import { FileList } from "./FileList";
 import { PathBar } from "./PathBar";
-import { folderHref, sharePageHref } from "./paths";
+import { folderHref, sharePageHref } from "@/shared/lib/routes";
 import { PropertiesDialog } from "./PropertiesDialog";
 import { SearchBox, TagModeBar } from "./SearchBox";
 import { Toolbar } from "./Toolbar";
 import { toolbarActions } from "./ToolbarActions";
-import { useDragMove } from "./useDragMove";
 import { useFileDialogs } from "./useFileDialogs";
+import { useFolderDrop } from "./useFolderDrop";
+import { useFolderTools } from "./useFolderTools";
 import { useFileMedia } from "./useFileMedia";
 import { useFileShortcuts } from "./useFileShortcuts";
 import { useFolderItems, type ListedItem } from "./useFolderItems";
+import { useCopyLink } from "./useCopyLink";
 import { useNewFolder } from "./useNewFolder";
+import { useNodeActions } from "./useNodeActions";
+import { useSelection } from "./useSelection";
 import { usePrefs } from "./usePrefs";
 
 /** Re-render interval for relative times ("Expires in 3h 12m"), as in the design. */
@@ -51,7 +52,6 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
   const [filter, setFilter] = useState<FilterKey>("all");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [menu, setMenu] = useState<{ id: string; anchor: AnchorRect } | null>(null);
   const [propertiesFor, setPropertiesFor] = useState<string | null>(null);
   const now = useNow(true, CLOCK_TICK_MS);
@@ -61,78 +61,38 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
   const parentRef = isRoot ? "root" : folder.id;
   const { items, counts, tagMode, wanted, q } = useFolderItems(children, filter, query, prefs.sort);
   const linkOf = (linkId: string) => `${publicUrl}/d/${linkId}`;
-  const clearSelection = () => setSelected(new Set());
+  const selection = useSelection(items);
+  const clearSelection = selection.clear;
   const { open, dialogs } = useFileDialogs({ isAdmin, accountDeletesAt: activeAccount?.deletesAt ?? null, linkOf, onChanged: clearSelection });
+  const folderTools = useFolderTools(clearSelection);
   const newFolder = useNewFolder(parentRef, children.map((child) => child.name));
   const media = useFileMedia(items, folder.name, initialView);
 
-  const moveTo = (ids: string[], targetId: string) =>
-    filesApi
-      .transfer(ids, targetId, "move")
-      .then((result) => {
-        notify(`Moved ${itemCount(result.done)} to ${result.targetName}${result.renamed ? ` · renamed ${result.renamed} to avoid duplicates` : ""}`);
-        clearSelection();
-        router.refresh();
-      })
-      .catch((caught: unknown) => notify(caught instanceof ApiClientError ? caught.message : "Something went wrong."));
   const transfers = useTransfers();
   const uploadTarget = { ref: parentRef, name: folder.name };
-  const dropFiles = async (folderId: string, transfer: DataTransfer) => {
-    const target = folderId === folder.id ? uploadTarget : { ref: folderId, name: items.find((item) => item.id === folderId)?.name ?? folder.name };
-    transfers.upload(await entriesFromDrop(transfer), target);
-  };
-  const drag = useDragMove(selected, moveTo, (folderId, transfer) => void dropFiles(folderId, transfer));
+  const { drag, dropFiles } = useFolderDrop(folder, uploadTarget, items, selection.ids, clearSelection);
 
-  const copyText = (text: string, message: string) => {
-    navigator.clipboard?.writeText(text).catch(() => undefined);
-    notify(message);
-  };
-  const copyLink = (url: string, visibility: "private" | "public") => copyText(url, visibility === "public" ? "Link copied" : "Link copied · private, only you can open it");
-  const visibilityOf = (item: NodeItem) => (item.settings.visibility === "inherit" ? view.effectiveVisibility : item.settings.visibility);
+  const { copyText, copyLink } = useCopyLink();
+  const actionsFor = useNodeActions({ view, isAdmin, dialogs: open, folderTools: folderTools.open, media, linkOf, copyLink, onProperties: setPropertiesFor });
   const openItem = (item: NodeItem) => (item.type === "folder" ? router.push(folderHref(item.id)) : media.preview(item));
   const parentOfCurrent = path.at(-2);
 
-  const actionsFor = (item: NodeItem): NodeActions => {
-    const current = item.id === folder.id;
-    const parentId = current ? (parentOfCurrent?.id ?? folder.id) : folder.id;
-    const parentVisibility = current ? view.parentVisibility : view.effectiveVisibility;
-    return {
-      open: item.type === "folder" && !current ? () => router.push(folderHref(item.id)) : undefined,
-      preview: item.type === "file" ? () => media.preview(item) : undefined,
-      download: () => media.download(item),
-      downloadZip: item.type === "file" ? () => media.zip([item]) : undefined,
-      share: item.type === "folder" ? () => router.push(sharePageHref(item.linkId)) : undefined,
-      tags: () => open.tags([item]),
-      directLink: () => copyLink(linkOf(item.linkId), current ? view.effectiveVisibility : visibilityOf(item)),
-      newLink: () => open.newLink(item),
-      activity: () => open.activity(item),
-      settings: () => open.settings(item, current && isRoot, parentVisibility),
-      togglePause: isAdmin ? () => void open.togglePause(item) : undefined,
-      rename: () => open.rename(item),
-      copy: () => open.move([item], "copy", parentId),
-      move: () => open.move([item], "move", parentId),
-      delete: () => open.remove([item]),
-      properties: () => setPropertiesFor(item.id),
-    };
-  };
-
   useFileShortcuts({
     upload: () => transfers.pickFiles(uploadTarget),
-    selectAll: () => setSelected(new Set(items.map((item) => item.id))),
+    selectAll: selection.selectAll,
     search: () => setSearchOpen(true),
     toggleView: () => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" }),
     parent: () => parentOfCurrent && router.push(folderHref(parentOfCurrent.id, path.length === 2)),
   });
 
-  const toggle = (id: string) =>
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const selectedItems = items.filter((item) => selected.has(item.id));
-  const menuItem = menu && (menu.id === folder.id ? folder : items.find((item) => item.id === menu.id));
+  const selectedItems = selection.items;
+  /** The current folder or one of its listed items. */
+  const itemById = (id: string) => (id === folder.id ? folder : items.find((item) => item.id === id));
+  const menuItem = menu && itemById(menu.id);
+  const withItem = (id: string, run: (item: NodeItem) => void) => {
+    const item = itemById(id);
+    if (item) run(item);
+  };
   const openMenu = (id: string, anchor: HTMLElement) => {
     const rect = anchorOf(anchor);
     setMenu((current) => (current?.id === id ? null : { id, anchor: rect }));
@@ -140,20 +100,16 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
   const searchTag = (tag: string) => {
     setSearchOpen(true);
     clearSelection();
-    setQuery((current) => {
-      const trimmed = current.trim();
-      if (trimmed.startsWith("#") && parseTags(trimmed).includes(tag)) return trimmed;
-      return trimmed.startsWith("#") ? `${trimmed} #${tag}` : `#${tag}`;
-    });
+    setQuery((current) => withTagQuery(current, tag));
   };
 
   const itemProps = (item: ListedItem): ItemProps => ({
     item,
     parentPath: item.parentPath,
     parentVisibility: view.effectiveVisibility,
-    selected: selected.has(item.id),
+    selected: selection.has(item.id),
     now,
-    onToggle: () => toggle(item.id),
+    onToggle: () => selection.toggle(item.id),
     onPrimary: () => openItem(item),
     onPreview: () => media.preview(item),
     onMenu: (anchor) => openMenu(item.id, anchor),
@@ -190,9 +146,9 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
         upOver={parentOfCurrent !== undefined && drag.over === parentOfCurrent.id}
       />
       <Toolbar
-        allSelected={items.length > 0 && items.every((item) => selected.has(item.id))}
+        allSelected={selection.allSelected}
         selectedCount={selectedItems.length}
-        onToggleAll={() => setSelected(items.length > 0 && items.every((item) => selected.has(item.id)) ? new Set() : new Set(items.map((item) => item.id)))}
+        onToggleAll={selection.toggleAll}
         selectionActions={toolbar.selection}
         folderActions={toolbar.folder}
         view={prefs.view}
@@ -225,7 +181,7 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
         emptyActions={toolbar.empty}
         onOpen={openItem}
         onDownload={media.download}
-        onDropFiles={(transfer) => void dropFiles(folder.id, transfer)}
+        onDropFiles={dropFiles}
       />
       {menu && menuItem && (
         <ActionMenu
@@ -240,24 +196,14 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
         onClose={() => setPropertiesFor(null)}
         linkOf={linkOf}
         onCopyLink={copyLink}
-        onEditTags={(id) => {
-          const item = id === folder.id ? folder : items.find((entry) => entry.id === id);
-          setPropertiesFor(null);
-          if (item) open.tags([item]);
-        }}
-        onZip={(id) => {
-          const item = id === folder.id ? folder : items.find((entry) => entry.id === id);
-          if (item) media.zip([item]);
-        }}
-        onEditSettings={(id) => {
-          const item = id === folder.id ? folder : items.find((entry) => entry.id === id);
-          setPropertiesFor(null);
-          if (item) open.settings(item, item.id === folder.id && isRoot, item.id === folder.id ? view.parentVisibility : view.effectiveVisibility);
-        }}
+        onEditTags={(id) => withItem(id, (item) => (setPropertiesFor(null), actionsFor(item).tags?.()))}
+        onZip={(id) => withItem(id, (item) => media.zip([item]))}
+        onEditSettings={(id) => withItem(id, (item) => (setPropertiesFor(null), actionsFor(item).settings?.()))}
       />
       {media.viewer}
       {newFolder.dialog}
       {dialogs}
+      {folderTools.dialogs}
       {drag.pill}
     </>
   );

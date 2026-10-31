@@ -8,7 +8,7 @@ import { formatSize } from "@/domain/format";
 import { previewKindOf } from "@/domain/media";
 import { KIND_LABEL } from "@/domain/share";
 import { itemCount } from "@/domain/tree";
-import { kindOf } from "@/features/files/kind";
+import { kindOf } from "@/shared/ui/node-kind";
 import { ListPreview } from "@/features/viewer/ListPreview";
 import { BusyPill } from "@/shared/ui/BusyPill";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
@@ -43,7 +43,7 @@ interface ShareRowsProps {
   onDownload: (item: ShareItem) => void;
 }
 
-/** The list on an open share page (design `shItems`): icon, name, meta, busy badge, actions. */
+/** The list on an open share page: icon, name, meta, busy badge, actions. */
 export function ShareRows({ items, urls, folderHref, onOpen, onDownload }: ShareRowsProps) {
   return (
     <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-card-line bg-card-line">

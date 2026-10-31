@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, HEADERS, JOBS, LOGIN, MEDIA, STORAGE, TRANSCODE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, DUPLICATES, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, RENUMBER, STORAGE, TRANSCODE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -83,6 +83,8 @@ export const ENV_GROUPS = {
     STORAGE_ACCEL_ENABLED: bool.default(false),
     STORAGE_ACCEL_PREFIX: z.string().startsWith("/").endsWith("/").default("/_protected/"),
     VOLUME_WATCH_INTERVAL_SEC: positiveInt.default(STORAGE.volumeWatchIntervalSec),
+    /** Copies and re-uploads of the same content share their bytes (hard links on the volume). */
+    STORAGE_DEDUPE: bool.default(true),
   }),
   uploads: z.object({
     UPLOAD_CHUNK_SIZE_MB: positiveInt.max(95).default(UPLOAD.chunkSizeMb),
@@ -105,6 +107,10 @@ export const ENV_GROUPS = {
     LOGIN_MAX_ATTEMPTS: positiveInt.default(LOGIN.maxAttempts),
     LOGIN_LOCK_SECONDS: secondsList.default([...LOGIN.lockSeconds]),
     SIGNUPS_PER_HOUR: positiveInt.default(AUTH.signupsPerHour),
+    /** "Renumber files": most files one run renames. */
+    RENUMBER_MAX_FILES: positiveInt.default(RENUMBER.maxFiles),
+    /** "Find duplicates": most files one scan compares. */
+    DUPLICATES_MAX_SCAN: positiveInt.default(DUPLICATES.maxScan),
   }),
   jobs: z.object({
     CLEANUP_CRON: z.string().default(JOBS.cleanupCron),
@@ -121,6 +127,12 @@ export const ENV_GROUPS = {
   observability: z.object({
     LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).optional(),
     LOG_DIR: z.string().default("/var/log/relayfiles"),
+    /**
+     * Which process writes the logs: its files in LOG_DIR are <name>-error.log and
+     * <name>-combined.log, so the app, the worker and admin scripts never rotate each other's
+     * files. The worker and scripts set it themselves (scripts/worker.mts, scripts/lib/bootstrap.mts).
+     */
+    LOG_SERVICE: z.enum(["app", "worker", "tools"]).default("app"),
     DISK_DEVICE: z.string().default("/dev/sda"),
     TLS_CERT_PATH: z.string().optional(),
   }),
@@ -129,6 +141,12 @@ export const ENV_GROUPS = {
     /** Host address Nginx is published on: 127.0.0.1 when another proxy on the host sits in front. */
     NGINX_LISTEN_HOST: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("0.0.0.0"),
     NGINX_LISTEN_PORT: port.default(80),
+    /** Nginx request limits (both templates): body size in MB, and per-minute rates with bursts. */
+    NGINX_MAX_BODY_MB: positiveInt.max(1_024).default(NGINX.maxBodyMb),
+    NGINX_AUTH_RATE_PER_MIN: positiveInt.default(NGINX.authRatePerMin),
+    NGINX_AUTH_BURST: positiveInt.default(NGINX.authBurst),
+    NGINX_UPLOAD_RATE_PER_MIN: positiveInt.default(NGINX.uploadRatePerMin),
+    NGINX_UPLOAD_BURST: positiveInt.default(NGINX.uploadBurst),
     CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
     /** Host directory for PostgreSQL, Redis and backups (docker compose). */
     DATA_DIR: z.string().startsWith("/").default("/srv/relayfiles"),
@@ -147,7 +165,40 @@ export const ENV_GROUPS = {
     APP_CPUS: cpus.default(3),
     WORKER_MEMORY_MAX: memorySize.default("2G"),
     WORKER_CPUS: cpus.default(2),
+    /** k3s deployment (deploy/scripts/k3s/deploy.sh): GHCR image name without -app/-tools, namespace, app replicas. */
+    K3S_IMAGE_REPO: z
+      .string()
+      .regex(/^[a-z0-9.-]+(:\d+)?(\/[a-z0-9._-]+)+$/, "must be a registry path such as ghcr.io/<owner>/relayfiles")
+      .optional(),
+    K3S_NAMESPACE: z.string().regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).default("relayfiles"),
+    K3S_APP_REPLICAS: positiveInt.max(K3S.maxAppReplicas).default(1),
   }),
+  offsite: z
+    .object({
+      /**
+       * restic repository for deploy/scripts/offsite-backup.sh, e.g. an S3 bucket on Cloudflare R2
+       * or Backblaze B2 (`s3:https://<endpoint>/<bucket>/relayfiles`). Empty: no offsite backup.
+       */
+      RESTIC_REPOSITORY: z
+        .string()
+        .regex(/^(s3|b2|sftp|rest|azure|gs|swift|rclone):/, "must start with a restic backend such as s3:")
+        .optional(),
+      /** Encrypts every offsite copy; keep a copy away from the server too, it cannot be recovered. */
+      RESTIC_PASSWORD: z.string().min(OFFSITE.passwordMinLength).optional(),
+      /** S3 credentials of the repository (passed to restic as AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). */
+      OFFSITE_ACCESS_KEY_ID: z.string().optional(),
+      OFFSITE_SECRET_ACCESS_KEY: z.string().optional(),
+      OFFSITE_KEEP_DAILY: positiveInt.default(OFFSITE.keepDaily),
+      OFFSITE_KEEP_WEEKLY: positiveInt.default(OFFSITE.keepWeekly),
+      OFFSITE_KEEP_MONTHLY: positiveInt.default(OFFSITE.keepMonthly),
+      OFFSITE_CHECK_PERCENT: z.coerce.number().positive().max(100).default(OFFSITE.checkPercent),
+      /** More directories to back up, space-separated (the users/ folders of extra volumes). */
+      OFFSITE_EXTRA_PATHS: z
+        .string()
+        .regex(/^\/\S*( \/\S*)*$/, "must be absolute paths separated by spaces")
+        .optional(),
+    })
+    .refine((env) => !env.RESTIC_REPOSITORY || env.RESTIC_PASSWORD, { message: "RESTIC_PASSWORD is required with RESTIC_REPOSITORY", path: ["RESTIC_PASSWORD"] }),
   testing: z.object({
     E2E_PORT: port.default(3100),
     E2E_BASE_URL: z.url().optional(),

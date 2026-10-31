@@ -36,4 +36,12 @@ describe("driverFor", () => {
     const volume = { id: "y", driver: "LOCAL" as const, mountPath: "/tmp/y", status: "ACTIVE" as const };
     expect(driverFor(volume)).toBe(driverFor(volume));
   });
+
+  it("makes a new driver when the volume was registered at another path", async () => {
+    const volume = { id: "z", driver: "LOCAL" as const, mountPath: "/tmp/z-old", status: "ACTIVE" as const };
+    const before = driverFor(volume);
+    const after = driverFor({ ...volume, mountPath: "/tmp/z-new" });
+    expect(after).not.toBe(before);
+    expect(await after.localPath({ accountId: "abcdefgh2345", segments: ["f"] })).toBe("/tmp/z-new/users/abcdefgh2345/f");
+  });
 });

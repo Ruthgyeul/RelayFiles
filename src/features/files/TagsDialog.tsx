@@ -6,7 +6,7 @@ import { ApiClientError } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { Modal, ModalHeader } from "@/shared/ui/Modal";
-import { filesApi } from "./api";
+import { filesApi } from "@/shared/lib/files-api";
 
 export interface TagsRequest {
   ids: string[];
@@ -16,7 +16,7 @@ export interface TagsRequest {
   tags: string[];
 }
 
-/** Starter suggestions shown before the account has its own tags (design). */
+/** Starter suggestions shown before the account has its own tags. */
 const STARTER_TAGS = ["movie", "music", "photos", "work", "family", "archive"];
 const MAX_SUGGESTIONS = 8;
 

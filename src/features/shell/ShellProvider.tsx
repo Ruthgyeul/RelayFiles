@@ -176,7 +176,7 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
     [config, session, notice, accountToast, signInOpen, tokenToSave, autoAccountId, notify, dismissAccountToast, applySession, accountCreated, run],
   );
 
-  // First visit with open sign-ups: create an anonymous account (design `componentDidMount`).
+  // First visit with open sign-ups: create an anonymous account.
   useEffect(() => {
     if (autoStarted.current || initialSession.accounts.length > 0 || initialSession.signupMode !== "open") return;
     autoStarted.current = true;

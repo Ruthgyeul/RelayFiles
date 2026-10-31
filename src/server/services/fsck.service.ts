@@ -1,7 +1,10 @@
 import "server-only";
 import { compareTrees, type FsckFindings, type TreeEntry } from "@/domain/fsck";
 import { db } from "../db/client";
-import { findRootFolder, setMissing, treeEntries } from "../repositories/node.repo";
+import { accountIdsOnVolume, allAccountIds } from "../repositories/account.repo";
+import { findRootFolder, setMissing } from "../repositories/node.repo";
+import { treeEntries } from "../repositories/node-tree.repo";
+import { listVolumesIn } from "../repositories/volume.repo";
 import { driverFor } from "../storage/registry";
 
 /**
@@ -34,15 +37,12 @@ const CHECKED = ["ACTIVE", "READONLY"] as const;
 
 export async function runFsck(options: { fix: boolean; accountId?: string }): Promise<FsckReport> {
   const report: FsckReport = { accounts: [], strayAccounts: [] };
-  const volumes = await db().storageVolume.findMany({ where: { status: { in: [...CHECKED] } }, select: { id: true, driver: true, mountPath: true, status: true, reservePct: true } });
+  const volumes = await listVolumesIn(db(), CHECKED);
   for (const volume of volumes) {
     const driver = driverFor(volume);
     const fix = options.fix && volume.status === "ACTIVE";
-    const accounts = await db().account.findMany({
-      where: { volumeId: volume.id, migrating: false, ...(options.accountId ? { id: options.accountId } : {}) },
-      select: { id: true },
-    });
-    for (const { id: accountId } of accounts) {
+    const accounts = await accountIdsOnVolume(db(), volume.id, { settled: true, onlyId: options.accountId });
+    for (const accountId of accounts) {
       const root = await findRootFolder(db(), accountId);
       if (!root) continue;
       const rows = await treeEntries(db(), root.id);
@@ -69,7 +69,7 @@ export async function runFsck(options: { fix: boolean; accountId?: string }): Pr
       if (entry.missing.length || entry.orphans.length || entry.sizeMismatch.length || entry.flagged) report.accounts.push(entry);
     }
     if (options.accountId) continue;
-    const known = new Set((await db().account.findMany({ select: { id: true } })).map((row) => row.id));
+    const known = await allAccountIds(db());
     for (const accountId of await driver.listAccountRoots()) {
       if (known.has(accountId)) continue;
       if (fix) await driver.moveToTrash({ accountId, segments: [] });

@@ -3,7 +3,7 @@
 import type { FilterKey } from "@/domain/tree";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
-import { FILTER_CHIPS } from "./kind";
+import { FILTER_CHIPS } from "@/shared/ui/node-kind";
 
 /** Type filter chips with counts; types without items are hidden unless selected. */
 export function FilterBar({ counts, value, onChange }: { counts: Record<FilterKey, number>; value: FilterKey; onChange: (key: FilterKey) => void }) {

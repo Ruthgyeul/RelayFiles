@@ -2,10 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { filesApi } from "@/features/files/api";
-import { folderHref } from "@/features/files/paths";
+import { filesApi } from "@/shared/lib/files-api";
+import { folderHref } from "@/shared/lib/routes";
 import { useShell } from "@/features/shell/ShellProvider";
-import { useTransfers } from "@/features/transfers/TransfersProvider";
+import { useTransfers } from "@/features/transfers/transfers-context";
 import { Icon } from "@/shared/ui/icon/Icon";
 
 /** "… is ready" card after a Home upload, with the folder's share link. */

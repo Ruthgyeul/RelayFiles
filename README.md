@@ -24,16 +24,7 @@ npm run worker         # thumbnails, previews, cleanup (needs ffmpeg)
 
 ## Scripts
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Development server |
-| `npm run build` | Production build (standalone bundle) |
-| `npm run start` | Run the standalone server |
-| `npm run check` | Typecheck, lint, emoji check, migration check, unit tests and build |
-| `npm run test:integration` | Integration tests against PostgreSQL and Redis |
-| `npm run test:e2e` | Playwright E2E at 360 / 768 / 1280 px |
-| `npm run env:check` | Validate `.env` without starting the app |
-| `npm run env:secrets` | Print freshly generated secrets for `.env` |
+Every npm script (development, checks, storage, volumes, keys) is listed with what it does in [CLAUDE.md "명령어"](CLAUDE.md#명령어). Before a change goes in, `npm run check` must pass (and `npm run test:integration` when it touches the database or storage).
 
 ## Documentation
 

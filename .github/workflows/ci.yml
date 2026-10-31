@@ -27,6 +27,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run check:emoji
+      - run: npm run check:cycles
       - run: npm run check:migrations
       - run: npm run test
       - run: npm run build
@@ -69,7 +70,7 @@ jobs:
       - name: shellcheck
         run: |
           shellcheck --version
-          shellcheck -x deploy/scripts/*.sh deploy/scripts/systemd/*.sh deploy/docker-entrypoint.sh
+          shellcheck -x deploy/scripts/*.sh deploy/scripts/systemd/*.sh deploy/scripts/k3s/*.sh deploy/docker-entrypoint.sh
 
   e2e:
     name: E2E (360 / 768 / 1280)

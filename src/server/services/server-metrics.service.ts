@@ -11,6 +11,7 @@ import { readDiskHistory, readHistory } from "../metrics/history";
 import { serviceRows } from "../metrics/services";
 import { storageCapacity } from "../metrics/storage";
 import { cpuMemory, linkMbps, networkRates, uptimeSeconds } from "../metrics/system";
+import { countAccounts } from "../repositories/account.repo";
 
 /** Hourly outbound bandwidth and per-disk read/write over the last METRICS.historyHours. */
 async function hourlyHistory(now: Date): Promise<{ bandwidth: RateSeries; disks: DiskActivity[] }> {
@@ -45,7 +46,7 @@ export async function serverSnapshot(now: Date = new Date()): Promise<ServerSnap
     cached(cacheKey.serverHistory(), METRICS.historyCacheSec, () => hourlyHistory(now)),
     activeCount("stream", now.getTime()),
     activeCount("upload", now.getTime()),
-    db().account.count(),
+    countAccounts(db()),
     cached(cacheKey.serverServices(), METRICS.servicesCacheSec, () => serviceRows(now)),
   ]);
   return {

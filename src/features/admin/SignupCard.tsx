@@ -23,7 +23,7 @@ interface SignupCardProps {
   onRevoke: (code: string) => void;
 }
 
-/** "New accounts": sign-up mode and, in invite mode, the one-time codes (design `suOpts`). */
+/** "New accounts": sign-up mode and, in invite mode, the one-time codes. */
 export function SignupCard({ mode, invites, busy, onMode, onGenerate, onCopy, onRevoke }: SignupCardProps) {
   return (
     <section aria-label="New accounts" className="flex flex-col gap-3.5 rounded-2xl border border-card-line bg-card p-5">

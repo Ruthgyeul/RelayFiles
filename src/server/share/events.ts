@@ -4,12 +4,12 @@ import { db } from "../db/client";
 import type { ClientInfo } from "../auth/client-info";
 import { logger } from "../logger";
 import { redis } from "../redis";
-import { addLinkEvent, trimLinkEvents } from "../repositories/node.repo";
+import { addLinkEvent, trimLinkEvents } from "../repositories/link-event.repo";
 
 export type LinkEventKind = "OPEN" | "PLAY" | "VIEW" | "DOWNLOAD";
 
 /**
- * Adds an entry to a link's activity log (design `logEv`): device, masked address and
+ * Adds an entry to a link's activity log: device, masked address and
  * country only. Opens and plays are logged once per visitor and item in a window, so a page
  * refresh or a seek does not flood the log. Failures are logged, never shown to visitors.
  */

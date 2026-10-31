@@ -5,7 +5,7 @@ import { Icon } from "@/shared/ui/icon/Icon";
 import { NoticePill } from "@/shared/ui/NoticePill";
 import { useShell } from "./ShellProvider";
 
-/** Short confirmation pill (design `note`) and the "Switched to …" account toast. */
+/** Short confirmation pill and the "Switched to …" account toast. */
 export function Toasts() {
   const { notice, accountToast, dismissAccountToast } = useShell();
   return (

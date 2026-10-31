@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ServerSnapshot } from "@/contracts/server-metrics";
 import type { ServerSettings } from "@/contracts/server-settings";
-import { usePageTitle } from "@/features/shell/page-title";
+import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { AnnouncementCard } from "./AnnouncementCard";

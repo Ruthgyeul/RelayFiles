@@ -18,7 +18,7 @@ interface IncidentsCardProps {
   onDelete: (incident: IncidentDto) => void;
 }
 
-/** Incident history; admins post, edit and delete (design `st.incidents`). */
+/** Incident history; admins post, edit and delete. */
 export function IncidentsCard({ incidents, isAdmin, onNew, onEdit, onDelete }: IncidentsCardProps) {
   return (
     <section aria-label="Incidents" className="flex flex-col gap-2.5 rounded-2xl border border-card-line bg-card p-5">
