@@ -17,3 +17,8 @@ export async function trimLinkEvents(db: DbClient, nodeId: string, keep: number)
       SELECT id FROM "LinkEvent" WHERE "nodeId" = ${nodeId} ORDER BY at DESC, id DESC LIMIT ${keep}
     )`;
 }
+
+/** Hands a node's link history to the node that replaced it (same share link, new content). */
+export async function moveLinkEvents(db: DbClient, fromNodeId: string, toNodeId: string): Promise<void> {
+  await db.linkEvent.updateMany({ where: { nodeId: fromNodeId }, data: { nodeId: toNodeId } });
+}

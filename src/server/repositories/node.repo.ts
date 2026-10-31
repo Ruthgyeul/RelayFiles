@@ -176,7 +176,25 @@ export async function setMissing(db: DbClient, ids: readonly string[], missing: 
   await db.node.updateMany({ where: { id: { in: [...ids] }, type: "FILE" }, data: { missing } });
 }
 
-export interface NewFile {
+/** What a file keeps when its content is replaced: its share link, the link's settings and tags. */
+export type CarriedSettings = Pick<NodeRow, "linkId" | "visibility" | "expiryLabel" | "expAt" | "burn" | "downloadLimit" | "passwordHash" | "access" | "note" | "dlPaused" | "downloads" | "tags">;
+
+export const carriedSettingsOf = (row: NodeRow): CarriedSettings => ({
+  linkId: row.linkId,
+  visibility: row.visibility,
+  expiryLabel: row.expiryLabel,
+  expAt: row.expAt,
+  burn: row.burn,
+  downloadLimit: row.downloadLimit,
+  passwordHash: row.passwordHash,
+  access: row.access,
+  note: row.note,
+  dlPaused: row.dlPaused,
+  downloads: row.downloads,
+  tags: row.tags,
+});
+
+export interface NewFile extends Partial<CarriedSettings> {
   id: string;
   accountId: string;
   parentId: string;

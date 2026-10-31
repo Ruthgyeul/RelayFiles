@@ -11,7 +11,8 @@ import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import { createFileNode, createFolderNode, deleteNodes, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, type NodeRow } from "../repositories/node.repo";
+import { carriedSettingsOf, createFileNode, createFolderNode, deleteNodes, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
+import { moveLinkEvents } from "../repositories/link-event.repo";
 import { ancestorChain, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { sha256Of } from "../storage/hash";
@@ -28,10 +29,13 @@ import { assertAccountWritable, driverForAccount } from "./volume.service";
 import { enqueueMedia } from "../jobs/queue";
 import { countOne } from "../metrics/counters";
 import { locationOf } from "./node-location";
+import { logger } from "../logger";
 
 type Owner = SpaceOwner;
 
 const BATCH_ID_LENGTH = 24;
+/** A name no upload can have (names are validated), held by a replaced row until it is deleted. */
+const replacedName = (nodeId: string) => `replaced/${nodeId}`;
 /** Folder depth of the folder a Home upload creates: the account root, then the upload folder. */
 const HOME_UPLOAD_DEPTH = 2;
 
@@ -161,21 +165,20 @@ async function ensureFolders(owner: Owner, driver: StorageDriver, baseId: string
 export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: number, uploadId: string, modifiedAt: Date | null = null): Promise<UploadedFile> {
   const entry = batch.files[slot];
   if (!entry) throw new ApiError("NOT_FOUND");
-  const driver = await driverForAccount(owner, "write");
   const volume = await findVolume(db(), batch.volumeId);
+  // Without its volume the received bytes cannot be reached (nor removed) from here.
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
   const tempPath = `${layoutOf(volume.mountPath).uploads}/${uploadId}`;
-  // The recorded size counts toward the quota, so it must be the size of the bytes received.
-  if ((await stat(tempPath)).size !== entry.size) {
-    await rm(tempPath, { force: true });
-    await rm(`${tempPath}.json`, { force: true });
-    throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
-  }
   try {
+    const driver = await driverForAccount(owner, "write");
+    // The recorded size counts toward the quota, so it must be the size of the bytes received.
+    if ((await stat(tempPath)).size !== entry.size) throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
     return await placeUpload(owner, driver, batch, entry, tempPath, modifiedAt ?? new Date());
   } catch (error) {
-    // A refused upload (its folder was deleted meanwhile, a name clash) must not leave its
-    // bytes in the temp area until the daily cleanup, where no quota sees them.
+    // Any refusal (volume busy or offline, its folder deleted meanwhile, a name clash) removes
+    // the received bytes. Left in place they would sit in the temp area where no quota sees
+    // them, and a retry would find the upload complete (offset = length) and stop without
+    // this step ever running again; removed, the retry gets 404 and starts a new upload.
     await rm(tempPath, { force: true });
     await rm(`${tempPath}.json`, { force: true });
     throw error;
@@ -204,12 +207,16 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
 
   const row = await withStorageTransaction(db(), async (tx, undo) => {
     if (replace) {
-      await deleteNodes(tx, [replace.id]);
       const trashed = await driver.moveToTrash(location);
       undo.push("restore replaced file", () => driver.restoreFromTrash(trashed, location));
       await recordTrashed(tx, owner.id, replace.size);
+      // The old row steps aside (its name and link are taken by the replacement below).
+      await updateNode(tx, replace.id, { name: replacedName(replace.id), linkId: newLinkId() });
     }
-    const created = await createFileNode(tx, {
+    // New content gets a new id (cached bytes are keyed by it, docs/architecture.md), but a
+    // replaced file hands over its share link, the link's settings, tags and history, so
+    // links already sent keep working.
+    const placed = await createFileNode(tx, {
       id: newNodeId(),
       accountId: owner.id,
       parentId: folder.id,
@@ -218,15 +225,19 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       mime,
       size: BigInt(entry.size),
       sha256,
-      linkId: newLinkId(),
       modifiedAt,
+      ...(replace ? carriedSettingsOf(replace) : { linkId: newLinkId() }),
     });
+    if (replace) {
+      await moveLinkEvents(tx, replace.id, placed.id);
+      await deleteNodes(tx, [replace.id]);
+    }
     linked = twinLocation !== null && (await driver.linkExisting(twinLocation, location, entry.size));
     if (!linked) await driver.moveIntoPlace(tempPath, location);
     undo.push("remove placed file", async () => {
       await driver.moveToTrash(location);
     });
-    return created;
+    return placed;
   });
   // tus keeps upload state next to the data file; the data moved (or was linked), so drop the state too.
   await unlink(`${tempPath}.json`).catch(() => undefined);
@@ -234,7 +245,7 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
     await driver.discardStaged(tempPath);
     void countOne("deduplicated_files");
   }
-  if (replace) await driver.removeAssets(owner.id, [replace.id]).catch(() => undefined);
+  if (replace) await driver.removeAssets(owner.id, [replace.id]).catch((error: unknown) => logger.warn("old media assets not removed", { error }));
   if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
   return { nodeId: row.id, name: row.name, folderId: folder.id };
 }
