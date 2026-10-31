@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { getEnv } from "@/config/env";
 import { MS, RENUMBER, STORAGE } from "@/config/policy";
 import type { RenumberPreview, RenumberResult } from "@/contracts/nodes";
-import { matchesReviewed, planRenumber, renumberChanges, renumberTempName, type RenumberCandidate, type RenumberEntry, type RenumberOrder, type RenumberPlan, type RenumberSort } from "@/domain/renumber";
+import { matchesReviewed, planRenumber, renumberChanges, renumberTempName, takenFallbacks, type RenumberCandidate, type RenumberEntry, type RenumberOrder, type RenumberPlan, type RenumberSort } from "@/domain/renumber";
 import { db, type DbClient } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
@@ -30,7 +30,7 @@ export function renumberTimeoutMs(changes: number): number {
   return Math.max(STORAGE.transactionTimeoutSec * MS.second, changes * RENUMBER.transactionMsPerFile);
 }
 
-async function planFor(tx: DbClient, folderId: string, sort: RenumberSort, order: RenumberOrder): Promise<{ plan: RenumberPlan; names: Set<string> }> {
+async function planFor(tx: DbClient, folderId: string, sort: RenumberSort, order: RenumberOrder): Promise<{ plan: RenumberPlan; names: Set<string>; candidates: RenumberCandidate[] }> {
   const children = await listChildrenForRenumber(tx, folderId);
   const candidates: RenumberCandidate[] = children.map((child) => ({
     id: child.id,
@@ -38,17 +38,24 @@ async function planFor(tx: DbClient, folderId: string, sort: RenumberSort, order
     type: child.type === "FOLDER" ? "folder" : "file",
     createdAt: child.createdAt.getTime(),
     modifiedAt: child.modifiedAt?.getTime() ?? null,
+    takenAt: child.takenAt?.getTime() ?? null,
     missing: child.missing,
   }));
-  return { plan: planRenumber(candidates, sort, order), names: new Set(children.map((child) => child.name)) };
+  return { plan: planRenumber(candidates, sort, order), names: new Set(children.map((child) => child.name)), candidates };
 }
 
 /** How the files directly inside a folder would be renamed (nothing changes). */
 export async function previewRenumber(owner: NodeOwner, folderRef: string, sort: RenumberSort, order: RenumberOrder): Promise<RenumberPreview> {
   const folder = await requireFolder(owner.id, folderRef);
-  const { plan } = await planFor(db(), folder.id, sort, order);
+  const { plan, candidates } = await planFor(db(), folder.id, sort, order);
   const changes = renumberChanges(plan).length;
-  return { entries: plan.entries, skipped: plan.skipped, changes, conflict: plan.conflict ?? overLimit(changes) };
+  return {
+    entries: plan.entries,
+    skipped: plan.skipped,
+    changes,
+    conflict: plan.conflict ?? overLimit(changes),
+    ...(sort === "taken" ? { takenFallbacks: takenFallbacks(candidates, plan) } : {}),
+  };
 }
 
 /**

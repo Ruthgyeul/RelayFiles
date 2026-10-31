@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { rm, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Queue } from "bullmq";
 import { afterAll, describe, expect, it } from "vitest";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { db } from "@/server/db/client";
 import { backfillModifiedAt } from "@/server/migrations/20261101-backfill-modified-at";
 import { backfillSha256 } from "@/server/migrations/20261101-backfill-sha256";
+import { queueDateTaken } from "@/server/migrations/20261101-queue-date-taken";
+import { closeQueues, MEDIA_QUEUE, queueConnection } from "@/server/jobs/queue";
 import { DATA_MIGRATIONS } from "@/server/migrations/registry";
 import { findRootFolder } from "@/server/repositories/node.repo";
 import { redis } from "@/server/redis";
@@ -19,6 +22,7 @@ const accounts: string[] = [];
 afterAll(async () => {
   for (const id of accounts) await rm(userRootOf(configuredVolumeRoot(), id), { recursive: true, force: true });
   await prisma.account.deleteMany({ where: { id: { in: accounts } } });
+  await closeQueues();
   await prisma.$disconnect();
   redis().disconnect();
 });
@@ -46,7 +50,7 @@ const noSave = async () => undefined;
 
 describe("release backfills", () => {
   it("are registered so `npm run data:migrate` runs them on every deploy path", () => {
-    expect(DATA_MIGRATIONS.map((step) => step.id)).toEqual(["20261101-backfill-modified-at", "20261101-backfill-sha256"]);
+    expect(DATA_MIGRATIONS.map((step) => step.id)).toEqual(["20261101-backfill-modified-at", "20261101-backfill-sha256", "20261101-queue-date-taken"]);
   });
 
   it("record the disk modification time of older files (creation time when missing)", async () => {
@@ -74,5 +78,22 @@ describe("release backfills", () => {
     const saved: string[] = [];
     await backfillSha256.run({ db: prisma, cursor: unhashed, save: async (cursor) => void saved.push(cursor) });
     expect((await prisma.node.findUniqueOrThrow({ where: { id: unhashed } })).sha256).toBeNull();
+  });
+
+  it("queue reading the date taken of existing photos and videos for the worker", async () => {
+    const accountId = (await createAdminAccount()).account.id;
+    accounts.push(accountId);
+    const root = (await findRootFolder(prisma, accountId))!.id;
+    const photo = newNodeId();
+    await prisma.node.create({ data: { id: photo, accountId, parentId: root, type: "FILE", kind: "IMAGE", name: "p.jpg", size: 1n, linkId: newLinkId() } });
+    await queueDateTaken.run({ db: prisma, cursor: null, save: noSave });
+    const queue = new Queue(MEDIA_QUEUE, queueConnection("producer"));
+    try {
+      const job = await queue.getJob(`taken-${photo}`);
+      expect(job?.data).toEqual({ nodeId: photo, task: "taken" });
+      await job?.remove();
+    } finally {
+      await queue.close();
+    }
   });
 });

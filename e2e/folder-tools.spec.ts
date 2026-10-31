@@ -26,6 +26,9 @@ test("renumbers the files of a folder in the chosen order", async ({ page }) => 
   const dialog = page.getByRole("dialog", { name: "Renumber files" });
   const newNames = dialog.getByRole("list", { name: "New names" });
   await expect(newNames.getByRole("listitem")).toHaveText(["a.txt01.txt", "b.txt02.txt", "c.txt03.txt"]);
+  // Text files have no date taken: they are placed by their modification time, and the dialog says so.
+  await dialog.getByRole("button", { name: "Date taken" }).click();
+  await expect(dialog.getByText(/3 without a date taken/)).toBeVisible();
   await dialog.getByRole("button", { name: "Date created" }).click();
   await expect(newNames.getByRole("listitem").first()).toHaveText("c.txt01.txt");
   await dialog.getByRole("button", { name: "Newest first" }).click();

@@ -49,7 +49,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 | 큐 | 작업 | 넣는 곳 |
 |---|---|---|
 | `maintenance` | 매일 `CLEANUP_CRON`(`JOBS_TIMEZONE`): 삭제일이 지난 계정과 만료 항목 삭제, 볼륨 휴지통에서 24시간 지난 항목과 `UPLOAD_TMP_TTL_HOURS`가 지난 미완료 업로드 영구 삭제(`ACTIVE`·`DRAINING` 볼륨). 그 밖에 `METRICS_SAMPLE_INTERVAL_SEC`마다 대역폭 표본(워커 heartbeat 겸), `HEALTH_PROBE_INTERVAL_SEC`마다 Status 페이지 프로브 | 워커 시작 시 스케줄 등록, 관리자 "Run cleanup now"는 계정·항목 정리만 즉시 실행 |
-| `media` | 썸네일(이미지: sharp, 영상: ffmpeg 1초 프레임 → WebP 576px), 공개 링크용 메타데이터 제거본(JPEG·PNG·WebP는 픽셀을 다시 인코딩하지 않고 메타데이터 구간만 제거, 방향 정보는 유지. GIF·AVIF·TIFF는 같은 형식으로 다시 쓰기), 뷰어 미리보기(512KB 이상 JPEG·PNG·WebP·AVIF·TIFF → 2560px WebP q92, 원본보다 작을 때만 저장), 자주 재생되는 영상의 저장된 변환본(`task: "transcode"`, 아래 "미리보기 전송") | 업로드 완료, 복사, 실시간 변환 재생 횟수 |
+| `media` | 썸네일(이미지: sharp, 영상: ffmpeg 1초 프레임 → WebP 576px), 공개 링크용 메타데이터 제거본(JPEG·PNG·WebP는 픽셀을 다시 인코딩하지 않고 메타데이터 구간만 제거, 방향 정보는 유지. GIF·AVIF·TIFF는 같은 형식으로 다시 쓰기), 뷰어 미리보기(512KB 이상 JPEG·PNG·WebP·AVIF·TIFF → 2560px WebP q92, 원본보다 작을 때만 저장), 자주 재생되는 영상의 저장된 변환본(`task: "transcode"`, 아래 "미리보기 전송"), 촬영일(`takenAt`, 아래 "순번 정리". 처리할 때마다 함께 읽고, `task: "taken"`은 촬영일만) | 업로드 완료, 복사, 실시간 변환 재생 횟수, 릴리스 데이터 마이그레이션(`taken`) |
 
 - 생성 파일은 `system/thumbs/`, `system/derived/`, `system/previews/`, `system/transcoded/` 아래 `<accountId>/<nodeId>`에 두고(`ASSET_DIRS`), 원본은 건드리지 않는다. 항목을 지우거나 계정을 다른 볼륨으로 옮기면 함께 지우거나 옮긴다.
 - ffmpeg·smartctl은 `runCommand`(`src/server/process/run-command.ts`)로 실행한다. 셸 없이, 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지, 끝나면 항상 회수한다.
@@ -129,7 +129,12 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 
 폴더 메뉴의 "Renumber files"는 `scripts/sortNumbered.sh`처럼 폴더 바로 아래 파일 이름을 `01, 02, 03…`(확장자 유지)으로 바꾼다(`domain/renumber.ts` 계획, `services/renumber.service.ts` 실행).
 
-- 정렬: 이름(자연 정렬), 생성일(`createdAt`), 수정일(`modifiedAt`), 오름·내림차순. 같은 값은 이름 → id 순이라 계획이 매번 같다.
+- 정렬: 이름(자연 정렬), 생성일(`createdAt`), 수정일(`modifiedAt`), 촬영일(`takenAt`), 오름·내림차순. 같은 값은 이름 → id 순이라 계획이 매번 같다.
+- **촬영일**(`Node.takenAt`): 워커가 미디어 자체의 메타데이터에서 읽는다(`domain/media-date.ts`, `server/media/date-taken.ts`).
+  - 사진: sharp가 헤더만 읽어 준 EXIF에서 `DateTimeOriginal` → `DateTimeDigitized` → IFD0 `DateTime` 순, 시간대는 `OffsetTimeOriginal`. 오프셋이 없으면 `JOBS_TIMEZONE`(기본 Asia/Seoul)의 시각으로 본다.
+  - 영상: `ffmpeg -map_metadata 0 -c copy -t 0 -f ffmetadata`(디코딩 없음, 입력은 기존 `ffmpegInput` 허용 목록 그대로)로 `com.apple.quicktime.creationdate`(현지 시각+오프셋) → `creation_time`(UTC) 순.
+  - 1971년 이전(시계가 설정되지 않은 카메라의 0값)과 미래 값은 버린다. 메타데이터가 없으면 null이고, 정렬은 수정일 → 생성일로 대신하며 미리보기가 그 개수를 알려 준다.
+  - 업로드·복사·`storage:import` 뒤 `processMedia`가 함께 읽는다. 이 기능 전에 올린 파일은 데이터 마이그레이션 `20261101-queue-date-taken`이 `task: "taken"` 작업을 큐에 넣고(파일당 하나, `taken-<nodeId>`), 워커가 릴리스 뒤 백그라운드로 읽는다.
 - 건드리지 않는 것: 하위 폴더, 숨김(점으로 시작하는) 파일(`.env`가 `05`가 되지 않게), 디스크에 없는 파일(`missing`). 새 이름이 이들과 겹치면 실행하지 않는다.
 - 이름만 바뀌고 노드 id는 그대로다. 태그, 공유 링크(`linkId`), 공유 설정, 링크 활동, 썸네일·미리보기(`system/*/<nodeId>`)는 모두 id 기준이라 영향이 없다.
 - 실행은 `withStorageTransaction` 하나: ① `pg_advisory_xact_lock(hashtext('renumber:'||folderId))`로 같은 폴더의 실행을 줄 세우고, 잠금 뒤 계획을 다시 계산해 클라이언트가 본 계획(`expect`)과 다르면 409. ② 바뀌는 파일마다 숨김 임시 이름(`.relayfiles-renumber-<무작위>-<n>`)으로, ③ 그다음 번호 이름으로 바꾼다(DB 행과 디스크를 함께). `(parentId, name)` 유일 인덱스가 지연되지 않고 `fs.rename`은 대상을 덮어쓰므로 두 단계가 필요하다.

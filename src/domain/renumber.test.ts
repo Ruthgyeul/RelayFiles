@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isHiddenName, numberedName, planRenumber, renumberChanges, renumberDigits, renumberTempName, matchesReviewed, sortForRenumber, type RenumberCandidate } from "./renumber";
+import { isHiddenName, numberedName, planRenumber, renumberChanges, renumberDigits, renumberTempName, matchesReviewed, sortForRenumber, takenFallbacks, type RenumberCandidate } from "./renumber";
 
 const file = (id: string, name: string, createdAt: number, modifiedAt: number | null = null, missing = false): RenumberCandidate => ({ id, name, type: "file", createdAt, modifiedAt, missing });
 const folder = (id: string, name: string): RenumberCandidate => ({ id, name, type: "folder", createdAt: 0, modifiedAt: null, missing: false });
@@ -43,6 +43,19 @@ describe("sortForRenumber", () => {
     expect(sortForRenumber(files, "created", "asc").map((f) => f.id)).toEqual(["a", "b", "c"]);
     expect(sortForRenumber(files, "modified", "asc").map((f) => f.id)).toEqual(["b", "c", "a"]);
     expect(sortForRenumber(files, "modified", "desc").map((f) => f.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("sorts by date taken, falling back to modification then creation time", () => {
+    const shots = [
+      { ...file("a", "a.jpg", 1, 50), takenAt: 30 },
+      { ...file("b", "b.jpg", 2, 10), takenAt: null },
+      { ...file("c", "c.jpg", 20, null), takenAt: undefined },
+      { ...file("d", "d.jpg", 3, 99), takenAt: 5 },
+    ];
+    expect(sortForRenumber(shots, "taken", "asc").map((f) => f.id)).toEqual(["d", "b", "c", "a"]);
+    expect(sortForRenumber(shots, "taken", "desc").map((f) => f.id)).toEqual(["a", "c", "b", "d"]);
+    const plan = planRenumber([...shots, folder("f", "Sub")], "taken", "asc");
+    expect(takenFallbacks(shots, plan)).toBe(2);
   });
 
   it("breaks ties by name, then id", () => {

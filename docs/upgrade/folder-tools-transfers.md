@@ -10,8 +10,8 @@
 
 | 대상 | 변경 | 자동 처리 | 직접 할 일 |
 |---|---|---|---|
-| DB 스키마 | `Node.modifiedAt` 컬럼 추가 (`20261031120000_node_modified_at`, NULL 허용 컬럼 추가만) | `release.sh` → `npm run db:deploy` | 없음 |
-| DB 데이터 | 기존 파일의 수정 시각 채우기, SHA-256 없는 파일 해시 (`20261101-backfill-modified-at`, `20261101-backfill-sha256`) | `release.sh` → `npm run data:migrate` | 없음 |
+| DB 스키마 | `Node.modifiedAt`, `Node.takenAt` 컬럼 추가 (`20261031120000_node_modified_at`, `20261101120000_node_taken_at`, NULL 허용 컬럼 추가만) | `release.sh` → `npm run db:deploy` | 없음 |
+| DB 데이터 | 기존 파일의 수정 시각 채우기, SHA-256 없는 파일 해시, 사진·영상 촬영일 읽기 작업 등록 (`20261101-backfill-modified-at`, `20261101-backfill-sha256`, `20261101-queue-date-taken`) | `release.sh` → `npm run data:migrate` | 없음 |
 | SSD 디렉터리 구조 | 변경 없음 (`layoutVersion` 그대로) | `storage:migrate`는 할 일 없이 끝남 | 없음 |
 | Redis | 변경 없음 (새 키 없음, `REDIS_KEY_PREFIX` 그대로) | — | 없음 |
 | `.env` | 선택 키 2개 추가: `RENUMBER_MAX_FILES`(순번 정리 한 번에 바꿀 최대 파일 수, 기본 10000), `DUPLICATES_MAX_SCAN`(중복 찾기 한 번에 비교할 최대 파일 수, 기본 10000) | 없으면 기본값 사용 | 없음 (바꾸고 싶을 때만 [아래 "한도 바꾸기"](#한도-바꾸기-env)) |
@@ -24,7 +24,7 @@
 
 ### 새로 생기는 기능
 
-1. **Renumber files**: 폴더 메뉴(⋮)에서 폴더 바로 아래 파일 이름을 `01, 02, 03…`(확장자 유지)으로 일괄 변경. 정렬은 이름 / 생성일 / 수정일, 오름·내림차순. 바꾸기 전에 새 이름을 미리 보여 준다.
+1. **Renumber files**: 폴더 메뉴(⋮)에서 폴더 바로 아래 파일 이름을 `01, 02, 03…`(확장자 유지)으로 일괄 변경. 정렬은 이름 / 생성일 / 수정일 / 촬영일(사진 EXIF·영상 메타데이터), 오름·내림차순. 바꾸기 전에 새 이름을 미리 보여 준다.
 2. **Find duplicates**: 폴더(선택하면 하위 폴더까지)에서 이름이 아닌 **내용(SHA-256)** 이 같은 파일 묶음을 보여 주고, 골라서 지운다.
 3. **전송 패널 파일별 목록**: 2개 이상 업로드·다운로드 카드의 ▾(Show files)를 누르면 파일마다 진행 막대, 속도 그래프, 개별 취소 버튼.
 4. **폴더로 저장하는 다운로드**: 여러 항목을 선택하고 Download를 누르면 Chrome·Edge에서는 저장할 폴더를 고르고, 파일별 진행률·취소가 된다.
@@ -108,8 +108,8 @@ deploy/scripts/release.sh
 | 2 | `Backup` | DB 덤프(`backup.sh`) | 실패하면 여기서 멈추고 아무것도 바뀌지 않는다 |
 | 3 | `Build images` | `app`·`worker`·`tools` 이미지 빌드 (수 분) | 빌드 중에도 기존 앱은 계속 서비스 |
 | 4 | (점검 모드 켜짐) | 방문자에게 503 안내 페이지 | — |
-| 5 | `Migrations (schema, data, storage layout)` | ① `db:deploy` | `Applying migration 20261031120000_node_modified_at` → 컬럼 추가 (즉시 끝남) |
-| | | ② `data:migrate` | `20261101-backfill-modified-at: …`, `20261101-backfill-sha256: …`, 마지막에 `Data migrations: 2 ran, 0 already done.` |
+| 5 | `Migrations (schema, data, storage layout)` | ① `db:deploy` | 적용 목록에 `20261031120000_node_modified_at`, `20261101120000_node_taken_at`(이전 업데이트를 적용한 서버는 뒤의 것만)이 나오고 `All migrations have been successfully applied.` → 컬럼 추가 (즉시 끝남) |
+| | | ② `data:migrate` | `20261101-backfill-modified-at: …`, `20261101-backfill-sha256: …`, `20261101-queue-date-taken: …`, 마지막에 `Data migrations: 3 ran, 0 already done.` (이전 업데이트를 이미 적용한 서버는 `1 ran, 2 already done.`) |
 | | | ③ `storage:migrate` | 구조 변경 없음 → 바로 끝남 |
 | 6 | `Restart app, worker and nginx` | 새 이미지로 교체 | — |
 | 7 | `Health check` | `/api/health`가 `ok`일 때까지 대기 | — |
@@ -144,7 +144,7 @@ $C exec postgres psql -U relayfiles -c $'SELECT count(*) FILTER (WHERE "modified
 ```
 
 - `migrate status`: `Database schema is up to date!`
-- `DataMigration`: 두 줄 모두 `finishedAt`에 시각이 있다.
+- `DataMigration`: 세 줄(`…backfill-modified-at`, `…backfill-sha256`, `…queue-date-taken`) 모두 `finishedAt`에 시각이 있다.
 - 마지막 쿼리: 보통 `no_mtime = 0`, `no_hash = 0`. 0이 아니면 그 파일은 OFFLINE 볼륨에 있거나 디스크에서 없어진 파일이다 → `$C run --rm tools npm run storage:fsck`로 확인([runbook "DB와 디스크 대조"](../runbook.md#db와-디스크-대조-storagefsck)).
 
 `POSTGRES_USER`를 바꿨다면 `-U` 값을 맞춘다.
@@ -162,7 +162,7 @@ $C exec postgres psql -U relayfiles -c $'SELECT count(*) FILTER (WHERE "modified
 ### Renumber files
 
 1. 폴더 ⋮ → **Renumber files**.
-2. **Order by**: Name / Date created / Date modified, **Direction**: A → Z(Oldest first) / Z → A(Newest first).
+2. **Order by**: Name / Date created / Date modified / Date taken, **Direction**: A → Z(Oldest first) / Z → A(Newest first).
 3. 목록에서 `원래 이름 → 01.jpg`를 확인하고 **Renumber N files**.
 
 - 대상은 그 폴더 **바로 아래 파일만**이다. 하위 폴더, 점(`.`)으로 시작하는 숨김 파일은 이름을 바꾸지 않는다.
@@ -171,6 +171,8 @@ $C exec postgres psql -U relayfiles -c $'SELECT count(*) FILTER (WHERE "modified
 - 공유 링크, 태그, 공유 설정, 썸네일은 그대로 유지된다(이름만 바뀐다).
 - 미리 본 뒤에 다른 사람이 파일을 올리거나 바꾸면 "This folder changed. Review the new order."가 나오고 아무것도 바뀌지 않는다. 새 목록을 확인하고 다시 누르면 된다.
 - 중간에 실패해도 모든 파일이 원래 이름으로 돌아간다. 하지만 **성공한 뒤 원래 이름으로 되돌리는 기능은 없다.** 바꾸기 전에 목록을 확인한다.
+- "Date taken"은 사진 EXIF 촬영일(`DateTimeOriginal`)이나 영상의 촬영 시각(`creation_time`, 아이폰은 `com.apple.quicktime.creationdate`)이다. 메타데이터가 없는 파일(스크린샷, 편집 프로그램이 지운 파일 등)은 수정일로 대신 정렬되고, 목록 아래에 "N without a date taken"으로 개수가 나온다. 시간대가 기록되지 않은 사진은 서버 시간대(`JOBS_TIMEZONE`, 기본 Asia/Seoul)로 본다.
+- 업데이트 전에 올린 사진·영상의 촬영일은 `release.sh`가 끝난 뒤 워커가 백그라운드로 읽는다(수천 개면 몇 분). 그동안 Date taken 정렬은 그 파일들을 수정일로 대신 정렬한다.
 - "Date modified"는 파일 자체의 수정 시각이다. 이번 버전부터 올리는 파일은 원본 파일의 수정 시각(브라우저가 알려 주는 값)이 저장된다. 그 전에 올린 파일은 SSD에 저장된 시각(대개 업로드 시각)으로 채워졌다.
 - 한 번에 바꾸는 파일은 기본 10,000개까지(`RENUMBER_MAX_FILES`, [아래 "한도 바꾸기"](#한도-바꾸기-env)). 넘으면 미리보기에 이유가 나오고 버튼이 꺼진다. 2만 개 기준 수십 초 안에 끝난다.
 - Cloudflare Tunnel로 접속 중이면 100초가 넘는 작업은 화면에 오류(524)가 보여도 서버에서는 끝까지 실행된다. 새로고침해서 결과를 확인한다.

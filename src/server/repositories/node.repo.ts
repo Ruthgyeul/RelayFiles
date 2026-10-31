@@ -220,7 +220,7 @@ export function findFileWithContent(db: DbClient, accountId: string, sha256: str
 
 /** Direct children with what "Renumber files" sorts and checks by. */
 export function listChildrenForRenumber(db: DbClient, parentId: string) {
-  return db.node.findMany({ where: { parentId }, select: { id: true, name: true, type: true, createdAt: true, modifiedAt: true, missing: true } });
+  return db.node.findMany({ where: { parentId }, select: { id: true, name: true, type: true, createdAt: true, modifiedAt: true, takenAt: true, missing: true } });
 }
 
 /**
@@ -263,7 +263,7 @@ export function filesWithoutSha256(db: DbClient, take: number, afterId: string |
 }
 
 /** Records a value a backfill computed. */
-export async function setFileFacts(db: DbClient, nodeId: string, data: { modifiedAt?: Date; sha256?: string }): Promise<void> {
+export async function setFileFacts(db: DbClient, nodeId: string, data: { modifiedAt?: Date; sha256?: string; takenAt?: Date }): Promise<void> {
   await db.node.update({ where: { id: nodeId }, data });
 }
 
@@ -280,4 +280,14 @@ export async function renameChildren(tx: DbClient, folderId: string, renames: re
     UPDATE "Node" AS n SET name = v.name, "updatedAt" = now()
     FROM unnest(${ids}::text[], ${names}::text[]) AS v(id, name)
     WHERE n.id = v.id AND n."parentId" = ${folderId}`;
+}
+
+/** Photos and videos whose date taken was never read, by id (the release data migration queues them). */
+export function mediaWithoutDateTaken(db: DbClient, take: number, afterId: string | null) {
+  return db.node.findMany({
+    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, takenAt: null, missing: false, ...(afterId ? { id: { gt: afterId } } : {}) },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take,
+  });
 }

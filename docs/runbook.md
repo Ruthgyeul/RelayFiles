@@ -269,6 +269,7 @@ $C exec postgres psql -U relayfiles -c 'SELECT at, "actorName", action, "targetI
 | id | 하는 일 | 시간 |
 |---|---|---|
 | `20261101-backfill-modified-at` | 수정 시각(`modifiedAt`)이 없는 파일에 디스크 mtime을 채운다(파일이 없으면 생성 시각). OFFLINE 볼륨의 파일은 건너뛰고 경고 로그 | 파일 1만 개당 수 초(행마다 경로 조회 + `stat`) |
+| `20261101-queue-date-taken` | 촬영일이 없는 사진·영상마다 워커 작업(`task: "taken"`)을 큐에 넣는다. 실제 읽기는 릴리스 뒤 워커가 백그라운드로 하며, 큐에 넣는 동안만 Redis가 필요하다(Redis가 안 되면 실패하고 다음 실행에서 이어 간다) | 큐 등록만: 파일 1만 개당 1초 안팎. 워커 처리는 사진 수 ms, 영상 수십 ms씩 |
 | `20261101-backfill-sha256` | SHA-256이 없는 파일을 해시한다. 업로드는 처음부터 해시를 기록했으므로 보통 대상이 0개다. 없거나 크기가 다른 파일은 비워 두고 경고 로그(`storage:fsck`로 확인) | 대상 파일 크기만큼 읽는다(SSD 기준 수백 MB/s) |
 
 진행 상황은 `DataMigration` 테이블에 남는다. 중간에 멈추면 다음 실행이 저장된 커서 다음부터 이어 간다. 끝난 마이그레이션은 다시 실행하지 않는다.

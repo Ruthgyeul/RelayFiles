@@ -6,7 +6,7 @@
 import { RENUMBER } from "@/config/policy";
 import { nameError, splitExtension } from "./names";
 
-export const RENUMBER_SORTS = ["name", "created", "modified"] as const;
+export const RENUMBER_SORTS = ["name", "created", "modified", "taken"] as const;
 export type RenumberSort = (typeof RENUMBER_SORTS)[number];
 
 export const RENUMBER_ORDERS = ["asc", "desc"] as const;
@@ -20,6 +20,8 @@ export interface RenumberCandidate {
   createdAt: number;
   /** The file's own modification time; null falls back to createdAt. */
   modifiedAt: number | null;
+  /** When the photo or video was taken (its metadata); null falls back to the modification time. */
+  takenAt?: number | null;
   missing: boolean;
 }
 
@@ -65,6 +67,7 @@ const byName = (a: RenumberCandidate, b: RenumberCandidate) => a.name.localeComp
 const timeOf: Record<Exclude<RenumberSort, "name">, (file: RenumberCandidate) => number> = {
   created: (file) => file.createdAt,
   modified: (file) => file.modifiedAt ?? file.createdAt,
+  taken: (file) => file.takenAt ?? file.modifiedAt ?? file.createdAt,
 };
 
 /** Orders files by the chosen key; ties fall back to the name, then the id, so a plan is stable. */
@@ -115,4 +118,10 @@ const sameEntries = (expected: readonly Pick<RenumberEntry, "id" | "to">[], actu
 export function matchesReviewed(expected: readonly Pick<RenumberEntry, "id" | "to">[], plan: Pick<RenumberPlan, "entries">, count?: number): boolean {
   if (count === undefined) return sameEntries(expected, plan.entries);
   return count === plan.entries.length && sameEntries(expected, renumberChanges(plan));
+}
+
+/** Files a "taken" order places by another time because their metadata records no date taken. */
+export function takenFallbacks(children: readonly RenumberCandidate[], plan: Pick<RenumberPlan, "entries">): number {
+  const numbered = new Set(plan.entries.map((entry) => entry.id));
+  return children.filter((child) => numbered.has(child.id) && (child.takenAt ?? null) === null).length;
 }

@@ -197,6 +197,8 @@ export const MEDIA = {
   ffmpegDemuxers: ["mov", "matroska", "avi", "asf", "mpegts", "mpeg", "flv", "ogg", "wav", "mp3"],
   /** Largest PNG frame read back from ffmpeg (a 8K frame fits); more stops the command. */
   maxFrameBytes: 256 * 1024 * 1024,
+  /** Largest metadata listing read back from ffmpeg (`-f ffmetadata`, for the date taken). */
+  maxMetadataBytes: 1024 * 1024,
   /**
    * What the browser may keep (playback bytes, thumbnails, previews, converted video). A file's
    * bytes never change under its URL (a replaced file gets a new id), so they are `immutable`:
