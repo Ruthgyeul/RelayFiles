@@ -19,8 +19,8 @@
 | 검증 | zod 4 (env, API 계약) |
 | 데이터 | PostgreSQL 16 + Prisma 7, Redis 7 + BullMQ |
 | 파일 | 외장 SSD `/mnt/relayfilesDB`, 사용자별 루트 폴더에 원본 저장 |
-| 테스트 | Vitest 5 (단위), Playwright 1.63 (E2E, 360/768/1280 뷰포트) |
-| 린트 | ESLint 9 flat config + `eslint-plugin-boundaries` (레이어 규칙) |
+| 테스트 | Vitest 5 (단위), Playwright 1.64 (E2E, 360/768/1280 뷰포트) |
+| 린트 | ESLint 10 flat config + `eslint-plugin-boundaries` (레이어 규칙). `eslint-config-next`의 react·import·jsx-a11y 플러그인은 peer 범위가 `^9`까지라 `overrides.eslint = "$eslint"`로 루트 버전을 쓴다 |
 
 ## Next.js 16 주의사항
 
@@ -119,3 +119,4 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 - Conventional Commits: `feat(scope): subject`, 소문자, 명령형, 마침표 없음.
 - PR 본문: `## Changes` / `## How to Test` / `## Related Issues`.
 - npm만 쓰고 `package-lock.json`을 커밋한다.
+- 의존성의 설치 스크립트(preinstall/install/postinstall)는 `package.json`의 `allowScripts`로 승인한다(npm 11.19+는 승인되지 않은 스크립트를 `npm warn install-scripts`로 알린다). 새 의존성이 스크립트를 가지면 내용을 확인한 뒤 `npm install-scripts approve --no-allow-scripts-pin <pkg>`로 추가한다(버전 고정 없이 이름만 등록해 Dependabot 업데이트마다 다시 승인하지 않게 한다).

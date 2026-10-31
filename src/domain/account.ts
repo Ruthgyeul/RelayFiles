@@ -32,13 +32,6 @@ export function daysLeftUntil(at: number, now: number): number {
   return Math.max(0, Math.ceil((at - now) / MS.day));
 }
 
-/** Whole days left until deletion (rounded up, never negative); null when it never expires. */
-export function daysLeft(account: Lifecycle, ttlDays: number, now: Date): number | null {
-  const at = deletionDate(account, ttlDays);
-  if (!at) return null;
-  return daysLeftUntil(at.getTime(), now.getTime());
-}
-
 /** True once the deletion date has passed (the account must no longer be usable). */
 export function isExpired(account: Lifecycle, ttlDays: number, now: Date): boolean {
   const at = deletionDate(account, ttlDays);

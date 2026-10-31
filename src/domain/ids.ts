@@ -68,5 +68,3 @@ export const newFileRequestId = () => randomString(ID_LENGTH.fileRequest, ID_ALP
 export const newInviteCode = () => `${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}-${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}`;
 
 export const isAccountId = (value: string) => ID_PATTERN.account.test(value);
-export const isLinkId = (value: string) => ID_PATTERN.link.test(value);
-export const isSessionId = (value: string) => ID_PATTERN.session.test(value);

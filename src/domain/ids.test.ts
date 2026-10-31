@@ -3,8 +3,6 @@ import {
   ID_ALPHABET,
   ID_PATTERN,
   isAccountId,
-  isLinkId,
-  isSessionId,
   newAccountId,
   newAccountToken,
   newAnonName,
@@ -25,7 +23,7 @@ describe("id generators", () => {
       expect(newAccountToken()).toMatch(ID_PATTERN.token);
       expect(newAnonName()).toMatch(ID_PATTERN.anonName);
       expect(newInviteCode()).toMatch(ID_PATTERN.invite);
-      expect(isSessionId(newSessionId())).toBe(true);
+      expect(newSessionId()).toMatch(ID_PATTERN.session);
     }
   });
 
@@ -49,7 +47,7 @@ describe("id generators", () => {
     expect(isAccountId("abcdefghjkmn")).toBe(true);
     expect(isAccountId("abcdefghjkm1")).toBe(false);
     expect(isAccountId("../etc/passwd")).toBe(false);
-    expect(isLinkId("abcdefghjk")).toBe(true);
+    expect("abcdefghjk").toMatch(ID_PATTERN.link);
   });
 });
 
