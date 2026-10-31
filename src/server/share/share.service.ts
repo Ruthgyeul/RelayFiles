@@ -114,10 +114,46 @@ function indexTree(rows: readonly SharedRow[]) {
   return { byId, children, sizeOf };
 }
 
+/**
+ * Stream only and paused downloads set on the items above a row, from the account root down
+ * to its parent. Like passwords and expiry (`strictestGuard`), a folder's setting applies to
+ * everything inside it, whichever link the item is opened through.
+ */
+export interface WayAbove {
+  streamOnly: boolean;
+  dlPaused: boolean;
+}
+
+type WayRow = Pick<SharedRow, "access" | "dlPaused">;
+const NOTHING_ABOVE: WayAbove = { streamOnly: false, dlPaused: false };
+const through = (way: WayAbove, row: WayRow): WayAbove => ({ streamOnly: way.streamOnly || row.access === "STREAM", dlPaused: way.dlPaused || row.dlPaused });
+
+/** The way above the last row of a chain (account root first). */
+const wayAboveEnd = (chain: readonly WayRow[]) => chain.slice(0, -1).reduce(through, NOTHING_ABOVE);
+
+/** The way above each row of a link's tree, starting from the folders above the link itself. */
+function wayAboveInTree(link: LoadedLink, byId: ReadonlyMap<string, SharedRow>): (row: SharedRow) => WayAbove {
+  const aboveRoot = wayAboveEnd(link.chain);
+  const known = new Map<string, WayAbove>();
+  const wayAbove = (row: SharedRow): WayAbove => {
+    if (row.id === link.root.id) return aboveRoot;
+    const cached = known.get(row.id);
+    if (cached) return cached;
+    const parent = byId.get(row.parentId ?? "");
+    const way = parent ? through(wayAbove(parent), parent) : aboveRoot;
+    known.set(row.id, way);
+    return way;
+  };
+  return wayAbove;
+}
+
+/** Whether downloads of a row are paused by an admin, on it or on a folder above it. */
+export const pausedOn = (row: WayRow, above: WayAbove) => row.dlPaused || above.dlPaused;
+
 /** Why visitors may not download this row now (null = they may), as on the share page. */
-export function downloadBlockOf(row: SharedRow, root: Pick<NodeRow, "access">, busy: Busy | undefined): DownloadBlock | null {
+export function downloadBlockOf(row: SharedRow, above: WayAbove, busy: Busy | undefined): DownloadBlock | null {
   return downloadBlock({
-    linkStreamOnly: root.access === "STREAM",
+    linkStreamOnly: above.streamOnly,
     streamOnly: row.access === "STREAM",
     downloadLimit: row.downloadLimit,
     downloads: row.downloads,
@@ -144,8 +180,9 @@ async function buildView(link: LoadedLink, folderId: string | null, now: number)
     listed.map((row) => ({ row, type: lower(row.type) as "file" | "folder", name: row.name, kind: kindOf(row), size: Number(sizeOf(row)), createdAt: row.createdAt.getTime() })),
     "name",
   ).map((entry) => entry.row);
+  const wayAbove = wayAboveInTree(link, byId);
   const busy = await busyLevels(
-    [folder, ...sorted].map((row) => ({ id: row.id, dlPaused: row.dlPaused || root.dlPaused })),
+    [folder, ...sorted].map((row) => ({ id: row.id, dlPaused: pausedOn(row, wayAbove(row)) })),
     now,
   );
 
@@ -157,7 +194,7 @@ async function buildView(link: LoadedLink, folderId: string | null, now: number)
     size: sizeOf(row).toString(),
     itemCount: (children.get(row.id) ?? []).length,
     busy: busyBadge(busy.get(row.id)!, now, "share"),
-    canDownload: downloadBlockOf(row, root, busy.get(row.id)) === null,
+    canDownload: downloadBlockOf(row, wayAbove(row), busy.get(row.id)) === null,
     hasThumb: row.type === "FILE" && row.hasThumb,
   }));
   return {
@@ -277,9 +314,10 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
   const path = chain.slice(rootAt).map((at) => at.id);
   const guarded = limitingIds(chain);
   const counted = [...new Set([row.id, link.root.id, ...guarded])];
-  const busy = (await busyLevels([{ id: row.id, dlPaused: row.dlPaused || link.root.dlPaused }], now)).get(row.id)!;
+  const above = wayAboveEnd(chain);
+  const busy = (await busyLevels([{ id: row.id, dlPaused: pausedOn(row, above) }], now)).get(row.id)!;
   if (purpose === "download") {
-    switch (downloadBlockOf(row, link.root, busy)) {
+    switch (downloadBlockOf(row, above, busy)) {
       case "stream-only":
         throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
       case "limit":
@@ -298,19 +336,21 @@ export async function resolveSharedTree(linkId: string, folderId: string, viewer
   const link = await loadLink(linkId, viewer, now);
   if (!link) throw await missingLinkError(linkId);
   if (link.status !== "open") throw statusError(link.status);
-  if (link.root.access === "STREAM") throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
   const tree = await publicTree(db(), link.root.id, new Date(now));
   const { byId, children } = indexTree(tree);
   const folder = byId.get(folderId);
   if (!folder) throw new ApiError("NOT_FOUND");
-  const busy = (await busyLevels([{ id: folder.id, dlPaused: folder.dlPaused || link.root.dlPaused }], now)).get(folder.id)!;
+  const wayAbove = wayAboveInTree(link, byId);
+  const atFolder = through(wayAbove(folder), folder);
+  if (atFolder.streamOnly) throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
+  const busy = (await busyLevels([{ id: folder.id, dlPaused: atFolder.dlPaused }], now)).get(folder.id)!;
   if (busy.level === 2) throw busyError(busy, now);
   const path: string[] = [];
   for (let at: SharedRow | undefined = folder; at; at = at.id === link.root.id ? undefined : byId.get(at.parentId ?? "")) path.unshift(at.id);
   // Counted for a "Download all" like a single download: the folder, the link and every item
   // on the way that limits downloads (the files inside are counted one by one).
   const counted = [...new Set([folder.id, link.root.id, ...limitingIds(link.chain), ...limitingIds(path.map((id) => byId.get(id)!))])];
-  return { link, folder, children, byId, path, counted, busy };
+  return { link, folder, children, byId, path, counted, busy, wayAbove };
 }
 
 /**
@@ -326,13 +366,20 @@ export async function unlockShare(linkId: string, password: string, viewer: Shar
   const locked = link.chain.filter((row) => row.passwordHash !== null && !isUnlocked(viewer.unlocks, row.linkId, row.passwordHash, secrets));
   if (locked.length === 0) return addUnlock(viewer.unlocks, linkId, link.root.passwordHash, secrets[0]!, now);
 
-  const key = `unlock:${linkId}:${client.ipKey}`;
-  const attempts = await countInWindow(key, SHARE.unlockWindowSec);
-  if (attempts > SHARE.unlockMaxAttempts) throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(key)) });
+  // Guesses count against each password still needed (the item holding it, not the link
+  // used), so links to different items under the same locked folder share one budget.
+  const keyOf = (row: ChainRow) => `unlock:${row.id}:${client.ipKey}`;
+  const attempts = await Promise.all(locked.map((row) => countInWindow(keyOf(row), SHARE.unlockWindowSec)));
+  const worst = attempts.indexOf(Math.max(...attempts));
+  if (attempts[worst]! > SHARE.unlockMaxAttempts) {
+    throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(keyOf(locked[worst]!))) });
+  }
   const matching: ChainRow[] = [];
   for (const row of locked) if (await verify(row.passwordHash!, password)) matching.push(row);
   if (matching.length === 0) throw new ApiError("FORBIDDEN", "Wrong password");
-  await redis().del(key);
+  // A right password gives back only this attempt, on the items it opened: knowing one
+  // password does not reset the guesses made at another (as with sign-in, refundTokenAttempt).
+  await Promise.all(matching.map((row) => redis().decr(keyOf(row))));
   return unlocksWith(
     viewer.unlocks,
     matching.map((row) => ({ linkId: row.linkId, passwordHash: row.passwordHash })),

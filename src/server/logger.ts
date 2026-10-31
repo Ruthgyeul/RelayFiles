@@ -5,7 +5,7 @@ import { getAppEnv, getEnv, logLevelOf } from "@/config/env";
 import { LOGS } from "@/config/policy";
 
 /** Keys whose values must never reach the logs (CLAUDE.md: no tokens, passwords or real IPs). */
-const SENSITIVE_KEY = /token|password|secret|authorization|cookie|^ip$|ipaddress|x-forwarded-for|cf-connecting-ip/i;
+const SENSITIVE_KEY = /token|password|secret|authorization|cookie|^ip$|ipaddress|x-forwarded-for|x-real-ip|cf-connecting-ip|true-client-ip/i;
 const REDACTED = "[redacted]";
 
 /** Returns a copy of `value` with sensitive fields replaced. Exported for tests. */

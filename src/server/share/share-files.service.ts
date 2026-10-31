@@ -27,7 +27,7 @@ import { grantDownload, hasDownloadGrant } from "./download-grant";
 import { logLinkEvent } from "./events";
 import { newVisitorId, setVisitorCookie } from "./visitor-cookie";
 import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driver";
-import { downloadBlockOf, resolveSharedFile, resolveSharedTree, type LoadedLink, type SharedFile, type ShareViewer } from "./share.service";
+import { downloadBlockOf, pausedOn, resolveSharedFile, resolveSharedTree, type LoadedLink, type SharedFile, type ShareViewer } from "./share.service";
 import { driverForAccount } from "../services/volume.service";
 import { zipResponse, type ZipEntry } from "../services/zip.service";
 import { markActive } from "../metrics/activity";
@@ -234,7 +234,7 @@ const SKIP_REASONS: Record<ZipSkip, string> = {
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
 function zipPlan(shared: Awaited<ReturnType<typeof resolveSharedTree>>, owner: AccountRow, busy: Map<string, Busy>) {
-  const { link, folder, children } = shared;
+  const { link, folder, children, wayAbove } = shared;
   const files: { row: SharedRow; name: string; segments: string[]; skip: ZipSkip | null }[] = [];
   const folders: string[] = [];
   const walk = (row: SharedRow, inZip: string[], onDisk: string[]) => {
@@ -247,7 +247,7 @@ function zipPlan(shared: Awaited<ReturnType<typeof resolveSharedTree>>, owner: A
         continue;
       }
       const imageBlock = stripsImage(owner, child) ? publicImageBlock(child) : null;
-      const skip = link.isOwner ? imageBlock : (downloadBlockOf(child, link.root, busy.get(child.id)) ?? imageBlock);
+      const skip = link.isOwner ? imageBlock : (downloadBlockOf(child, wayAbove(child), busy.get(child.id)) ?? imageBlock);
       files.push({ row: child, name, segments, skip });
     }
   };
@@ -268,14 +268,14 @@ function skippedNote(skipped: readonly { name: string; skip: ZipSkip }[]): strin
 export async function zipSharedFolder(linkId: string, folderId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
   const now = Date.now();
   const shared = await resolveSharedTree(linkId, folderId, viewer, now);
-  const { link, folder, children } = shared;
+  const { link, folder, children, wayAbove } = shared;
   const owner = await ownerOf(link);
   const driver = await driverForAccount(owner);
   const base = segmentsBelowRoot(await ancestorChain(db(), folder.id));
 
   const allFiles = [...children.values()].flat().filter((row) => row.type === "FILE");
   const busy = await busyLevels(
-    allFiles.map((row) => ({ id: row.id, dlPaused: row.dlPaused || link.root.dlPaused })),
+    allFiles.map((row) => ({ id: row.id, dlPaused: pausedOn(row, wayAbove(row)) })),
     now,
   );
   const plan = zipPlan(shared, owner, busy);

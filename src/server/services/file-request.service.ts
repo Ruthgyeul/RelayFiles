@@ -124,7 +124,8 @@ export async function unlockRequest(id: string, password: string, unlocks: Unloc
     throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(key)) });
   }
   if (!(await verify(row.passwordHash!, password))) throw new ApiError("FORBIDDEN", "Wrong password");
-  await redis().del(key);
+  // Only this attempt is given back (like share links and sign-in), not earlier wrong guesses.
+  await redis().decr(key);
   return addUnlock(unlocks, requestUnlockKey(id), row.passwordHash, secret, now);
 }
 
