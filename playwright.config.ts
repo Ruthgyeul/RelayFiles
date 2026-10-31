@@ -46,7 +46,9 @@ export default defineConfig({
     : {
         command: `npm run build && npm run start`,
         // CSP enforced, so a blocked script, style or viewer fails the tests (e2e/fixtures.ts).
-        env: { PORT: String(testing.E2E_PORT), HOSTNAME: "127.0.0.1", ENABLE_UI_CATALOG: "true", SIGNUPS_PER_HOUR: "10000", CSP_MODE: "enforce" },
+        // NODE_ENV: loadEnvConfig above copies .env (NODE_ENV=development in .env.example) into
+        // this process, and `next build` fails to prerender under a non-production NODE_ENV.
+        env: { NODE_ENV: "production", PORT: String(testing.E2E_PORT), HOSTNAME: "127.0.0.1", ENABLE_UI_CATALOG: "true", SIGNUPS_PER_HOUR: "10000", CSP_MODE: "enforce" },
         url: BASE_URL,
         timeout: 240_000,
         reuseExistingServer: !process.env.CI,

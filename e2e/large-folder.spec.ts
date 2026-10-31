@@ -11,9 +11,11 @@ test("long folders render lazily and stay usable", async ({ page }) => {
     await Promise.all(names.slice(i, i + 20).map((name) => page.request.post("/api/folders", { data: { parentId: "root", name } })));
   }
   await page.reload();
-  const rows = page.locator("[data-item]");
+  // Scoped to <main> and polled: while the page streams in, React parks the finished rows in a
+  // hidden container outside it and then moves them, so a row read once can be a detached copy.
+  const rows = page.getByRole("main").locator("[data-item]");
   await expect(rows).toHaveCount(COUNT);
-  expect(await rows.first().evaluate((row) => getComputedStyle(row).contentVisibility)).toBe("auto");
+  await expect.poll(() => rows.first().evaluate((row) => getComputedStyle(row).contentVisibility)).toBe("auto");
 
   const last = page.locator(`[data-item="${names.at(-1)}"]`);
   await last.scrollIntoViewIfNeeded();
