@@ -33,9 +33,6 @@ const kindOf = (row: { kind: string | null }) => (row.kind ? (lower(row.kind) as
 
 export const shareUrl = (linkId: string) => `${getAppEnv().PUBLIC_URL}/d/${linkId}`;
 
-/** Items on the way that carry link settings (the account's root folder never does). */
-const guardedPart = (chain: readonly ChainRow[]) => chain.slice(1);
-
 /**
  * A link's settings, owner and status. Null when no item has this link. The status follows
  * the strictest settings from the account root down to the shared item (`strictestGuard`):
@@ -50,7 +47,7 @@ export async function loadLink(linkId: string, viewer: ShareViewer, now: number)
   if (!owner) return null;
   const visibility = effectiveVisibility(chain.map((row) => lower(row.visibility) as Visibility).reverse());
   const guard = strictestGuard(
-    guardedPart(chain).map((row) => ({
+    chain.map((row) => ({
       expAt: row.expAt?.getTime() ?? null,
       burn: row.burn,
       downloads: row.downloads,
@@ -278,7 +275,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
   // Inside the link, and nothing between the link and the file is closed to it (as in publicTree).
   if (!row || row.id !== nodeId || row.type !== "FILE" || rootAt < 0 || chain.slice(rootAt + 1).some((at) => closedBelowLink(at, now))) throw new ApiError("NOT_FOUND");
   const path = chain.slice(rootAt).map((at) => at.id);
-  const guarded = limitingIds(guardedPart(chain));
+  const guarded = limitingIds(chain);
   const counted = [...new Set([row.id, link.root.id, ...guarded])];
   const busy = (await busyLevels([{ id: row.id, dlPaused: row.dlPaused || link.root.dlPaused }], now)).get(row.id)!;
   if (purpose === "download") {
@@ -312,7 +309,7 @@ export async function resolveSharedTree(linkId: string, folderId: string, viewer
   for (let at: SharedRow | undefined = folder; at; at = at.id === link.root.id ? undefined : byId.get(at.parentId ?? "")) path.unshift(at.id);
   // Counted for a "Download all" like a single download: the folder, the link and every item
   // on the way that limits downloads (the files inside are counted one by one).
-  const counted = [...new Set([folder.id, link.root.id, ...limitingIds(guardedPart(link.chain)), ...limitingIds(path.map((id) => byId.get(id)!))])];
+  const counted = [...new Set([folder.id, link.root.id, ...limitingIds(link.chain), ...limitingIds(path.map((id) => byId.get(id)!))])];
   return { link, folder, children, byId, path, counted, busy };
 }
 
@@ -326,7 +323,7 @@ export async function unlockShare(linkId: string, password: string, viewer: Shar
   const link = await loadLink(linkId, viewer, now);
   if (!link || link.status === "private") throw new ApiError("NOT_FOUND");
   const secrets = cookieSecrets();
-  const locked = guardedPart(link.chain).filter((row) => row.passwordHash !== null && !isUnlocked(viewer.unlocks, row.linkId, row.passwordHash, secrets));
+  const locked = link.chain.filter((row) => row.passwordHash !== null && !isUnlocked(viewer.unlocks, row.linkId, row.passwordHash, secrets));
   if (locked.length === 0) return addUnlock(viewer.unlocks, linkId, link.root.passwordHash, secrets[0]!, now);
 
   const key = `unlock:${linkId}:${client.ipKey}`;

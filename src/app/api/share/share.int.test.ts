@@ -1,5 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { NextRequest } from "next/server";
 import sharp from "sharp";
 import { afterAll, describe, expect, it } from "vitest";
@@ -9,6 +12,7 @@ import { GET as sharePreview } from "@/app/api/share/[linkId]/files/[id]/preview
 import { GET as shareThumb } from "@/app/api/share/[linkId]/files/[id]/thumb/route";
 import { POST as unlock } from "@/app/api/share/[linkId]/unlock/route";
 import { GET as shareZip, HEAD as shareZipCheck } from "@/app/api/share/[linkId]/zip/route";
+import { getEnv } from "@/config/env";
 import { DOCUMENT_PREVIEW, IMMUTABLE_CACHE, MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER } from "@/contracts/api";
 import { newLinkId, newNodeId } from "@/domain/ids";
@@ -16,6 +20,7 @@ import { hash } from "@node-rs/argon2";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
 import { processMedia } from "@/server/media/process";
+import { runningTranscodes } from "@/server/media/transcode";
 import { getFolderView } from "@/server/services/node.service";
 import { retiredSharePage, sharePage } from "@/server/share/share.service";
 import { purgeExpired } from "@/server/services/profile.service";
@@ -223,6 +228,54 @@ describe("settings on the way to a file", () => {
     expect((await prisma.node.findUniqueOrThrow({ where: { id: a } })).downloads).toBe(1);
     // Another browser would be the second "download" of a file limited to one.
     expect((await stream()).status).toBe(403);
+  });
+
+  it("locks a link to the account's root folder with the root's own password", async () => {
+    const m = await member();
+    await prisma.node.update({ where: { id: m.rootId }, data: { visibility: "PUBLIC", passwordHash: await hash("root pass") } });
+    const a = await addFile(m, m.rootId, [], "a.txt", "alpha", "text/plain");
+    const rootLink = await linkOf(m.rootId);
+    expect((await sharePage(rootLink, null, noViewer, Date.now()))!.page.status).toBe("locked");
+    expect((await visit(shareDownload, path(rootLink, a, "download"), fileParams(rootLink, a))).status).toBe(401);
+    const wrong = await visit(unlock, `/api/share/${rootLink}/unlock`, { linkId: rootLink }, { method: "POST", body: { password: "nope" } });
+    expect(wrong.status).toBe(403);
+    const right = await visit(unlock, `/api/share/${rootLink}/unlock`, { linkId: rootLink }, { method: "POST", body: { password: "root pass" } });
+    expect(right.status).toBe(200);
+    expect((await visit(shareDownload, path(rootLink, a, "download"), fileParams(rootLink, a), { cookies: [unlockCookie(right)] })).status).toBe(200);
+  });
+
+  it("counts converted playback of a limited video like playback", async () => {
+    const { m, trip } = await sharedTrip();
+    const dir = await mkdtemp(join(tmpdir(), "relay-share-"));
+    try {
+      const clip = join(dir, "clip.mp4");
+      await promisify(execFile)(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x36:rate=5", "-c:v", "mpeg4", clip]);
+      const id = await addFile(m, trip.id, ["Trip"], "clip.mp4", await readFile(clip), "video/mp4", "VIDEO");
+      await prisma.node.update({ where: { id }, data: { downloadLimit: 1 } });
+      const converted = (headers: Record<string, string> = {}) => visit(shareStream, `${path(trip.linkId, id, "stream")}?transcode=1`, fileParams(trip.linkId, id), { headers });
+      const first = await converted();
+      expect(first.status).toBe(200);
+      await first.body?.cancel();
+      expect((await prisma.node.findUniqueOrThrow({ where: { id } })).downloads).toBe(1);
+      // Other browsers: the conversion ignores Range, so no header gets it uncounted.
+      expect((await converted()).status).toBe(403);
+      expect((await converted({ range: "bytes=5-2" })).status).toBe(403);
+      await expect.poll(runningTranscodes).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("serves a limited picture through counted playback, not the uncounted preview", async () => {
+    const { m, trip } = await sharedTrip();
+    const big = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: "#808080", noise: { type: "gaussian", mean: 128, sigma: 40 } } }).jpeg({ quality: 95 }).toBuffer();
+    const id = await addFile(m, trip.id, ["Trip"], "big.jpg", big, "image/jpeg", "IMAGE");
+    expect((await processMedia(id))?.preview).toBe(true);
+    await prisma.node.update({ where: { id }, data: { downloadLimit: 1 } });
+    const shown = await visit(sharePreview, path(trip.linkId, id, "preview"), fileParams(trip.linkId, id));
+    expect(shown.status).toBe(200);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id } })).downloads).toBe(1);
+    expect((await visit(sharePreview, path(trip.linkId, id, "preview"), fileParams(trip.linkId, id))).status).toBe(403);
   });
 
   it("closes the links of an account that reached its deletion date", async () => {

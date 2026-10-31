@@ -149,5 +149,7 @@ test("the file manager shows when a shared item is busy", async ({ page }) => {
   for (let index = 0; index < 5; index++) expect((await visitor.request.get(`/api/share/${trip.linkId}/files/${notes.id}/download`)).status()).toBe(200);
   await visitor.close();
   await page.reload();
-  await expect(page.locator('[data-item="notes.txt"]').getByText("Busy", { exact: true })).toBeVisible();
+  // Scoped to <main>: while the page streams in, React parks the finished rows in a hidden
+  // container outside it before moving them into place, so the row briefly exists twice.
+  await expect(page.getByRole("main").locator('[data-item="notes.txt"]').getByText("Busy", { exact: true })).toBeVisible();
 });

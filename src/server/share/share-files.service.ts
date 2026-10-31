@@ -2,7 +2,7 @@ import "server-only";
 import { Readable } from "node:stream";
 import { MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER } from "@/contracts/api";
-import { effectiveRange, zipName } from "@/domain/serving";
+import { effectiveRange, parseRange, zipName } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadBlock, type DownloadDecision } from "@/domain/share-access";
 import type { NodeKind } from "@/domain/tree";
 import { mimeFromName } from "@/domain/upload";
@@ -173,9 +173,10 @@ export async function serveSharedThumb(req: Request, linkId: string, nodeId: str
  * Counted as a view like playback, except the viewer's look-ahead for the next picture.
  */
 export async function serveSharedPreview(req: Request, linkId: string, nodeId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
-  const { link, row } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
+  const { link, row, limited } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
   const owner = await ownerOf(link);
-  const preview = row.kind === "IMAGE" ? await sendAsset(req, await driverForAccount(owner), owner.id, row, "preview") : null;
+  // A file under a download limit or delete-after-download goes through playback, which counts it.
+  const preview = row.kind === "IMAGE" && !limited ? await sendAsset(req, await driverForAccount(owner), owner.id, row, "preview") : null;
   if (!preview) return serveSharedFile(req, linkId, nodeId, "stream", viewer, client);
   // The viewer's look-ahead for the next picture is not a view.
   const prefetch = req.headers.get(PREFETCH_HEADER) !== null;
@@ -185,20 +186,38 @@ export async function serveSharedPreview(req: Request, linkId: string, nodeId: s
 
 /** A visitor's playback of a video the browser cannot decode, converted while it plays. */
 export async function serveSharedTranscode(req: Request, linkId: string, nodeId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
-  const file = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
+  const now = Date.now();
+  const file = await resolveSharedFile(linkId, nodeId, viewer, "stream", now);
   const { link, row } = file;
   if (row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
   const owner = await ownerOf(link);
   const driver = await driverForAccount(owner);
+  // A file under a download limit or delete-after-download: converted playback counts like
+  // playback of the original. Only where the request starts matters, so the converted
+  // video's length (unknown while it converts) is not needed.
+  let newVisitor: string | null = null;
+  if (!link.isOwner && file.limited) {
+    // Live conversion ignores Range and sends the whole video, so a range no file could satisfy
+    // is judged as a request for all of it rather than let through uncounted.
+    const parsed = parseRange(req.headers.get("range"), UNKNOWN_LENGTH);
+    const range = parsed === "unsatisfiable" ? null : parsed;
+    newVisitor = await applyDecision(limitedStreamDecision({ method: req.method, range, granted: await hasDownloadGrant(row.id, viewer.visitorId) }), file, viewer, client, now);
+  }
   if (req.method === "GET") {
     if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
     void markActive("stream", `${row.id}:${client.ipKey}`);
   }
-  const stored = await sendStoredTranscode(req, driver, owner.id, row);
-  if (stored) return stored;
-  const path = await driver.localPath({ accountId: owner.id, segments: file.segments });
+  const response = (await sendStoredTranscode(req, driver, owner.id, row)) ?? (await liveTranscode(req, driver, owner.id, file, row.id));
+  return newVisitor ? setVisitorCookie(response, newVisitor) : response;
+}
+
+/** Length passed to parseRange when only the start of a request matters. */
+const UNKNOWN_LENGTH = Number.MAX_SAFE_INTEGER;
+
+async function liveTranscode(req: Request, driver: StorageDriver, accountId: string, file: SharedFile, nodeId: string): Promise<Response> {
+  const path = await driver.localPath({ accountId, segments: file.segments });
   if (!path) throw new ApiError("NOT_FOUND");
-  if (req.method === "GET") void notePlay(row.id);
+  if (req.method === "GET") void notePlay(nodeId);
   return transcodeResponse(req, path);
 }
 
