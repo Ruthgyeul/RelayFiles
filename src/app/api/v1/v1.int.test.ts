@@ -80,7 +80,9 @@ describe("personal API tokens", () => {
     const m = await member();
     const reader = await tokenFor(m, ["files:read"]);
     expect((await v1(me)).status).toBe(401);
-    expect((await v1(me, { token: `${reader.token.slice(0, -1)}x` })).status).toBe(401);
+    // A wrong token: the last character changed (never to the one it already is).
+    const wrong = `${reader.token.slice(0, -1)}${reader.token.endsWith("x") ? "y" : "x"}`;
+    expect((await v1(me, { token: wrong })).status).toBe(401);
     expect((await v1(me, { headers: { cookie: `${SESSION_COOKIE}=${m.cookie}` } })).status).toBe(401);
     const denied = await v1(createFolder, { method: "POST", token: reader.token, body: JSON.stringify({ parentId: "root", name: "x" }) });
     expect(denied.status).toBe(403);
