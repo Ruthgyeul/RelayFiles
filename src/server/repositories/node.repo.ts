@@ -55,6 +55,7 @@ export const NODE_SELECT = {
   downloads: true,
   tags: true,
   createdAt: true,
+  modifiedAt: true,
 } as const;
 
 export type NodeRow = NonNullable<Awaited<ReturnType<typeof findNode>>>;
@@ -185,6 +186,8 @@ export interface NewFile {
   size: bigint;
   sha256: string;
   linkId: string;
+  /** The file's own modification time (the uploader's File.lastModified, or the upload time). */
+  modifiedAt: Date;
 }
 
 export function createFileNode(db: DbClient, data: NewFile) {
@@ -213,4 +216,53 @@ export function findFileWithContent(db: DbClient, accountId: string, sha256: str
     orderBy: { createdAt: "asc" },
     select: { id: true },
   });
+}
+
+/** Direct children with what "Renumber files" sorts and checks by. */
+export function listChildrenForRenumber(db: DbClient, parentId: string) {
+  return db.node.findMany({ where: { parentId }, select: { id: true, name: true, type: true, createdAt: true, modifiedAt: true, missing: true } });
+}
+
+/**
+ * Serializes renumbering runs of one folder inside a transaction: a second run waits for the
+ * first to commit, then plans again from the names it left.
+ */
+export async function lockFolderForRenumber(tx: DbClient, folderId: string): Promise<void> {
+  const key = `renumber:${folderId}`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+}
+
+/** Files in these folders with their content hash, for "Find duplicates" (at most `take`). */
+export function filesInFolders(db: DbClient, accountId: string, folderIds: string[], take: number) {
+  return db.node.findMany({
+    where: { accountId, type: "FILE", parentId: { in: folderIds } },
+    select: { id: true, name: true, parentId: true, kind: true, size: true, sha256: true, hasThumb: true, createdAt: true, modifiedAt: true },
+    orderBy: { id: "asc" },
+    take,
+  });
+}
+
+/** Files without a modification time, by id, for the backfill data migration. */
+export function filesWithoutModifiedAt(db: DbClient, take: number, afterId: string | null) {
+  return db.node.findMany({
+    where: { type: "FILE", modifiedAt: null, ...(afterId ? { id: { gt: afterId } } : {}) },
+    select: { id: true, accountId: true, createdAt: true, missing: true, account: { select: { volumeId: true } } },
+    orderBy: { id: "asc" },
+    take,
+  });
+}
+
+/** Files without a content hash, by id, for the backfill data migration. */
+export function filesWithoutSha256(db: DbClient, take: number, afterId: string | null) {
+  return db.node.findMany({
+    where: { type: "FILE", sha256: null, ...(afterId ? { id: { gt: afterId } } : {}) },
+    select: { id: true, accountId: true, size: true, missing: true, account: { select: { volumeId: true } } },
+    orderBy: { id: "asc" },
+    take,
+  });
+}
+
+/** Records a value a backfill computed. */
+export async function setFileFacts(db: DbClient, nodeId: string, data: { modifiedAt?: Date; sha256?: string }): Promise<void> {
+  await db.node.update({ where: { id: nodeId }, data });
 }

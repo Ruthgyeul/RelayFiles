@@ -44,5 +44,5 @@ export interface UploadedFile {
   folderId: string;
 }
 
-/** tus metadata keys sent with each file. */
-export const UPLOAD_METADATA = { batch: "batch", index: "index", filename: "filename" } as const;
+/** tus metadata keys sent with each file; `lastModified` (File.lastModified, ms) is optional for older clients. */
+export const UPLOAD_METADATA = { batch: "batch", index: "index", filename: "filename", lastModified: "lastModified" } as const;

@@ -28,6 +28,7 @@ export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: num
     kind: row.kind ? (row.kind.toLowerCase() as NodeItem["kind"]) : null,
     size: (extra.size ?? row.size).toString(),
     createdAt: row.createdAt.toISOString(),
+    ...(row.modifiedAt ? { modifiedAt: row.modifiedAt.toISOString() } : {}),
     downloads: row.downloads,
     itemCount: extra.itemCount ?? 0,
     fileCount: extra.fileCount ?? (row.type === "FILE" ? 1 : 0),

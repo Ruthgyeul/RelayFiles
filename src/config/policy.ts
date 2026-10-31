@@ -65,6 +65,38 @@ export const FILES = {
   maxTagsPerItem: 20,
 } as const;
 
+/** "Renumber files": renames the files of one folder to 01, 02, 03, … (docs/architecture.md "순번 정리"). */
+export const RENUMBER = {
+  /** Numbers are padded to at least this many digits ("01"); more files get more digits. */
+  minDigits: 2,
+  /**
+   * Most files one run renames. Each file is renamed twice (to a temporary name, then to its
+   * number) inside one storage transaction, which must finish within STORAGE.transactionTimeoutSec.
+   */
+  maxFiles: 2_000,
+  /** Temporary names between the two steps; hidden (dot) names, so no run ever renumbers them. */
+  tempPrefix: ".relayfiles-renumber-",
+} as const;
+
+/** "Find duplicates": files with the same content (SHA-256 and size). */
+export const DUPLICATES = {
+  /** Most files one scan reads; a larger folder tree reports the result as truncated. */
+  maxScan: 20_000,
+  /** Most duplicate groups returned, the ones wasting the most space first. */
+  maxGroups: 500,
+} as const;
+
+/** Transfer panel per-file list. */
+export const TRANSFERS = {
+  /** Per-file list (dropdown) for batches with at least this many files. */
+  fileListMin: 2,
+  /** Speed samples kept for the per-file sparkline, one per speedSampleMs. */
+  speedSamples: 30,
+  speedSampleMs: 1_000,
+  /** Per-file byte counts are applied to the panel at most this often (large batches stay smooth). */
+  progressFlushMs: 150,
+} as const;
+
 /** Global search (design `gs*`, Ctrl/⌘ K). */
 export const SEARCH = {
   /** Recent files listed before anything is typed. */
