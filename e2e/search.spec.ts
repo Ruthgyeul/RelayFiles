@@ -35,7 +35,7 @@ test("finds files anywhere and opens them in their folder", async ({ page }) => 
   await expect(page).toHaveURL(/\/files\/[a-z0-9]{12}$/);
   await page.getByRole("button", { name: "Close viewer" }).click();
 
-  await page.getByRole("button", { name: "Search all files" }).click();
+  await page.getByRole("button", { name: "Search files" }).click();
   await dialog.getByRole("textbox").fill("nothing-like-this");
   await expect(dialog.getByText("No files or folders match.")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -44,10 +44,10 @@ test("finds files anywhere and opens them in their folder", async ({ page }) => 
 
 test("offers global search only in the File Manager", async ({ page }) => {
   await openFiles(page);
-  await expect(page.getByRole("button", { name: "Search all files" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Search files" })).toBeVisible();
   await page.goto("/settings");
   await expect(page.getByRole("heading", { level: 1, name: "My Profile" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Search all files" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Search files" })).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page.getByRole("dialog", { name: "Search all files" })).toHaveCount(0);
 });
