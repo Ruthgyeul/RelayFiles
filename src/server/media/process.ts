@@ -6,9 +6,10 @@ import { LOSSLESS_STRIP_TYPES, stripImageMetadata } from "@/domain/image-metadat
 import { db } from "../db/client";
 import { logger } from "../logger";
 import { findAccountById } from "../repositories/account.repo";
-import { findNodeForJob, updateNode } from "../repositories/node.repo";
+import { findNodeForJob, setFileFacts, updateNode } from "../repositories/node.repo";
 import { driverForAccount } from "../services/volume.service";
 import { locationOf } from "../services/node-location";
+import { dateTaken } from "./date-taken";
 import { imagePreview, imageThumbnail, videoThumbnail, wantsPreview } from "./thumbnail";
 
 /** Image types sharp can rewrite in the same format (metadata is dropped on output). */
@@ -71,6 +72,7 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
   // Not smaller than the original (an already small or well-compressed file): show the original.
   const keepPreview = preview !== null && preview.length < size;
   if (keepPreview) await driver.writeAsset({ ...asset, kind: "preview" }, preview);
+  const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"));
 
   // The file may have been deleted while it was processed; then its assets go too.
   const current = await findNodeForJob(db(), row.id);
@@ -82,6 +84,24 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
   // An image that should have been cleaned but was not (undecodable, too large) is not tried
   // again for every visitor: share routes answer 415 for it until the file changes.
   const stripFailed = row.kind === "IMAGE" && !result.derived && canStripType(mime);
-  await updateNode(db(), row.id, { hasThumb: result.thumb, hasDerived: result.derived, stripFailed });
+  // A date taken that could not be read this time keeps any value read before.
+  await updateNode(db(), row.id, { hasThumb: result.thumb, hasDerived: result.derived, stripFailed, ...(takenAt ? { takenAt } : {}) });
   return result;
+}
+
+/**
+ * Reads only the date taken of a photo or video (existing files after the release that added it;
+ * thumbnails are left alone). Returns whether a date was found.
+ */
+export async function recordDateTaken(nodeId: string): Promise<boolean> {
+  const row = await findNodeForJob(db(), nodeId);
+  if (!row || row.type !== "FILE" || (row.kind !== "IMAGE" && row.kind !== "VIDEO")) return false;
+  const account = await findAccountById(db(), row.accountId);
+  if (!account) return false;
+  const driver = await driverForAccount(account);
+  const path = await driver.localPath(await locationOf(row.accountId, row.id));
+  if (!path) throw new Error("Media processing needs a local volume.");
+  const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"));
+  if (takenAt) await setFileFacts(db(), row.id, { takenAt });
+  return takenAt !== null;
 }

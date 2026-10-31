@@ -166,6 +166,8 @@ export interface RenumberPreview {
   skipped: { id: string; name: string; reason: RenumberSkipReason }[];
   /** Files whose name changes. */
   changes: number;
+  /** "taken" order only: numbered files without a date taken in their metadata (placed by their modification time). */
+  takenFallbacks?: number;
   /** Why the plan cannot run, or null. */
   conflict: string | null;
 }

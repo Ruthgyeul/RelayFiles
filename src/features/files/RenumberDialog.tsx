@@ -18,11 +18,12 @@ export interface RenumberRequest {
   name: string;
 }
 
-const SORT_LABEL: Record<RenumberSort, string> = { name: "Name", created: "Date created", modified: "Date modified" };
+const SORT_LABEL: Record<RenumberSort, string> = { name: "Name", created: "Date created", modified: "Date modified", taken: "Date taken" };
 const ORDER_LABEL: Record<RenumberSort, Record<RenumberOrder, string>> = {
   name: { asc: "A → Z", desc: "Z → A" },
   created: { asc: "Oldest first", desc: "Newest first" },
   modified: { asc: "Oldest first", desc: "Newest first" },
+  taken: { asc: "Oldest first", desc: "Newest first" },
 };
 const files = (count: number) => `${formatCount(count)} ${count === 1 ? "file" : "files"}`;
 /** A refused request (400 with field errors) gets a message that says what to do next. */
@@ -37,6 +38,7 @@ function summaryOf(preview: RenumberPreview): string {
   const unchanged = preview.entries.length - preview.changes;
   if (unchanged > 0) parts.push(`${formatCount(unchanged)} already numbered`);
   if (preview.skipped.length > 0) parts.push(`${formatCount(preview.skipped.length)} kept (hidden or missing)`);
+  if (preview.takenFallbacks) parts.push(`${formatCount(preview.takenFallbacks)} without a date taken (sorted by date modified)`);
   return parts.join(" · ");
 }
 
