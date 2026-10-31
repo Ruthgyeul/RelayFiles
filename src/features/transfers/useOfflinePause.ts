@@ -13,7 +13,8 @@ export function useOfflinePause(transfers: Transfer[], pause: (id: string, auto:
     latest.current = transfers;
   });
   useEffect(() => {
-    const onOffline = () => latest.current.filter((transfer) => transfer.status === "active").forEach((transfer) => pause(transfer.id, true));
+    // Uploads only: a download into a folder fails its current file instead (it cannot resume).
+    const onOffline = () => latest.current.filter((transfer) => transfer.status === "active" && transfer.direction === "up").forEach((transfer) => pause(transfer.id, true));
     const onOnline = () => latest.current.filter((transfer) => transfer.status === "paused" && transfer.auto).forEach((transfer) => resume(transfer.id));
     window.addEventListener("offline", onOffline);
     window.addEventListener("online", onOnline);

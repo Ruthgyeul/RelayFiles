@@ -69,3 +69,15 @@ export function mimeFromName(name: string): string {
   const ext = /\.([^.]+)$/.exec(name)?.[1]?.toLowerCase();
   return (ext && MIME_BY_EXTENSION[ext]) || "application/octet-stream";
 }
+
+/**
+ * The file's own modification time sent by the uploader (File.lastModified, ms since 1970).
+ * Missing, malformed, zero and future values (a wrong client clock) give null, and the server
+ * records the upload time instead.
+ */
+export function clientModifiedAt(raw: string | undefined, now: Date): Date | null {
+  if (!raw || !/^\d{1,16}$/.test(raw)) return null;
+  const ms = Number(raw);
+  if (ms <= 0 || ms > now.getTime()) return null;
+  return new Date(ms);
+}

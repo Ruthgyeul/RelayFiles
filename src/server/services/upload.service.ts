@@ -1,5 +1,4 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { rm, stat, unlink } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
@@ -15,6 +14,7 @@ import { ApiError } from "../http/api-error";
 import { createFileNode, createFolderNode, deleteNodes, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, type NodeRow } from "../repositories/node.repo";
 import { ancestorChain, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
+import { sha256Of } from "../storage/hash";
 import { layoutOf } from "../storage/layout";
 import { driverFor } from "../storage/registry";
 import type { StorageDriver } from "../storage/driver";
@@ -153,17 +153,12 @@ async function ensureFolders(owner: Owner, driver: StorageDriver, baseId: string
   return { id: parentId, segments };
 }
 
-async function sha256Of(path: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
-  return hash.digest("hex");
-}
-
 /**
- * Moves a finished upload into place and records it: content-detected type, SHA-256,
- * and the batch's duplicate policy (replace, keep both as "name (2)", or skip).
+ * Moves a finished upload into place and records it: content-detected type, SHA-256, the
+ * file's own modification time (the upload time when the sender gave none) and the batch's
+ * duplicate policy (replace, keep both as "name (2)", or skip).
  */
-export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: number, uploadId: string): Promise<UploadedFile> {
+export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: number, uploadId: string, modifiedAt: Date | null = null): Promise<UploadedFile> {
   const entry = batch.files[slot];
   if (!entry) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner, "write");
@@ -177,7 +172,7 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
     throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
   }
   try {
-    return await placeUpload(owner, driver, batch, entry, tempPath);
+    return await placeUpload(owner, driver, batch, entry, tempPath, modifiedAt ?? new Date());
   } catch (error) {
     // A refused upload (its folder was deleted meanwhile, a name clash) must not leave its
     // bytes in the temp area until the daily cleanup, where no quota sees them.
@@ -188,7 +183,7 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
 }
 
 /** Puts a received upload into its folder and records it (the second half of {@link finalizeUpload}). */
-async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBatch, entry: UploadBatch["files"][number], tempPath: string): Promise<UploadedFile> {
+async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBatch, entry: UploadBatch["files"][number], tempPath: string, modifiedAt: Date): Promise<UploadedFile> {
   const parts = entry.rel.split("/");
   const fileName = parts.at(-1)!;
   // The account's own folder never moves, so it may be (re)created; folders below it must exist.
@@ -197,7 +192,7 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
 
   const detected = await fileTypeFromFile(tempPath).catch(() => undefined);
   const mime = detected?.mime ?? mimeFromName(fileName);
-  const sha256 = await sha256Of(tempPath);
+  const sha256 = await sha256Of(createReadStream(tempPath));
   const existing = await findChildByName(db(), folder.id, fileName);
   const replace = batch.dup === "replace" && existing?.type === "FILE" ? existing : null;
   const name = existing && !replace ? uniqName(await listSiblingNames(db(), folder.id), fileName, true) : fileName;
@@ -224,6 +219,7 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       size: BigInt(entry.size),
       sha256,
       linkId: newLinkId(),
+      modifiedAt,
     });
     linked = twinLocation !== null && (await driver.linkExisting(twinLocation, location, entry.size));
     if (!linked) await driver.moveIntoPlace(tempPath, location);

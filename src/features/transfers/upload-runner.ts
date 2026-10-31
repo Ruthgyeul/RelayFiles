@@ -7,10 +7,26 @@ export interface BatchPlan {
 }
 
 export interface RunnerEvents {
-  /** Bytes sent so far across the batch. */
+  /** Bytes sent so far across the batch (finished files plus the current one). */
   onProgress: (done: number) => void;
-  onComplete: () => void;
+  /** Every file was sent, cancelled or (with `continueOnError`) failed; `failed` counts the last. */
+  onComplete: (failed: number, firstError?: string) => void;
+  /** The batch stopped on a failed file (without `continueOnError`). */
   onError: (message: string) => void;
+}
+
+/** Per-file events for the transfer card's file list (all optional). */
+export interface FileEvents {
+  onFileStart?: (slot: number) => void;
+  onFileProgress?: (slot: number, sent: number) => void;
+  onFileDone?: (slot: number) => void;
+  onFileFailed?: (slot: number, message: string) => void;
+  onFileCancelled?: (slot: number) => void;
+}
+
+export interface RunnerOptions {
+  /** A failed file is reported and the next one starts, instead of stopping the batch. */
+  continueOnError?: boolean;
 }
 
 /** Waits before retrying a failed chunk (connection drops); 4xx answers are not retried. */
@@ -37,7 +53,7 @@ function messageOf(error: Error): string {
 
 /**
  * Sends the files of one upload batch through tus, one after another, so a batch can be
- * paused, resumed from the server's offset, or cancelled as a unit.
+ * paused, resumed from the server's offset, or cancelled as a unit or file by file.
  */
 export class BatchUploader {
   private index = 0;
@@ -45,12 +61,17 @@ export class BatchUploader {
   private current: Upload | null = null;
   private paused = false;
   private cancelled = false;
+  /** Slots cancelled before they started. */
+  private readonly skipped = new Set<number>();
+  private failed = 0;
+  private firstError: string | undefined;
 
   constructor(
     private readonly plan: BatchPlan,
     private readonly files: File[],
     private readonly chunkSize: number,
-    private readonly events: RunnerEvents,
+    private readonly events: RunnerEvents & FileEvents,
+    private readonly options: RunnerOptions = {},
   ) {}
 
   start(): void {
@@ -76,35 +97,77 @@ export class BatchUploader {
     void this.current?.abort(true).catch(() => undefined);
   }
 
+  /**
+   * Cancels one file: one not started yet is skipped; the one being sent is discarded on the
+   * server (tus DELETE gives its reserved space back) and the next one starts. A finished file
+   * stays (false).
+   */
+  cancelFile(slot: number): boolean {
+    if (this.cancelled || slot < this.index || slot >= this.files.length || this.skipped.has(slot)) return false;
+    if (slot > this.index) {
+      this.skipped.add(slot);
+      this.events.onFileCancelled?.(slot);
+      return true;
+    }
+    const upload = this.current;
+    this.current = null;
+    this.index += 1;
+    this.events.onFileCancelled?.(slot);
+    this.events.onProgress(this.sentBefore);
+    void upload?.abort(true).catch(() => undefined);
+    this.next();
+    return true;
+  }
+
   private next(): void {
     if (this.paused || this.cancelled) return;
+    while (this.skipped.has(this.index)) this.index += 1;
     const file = this.files[this.index];
     if (!file) {
-      this.events.onComplete();
+      this.events.onComplete(this.failed, this.firstError);
       return;
     }
     const slot = this.index;
+    this.events.onFileStart?.(slot);
     const upload = new Upload(file, {
       endpoint: this.plan.endpoint,
       chunkSize: this.chunkSize,
       retryDelays: RETRY_DELAYS_MS,
       removeFingerprintOnSuccess: true,
-      metadata: { [UPLOAD_METADATA.batch]: this.plan.batchId, [UPLOAD_METADATA.index]: String(slot), [UPLOAD_METADATA.filename]: file.name },
+      metadata: {
+        [UPLOAD_METADATA.batch]: this.plan.batchId,
+        [UPLOAD_METADATA.index]: String(slot),
+        [UPLOAD_METADATA.filename]: file.name,
+        [UPLOAD_METADATA.lastModified]: String(file.lastModified),
+      },
       onShouldRetry: (error) => {
         const status = statusOf(error);
         return status === null || status >= HTTP_SERVER_ERROR || RETRYABLE_CLIENT_STATUSES.has(status);
       },
-      onProgress: (sent) => this.events.onProgress(this.sentBefore + sent),
+      onProgress: (sent) => {
+        if (this.current !== upload) return;
+        this.events.onFileProgress?.(slot, sent);
+        this.events.onProgress(this.sentBefore + sent);
+      },
       onSuccess: () => {
+        if (this.current !== upload) return;
         this.sentBefore += file.size;
         this.index += 1;
         this.current = null;
+        this.events.onFileDone?.(slot);
         this.events.onProgress(this.sentBefore);
         this.next();
       },
       onError: (error) => {
-        if (this.paused || this.cancelled) return;
-        this.events.onError(messageOf(error));
+        if (this.paused || this.cancelled || this.current !== upload) return;
+        const message = messageOf(error);
+        if (!this.options.continueOnError) return this.events.onError(message);
+        this.failed += 1;
+        this.firstError ??= message;
+        this.index += 1;
+        this.current = null;
+        this.events.onFileFailed?.(slot, message);
+        this.next();
       },
     });
     this.current = upload;

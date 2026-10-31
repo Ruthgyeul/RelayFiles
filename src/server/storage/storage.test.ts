@@ -11,6 +11,7 @@ const { UnsafePathError, resolveInsideUserRoot } = await import("./safe-path");
 const { checkVolume, initVolume, readVolumeMarker } = await import("./volume");
 const { withStorageTransaction } = await import("./storage-transaction");
 const { layoutOf } = await import("./layout");
+const { StorageTargetExistsError } = await import("./driver");
 
 const ACCOUNT = "abcdefghjkmn";
 const OTHER = "pqrstuvwxyz2";
@@ -102,6 +103,32 @@ describe("LocalVolumeDriver", () => {
     await driver.createFolder(at("B"));
     await driver.rename(at("A"), at("B", "A2"));
     expect(await readFile(join(root, "users", ACCOUNT, "B", "A2", "f.txt"), "utf8")).toBe("x");
+  });
+
+  it("renames without replacing an existing file (renumbering swaps names)", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    const user = join(root, "users", ACCOUNT);
+    await writeFile(join(user, "a.txt"), "A");
+    await writeFile(join(user, "b.txt"), "B");
+    await expect(driver.renameNoReplace(at("a.txt"), at("b.txt"))).rejects.toBeInstanceOf(StorageTargetExistsError);
+    expect(await readFile(join(user, "a.txt"), "utf8")).toBe("A");
+    expect(await readFile(join(user, "b.txt"), "utf8")).toBe("B");
+
+    await driver.renameNoReplace(at("a.txt"), at("c.txt"));
+    expect(await readFile(join(user, "c.txt"), "utf8")).toBe("A");
+    await expect(stat(join(user, "a.txt"))).rejects.toThrow();
+  });
+
+  it("renames a hard-linked (deduplicated) file without touching its other link", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    const user = join(root, "users", ACCOUNT);
+    await writeFile(join(user, "a.txt"), "same");
+    expect(await driver.linkExisting(at("a.txt"), at("b.txt"), 4)).toBe(true);
+    await driver.renameNoReplace(at("b.txt"), at("01.txt"));
+    expect(await readFile(join(user, "a.txt"), "utf8")).toBe("same");
+    expect((await stat(join(user, "01.txt"))).nlink).toBe(2);
   });
 
   it("copies files and folders without overwriting", async () => {

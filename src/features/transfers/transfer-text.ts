@@ -8,6 +8,8 @@ export type TransferStatus = "active" | "paused" | "complete" | "error" | "hande
 
 export interface TransferProgress {
   status: TransferStatus;
+  /** Downloads into a folder finish as "saved"; uploads as "uploaded". */
+  direction?: "up" | "down";
   files: number;
   folders: number;
   total: number;
@@ -40,7 +42,7 @@ export function transferMeta(progress: TransferProgress): string {
     case "handed":
       return `${head} · saving in your browser`;
     default:
-      return `${head} · in ${formatClock(progress.elapsed)} · uploaded`;
+      return `${head} · in ${formatClock(progress.elapsed)} · ${progress.direction === "down" ? "saved" : "uploaded"}`;
   }
 }
 

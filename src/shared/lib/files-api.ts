@@ -1,14 +1,18 @@
 import type {
   CreatedFolder,
+  DuplicatesResult,
   FolderNode,
   FolderView,
   LinkEventDto,
   NodeItem,
   NodeProperties,
+  RenumberPreview,
+  RenumberResult,
   SettingsInput,
   TaggedItem,
   TransferResult,
 } from "@/contracts/nodes";
+import type { RenumberOrder, RenumberSort } from "@/domain/renumber";
 import { apiFetch } from "@/shared/lib/api-client";
 
 const node = (id: string) => `/api/nodes/${encodeURIComponent(id)}`;
@@ -40,5 +44,10 @@ export const filesApi = {
   newLink: (id: string) => apiFetch<NodeItem>(`${node(id)}/link`, { method: "POST" }),
   activity: (id: string) => apiFetch<LinkEventDto[]>(`${node(id)}/activity`),
   setPaused: (id: string, paused: boolean) => apiFetch<NodeItem>(`${node(id)}/pause`, { method: "PUT", json: { paused } }),
+  renumberPreview: (folderId: string, sort: RenumberSort, order: RenumberOrder) => apiFetch<RenumberPreview>(`${node(folderId)}/renumber?sort=${sort}&order=${order}`),
+  /** `expect` = the files whose name changes (plan order), `count` = files the plan numbered. */
+  renumber: (folderId: string, sort: RenumberSort, order: RenumberOrder, expect: { id: string; to: string }[], count: number) =>
+    apiFetch<RenumberResult>(`${node(folderId)}/renumber`, { method: "POST", json: { sort, order, expect, count } }),
+  duplicates: (folderId: string, recursive: boolean) => apiFetch<DuplicatesResult>(`${node(folderId)}/duplicates?recursive=${recursive ? 1 : 0}`),
   searchTags: (tags: string[]) => apiFetch<TaggedItem[]>(`/api/search?tags=${encodeURIComponent(tags.join(","))}`),
 };

@@ -24,19 +24,20 @@ export class UndoStack {
 
 /** Minimal shape of a Prisma client's interactive transaction API. */
 export interface Transactional<Tx> {
-  $transaction<R>(fn: (tx: Tx) => Promise<R>): Promise<R>;
+  $transaction<R>(fn: (tx: Tx) => Promise<R>, options?: { timeout?: number }): Promise<R>;
 }
 
 /**
  * Keeps PostgreSQL (the index) and the disk (the source of truth) consistent
  * (docs/architecture.md "스토리지"). The callback performs DB writes through `tx` and filesystem
  * changes, registering an undo for each filesystem change. If the callback throws or the
- * commit fails, the DB rolls back and the undo actions restore the disk.
+ * commit fails, the DB rolls back and the undo actions restore the disk. `timeoutMs` replaces the
+ * client's default time limit for long runs (renumbering a large folder).
  */
-export async function withStorageTransaction<Tx, R>(db: Transactional<Tx>, fn: (tx: Tx, undo: UndoStack) => Promise<R>): Promise<R> {
+export async function withStorageTransaction<Tx, R>(db: Transactional<Tx>, fn: (tx: Tx, undo: UndoStack) => Promise<R>, options?: { timeoutMs?: number }): Promise<R> {
   const undo = new UndoStack();
   try {
-    return await db.$transaction((tx) => fn(tx, undo));
+    return await db.$transaction((tx) => fn(tx, undo), options?.timeoutMs ? { timeout: options.timeoutMs } : undefined);
   } catch (error) {
     await undo.rollback();
     throw error;

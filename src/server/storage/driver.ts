@@ -31,6 +31,14 @@ export interface ByteSource {
   open(range?: { start: number; end: number }): Promise<Readable>;
 }
 
+/** {@link StorageDriver.renameNoReplace} found something at the target name. */
+export class StorageTargetExistsError extends Error {
+  constructor() {
+    super("The target name already exists on the volume.");
+    this.name = "StorageTargetExistsError";
+  }
+}
+
 export interface SpaceInfo {
   total: bigint;
   available: bigint;
@@ -62,6 +70,11 @@ export interface StorageDriver {
   /** Removes a staged copy or upload from the temp area (missing is fine). */
   discardStaged(tempPath: string): Promise<void>;
   rename(from: StorageLocation, to: StorageLocation): Promise<void>;
+  /**
+   * Renames a file only if nothing exists at `to` (a plain rename replaces it). Throws
+   * {@link StorageTargetExistsError} when the name is taken, leaving both files untouched.
+   */
+  renameNoReplace(from: StorageLocation, to: StorageLocation): Promise<void>;
   copy(from: StorageLocation, to: StorageLocation): Promise<void>;
   /** Moves an item (or a whole account root when segments is empty) to the trash area. */
   moveToTrash(location: StorageLocation): Promise<string>;

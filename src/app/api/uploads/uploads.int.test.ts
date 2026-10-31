@@ -6,12 +6,14 @@ import { afterAll, describe, expect, it } from "vitest";
 import { POST as anonymous } from "@/app/api/auth/anonymous/route";
 import { GET as getFolder } from "@/app/api/folders/[id]/route";
 import { POST as createFolder } from "@/app/api/folders/route";
+import { GET as duplicates } from "@/app/api/nodes/[id]/duplicates/route";
 import { POST as remove } from "@/app/api/nodes/delete/route";
 import { POST as prepare } from "@/app/api/uploads/route";
 import * as tus from "@/app/api/uploads/tus/[...path]/route";
 import type { CreatedAccount } from "@/contracts/auth";
+import { getEnv } from "@/config/env";
 import { STORAGE } from "@/config/policy";
-import type { CreatedFolder, FolderView } from "@/contracts/nodes";
+import type { CreatedFolder, DuplicatesResult, FolderView } from "@/contracts/nodes";
 import type { PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
 import { db } from "@/server/db/client";
 import { redis } from "@/server/redis";
@@ -46,10 +48,10 @@ async function tusCall(method: "POST" | "PATCH" | "HEAD" | "DELETE", url: string
 }
 
 /** Sends one file through tus: create, then a single PATCH with the whole body. */
-async function sendFile(s: Session, endpoint: string, batchId: string, slot: number, name: string, content: string) {
+async function sendFile(s: Session, endpoint: string, batchId: string, slot: number, name: string, content: string, lastModified?: number) {
   const created = await tusCall("POST", endpoint, s.cookie, {
     "upload-length": String(Buffer.byteLength(content)),
-    "upload-metadata": `batch ${b64(batchId)},index ${b64(String(slot))},filename ${b64(name)}`,
+    "upload-metadata": `batch ${b64(batchId)},index ${b64(String(slot))},filename ${b64(name)}${lastModified === undefined ? "" : `,lastModified ${b64(String(lastModified))}`}`,
   });
   expect(created.status, await created.clone().text()).toBe(201);
   const location = created.headers.get("location")!;
@@ -58,12 +60,12 @@ async function sendFile(s: Session, endpoint: string, batchId: string, slot: num
   return { status: patched.status, file: patched.status === 200 ? ((await patched.json()) as { data: UploadedFile }).data : null, id };
 }
 
-async function upload(s: Session, target: string, files: { rel: string; content: string }[], dup?: "replace" | "keep" | "skip") {
+async function upload(s: Session, target: string, files: { rel: string; content: string; lastModified?: number }[], dup?: "replace" | "keep" | "skip") {
   const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target, dup, files: files.map((f) => ({ rel: f.rel, size: Buffer.byteLength(f.content) })), fallbackName: "Upload Oct 6, 9:00 AM" } });
   const plan = res.json.data;
   if (res.status !== 200 || plan.kind !== "ready") return { status: res.status, plan, sent: [] };
   const sent = [];
-  for (const [slot, file] of plan.files.entries()) sent.push(await sendFile(s, plan.endpoint, plan.batchId, slot, file.rel.split("/").pop()!, files[file.index]!.content));
+  for (const [slot, file] of plan.files.entries()) sent.push(await sendFile(s, plan.endpoint, plan.batchId, slot, file.rel.split("/").pop()!, files[file.index]!.content, files[file.index]!.lastModified));
   return { status: res.status, plan, sent };
 }
 
@@ -77,6 +79,63 @@ afterAll(async () => {
 });
 
 describe("uploads", () => {
+  it("records the file's own modification time, or the upload time without one", async () => {
+    const s = await member();
+    const before = Date.now();
+    const { sent } = await upload(s, "root", [
+      { rel: "old.txt", content: "a", lastModified: Date.UTC(2020, 0, 2) },
+      { rel: "none.txt", content: "b" },
+      { rel: "future.txt", content: "c", lastModified: Date.now() + 86_400_000 },
+    ]);
+    expect(sent.map((r) => r.status)).toEqual([200, 200, 200]);
+    const rows = await prisma.node.findMany({ where: { accountId: s.id, type: "FILE" }, select: { name: true, modifiedAt: true } });
+    const at = (name: string) => rows.find((row) => row.name === name)!.modifiedAt!.getTime();
+    expect(at("old.txt")).toBe(Date.UTC(2020, 0, 2));
+    for (const name of ["none.txt", "future.txt"]) expect(at(name)).toBeGreaterThanOrEqual(before);
+    expect((await list(s)).children.find((child) => child.name === "old.txt")?.modifiedAt).toBe("2020-01-02T00:00:00.000Z");
+  });
+
+  it("finds files with the same content in a folder and its subfolders", async () => {
+    const s = await member();
+    const { sent } = await upload(s, "root", [
+      { rel: "a.jpg", content: "same" },
+      { rel: "b.jpg", content: "same" },
+      { rel: "Trip/c.jpg", content: "same" },
+      { rel: "Trip/d.jpg", content: "other" },
+      { rel: "e.jpg", content: "diff" },
+    ]);
+    expect(sent.every((r) => r.status === 200)).toBe(true);
+    const root = (await list(s)).folder.id;
+    const shallow = await callRoute<DuplicatesResult, { id: string }>(duplicates, { cookie: s.cookie, params: { id: "root" }, query: "?recursive=0" });
+    expect(shallow.status).toBe(200);
+    expect(shallow.json.data).toMatchObject({ scanned: 3, unchecked: 0, truncated: false });
+    expect(shallow.json.data.groups.map((group) => group.files.map((file) => file.name))).toEqual([["a.jpg", "b.jpg"]]);
+
+    const deep = (await callRoute<DuplicatesResult, { id: string }>(duplicates, { cookie: s.cookie, params: { id: root }, query: "?recursive=1" })).json.data;
+    expect(deep.scanned).toBe(5);
+    const group = deep.groups[0]!;
+    expect(group.files.map((file) => [file.name, file.folderPath, file.parentIsRoot])).toEqual([
+      ["a.jpg", "", true],
+      ["b.jpg", "", true],
+      ["c.jpg", "Trip", false],
+    ]);
+    expect(group.wasted).toBe(String(2 * "same".length));
+
+    const other = await member();
+    expect((await callRoute(duplicates, { cookie: other.cookie, params: { id: root }, query: "?recursive=1" })).status).toBe(404);
+
+    // DUPLICATES_MAX_SCAN limits how many files one scan compares; the rest is reported as truncated.
+    const policy = getEnv("policy") as { DUPLICATES_MAX_SCAN: number };
+    const saved = policy.DUPLICATES_MAX_SCAN;
+    policy.DUPLICATES_MAX_SCAN = 2;
+    try {
+      const partial = (await callRoute<DuplicatesResult, { id: string }>(duplicates, { cookie: s.cookie, params: { id: root }, query: "?recursive=1" })).json.data;
+      expect(partial).toMatchObject({ scanned: 2, truncated: true });
+    } finally {
+      policy.DUPLICATES_MAX_SCAN = saved;
+    }
+  });
+
   it("stores files byte for byte with folders, type and checksum", async () => {
     const s = await member();
     const { plan, sent } = await upload(s, "root", [

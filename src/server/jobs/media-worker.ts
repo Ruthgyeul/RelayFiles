@@ -2,13 +2,20 @@ import "server-only";
 import { Worker } from "bullmq";
 import { getEnv } from "@/config/env";
 import { logger } from "../logger";
-import { processMedia } from "../media/process";
+import { processMedia, recordDateTaken } from "../media/process";
 import { storeTranscode } from "../media/transcode-cache";
 import { MEDIA_QUEUE, queueConnection, type MediaJob } from "./queue";
 
-/** Consumes the media queue: thumbnails, metadata-stripped copies and stored video conversions (separate process). */
+/** Runs one media job by its task. */
+function runMediaJob({ nodeId, task }: MediaJob): Promise<unknown> {
+  if (task === "transcode") return storeTranscode(nodeId);
+  if (task === "taken") return recordDateTaken(nodeId);
+  return processMedia(nodeId);
+}
+
+/** Consumes the media queue: thumbnails, metadata-stripped copies, dates taken and stored video conversions (separate process). */
 export function startMediaWorker(): Worker<MediaJob> {
-  const worker = new Worker<MediaJob>(MEDIA_QUEUE, async (job) => (job.data.task === "transcode" ? storeTranscode(job.data.nodeId) : processMedia(job.data.nodeId)), {
+  const worker = new Worker<MediaJob>(MEDIA_QUEUE, async (job) => runMediaJob(job.data), {
     ...queueConnection("worker"),
     concurrency: getEnv("jobs").MEDIA_WORKER_CONCURRENCY,
   });

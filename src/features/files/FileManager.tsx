@@ -23,6 +23,7 @@ import { Toolbar } from "./Toolbar";
 import { toolbarActions } from "./ToolbarActions";
 import { useFileDialogs } from "./useFileDialogs";
 import { useFolderDrop } from "./useFolderDrop";
+import { useFolderTools } from "./useFolderTools";
 import { useFileMedia } from "./useFileMedia";
 import { useFileShortcuts } from "./useFileShortcuts";
 import { useFolderItems, type ListedItem } from "./useFolderItems";
@@ -63,6 +64,7 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
   const selection = useSelection(items);
   const clearSelection = selection.clear;
   const { open, dialogs } = useFileDialogs({ isAdmin, accountDeletesAt: activeAccount?.deletesAt ?? null, linkOf, onChanged: clearSelection });
+  const folderTools = useFolderTools(clearSelection);
   const newFolder = useNewFolder(parentRef, children.map((child) => child.name));
   const media = useFileMedia(items, folder.name, initialView);
 
@@ -71,7 +73,7 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
   const { drag, dropFiles } = useFolderDrop(folder, uploadTarget, items, selection.ids, clearSelection);
 
   const { copyText, copyLink } = useCopyLink();
-  const actionsFor = useNodeActions({ view, isAdmin, dialogs: open, media, linkOf, copyLink, onProperties: setPropertiesFor });
+  const actionsFor = useNodeActions({ view, isAdmin, dialogs: open, folderTools: folderTools.open, media, linkOf, copyLink, onProperties: setPropertiesFor });
   const openItem = (item: NodeItem) => (item.type === "folder" ? router.push(folderHref(item.id)) : media.preview(item));
   const parentOfCurrent = path.at(-2);
 
@@ -201,6 +203,7 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
       {media.viewer}
       {newFolder.dialog}
       {dialogs}
+      {folderTools.dialogs}
       {drag.pill}
     </>
   );

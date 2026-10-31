@@ -68,13 +68,16 @@
 | `POST` | `/api/nodes/transfer` | `{ ids, targetId, mode: move\|copy }` → `{ done, renamed, targetName }`. 자기 자신·하위로 이동 불가, 겹치는 이름은 `Name (2)`, 복사는 새 id·링크, 다운로드 수 0, 용량 초과 시 507 |
 | `POST` | `/api/nodes/delete` | `{ ids }` → `{ deleted }`. DB에서 지우고 볼륨의 `system/trash`로 옮긴다(정리 작업이 비움) |
 | `POST` | `/api/nodes/tags` | `{ ids, add, remove }`. 태그는 소문자·공백→`-`·24자, 항목당 20개 |
+| `GET` | `/api/nodes/:id/renumber?sort=name\|created\|modified\|taken&order=asc\|desc` | "Renumber files" 미리보기(바뀌는 것 없음). `id` = `root` 또는 폴더 id. `RenumberPreview { entries: [{ id, from, to }], skipped: [{ id, name, reason: hidden\|missing }], changes, conflict }`. 대상은 폴더 바로 아래 파일만(하위 폴더·숨김 파일·디스크에 없는 파일은 그대로). 번호는 최소 2자리(`01`), 파일이 100개 이상이면 자릿수가 늘어난다. 확장자는 원래 표기 그대로. `modified`는 파일 자체의 수정 시각(`modifiedAt`), `taken`은 사진·영상 메타데이터의 촬영일(`takenAt`, 없으면 수정일 → 생성일)이고 그때만 `takenFallbacks`(촬영일이 없어 다른 시각으로 정렬된 파일 수)가 붙는다. 새 이름이 남는 항목과 겹치면 `conflict`에 이유 |
+| `POST` | `/api/nodes/:id/renumber` | `{ sort, order, expect: [{ id, to }], count }` → `{ renamed, unchanged }`. `expect`는 미리보기 `entries` 중 이름이 바뀌는 항목(순서 그대로), `count`는 `entries` 개수. 서버가 다시 계산한 계획과 다르면 409 `This folder changed. Review the new order.`(아무것도 바뀌지 않음). `count`가 없으면 `expect`를 전체 `entries`로 본다(첫 릴리스 클라이언트). 바뀌는 파일이 `RENUMBER_MAX_FILES`(기본 10,000)를 넘으면 400(미리보기 `conflict`에도 같은 문구). 노드 id·링크·태그·설정은 그대로 |
+| `GET` | `/api/nodes/:id/duplicates?recursive=0\|1` | 내용(SHA-256·크기)이 같은 파일 묶음 `DuplicatesResult { groups: [{ sha256, size, wasted, files: [{ id, name, folderPath, parentId, parentIsRoot, kind, hasThumb, createdAt, modifiedAt }] }], scanned, unchecked, truncated }`. 묶음은 낭비 바이트가 큰 순, 파일은 오래된 순. `recursive=1`이면 하위 폴더까지. 해시가 없는 파일은 `unchecked`. `DUPLICATES_MAX_SCAN`(기본 10,000)개·`DUPLICATES.maxGroups`(500)개를 넘으면 `truncated`. 지우기는 일반 삭제(`/api/nodes/delete`)로 한다 |
 | `GET` | `/api/tags` | 계정에서 쓰는 태그와 개수(태그 제안) |
 | `PUT` | `/api/nodes/:id/settings` | 공유 설정(공개 범위, 만료·첫 다운로드 후 삭제는 관리자만, 다운로드 한도, 비밀번호(argon2), 접근, 메모, 하위 항목에 적용) |
 | `POST` | `/api/nodes/:id/link` | 공유 링크 재발급(옛 링크 즉시 무효, 활동 기록에 남음) |
 | `GET` | `/api/nodes/:id/activity` | 링크 활동 최신 200개(폴더는 하위 항목 포함) |
 | `PUT` | `/api/nodes/:id/pause` | 관리자: 다운로드 일시정지/재개 |
 | `POST` | `/api/uploads` | 업로드 준비 `{ target: home\|root\|폴더id, files: [{ rel, size }], dup?, fallbackName? }` → `{ kind: duplicates, names }` / `{ kind: nothing }` / `{ kind: ready, batchId, endpoint, folder, files }`. 이름 검증, 용량·볼륨 여유 공간(507), Home 업로드 폴더 생성 |
-| tus | `/api/uploads/tus/:volumeId[/:uploadId]` | 재개 가능한 업로드(tus 1.0, 청크 `UPLOAD_CHUNK_SIZE_MB`). 메타데이터 `batch`, `index`, `filename`. 업로드한 기기의 계정만 이어 올리거나 조회할 수 있다. 완료되면 `{ success, data: { nodeId, name, folderId } }`. `proxy.ts`를 거치지 않는다(본문 버퍼링 방지) |
+| tus | `/api/uploads/tus/:volumeId[/:uploadId]` | 재개 가능한 업로드(tus 1.0, 청크 `UPLOAD_CHUNK_SIZE_MB`). 메타데이터 `batch`, `index`, `filename`, `lastModified`(선택, 파일의 `File.lastModified` ms. 없거나 미래 값이면 업로드 시각을 `modifiedAt`으로 저장). 업로드한 기기의 계정만 이어 올리거나 조회할 수 있다. 완료되면 `{ success, data: { nodeId, name, folderId } }`. `proxy.ts`를 거치지 않는다(본문 버퍼링 방지) |
 | `GET` | `/api/search?q=…` | 전역 검색(Ctrl/⌘ K): 빈 값이면 최근 파일 8개, `#태그`로 시작하면 모든 태그를 가진 항목, 그 밖에는 이름 검색(후보 200개를 순위로 정렬해 최대 30개). 결과마다 폴더 경로. `q`는 200자까지 |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
 | `GET`·`HEAD` | `/api/files/:id/download` | 원본 그대로 첨부 파일로 받기. SHA-256 ETag(304), Range(206/416), RFC 6266 파일명(한글). `STORAGE_ACCEL_ENABLED`면 Nginx `X-Accel-Redirect`로 넘긴다. 받은 바이트는 `TrafficDaily`에 기록 |

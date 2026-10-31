@@ -49,7 +49,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 | 큐 | 작업 | 넣는 곳 |
 |---|---|---|
 | `maintenance` | 매일 `CLEANUP_CRON`(`JOBS_TIMEZONE`): 삭제일이 지난 계정과 만료 항목 삭제, 볼륨 휴지통에서 24시간 지난 항목과 `UPLOAD_TMP_TTL_HOURS`가 지난 미완료 업로드 영구 삭제(`ACTIVE`·`DRAINING` 볼륨). 그 밖에 `METRICS_SAMPLE_INTERVAL_SEC`마다 대역폭 표본(워커 heartbeat 겸), `HEALTH_PROBE_INTERVAL_SEC`마다 Status 페이지 프로브 | 워커 시작 시 스케줄 등록, 관리자 "Run cleanup now"는 계정·항목 정리만 즉시 실행 |
-| `media` | 썸네일(이미지: sharp, 영상: ffmpeg 1초 프레임 → WebP 576px), 공개 링크용 메타데이터 제거본(JPEG·PNG·WebP는 픽셀을 다시 인코딩하지 않고 메타데이터 구간만 제거, 방향 정보는 유지. GIF·AVIF·TIFF는 같은 형식으로 다시 쓰기), 뷰어 미리보기(512KB 이상 JPEG·PNG·WebP·AVIF·TIFF → 2560px WebP q92, 원본보다 작을 때만 저장), 자주 재생되는 영상의 저장된 변환본(`task: "transcode"`, 아래 "미리보기 전송") | 업로드 완료, 복사, 실시간 변환 재생 횟수 |
+| `media` | 썸네일(이미지: sharp, 영상: ffmpeg 1초 프레임 → WebP 576px), 공개 링크용 메타데이터 제거본(JPEG·PNG·WebP는 픽셀을 다시 인코딩하지 않고 메타데이터 구간만 제거, 방향 정보는 유지. GIF·AVIF·TIFF는 같은 형식으로 다시 쓰기), 뷰어 미리보기(512KB 이상 JPEG·PNG·WebP·AVIF·TIFF → 2560px WebP q92, 원본보다 작을 때만 저장), 자주 재생되는 영상의 저장된 변환본(`task: "transcode"`, 아래 "미리보기 전송"), 촬영일(`takenAt`, 아래 "순번 정리". 처리할 때마다 함께 읽고, `task: "taken"`은 촬영일만) | 업로드 완료, 복사, 실시간 변환 재생 횟수, 릴리스 데이터 마이그레이션(`taken`) |
 
 - 생성 파일은 `system/thumbs/`, `system/derived/`, `system/previews/`, `system/transcoded/` 아래 `<accountId>/<nodeId>`에 두고(`ASSET_DIRS`), 원본은 건드리지 않는다. 항목을 지우거나 계정을 다른 볼륨으로 옮기면 함께 지우거나 옮긴다.
 - ffmpeg·smartctl은 `runCommand`(`src/server/process/run-command.ts`)로 실행한다. 셸 없이, 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지, 끝나면 항상 회수한다.
@@ -73,6 +73,13 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
   - SVG·글꼴·docx·xlsx는 파일 전체가 필요해서 20MB(`DOCUMENT_PREVIEW.assetMaxBytes`)까지만 미리 본다. 표는 1,000행·100열까지.
   - 압축 파일, 옛 Office 형식(.doc, .xls, .ppt)과 .pptx, .hwp, 디스크 이미지, 패키지 등은 형식 아이콘과 "No preview"만 보인다.
   - 공유 링크에서 문서를 여는 것은 `VIEW`로 기록된다(영상·오디오만 `PLAY`).
+
+### 전송 패널 (파일별 진행률·취소)
+
+- 2개 이상인 배치(`TRANSFERS.fileListMin`)는 카드의 "Show files"로 파일 목록을 연다. 파일마다 진행 막대(`Meter`), 받은/보낸 바이트, 속도 스파크라인(`LineChart`, 1초 간격 최근 30개), 취소 버튼.
+- 상태는 `features/transfers/transfer-items.ts`의 순수 함수로 바꾼다. 바이트 수는 `TRANSFERS.progressFlushMs`마다 모아서 반영하고(파일 1만 개 배치에서도 렌더가 밀리지 않게), 시작·완료·실패·취소는 바로 반영한다. 행은 `memo`라 바뀐 파일만 다시 그린다.
+- 업로드(`BatchUploader`): 대기 중인 파일을 취소하면 건너뛰고, 보내는 중인 파일은 `abort(true)`(tus DELETE → 서버가 예약을 풀고 조각을 지움) 후 다음 파일로 넘어간다. 다 올라간 파일은 취소 대상이 아니다(지우기로 지운다). 웹 앱 배치는 파일 하나가 실패해도 멈추지 않고 나머지를 보낸 뒤 "N of M files failed"로 끝난다(`continueOnError`). 업로드 링크 페이지(`/r/<id>`)는 예전처럼 첫 실패에서 멈춘다.
+- 다운로드: 단일 파일·zip은 예전처럼 브라우저 다운로드에 맡긴다(진행률을 볼 수 없어 "saving in your browser"). 여러 항목을 선택해 Download를 누르면 File System Access API가 있는 브라우저(Chromium, https 또는 localhost)에서는 저장할 폴더를 고르게 하고(`FolderDownloader`), 파일마다 `fetch` 응답을 `createWritable()`로 바로 흘려 쓴다(메모리에 쌓지 않음). 폴더는 `<이름>.zip`으로 받고 크기는 추정치다. 같은 이름이 있으면 덮어쓰지 않고 `name (2).ext`로 저장한다. 취소·실패한 파일의 부분 파일은 지운다. Safari·Firefox는 예전 방식.
 
 ## 교체 가능한 인터페이스
 
@@ -116,6 +123,32 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
   - 계정 용량·휴지통 용량은 사본마다 논리 크기로 센다(사용자가 보는 크기와 같다). 볼륨 여유 공간 검사만 실제 사용량을 본다.
   - 다른 계정의 파일과는 공유하지 않는다(계정 사이에 어떤 연결도 만들지 않는다).
   - `volume:migrate`는 파일마다 복사하므로 새 볼륨에서는 링크가 풀린다(내용은 SHA-256으로 대조). 백업 `rsync`에는 `-H`를 넣어 링크를 유지한다(runbook의 예시는 `-aHAX`).
+- **수정 시각**(`Node.modifiedAt`): 파일 내용이 마지막으로 바뀐 시각. 업로드는 브라우저의 `File.lastModified`(tus 메타데이터 `lastModified`), `storage:import`는 tar 항목의 mtime, 값이 없으면 업로드 시각을 쓴다. 복사본은 원본 값을 그대로 가진다. `updatedAt`은 이름·태그·설정 변경에도 바뀌므로 "수정일"로 쓰지 않는다. 이 컬럼이 생기기 전 파일은 데이터 마이그레이션 `20261101-backfill-modified-at`이 디스크 mtime으로 채운다(이름 변경·하드 링크는 mtime을 바꾸지 않는다).
+
+### 순번 정리 (Renumber files)
+
+폴더 메뉴의 "Renumber files"는 `scripts/sortNumbered.sh`처럼 폴더 바로 아래 파일 이름을 `01, 02, 03…`(확장자 유지)으로 바꾼다(`domain/renumber.ts` 계획, `services/renumber.service.ts` 실행).
+
+- 정렬: 이름(자연 정렬), 생성일(`createdAt`), 수정일(`modifiedAt`), 촬영일(`takenAt`), 오름·내림차순. 같은 값은 이름 → id 순이라 계획이 매번 같다.
+- **촬영일**(`Node.takenAt`): 워커가 미디어 자체의 메타데이터에서 읽는다(`domain/media-date.ts`, `server/media/date-taken.ts`).
+  - 사진: sharp가 헤더만 읽어 준 EXIF에서 `DateTimeOriginal` → `DateTimeDigitized` → IFD0 `DateTime` 순, 시간대는 `OffsetTimeOriginal`. 오프셋이 없으면 `JOBS_TIMEZONE`(기본 Asia/Seoul)의 시각으로 본다.
+  - 영상: `ffmpeg -map_metadata 0 -c copy -t 0 -f ffmetadata`(디코딩 없음, 입력은 기존 `ffmpegInput` 허용 목록 그대로)로 `com.apple.quicktime.creationdate`(현지 시각+오프셋) → `creation_time`(UTC) 순.
+  - 1971년 이전(시계가 설정되지 않은 카메라의 0값)과 미래 값은 버린다. 메타데이터가 없으면 null이고, 정렬은 수정일 → 생성일로 대신하며 미리보기가 그 개수를 알려 준다.
+  - 업로드·복사·`storage:import` 뒤 `processMedia`가 함께 읽는다. 이 기능 전에 올린 파일은 데이터 마이그레이션 `20261101-queue-date-taken`이 `task: "taken"` 작업을 큐에 넣고(파일당 하나, `taken-<nodeId>`), 워커가 릴리스 뒤 백그라운드로 읽는다.
+- 건드리지 않는 것: 하위 폴더, 숨김(점으로 시작하는) 파일(`.env`가 `05`가 되지 않게), 디스크에 없는 파일(`missing`). 새 이름이 이들과 겹치면 실행하지 않는다.
+- 이름만 바뀌고 노드 id는 그대로다. 태그, 공유 링크(`linkId`), 공유 설정, 링크 활동, 썸네일·미리보기(`system/*/<nodeId>`)는 모두 id 기준이라 영향이 없다.
+- 실행은 `withStorageTransaction` 하나: ① `pg_advisory_xact_lock(hashtext('renumber:'||folderId))`로 같은 폴더의 실행을 줄 세우고, 잠금 뒤 계획을 다시 계산해 클라이언트가 본 계획(`expect`)과 다르면 409. ② 바뀌는 파일마다 숨김 임시 이름(`.relayfiles-renumber-<무작위>-<n>`)으로, ③ 그다음 번호 이름으로 바꾼다(DB 행과 디스크를 함께). `(parentId, name)` 유일 인덱스가 지연되지 않고 `fs.rename`은 대상을 덮어쓰므로 두 단계가 필요하다.
+- 디스크 이름 변경은 `StorageDriver.renameNoReplace`: `link()` 뒤 `unlink()`라 대상 이름이 이미 있으면 `EEXIST`로 실패하고 아무것도 덮어쓰지 않는다(하드 링크가 안 되는 곳에서는 존재 확인 후 `rename`). 같은 순간 그 이름으로 업로드가 들어와도 파일을 잃지 않고 실행이 실패한다.
+- 어느 단계에서든 실패하면 DB는 롤백되고 undo 스택이 디스크 이름을 역순으로 되돌린다(스크립트의 `rollback`/`rollback_stage2`와 같은 결과). 한 번에 바꾸는 파일 수는 `RENUMBER_MAX_FILES`(기본 10,000, `.env`에서 변경)까지다. 넘으면 미리보기에 이유가 나오고 실행 버튼이 꺼진다. DB 이름은 단계마다 SQL 한 번(`renameChildren`, `unnest`로 일괄 UPDATE)으로 바꾸고 디스크만 파일마다 바꾼다. 트랜잭션 제한 시간은 `max(STORAGE.transactionTimeoutSec, 바뀌는 파일 수 × RENUMBER.transactionMsPerFile(20ms))`이다(개발 환경 측정: 2만 개 10초, 파일당 약 0.5ms). Nginx 응답 대기 시간은 1시간이고, Cloudflare Tunnel을 거치면 100초가 넘는 요청은 브라우저에 524가 보여도 서버에서는 끝까지 실행된다.
+- 클라이언트는 바뀌는 파일만(`expect`)과 번호 대상 전체 수(`count`)를 보낸다. 서버는 잠금 뒤 계획을 다시 계산해 바뀌는 목록과 개수가 같을 때만 실행한다(그 사이 파일이 추가·삭제되면 409).
+
+### 중복 파일 찾기 (Find duplicates)
+
+- 한 번에 비교하는 파일 수는 `DUPLICATES_MAX_SCAN`(기본 10,000, `.env`에서 변경)까지이고, 넘으면 결과에 "only part of the folder was scanned"가 붙는다.
+- 폴더(선택하면 하위 폴더까지)의 파일을 SHA-256과 크기로 묶는다(`domain/duplicates.ts`, `services/duplicates.service.ts`). 이름은 보지 않는다. 읽기만 하고, 지우기는 일반 삭제를 쓴다.
+- 처음에는 묶음마다 가장 오래된 파일을 남기고 나머지를 선택한다. 묶음의 모든 사본을 선택하면 삭제 버튼이 꺼진다.
+- 중복 제거(`STORAGE_DEDUPE`)로 이미 하드 링크를 공유하는 사본은 지워도 쿼터만 줄고 디스크 공간은 마지막 링크가 지워질 때 돌아온다(대화상자에 안내).
+- SHA-256이 없는 파일(처음 커밋부터 업로드는 해시를 기록했으므로 보통 없음)은 비교하지 않고 `unchecked`로 센다. 데이터 마이그레이션 `20261101-backfill-sha256`이 릴리스 때 채운다.
 
 ## 설정과 환경 변수
 
