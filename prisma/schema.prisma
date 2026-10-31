@@ -182,6 +182,8 @@ model Node {
   updatedAt     DateTime    @updatedAt
   /// When the file's content last changed, as the uploader reported it (File.lastModified); files without it use the disk mtime (data migration 20261101-backfill-modified-at).
   modifiedAt    DateTime?
+  /// When the photo or video was taken, from its metadata (EXIF DateTimeOriginal, video creation_time); null when it has none or the worker has not read it yet.
+  takenAt       DateTime?
   events        LinkEvent[]
   fileRequests  FileRequest[]
 

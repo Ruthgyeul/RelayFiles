@@ -18,7 +18,7 @@ import { configuredVolumeRoot } from "@/server/storage/registry";
 import { layoutOf } from "@/server/storage/layout";
 import { callRoute } from "../../../../test/route-call";
 import { fileFixtures } from "../../../../test/file-fixtures";
-import { processMedia } from "@/server/media/process";
+import { processMedia, recordDateTaken } from "@/server/media/process";
 import { runningTranscodes } from "@/server/media/transcode";
 import { storeTranscode } from "@/server/media/transcode-cache";
 import { redis } from "@/server/redis";
@@ -74,6 +74,34 @@ describe("media processing", () => {
     const info = await sharp(preview).metadata();
     expect([info.width, info.height, info.exif]).toEqual([32, 64, undefined]);
     expect((await get(thumb, m, id, { "if-none-match": res.headers.get("etag")! })).status).toBe(304);
+  });
+
+  it("records the date taken from photo EXIF and video metadata", async () => {
+    const m = await member();
+    const shot = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#123456" } })
+      .jpeg()
+      .withExif({ IFD2: { DateTimeOriginal: "2021:07:04 10:20:30", OffsetTimeOriginal: "+09:00" } })
+      .toBuffer();
+    const photo = await addFile(m, m.rootId, [], "shot.jpg", shot, "image/jpeg", "IMAGE");
+    await processMedia(photo);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: photo } })).takenAt?.toISOString()).toBe("2021-07-04T01:20:30.000Z");
+
+    const plain = await addFile(m, m.rootId, [], "plain.png", await sharp({ create: { width: 8, height: 8, channels: 3, background: "#000" } }).png().toBuffer(), "image/png", "IMAGE");
+    expect(await recordDateTaken(plain)).toBe(false);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: plain } })).takenAt).toBeNull();
+
+    const dir = await mkdtemp(join(tmpdir(), "relay-media-"));
+    try {
+      const clip = join(dir, "clip.mp4");
+      await run(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x36:rate=5", "-c:v", "mpeg4", "-metadata", "creation_time=2020-02-03T04:05:06Z", clip]);
+      const video = await addFile(m, m.rootId, [], "clip.mp4", await readFile(clip), "video/mp4", "VIDEO");
+      // The release data migration's job: only the date, thumbnails left alone.
+      expect(await recordDateTaken(video)).toBe(true);
+      expect(await prisma.node.findUniqueOrThrow({ where: { id: video } })).toMatchObject({ hasThumb: false });
+      expect((await prisma.node.findUniqueOrThrow({ where: { id: video } })).takenAt?.toISOString()).toBe("2020-02-03T04:05:06.000Z");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("takes a video frame for the thumbnail", async () => {

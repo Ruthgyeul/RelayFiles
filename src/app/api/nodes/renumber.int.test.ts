@@ -104,6 +104,19 @@ describe("renumber files", () => {
     expect((await plan(s, "root", "modified", "desc")).json.data.entries.map((entry) => entry.from)).toEqual(["b2.jpg", "a.jpg", "b10.jpg"]);
   });
 
+  it("orders by the date taken, placing files without one by their modification time", async () => {
+    const s = await member();
+    const root = await rootOf(s);
+    const late = await file(s, root, [], "late.jpg", 3, 10);
+    const early = await file(s, root, [], "early.jpg", 2, 1);
+    const none = await file(s, root, [], "none.jpg", 1, 5);
+    await prisma.node.update({ where: { id: late }, data: { takenAt: new Date("2024-01-02T00:00:00Z") } });
+    await prisma.node.update({ where: { id: early }, data: { takenAt: new Date("2023-01-02T00:00:00Z") } });
+    const previewed = (await plan(s, root, "taken")).json.data;
+    expect(previewed.entries.map((entry) => entry.id)).toEqual([early, late, none]);
+    expect(previewed.takenFallbacks).toBe(1);
+  });
+
   it("refuses a plan that no longer matches the folder", async () => {
     const s = await member();
     const root = await rootOf(s);

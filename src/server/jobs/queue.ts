@@ -8,8 +8,11 @@ export const MEDIA_QUEUE = "media";
 
 export interface MediaJob {
   nodeId: string;
-  /** "process" (default): thumbnails, previews, stripped copies; "transcode": store an MP4 conversion. */
-  task?: "process" | "transcode";
+  /**
+   * "process" (default): thumbnails, previews, stripped copies and the date taken;
+   * "transcode": store an MP4 conversion; "taken": read only the date taken.
+   */
+  task?: "process" | "transcode" | "taken";
 }
 
 /**
@@ -51,6 +54,16 @@ export async function enqueueMedia(nodeIds: readonly string[]): Promise<void> {
   } catch (error) {
     logger.warn("media jobs not queued", { error, count: nodeIds.length });
   }
+}
+
+/**
+ * Asks the worker to read the date taken of existing photos and videos (one pending job per
+ * file). Unlike {@link enqueueMedia} it fails when Redis is unreachable, so the release data
+ * migration that calls it stops and runs again next time instead of skipping files.
+ */
+export async function enqueueDateTaken(nodeIds: readonly string[]): Promise<void> {
+  if (nodeIds.length === 0) return;
+  await mediaQueue().addBulk(nodeIds.map((nodeId) => ({ name: "taken", data: { nodeId, task: "taken" as const }, opts: { jobId: `taken-${nodeId}` } })));
 }
 
 /** Asks the worker to store an MP4 conversion of an often played video (one pending job per video). */
