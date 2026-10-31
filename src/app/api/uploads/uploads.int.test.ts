@@ -220,6 +220,55 @@ describe("uploads", () => {
     expect((await upload(s, "root", [{ rel: "a.txt", content: "x" }], "skip")).plan).toEqual({ kind: "nothing" });
   });
 
+  it("replaces a file's content, keeping its share link, settings, tags and link history", async () => {
+    const s = await member();
+    await upload(s, "root", [{ rel: "doc.txt", content: "first" }]);
+    const before = await prisma.node.findFirstOrThrow({ where: { accountId: s.id, name: "doc.txt" } });
+    await prisma.node.update({ where: { id: before.id }, data: { tags: ["work"], visibility: "PUBLIC", note: "keep me", downloadLimit: 5, downloads: 2, hasThumb: true } });
+    await prisma.linkEvent.create({ data: { nodeId: before.id, kind: "DOWNLOAD", fileName: "doc.txt" } });
+    const { sent } = await upload(s, "root", [{ rel: "doc.txt", content: "second version" }], "replace");
+    // New content, new id: cached bytes are keyed by the id.
+    const nodeId = sent[0]!.file!.nodeId;
+    expect(nodeId).not.toBe(before.id);
+    const after = await prisma.node.findUniqueOrThrow({ where: { id: nodeId } });
+    expect({ linkId: after.linkId, tags: after.tags, visibility: after.visibility, note: after.note, downloadLimit: after.downloadLimit, downloads: after.downloads }).toEqual({
+      linkId: before.linkId,
+      tags: ["work"],
+      visibility: "PUBLIC",
+      note: "keep me",
+      downloadLimit: 5,
+      downloads: 2,
+    });
+    expect(after.size).toBe(BigInt(Buffer.byteLength("second version")));
+    expect(after.sha256).toBe(createHash("sha256").update("second version").digest("hex"));
+    expect(after.hasThumb).toBe(false);
+    expect(await prisma.linkEvent.count({ where: { nodeId } })).toBe(1);
+    expect(await prisma.node.count({ where: { id: before.id } })).toBe(0);
+    expect(await readFile(join(s.root, "doc.txt"), "utf8")).toBe("second version");
+    expect(await prisma.node.count({ where: { accountId: s.id, name: "doc.txt" } })).toBe(1);
+  });
+
+  it("removes the received bytes when the upload cannot be placed, so a retry starts over", async () => {
+    const s = await member();
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "late.txt", size: 4 }] } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+    const created = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "4", "upload-metadata": `batch ${b64(plan.batchId)},index ${b64("0")},filename ${b64("late.txt")}` });
+    const id = created.headers.get("location")!.split("/").pop()!;
+    // The account starts moving to another volume while the bytes are on their way.
+    await prisma.account.update({ where: { id: s.id }, data: { migrating: true } });
+    try {
+      const patched = await tusCall("PATCH", `${plan.endpoint}/${id}`, s.cookie, { "upload-offset": "0", "content-type": "application/offset+octet-stream" }, Buffer.from("data"));
+      expect(patched.status).toBeGreaterThanOrEqual(400);
+    } finally {
+      await prisma.account.update({ where: { id: s.id }, data: { migrating: false } });
+    }
+    const uploads = await readdir(layoutOf(configuredVolumeRoot()).uploads);
+    expect(uploads.filter((name) => name.startsWith(id))).toEqual([]);
+    expect((await tusCall("HEAD", `${plan.endpoint}/${id}`, s.cookie, {})).status).toBe(404);
+    expect(await prisma.node.count({ where: { accountId: s.id, name: "late.txt" } })).toBe(0);
+  });
+
   it("enforces names, quota and upload ownership", async () => {
     const s = await member();
     expect((await upload(s, "root", [{ rel: "bad/../x.txt", content: "x" }])).status).toBe(400);
