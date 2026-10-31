@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isHiddenName, numberedName, planRenumber, renumberChanges, renumberDigits, renumberTempName, samePlan, sortForRenumber, type RenumberCandidate } from "./renumber";
+import { isHiddenName, numberedName, planRenumber, renumberChanges, renumberDigits, renumberTempName, matchesReviewed, sortForRenumber, type RenumberCandidate } from "./renumber";
 
 const file = (id: string, name: string, createdAt: number, modifiedAt: number | null = null, missing = false): RenumberCandidate => ({ id, name, type: "file", createdAt, modifiedAt, missing });
 const folder = (id: string, name: string): RenumberCandidate => ({ id, name, type: "folder", createdAt: 0, modifiedAt: null, missing: false });
@@ -91,14 +91,28 @@ describe("planRenumber", () => {
   });
 });
 
-describe("samePlan", () => {
-  it("compares ids and new names in order", () => {
-    const entries = [
-      { id: "a", from: "x", to: "01" },
-      { id: "b", from: "y", to: "02" },
-    ];
-    expect(samePlan([{ id: "a", to: "01" }, { id: "b", to: "02" }], entries)).toBe(true);
-    expect(samePlan([{ id: "b", to: "01" }, { id: "a", to: "02" }], entries)).toBe(false);
-    expect(samePlan([{ id: "a", to: "01" }], entries)).toBe(false);
+describe("matchesReviewed", () => {
+  const plan = {
+    entries: [
+      { id: "a", from: "01.jpg", to: "01.jpg" },
+      { id: "b", from: "x.jpg", to: "02.jpg" },
+      { id: "c", from: "y.jpg", to: "03.jpg" },
+    ],
+  };
+
+  it("compares only the changed files and the number of files", () => {
+    expect(matchesReviewed([{ id: "b", to: "02.jpg" }, { id: "c", to: "03.jpg" }], plan, 3)).toBe(true);
+    expect(matchesReviewed([{ id: "c", to: "02.jpg" }, { id: "b", to: "03.jpg" }], plan, 3)).toBe(false);
+    expect(matchesReviewed([{ id: "b", to: "02.jpg" }], plan, 3)).toBe(false);
+  });
+
+  it("notices a file added or removed meanwhile", () => {
+    expect(matchesReviewed([{ id: "b", to: "02.jpg" }, { id: "c", to: "03.jpg" }], plan, 2)).toBe(false);
+    expect(matchesReviewed([{ id: "b", to: "02.jpg" }, { id: "c", to: "03.jpg" }], plan, 4)).toBe(false);
+  });
+
+  it("still accepts the whole plan without a count (first release's clients)", () => {
+    expect(matchesReviewed(plan.entries.map(({ id, to }) => ({ id, to })), plan)).toBe(true);
+    expect(matchesReviewed([{ id: "b", to: "02.jpg" }, { id: "c", to: "03.jpg" }], plan)).toBe(false);
   });
 });

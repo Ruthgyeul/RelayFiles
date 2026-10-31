@@ -103,7 +103,16 @@ export function renumberChanges(plan: Pick<RenumberPlan, "entries">): RenumberEn
   return plan.entries.filter((entry) => entry.from !== entry.to);
 }
 
-/** True when the plan the client reviewed is the one the server would run now. */
-export function samePlan(expected: readonly Pick<RenumberEntry, "id" | "to">[], actual: readonly RenumberEntry[]): boolean {
-  return expected.length === actual.length && expected.every((entry, index) => entry.id === actual[index]!.id && entry.to === actual[index]!.to);
+const sameEntries = (expected: readonly Pick<RenumberEntry, "id" | "to">[], actual: readonly RenumberEntry[]) =>
+  expected.length === actual.length && expected.every((entry, index) => entry.id === actual[index]!.id && entry.to === actual[index]!.to);
+
+/**
+ * True when the plan the client reviewed is the one the server would run now. The client sends
+ * only the files whose name changes, in order, and how many files the plan numbered (`count`): a
+ * file added or removed meanwhile changes the count or shifts the numbers. Without `count` (the
+ * first release's clients), `expected` is the whole plan.
+ */
+export function matchesReviewed(expected: readonly Pick<RenumberEntry, "id" | "to">[], plan: Pick<RenumberPlan, "entries">, count?: number): boolean {
+  if (count === undefined) return sameEntries(expected, plan.entries);
+  return count === plan.entries.length && sameEntries(expected, renumberChanges(plan));
 }

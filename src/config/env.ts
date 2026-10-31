@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, STORAGE, TRANSCODE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, DUPLICATES, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, RENUMBER, STORAGE, TRANSCODE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -107,6 +107,10 @@ export const ENV_GROUPS = {
     LOGIN_MAX_ATTEMPTS: positiveInt.default(LOGIN.maxAttempts),
     LOGIN_LOCK_SECONDS: secondsList.default([...LOGIN.lockSeconds]),
     SIGNUPS_PER_HOUR: positiveInt.default(AUTH.signupsPerHour),
+    /** "Renumber files": most files one run renames. */
+    RENUMBER_MAX_FILES: positiveInt.default(RENUMBER.maxFiles),
+    /** "Find duplicates": most files one scan compares. */
+    DUPLICATES_MAX_SCAN: positiveInt.default(DUPLICATES.maxScan),
   }),
   jobs: z.object({
     CLEANUP_CRON: z.string().default(JOBS.cleanupCron),

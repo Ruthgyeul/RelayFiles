@@ -134,10 +134,12 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - 이름만 바뀌고 노드 id는 그대로다. 태그, 공유 링크(`linkId`), 공유 설정, 링크 활동, 썸네일·미리보기(`system/*/<nodeId>`)는 모두 id 기준이라 영향이 없다.
 - 실행은 `withStorageTransaction` 하나: ① `pg_advisory_xact_lock(hashtext('renumber:'||folderId))`로 같은 폴더의 실행을 줄 세우고, 잠금 뒤 계획을 다시 계산해 클라이언트가 본 계획(`expect`)과 다르면 409. ② 바뀌는 파일마다 숨김 임시 이름(`.relayfiles-renumber-<무작위>-<n>`)으로, ③ 그다음 번호 이름으로 바꾼다(DB 행과 디스크를 함께). `(parentId, name)` 유일 인덱스가 지연되지 않고 `fs.rename`은 대상을 덮어쓰므로 두 단계가 필요하다.
 - 디스크 이름 변경은 `StorageDriver.renameNoReplace`: `link()` 뒤 `unlink()`라 대상 이름이 이미 있으면 `EEXIST`로 실패하고 아무것도 덮어쓰지 않는다(하드 링크가 안 되는 곳에서는 존재 확인 후 `rename`). 같은 순간 그 이름으로 업로드가 들어와도 파일을 잃지 않고 실행이 실패한다.
-- 어느 단계에서든 실패하면 DB는 롤백되고 undo 스택이 디스크 이름을 역순으로 되돌린다(스크립트의 `rollback`/`rollback_stage2`와 같은 결과). 한 번에 `RENUMBER.maxFiles`(2,000)개까지(2N번의 rename이 `STORAGE.transactionTimeoutSec` 60초 안에 끝나도록).
+- 어느 단계에서든 실패하면 DB는 롤백되고 undo 스택이 디스크 이름을 역순으로 되돌린다(스크립트의 `rollback`/`rollback_stage2`와 같은 결과). 한 번에 바꾸는 파일 수는 `RENUMBER_MAX_FILES`(기본 10,000, `.env`에서 변경)까지다. 넘으면 미리보기에 이유가 나오고 실행 버튼이 꺼진다. DB 이름은 단계마다 SQL 한 번(`renameChildren`, `unnest`로 일괄 UPDATE)으로 바꾸고 디스크만 파일마다 바꾼다. 트랜잭션 제한 시간은 `max(STORAGE.transactionTimeoutSec, 바뀌는 파일 수 × RENUMBER.transactionMsPerFile(20ms))`이다(개발 환경 측정: 2만 개 10초, 파일당 약 0.5ms). Nginx 응답 대기 시간은 1시간이고, Cloudflare Tunnel을 거치면 100초가 넘는 요청은 브라우저에 524가 보여도 서버에서는 끝까지 실행된다.
+- 클라이언트는 바뀌는 파일만(`expect`)과 번호 대상 전체 수(`count`)를 보낸다. 서버는 잠금 뒤 계획을 다시 계산해 바뀌는 목록과 개수가 같을 때만 실행한다(그 사이 파일이 추가·삭제되면 409).
 
 ### 중복 파일 찾기 (Find duplicates)
 
+- 한 번에 비교하는 파일 수는 `DUPLICATES_MAX_SCAN`(기본 10,000, `.env`에서 변경)까지이고, 넘으면 결과에 "only part of the folder was scanned"가 붙는다.
 - 폴더(선택하면 하위 폴더까지)의 파일을 SHA-256과 크기로 묶는다(`domain/duplicates.ts`, `services/duplicates.service.ts`). 이름은 보지 않는다. 읽기만 하고, 지우기는 일반 삭제를 쓴다.
 - 처음에는 묶음마다 가장 오래된 파일을 남기고 나머지를 선택한다. 묶음의 모든 사본을 선택하면 삭제 버튼이 꺼진다.
 - 중복 제거(`STORAGE_DEDUPE`)로 이미 하드 링크를 공유하는 사본은 지워도 쿼터만 줄고 디스크 공간은 마지막 링크가 지워질 때 돌아온다(대화상자에 안내).

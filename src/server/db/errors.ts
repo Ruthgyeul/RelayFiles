@@ -2,9 +2,20 @@ import "server-only";
 import { DB_WRITE } from "@/config/policy";
 import { Prisma } from "./client";
 
-/** A unique index refused the write (Prisma P2002): the name or id is already taken. */
+/** Shape of a raw query's driver error (Prisma P2010) when PostgreSQL refused the write. */
+interface RawQueryMeta {
+  driverAdapterError?: { cause?: { kind?: string } };
+}
+
+/**
+ * A unique index refused the write: the name or id is already taken. Model queries report it as
+ * P2002, raw queries ($executeRaw, e.g. renumbering) as P2010 with the driver's
+ * UniqueConstraintViolation.
+ */
 export function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === "P2002") return true;
+  return error.code === "P2010" && (error.meta as RawQueryMeta | undefined)?.driverAdapterError?.cause?.kind === "UniqueConstraintViolation";
 }
 
 /**

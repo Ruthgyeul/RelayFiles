@@ -1,6 +1,6 @@
 # 업데이트 가이드 — 순번 정리 · 중복 찾기 · 파일별 전송 진행률
 
-이미 운영 중인 서버(이전 버전, `deploy/scripts/release.sh` 한 번으로 업데이트하던 환경)에 이번 버전을 올리는 절차다. **결론부터: 지금까지와 똑같이 `git pull` 후 `release.sh`를 한 번 실행하면 끝난다.** `.env`, Nginx, SSD 구조는 손대지 않는다. DB 컬럼 추가와 기존 파일 데이터 채우기는 `release.sh`가 자동으로 한다.
+이미 운영 중인 서버(이전 버전, `deploy/scripts/release.sh` 한 번으로 업데이트하던 환경)에 이번 버전을 올리는 절차다. **결론부터: 지금까지와 똑같이 `git pull` 후 `release.sh`를 한 번 실행하면 끝난다.** `.env`(새 키는 기본값이 있는 선택 항목), Nginx, SSD 구조는 손대지 않는다. DB 컬럼 추가와 기존 파일 데이터 채우기는 `release.sh`가 자동으로 한다.
 
 아래는 그 한 번의 실행 안에서 무슨 일이 일어나는지, 실행 전후에 무엇을 확인하면 되는지, 문제가 생기면 어떻게 하는지를 순서대로 적은 것이다. Docker Compose 배포 기준이고, systemd·k3s 배포는 [§8](#8-systemd--k3s-배포인-경우)을 본다.
 
@@ -14,7 +14,7 @@
 | DB 데이터 | 기존 파일의 수정 시각 채우기, SHA-256 없는 파일 해시 (`20261101-backfill-modified-at`, `20261101-backfill-sha256`) | `release.sh` → `npm run data:migrate` | 없음 |
 | SSD 디렉터리 구조 | 변경 없음 (`layoutVersion` 그대로) | `storage:migrate`는 할 일 없이 끝남 | 없음 |
 | Redis | 변경 없음 (새 키 없음, `REDIS_KEY_PREFIX` 그대로) | — | 없음 |
-| `.env` | 변경 없음 (새 키 없음) | — | 없음 |
+| `.env` | 선택 키 2개 추가: `RENUMBER_MAX_FILES`(순번 정리 한 번에 바꿀 최대 파일 수, 기본 10000), `DUPLICATES_MAX_SCAN`(중복 찾기 한 번에 비교할 최대 파일 수, 기본 10000) | 없으면 기본값 사용 | 없음 (바꾸고 싶을 때만 [아래 "한도 바꾸기"](#한도-바꾸기-env)) |
 | Nginx 설정 | 변경 없음 | — | 없음 |
 | 앱·워커 이미지 | 새 코드로 다시 빌드 | `release.sh` → `docker compose build` | 없음 |
 | 브라우저 | 새 화면(JS) | 페이지를 새로 열 때 받음 | 열어 둔 탭은 새로고침 |
@@ -172,7 +172,8 @@ $C exec postgres psql -U relayfiles -c $'SELECT count(*) FILTER (WHERE "modified
 - 미리 본 뒤에 다른 사람이 파일을 올리거나 바꾸면 "This folder changed. Review the new order."가 나오고 아무것도 바뀌지 않는다. 새 목록을 확인하고 다시 누르면 된다.
 - 중간에 실패해도 모든 파일이 원래 이름으로 돌아간다. 하지만 **성공한 뒤 원래 이름으로 되돌리는 기능은 없다.** 바꾸기 전에 목록을 확인한다.
 - "Date modified"는 파일 자체의 수정 시각이다. 이번 버전부터 올리는 파일은 원본 파일의 수정 시각(브라우저가 알려 주는 값)이 저장된다. 그 전에 올린 파일은 SSD에 저장된 시각(대개 업로드 시각)으로 채워졌다.
-- 한 번에 2,000개까지.
+- 한 번에 바꾸는 파일은 기본 10,000개까지(`RENUMBER_MAX_FILES`, [아래 "한도 바꾸기"](#한도-바꾸기-env)). 넘으면 미리보기에 이유가 나오고 버튼이 꺼진다. 2만 개 기준 수십 초 안에 끝난다.
+- Cloudflare Tunnel로 접속 중이면 100초가 넘는 작업은 화면에 오류(524)가 보여도 서버에서는 끝까지 실행된다. 새로고침해서 결과를 확인한다.
 
 ### Find duplicates
 
@@ -181,6 +182,7 @@ $C exec postgres psql -U relayfiles -c $'SELECT count(*) FILTER (WHERE "modified
 3. **Delete selected** → 확인.
 
 - 묶음의 모든 사본을 선택하면 삭제 버튼이 꺼진다(내용을 통째로 잃지 않게).
+- 한 번에 비교하는 파일은 기본 10,000개까지(`DUPLICATES_MAX_SCAN`). 넘으면 "only part of the folder was scanned"가 표시된다.
 - 같은 내용을 다시 올린 파일은 이미 SSD에서 바이트를 공유(하드 링크)하고 있을 수 있다. 이때 지우면 계정 사용량은 줄지만 SSD 공간은 마지막 사본을 지울 때 돌아온다.
 
 ### 전송 패널 파일별 진행률·취소
@@ -194,6 +196,22 @@ $C exec postgres psql -U relayfiles -c $'SELECT count(*) FILTER (WHERE "modified
 - 여러 항목을 선택 → 툴바 **Download** → (Chrome·Edge) 저장할 폴더 선택 → 브라우저의 "파일 수정 허용" 질문에 허용.
 - 같은 이름의 파일이 이미 있으면 덮어쓰지 않고 `이름 (2).확장자`로 저장한다. 폴더는 `폴더이름.zip`으로 저장된다.
 - 이 기능은 **https 주소나 localhost**에서만 동작한다(브라우저 보안 정책). `http://192.168.0.100`처럼 LAN IP를 http로 열면, Safari·Firefox처럼 예전 방식(브라우저 다운로드)으로 받는다.
+
+### 한도 바꾸기 (env)
+
+기본값은 둘 다 10,000개다. 더 큰 폴더를 다루려면 서버의 `.env`에 값을 적고 앱만 다시 띄운다(DB·이미지 재빌드 필요 없음).
+
+```bash
+# .env
+RENUMBER_MAX_FILES=50000
+DUPLICATES_MAX_SCAN=50000
+```
+
+```bash
+$C up -d app
+```
+
+(systemd: `sudo systemctl restart relayfiles-app`, k3s: `deploy/scripts/k3s/deploy.sh`가 `.env`를 Secret으로 다시 만든다.) 값은 양의 정수여야 하고, 잘못 적으면 앱이 시작할 때 어떤 키가 왜 틀렸는지 출력하고 멈춘다(`$C run --rm tools npm run env:check`로 미리 확인).
 
 ---
 
