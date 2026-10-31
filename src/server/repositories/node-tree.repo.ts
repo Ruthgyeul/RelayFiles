@@ -96,3 +96,14 @@ export function treeEntries(db: DbClient, folderId: string) {
     )
     SELECT n.id, sub.path, n.type::text AS type, n.size, n.missing FROM sub JOIN "Node" n ON n.id = sub.id`;
 }
+
+/** A folder and every folder below it, with paths relative to it ("" for the folder itself). */
+export function folderPathsBelow(db: DbClient, folderId: string) {
+  return db.$queryRaw<{ id: string; path: string }[]>`
+    WITH RECURSIVE sub AS (
+      SELECT id, ''::text AS path FROM "Node" WHERE id = ${folderId} AND type = 'FOLDER'
+      UNION ALL
+      SELECT n.id, CASE WHEN s.path = '' THEN n.name::text ELSE s.path || '/' || n.name END FROM "Node" n JOIN sub s ON n."parentId" = s.id WHERE n.type = 'FOLDER'
+    )
+    SELECT id, path FROM sub`;
+}

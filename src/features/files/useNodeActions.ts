@@ -6,11 +6,13 @@ import { folderHref, sharePageHref } from "@/shared/lib/routes";
 import type { NodeActions } from "./node-menu";
 import type { useFileDialogs } from "./useFileDialogs";
 import type { useFileMedia } from "./useFileMedia";
+import type { useFolderTools } from "./useFolderTools";
 
 interface Options {
   view: FolderView;
   isAdmin: boolean;
   dialogs: ReturnType<typeof useFileDialogs>["open"];
+  folderTools: ReturnType<typeof useFolderTools>["open"];
   media: ReturnType<typeof useFileMedia>;
   linkOf: (linkId: string) => string;
   copyLink: (url: string, visibility: "private" | "public") => void;
@@ -21,7 +23,7 @@ interface Options {
  * What each entry of an item's action menu does. The current folder (its header menu) is
  * handled like its own item: it moves within its parent and shares with the parent's visibility.
  */
-export function useNodeActions({ view, isAdmin, dialogs, media, linkOf, copyLink, onProperties }: Options): (item: NodeItem) => NodeActions {
+export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, linkOf, copyLink, onProperties }: Options): (item: NodeItem) => NodeActions {
   const router = useRouter();
   const { folder, path, isRoot } = view;
   const parentOfCurrent = path.at(-2);
@@ -48,6 +50,8 @@ export function useNodeActions({ view, isAdmin, dialogs, media, linkOf, copyLink
       copy: () => dialogs.move([item], "copy", parentId),
       move: () => dialogs.move([item], "move", parentId),
       delete: () => dialogs.remove([item]),
+      renumber: item.type === "folder" ? () => folderTools.renumber(item) : undefined,
+      duplicates: item.type === "folder" ? () => folderTools.duplicates(item) : undefined,
       properties: () => onProperties(item.id),
     };
   };

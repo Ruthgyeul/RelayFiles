@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { TransferItem } from "./transfer-items";
 import type { TransferStatus } from "./transfer-text";
 import type { UploadEntry } from "./read-drop";
 
@@ -16,6 +17,12 @@ export interface DownloadRequest {
   title: string;
   files: number;
   total: number;
+}
+
+/** Several items saved into a folder the user picks (File System Access API, Chromium). */
+export interface FolderDownloadRequest {
+  title: string;
+  items: { url: string; name: string; size: number }[];
 }
 
 export interface Transfer {
@@ -34,6 +41,8 @@ export interface Transfer {
   /** Time spent transferring before the current run, and when the current run started. */
   activeMs: number;
   runningSince: number | null;
+  /** Per-file progress for batches of several files (the card's file list). */
+  items?: TransferItem[];
 }
 
 export interface TransfersContextValue {
@@ -45,8 +54,15 @@ export interface TransfersContextValue {
   pickFolder: (target: UploadTarget) => void;
   upload: (entries: UploadEntry[], target: UploadTarget) => void;
   download: (request: DownloadRequest) => void;
+  /**
+   * Saves items into a folder the user picks, with per-file progress and cancel. Must be called
+   * from a click; returns false when the browser cannot (the caller then uses `download`).
+   */
+  downloadToFolder: (request: FolderDownloadRequest, fallback: () => void) => boolean;
   togglePause: (id: string) => void;
   remove: (id: string) => void;
+  /** Cancels one file of a batch (queued or in progress); the others continue. */
+  cancelItem: (id: string, key: number) => void;
   clearFinished: () => void;
   setPanel: (open: boolean, expanded?: boolean) => void;
 }

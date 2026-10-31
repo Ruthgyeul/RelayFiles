@@ -19,14 +19,19 @@ export interface NodeActions {
   copy?: () => void;
   move?: () => void;
   delete?: () => void;
+  /** Folders: rename the files inside to 01, 02, 03, … */
+  renumber?: () => void;
+  /** Folders: files with the same content. */
+  duplicates?: () => void;
   properties?: () => void;
 }
 
 type Candidate = [label: string, icon: MenuEntry["icon"], action: (() => void) | undefined] | null;
 
 /**
- * Item menu in the design's four groups: open/download, sharing, file
- * operations, properties. Groups are separated by a line; empty groups disappear.
+ * Item menu in the design's four groups: open/download, sharing, file operations, properties,
+ * plus folder tools (renumber, duplicates) before properties. Groups are separated by a line;
+ * empty groups disappear.
  */
 export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings">, isRoot: boolean, isAdmin: boolean, actions: NodeActions): MenuEntry[] {
   const folder = item.type === "folder";
@@ -53,6 +58,7 @@ export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings">
       isRoot ? null : ["Move", "arrow-bend-up-right", actions.move],
       isRoot ? null : ["Delete", "trash", actions.delete],
     ],
+    [folder ? ["Renumber files", "list-numbers", actions.renumber] : null, folder ? ["Find duplicates", "files", actions.duplicates] : null],
     [["Properties", "info", actions.properties]],
   ];
 

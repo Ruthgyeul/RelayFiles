@@ -1,5 +1,6 @@
 import "server-only";
 import { BYTES_PER_GB } from "@/domain/quota";
+import { clientModifiedAt } from "@/domain/upload";
 import { FileStore } from "@tus/file-store";
 import { EVENTS, Server, type Upload } from "@tus/server";
 import { getEnv } from "@/config/env";
@@ -96,7 +97,8 @@ function createServer(volumeId: string, mountPath: string): Server {
       const { owner } = await senderOf(req, batch, false);
       const { requestId } = batch;
       try {
-        const file = await finalizeUpload(owner, batch, slot, upload.id).catch(rethrow);
+        const modifiedAt = clientModifiedAt(upload.metadata?.[UPLOAD_METADATA.lastModified] ?? undefined, new Date());
+        const file = await finalizeUpload(owner, batch, slot, upload.id, modifiedAt).catch(rethrow);
         if (requestId) await recordRequestUpload(requestId, upload.id, batch.files[slot]?.size ?? 0);
         await forgetUpload(upload.id);
         // A visitor learns only that the file arrived, not where it went.

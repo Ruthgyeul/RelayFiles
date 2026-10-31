@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MAX_DOWNLOAD_LIMIT, MAX_SHARE_NOTE_LENGTH, type BusyBadge } from "@/domain/share";
-import { FILES, SEARCH } from "@/config/policy";
+import { FILES, RENUMBER, SEARCH } from "@/config/policy";
+import { RENUMBER_ORDERS, RENUMBER_SORTS, type RenumberEntry, type RenumberSkipReason } from "@/domain/renumber";
 
 export type NodeKind = "video" | "audio" | "image" | "other";
 export type NodeType = "folder" | "file";
@@ -29,6 +30,8 @@ export interface NodeItem {
   /** Bytes as a decimal string; folders carry the total of their contents. */
   size: string;
   createdAt: string;
+  /** Files: when the content last changed (the uploader's file time); absent for folders. */
+  modifiedAt?: string;
   downloads: number;
   /** Direct children (folders only). */
   itemCount: number;
@@ -141,6 +144,68 @@ export const settingsSchema = z.object({
 });
 
 export const pauseSchema = z.object({ paused: z.boolean() });
+
+/** GET /api/nodes/:id/renumber — how the files would be renamed. */
+export const renumberQuerySchema = z.object({ sort: z.enum(RENUMBER_SORTS), order: z.enum(RENUMBER_ORDERS) });
+
+/** POST /api/nodes/:id/renumber — runs the reviewed plan (refused when the folder changed since). */
+export const renumberApplySchema = renumberQuerySchema.extend({
+  expect: z.array(z.object({ id: nodeIdSchema, to: z.string().max(1024) })).max(RENUMBER.maxFiles),
+});
+
+export interface RenumberPreview {
+  /** Every numbered file in its new order; unchanged ones have from === to. */
+  entries: RenumberEntry[];
+  /** Files that keep their names (hidden or missing on disk). */
+  skipped: { id: string; name: string; reason: RenumberSkipReason }[];
+  /** Files whose name changes. */
+  changes: number;
+  /** Why the plan cannot run, or null. */
+  conflict: string | null;
+}
+
+export interface RenumberResult {
+  renamed: number;
+  unchanged: number;
+}
+
+/** GET /api/nodes/:id/duplicates?recursive=1 */
+export const duplicatesQuerySchema = z.object({ recursive: z.enum(["0", "1"]).default("0").transform((value) => value === "1") });
+
+/** A file in a duplicate group, with its folder path relative to the scanned folder. */
+export interface DuplicateFile {
+  id: string;
+  name: string;
+  /** Folder names below the scanned folder ("Trip/Day 2"); "" for the folder itself. */
+  folderPath: string;
+  parentId: string;
+  /** The file's folder is the account root (opened at /files). */
+  parentIsRoot: boolean;
+  kind: NodeKind | null;
+  hasThumb: boolean;
+  createdAt: string;
+  modifiedAt: string | null;
+}
+
+export interface DuplicateGroupDto {
+  sha256: string;
+  /** Bytes of one copy as a decimal string. */
+  size: string;
+  /** Bytes the extra copies count in the quota. */
+  wasted: string;
+  /** Oldest first. */
+  files: DuplicateFile[];
+}
+
+export interface DuplicatesResult {
+  groups: DuplicateGroupDto[];
+  /** Files compared. */
+  scanned: number;
+  /** Files without a recorded content hash (not compared). */
+  unchecked: number;
+  /** More files (or groups) than one scan handles; only part of the tree was compared. */
+  truncated: boolean;
+}
 
 export type SettingsInput = z.infer<typeof settingsSchema>;
 

@@ -264,6 +264,13 @@ $C exec postgres psql -U relayfiles -c 'SELECT at, "actorName", action, "targetI
 2. `run({ db, cursor, save })`는 `MIGRATION.batchSize`(1,000)행씩 처리하고 배치마다 `save(cursor)`를 부른다. 다시 실행해도 결과가 같아야 한다.
 3. `src/server/migrations/registry.ts`의 `DATA_MIGRATIONS` 끝에 추가한다.
 
+등록된 데이터 마이그레이션:
+
+| id | 하는 일 | 시간 |
+|---|---|---|
+| `20261101-backfill-modified-at` | 수정 시각(`modifiedAt`)이 없는 파일에 디스크 mtime을 채운다(파일이 없으면 생성 시각). OFFLINE 볼륨의 파일은 건너뛰고 경고 로그 | 파일 1만 개당 수 초(행마다 경로 조회 + `stat`) |
+| `20261101-backfill-sha256` | SHA-256이 없는 파일을 해시한다. 업로드는 처음부터 해시를 기록했으므로 보통 대상이 0개다. 없거나 크기가 다른 파일은 비워 두고 경고 로그(`storage:fsck`로 확인) | 대상 파일 크기만큼 읽는다(SSD 기준 수백 MB/s) |
+
 진행 상황은 `DataMigration` 테이블에 남는다. 중간에 멈추면 다음 실행이 저장된 커서 다음부터 이어 간다. 끝난 마이그레이션은 다시 실행하지 않는다.
 
 ```bash

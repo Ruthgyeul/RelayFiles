@@ -42,7 +42,7 @@ await runScript(async () => {
     const counts = { imported: 0, skipped: 0, ignored: 0, bytes: 0 };
 
     for await (const entry of process.stdin.pipe(extract())) {
-      const { name, type, size = 0 } = entry.header;
+      const { name, type, size = 0, mtime } = entry.header;
       const rel = importRelPath(name, values.to);
       if (type !== "file" || rel === null) {
         // Folders are created with their files; links, devices and unsafe names are not imported.
@@ -54,7 +54,8 @@ await runScript(async () => {
         continue;
       }
       // tar-stream entries (streamx) are typed as unknown chunks; they yield Buffers.
-      const result = await importFile(target, rel, size, entry as AsyncIterable<Uint8Array>);
+      // The tar entry's mtime is the file's own modification time ("Renumber files" by date modified).
+      const result = await importFile(target, rel, size, entry as AsyncIterable<Uint8Array>, mtime instanceof Date && mtime.getTime() <= Date.now() ? mtime : null);
       if (result.status === "skipped") {
         counts.skipped++;
         continue;

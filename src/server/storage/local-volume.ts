@@ -1,13 +1,13 @@
 import "server-only";
 import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { copyFile, link, lstat, mkdir, open, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { copyFile, link, lstat, mkdir, open, readdir, rename, rm, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import { getEnv } from "@/config/env";
 import { basename, dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { ASSET_DIRS, DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
 import type { DiskEntry } from "@/domain/fsck";
-import type { AssetKind, AssetRef, ByteSource, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
+import { StorageTargetExistsError, type AssetKind, type AssetRef, type ByteSource, type SpaceInfo, type StorageDriver, type StorageLocation, type StorageStat } from "./driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path";
 
 /** "2026-10-06T03-12-00-000Z": when an item was moved to the trash (filename-safe ISO time). */
@@ -26,6 +26,17 @@ function trashTime(name: string): number | null {
 /** Errors meaning "no hard link here" (another filesystem, too many links, not supported): copy instead. */
 const NO_HARD_LINK = new Set(["EXDEV", "EMLINK", "EPERM", "ENOTSUP", "EOPNOTSUPP"]);
 const errorCode = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code ?? "";
+
+/** True when something (a file, folder or link) exists at `path`. */
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return false;
+    throw error;
+  }
+}
 
 /**
  * Whether files with the same content share their bytes (STORAGE_DEDUPE): a copy or a
@@ -148,6 +159,22 @@ export class LocalVolumeDriver implements StorageDriver {
   async rename(from: StorageLocation, to: StorageLocation): Promise<void> {
     const [source, target] = await Promise.all([this.pathOf(from), this.pathOf(to)]);
     await rename(source, target);
+  }
+
+  async renameNoReplace(from: StorageLocation, to: StorageLocation): Promise<void> {
+    const [source, target] = await Promise.all([this.pathOf(from), this.pathOf(to)]);
+    try {
+      // link() fails with EEXIST instead of replacing: the check and the rename are one step.
+      await link(source, target);
+    } catch (error) {
+      if (errorCode(error) === "EEXIST") throw new StorageTargetExistsError();
+      if (!NO_HARD_LINK.has(errorCode(error))) throw error;
+      // No hard links here (or the link count is at its limit): check, then rename.
+      if (await pathExists(target)) throw new StorageTargetExistsError();
+      await rename(source, target);
+      return;
+    }
+    await unlink(source);
   }
 
   async copy(from: StorageLocation, to: StorageLocation): Promise<void> {

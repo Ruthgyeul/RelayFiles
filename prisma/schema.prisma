@@ -180,6 +180,8 @@ model Node {
   tags          String[]    @default([])
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  /// When the file's content last changed, as the uploader reported it (File.lastModified); files without it use the disk mtime (data migration 20261101-backfill-modified-at).
+  modifiedAt    DateTime?
   events        LinkEvent[]
   fileRequests  FileRequest[]
 
