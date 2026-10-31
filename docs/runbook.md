@@ -214,7 +214,7 @@ $C restart app worker nginx
 
 컨테이너를 재시작하면 앱이 SSD의 `.relayfiles-volume` 표시 파일을 다시 확인하고(Status 페이지 Storage가 정상으로 돌아온다) 정상으로 동작한다. 빈 마운트 지점(내장 디스크)에는 쓰지 않는다.
 
-워커는 `VOLUME_WATCH_INTERVAL_SEC`(기본 30초)마다 ACTIVE 볼륨의 표시 파일을 확인한다. 없거나 다른 볼륨이면 그 볼륨을 `OFFLINE`으로 바꾸고 `storage volume went offline` 에러 로그를 남긴다. 다시 마운트되면 다음 확인에서 `ACTIVE`로 돌아온다(`READONLY`·`DRAINING`은 건드리지 않는다).
+워커는 `VOLUME_WATCH_INTERVAL_SEC`(기본 30초)마다 ACTIVE 볼륨의 표시 파일을 확인한다(`probes` 큐: 매일 정리가 도는 중에도 멈추지 않는다). 없거나 다른 볼륨이면 그 볼륨을 `OFFLINE`으로 바꾸고 `storage volume went offline` 에러 로그를 남긴다. 다시 마운트되면 다음 확인에서 `ACTIVE`로 돌아온다(`READONLY`·`DRAINING`은 건드리지 않는다).
 
 ## DB와 디스크 대조 (storage:fsck)
 
@@ -305,6 +305,16 @@ $C run --rm tools npm run media:backfill -- --previews # 뷰어 미리보기 도
 ```
 
 큐에 넣기만 하고, 워커(`$C ps worker`)가 처리한다.
+
+SSD가 빠졌거나 디스크 I/O 오류가 난 동안 처리하던 사진·영상은 실패로 기록되지 않고 약 5분 동안 다시 시도된다(`MEDIA.jobAttempts`, 로그 `media step failed; retrying later`). 그 뒤에도 실패한 파일은 썸네일이 없는 채로 남고 공개 링크에서 503 "not ready"이므로, 볼륨을 다시 붙인 뒤 `media:backfill`을 한 번 실행한다. 파일 자체가 깨진 사진만 `stripFailed`(공개 링크 415)가 된다.
+
+### 작업 큐 기록 (Redis)
+
+`maintenance`(매일 정리)와 `probes`(표본·헬스 프로브·볼륨 확인) 큐는 끝난 작업을 최근 100개, 실패한 작업을 최근 1,000개만 남긴다(`JOBS.keepCompleted`·`keepFailed`). 이 한도가 생기기 전 릴리스는 모든 작업을 남겨 Redis에 하루 5,700개쯤 쌓였다. 업데이트한 뒤 첫 워커 시작에서 하루 넘은 기록을 1,000개씩 지우므로(`old finished jobs removed` 로그) 시작이 몇 초 늦을 수 있다. 확인:
+
+```bash
+$C exec redis redis-cli -n <REDIS_DB> --scan --pattern '*q:*' | wc -l   # 큐 키 수: 작업마다 키가 하나 이상, 수백 개 안팎이 정상
+```
 
 ## 볼륨 추가·교체
 

@@ -1,5 +1,5 @@
 import "server-only";
-import { readFile } from "node:fs/promises";
+import { access, constants, readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { MEDIA } from "@/config/policy";
 import { LOSSLESS_STRIP_TYPES, stripImageMetadata } from "@/domain/image-metadata";
@@ -7,9 +7,12 @@ import { db } from "../db/client";
 import { logger } from "../logger";
 import { findAccountById } from "../repositories/account.repo";
 import { findNodeForJob, setFileFacts, updateNode } from "../repositories/node.repo";
+import { findVolume } from "../repositories/volume.repo";
 import { driverForAccount } from "../services/volume.service";
 import { locationOf } from "../services/node-location";
+import { checkVolume } from "../storage/volume";
 import { dateTaken } from "./date-taken";
+import { isTransientMediaError } from "./failure";
 import { imagePreview, imageThumbnail, videoThumbnail, wantsPreview } from "./thumbnail";
 
 /** Image types sharp can rewrite in the same format (metadata is dropped on output). */
@@ -38,11 +41,34 @@ export interface MediaResult {
   preview: boolean;
 }
 
-/** Runs one step; a file that cannot be decoded is logged and skipped, not retried. */
-async function attempt<T>(step: string, nodeId: string, run: () => Promise<T>): Promise<T | null> {
+/**
+ * Whether the original can still be read and its volume is the one mounted: then a failed
+ * step blames the file. A volume that came off or a vanished original blames the storage.
+ */
+async function storageReadable(path: string, volumeId: string): Promise<boolean> {
+  try {
+    await access(path, constants.R_OK);
+    const volume = await findVolume(db(), volumeId);
+    return volume !== null && (await checkVolume(volume.mountPath, volume.id)).state === "online";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Runs one step. A file that cannot be decoded is logged and skipped (not retried). A storage
+ * or system failure (I/O error, full disk, volume offline, a timeout, or a decoder error while
+ * the original or its volume is unreadable) is thrown, so BullMQ tries the whole job again
+ * with backoff and nothing is recorded for good.
+ */
+async function attempt<T>(step: string, nodeId: string, run: () => Promise<T>, source: { path: string; volumeId: string }): Promise<T | null> {
   try {
     return await run();
   } catch (error) {
+    if (isTransientMediaError(error) || !(await storageReadable(source.path, source.volumeId))) {
+      logger.warn("media step failed; retrying later", { step, nodeId, error });
+      throw error;
+    }
     logger.warn("media step failed", { step, nodeId, error });
     return null;
   }
@@ -62,17 +88,18 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
   if (!path) throw new Error("Media processing needs a local volume.");
   const mime = row.mime ?? "";
   const asset = { accountId: row.accountId, nodeId: row.id };
+  const source = { path, volumeId: account.volumeId };
 
-  const thumb = await attempt("thumbnail", row.id, () => (row.kind === "VIDEO" ? videoThumbnail(path) : imageThumbnail(path)));
+  const thumb = await attempt("thumbnail", row.id, () => (row.kind === "VIDEO" ? videoThumbnail(path) : imageThumbnail(path)), source);
   if (thumb) await driver.writeAsset({ ...asset, kind: "thumb" }, thumb);
-  const derived = row.kind === "IMAGE" ? await attempt("strip metadata", row.id, () => strippedCopy(path, mime, Number(row.size))) : null;
+  const derived = row.kind === "IMAGE" ? await attempt("strip metadata", row.id, () => strippedCopy(path, mime, Number(row.size)), source) : null;
   if (derived) await driver.writeAsset({ ...asset, kind: "derived" }, derived);
   const size = Number(row.size);
-  const preview = row.kind === "IMAGE" && wantsPreview(mime, size) ? await attempt("preview", row.id, () => imagePreview(path)) : null;
+  const preview = row.kind === "IMAGE" && wantsPreview(mime, size) ? await attempt("preview", row.id, () => imagePreview(path), source) : null;
   // Not smaller than the original (an already small or well-compressed file): show the original.
   const keepPreview = preview !== null && preview.length < size;
   if (keepPreview) await driver.writeAsset({ ...asset, kind: "preview" }, preview);
-  const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"));
+  const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"), source);
 
   // The file may have been deleted while it was processed; then its assets go too.
   const current = await findNodeForJob(db(), row.id);
@@ -82,7 +109,8 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
   }
   const result = { thumb: thumb !== null, derived: derived !== null, preview: keepPreview };
   // An image that should have been cleaned but was not (undecodable, too large) is not tried
-  // again for every visitor: share routes answer 415 for it until the file changes.
+  // again for every visitor: share routes answer 415 for it until the file changes. Storage
+  // failures never get here (attempt throws them), so they leave the image "not ready" (503).
   const stripFailed = row.kind === "IMAGE" && !result.derived && canStripType(mime);
   // A date taken that could not be read this time keeps any value read before.
   await updateNode(db(), row.id, { hasThumb: result.thumb, hasDerived: result.derived, stripFailed, ...(takenAt ? { takenAt } : {}) });
@@ -101,7 +129,7 @@ export async function recordDateTaken(nodeId: string): Promise<boolean> {
   const driver = await driverForAccount(account);
   const path = await driver.localPath(await locationOf(row.accountId, row.id));
   if (!path) throw new Error("Media processing needs a local volume.");
-  const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"));
+  const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"), { path, volumeId: account.volumeId });
   if (takenAt) await setFileFacts(db(), row.id, { takenAt });
   return takenAt !== null;
 }

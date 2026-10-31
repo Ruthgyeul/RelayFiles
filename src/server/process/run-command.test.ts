@@ -53,6 +53,21 @@ describe("runCommand", () => {
     expect(alive(error.result.pid!)).toBe(false);
   }, 10_000);
 
+  it("stops a command when its signal aborts, also one aborted before it started", async () => {
+    const controller = new AbortController();
+    const running = failureOf(runCommand(NODE, ["-e", "setInterval(() => {}, 1000)"], { timeoutMs: 10_000, signal: controller.signal, ...QUIET }));
+    controller.abort(new Error("worker stopping"));
+    const error = await running;
+    expect(error.reason).toBe("aborted");
+    expect(error.message).toContain("worker stopping");
+    expect(error.result.signal).toBe("SIGTERM");
+    expect(alive(error.result.pid!)).toBe(false);
+
+    const early = await failureOf(runCommand(NODE, ["-e", "setInterval(() => {}, 1000)"], { timeoutMs: 10_000, signal: AbortSignal.abort(), ...QUIET }));
+    expect(early.reason).toBe("aborted");
+    expect(alive(early.result.pid!)).toBe(false);
+  });
+
   it("stops a command that writes more than allowed", async () => {
     const error = await failureOf(runCommand(NODE, ["-e", "setInterval(() => process.stdout.write('x'.repeat(65536)), 1)"], { timeoutMs: 10_000, maxStdoutBytes: 1024, ...QUIET }));
     expect(error.reason).toBe("output-limit");

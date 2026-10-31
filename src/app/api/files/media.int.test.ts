@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rename, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -10,10 +10,11 @@ import { GET as stream } from "@/app/api/files/[id]/stream/route";
 import { GET as thumb } from "@/app/api/files/[id]/thumb/route";
 import { POST as removeNodes } from "@/app/api/nodes/delete/route";
 import { getEnv } from "@/config/env";
-import { IMMUTABLE_CACHE, MEDIA, TRANSCODE } from "@/config/policy";
+import { IMMUTABLE_CACHE, MEDIA, PROCESS, TRANSCODE } from "@/config/policy";
 import { exifOrientation } from "@/domain/image-metadata";
-import { startMediaWorker } from "@/server/jobs/media-worker";
-import { closeQueues, enqueueMedia } from "@/server/jobs/queue";
+import { Queue } from "bullmq";
+import { startMediaWorker, stopMediaWorker } from "@/server/jobs/media-worker";
+import { closeQueues, enqueueMedia, enqueueTranscode, MEDIA_QUEUE, queueConnection } from "@/server/jobs/queue";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { layoutOf } from "@/server/storage/layout";
 import { callRoute } from "../../../../test/route-call";
@@ -22,6 +23,7 @@ import { processMedia, recordDateTaken } from "@/server/media/process";
 import { runningTranscodes } from "@/server/media/transcode";
 import { storeTranscode } from "@/server/media/transcode-cache";
 import { redis } from "@/server/redis";
+import { slotsHeld } from "@/server/redis-semaphore";
 
 const { prisma, member, addFile, get, cleanup } = fileFixtures();
 const run = promisify(execFile);
@@ -46,6 +48,8 @@ function cameraJpeg() {
 const GPS_POINTER = Buffer.from([0x25, 0x88]);
 /** "Exif\0\0" + TIFF header + one-entry IFD: the orientation-only block the stripper writes. */
 const ORIENTATION_ONLY_EXIF_BYTES = 32;
+/** Time a stopping worker may take beyond the SIGTERM grace (closing Redis connections). */
+const SHUTDOWN_SLACK_MS = 3_000;
 
 describe("media processing", () => {
   it("makes a thumbnail and a copy without location or camera data, keeping the original", async () => {
@@ -145,6 +149,8 @@ describe("media processing", () => {
     const m = await member();
     const broken = await addFile(m, m.rootId, [], "broken.jpg", "not a jpeg", "image/jpeg", "IMAGE");
     expect(await processMedia(broken)).toEqual({ thumb: false, derived: false, preview: false });
+    // Not tried again for every visitor: the share page answers 415 until the file changes.
+    expect(await prisma.node.findUniqueOrThrow({ where: { id: broken } })).toMatchObject({ hasDerived: false, stripFailed: true });
     expect((await get(thumb, m, broken)).status).toBe(404);
     const text = await addFile(m, m.rootId, [], "notes.txt", "hello", "text/plain");
     expect(await processMedia(text)).toBeNull();
@@ -153,6 +159,33 @@ describe("media processing", () => {
     await processMedia(photo);
     const other = await member();
     expect((await get(thumb, other, photo)).status).toBe(404);
+  });
+
+  it("retries storage failures instead of recording the file as unprocessable", async () => {
+    const m = await member();
+    const facts = (id: string) => prisma.node.findUniqueOrThrow({ where: { id }, select: { hasThumb: true, hasDerived: true, stripFailed: true } });
+    const before = { hasThumb: false, hasDerived: false, stripFailed: false };
+
+    // The original cannot be read (an I/O error, the SSD came off): the job fails and is retried.
+    const gone = await addFile(m, m.rootId, [], "gone.jpg", await cameraJpeg(), "image/jpeg", "IMAGE");
+    await rm(join(m.dir, "gone.jpg"));
+    await expect(processMedia(gone)).rejects.toThrow();
+    expect(await facts(gone)).toEqual(before);
+
+    // A decoder error while the volume is not mounted blames the storage, not the file.
+    const broken = await addFile(m, m.rootId, [], "broken.jpg", "not a jpeg", "image/jpeg", "IMAGE");
+    const { volume } = await prisma.account.findUniqueOrThrow({ where: { id: m.id }, select: { volume: { select: { mountPath: true } } } });
+    const marker = layoutOf(volume.mountPath).marker;
+    await rename(marker, `${marker}.hidden`);
+    try {
+      await expect(processMedia(broken)).rejects.toThrow();
+    } finally {
+      await rename(`${marker}.hidden`, marker);
+    }
+    expect(await facts(broken)).toEqual(before);
+    // Back online, the retry finds the file itself undecodable.
+    expect(await processMedia(broken)).toEqual({ thumb: false, derived: false, preview: false });
+    expect(await facts(broken)).toEqual({ ...before, stripFailed: true });
   });
 
   it("removes generated files with the item", async () => {
@@ -208,6 +241,11 @@ describe("media processing", () => {
       }
       await expect.poll(runningTranscodes).toBe(0);
       expect(Number(await redis().get(`transcode:plays:${id}`))).toBe(TRANSCODE.cacheAfterPlays);
+
+      // A worker that stops mid-way stops ffmpeg, keeps nothing and frees the slot (the job is retried).
+      await expect(storeTranscode(id, AbortSignal.abort("worker stopping"))).rejects.toThrow("worker stopping");
+      expect(await exists(assetFile("transcoded", m.id, id))).toBe(false);
+      expect(await slotsHeld("transcode")).toBe(0);
 
       // What the worker runs once the plays are counted.
       expect(await storeTranscode(id)).toBe(true);
@@ -281,4 +319,32 @@ describe("media processing", () => {
       await worker.close();
     }
   });
+
+  it("stops a running stored conversion when the worker stops, so shutdown is not held up", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "relay-media-"));
+    const queue = new Queue(MEDIA_QUEUE, queueConnection("producer"));
+    try {
+      const long = join(dir, "long.avi");
+      await run(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=120:size=1280x720:rate=25", "-c:v", "mpeg4", "-q:v", "2", long]);
+      const m = await member();
+      const id = await addFile(m, m.rootId, [], "long.avi", await readFile(long), "video/vnd.avi", "VIDEO");
+      const worker = startMediaWorker();
+      await enqueueTranscode(id);
+      await expect.poll(() => slotsHeld("transcode"), { timeout: 10_000 }).toBe(1);
+
+      const started = Date.now();
+      await stopMediaWorker(worker);
+      // ffmpeg gets SIGTERM (SIGKILL after the grace); the conversion is not waited for.
+      expect(Date.now() - started).toBeLessThan(PROCESS.killGraceMs + SHUTDOWN_SLACK_MS);
+      expect(await slotsHeld("transcode")).toBe(0);
+      expect(await exists(assetFile("transcoded", m.id, id))).toBe(false);
+      // The job waits for a retry after the restart.
+      const job = await queue.getJob(`transcode-${id}`);
+      expect(await job?.getState()).toBe("delayed");
+      await job?.remove();
+    } finally {
+      await queue.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
