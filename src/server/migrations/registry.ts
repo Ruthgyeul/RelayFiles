@@ -1,6 +1,6 @@
 import "server-only";
-import { backfillModifiedAt } from "./backfill-modified-at";
-import { backfillSha256 } from "./backfill-sha256";
+import { backfillModifiedAt } from "./20261101-backfill-modified-at";
+import { backfillSha256 } from "./20261101-backfill-sha256";
 import type { DataMigrationStep } from "./data-migrations";
 
 /**

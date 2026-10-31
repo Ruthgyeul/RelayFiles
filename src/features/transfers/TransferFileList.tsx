@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useRef } from "react";
 import { formatSize } from "@/domain/format";
+import { kindFromMime, mimeFromName } from "@/domain/upload";
 import { cn } from "@/shared/lib/cn";
 import { Meter } from "@/shared/ui/Display";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -32,7 +33,8 @@ function detailOf(item: TransferItem, verb: string): string {
 
 /** One file: name, its own progress bar, bytes and speed (with a sparkline while it runs), cancel. */
 const TransferFileRow = memo(function TransferFileRow({ item, verb, onCancel }: { item: TransferItem; verb: string; onCancel?: (key: number) => void }) {
-  const kind = kindOf({ type: "file", kind: null, name: item.name });
+  // Media kind from the extension (the server detects it from the content only after the upload).
+  const kind = kindOf({ type: "file", kind: kindFromMime(mimeFromName(item.name)), name: item.name });
   const percent = itemPercent(item);
   return (
     <li className="flex flex-col gap-1.5 rounded-lg px-2 py-2 [contain-intrinsic-size:auto_56px] [content-visibility:auto]">
