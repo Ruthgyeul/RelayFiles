@@ -38,6 +38,8 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 ```
 
 - 공유 링크(`/d/<linkId>`)의 규칙과 응답은 `src/server/share/`에 모여 있다(`share.service.ts` 링크 해석·잠금, `share-files.service.ts` 파일·zip 응답, 쿠키·다운로드 허가·이벤트). 파일 바이트를 보내는 HTTP 도구(`send-file.ts`, `send-thumb.ts`, `throttle.ts`)는 `src/server/http/`에 있다.
+  - 공유 페이지는 보고 있는 폴더만 읽는다: 링크 해석(`findByLinkId`, 링크의 `sharedChain`, 소유자) 뒤 폴더의 `sharedChain`(경로 표시, 위 폴더 설정, 링크 안인지·사이에 닫힌 항목이 없는지 `trailInLink`), 방문자가 볼 수 있는 자식(`publicChildren`), 자식마다의 크기·항목 수(`publicChildStats`, 폴더 아래를 한 번 걷는 재귀 CTE를 맨 위 자식별로 묶음)까지 쿼리 6개다. 링크 아래 트리 크기와 관계없다(개발 환경 측정: 하위 폴더 2,000개·약 18,000항목 링크의 하위 폴더 보기 3.2초 → 9ms). 비공개·자기 비밀번호·만료 항목은 예전 `publicTree`처럼 그 아래까지 빠진다(같은 조건 `openBelowLink`).
+  - "Download all"만 폴더 아래 전체(`publicTree`, 그 폴더부터)를 읽고, 항목이 `SHARE.zipMaxItems`(100,000, 멤버 계정이 가질 수 있는 수와 같다)를 넘으면 소유자에게도 413 `PAYLOAD_TOO_LARGE`로 거절한다. 그 이상은 읽지 않는다(`LIMIT`). HEAD 확인은 행을 읽지 않고 같은 한도까지 센다(`publicTreeSize`).
 
 - 쿼리는 repository에만 쓴다. 서비스·잡·스크립트에서 `db()`는 repository 함수에 넘기거나 트랜잭션(`$transaction`)을 열 때만 쓴다(`no-restricted-syntax`). `src/app`은 `@/server/db`·`@/server/repositories`를 import하지 않고 서비스를 부른다(`no-restricted-imports`).
 - 예외: tus 업로드 라우트(`src/app/api/uploads/tus`)는 `apiHandler`를 거치지 않는다. tus가 자체 평문 프로토콜로 응답하기 때문이며, 같은 방식으로 try-catch와 에러 마스킹을 직접 한다. 볼륨 조회는 `upload.service.tusVolume()`이 한다.

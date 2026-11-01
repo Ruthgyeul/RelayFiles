@@ -1,3 +1,4 @@
+import { ERRORS } from "@/contracts/errors";
 import { filesApi } from "@/shared/lib/files-api";
 import { withVisibility } from "@/features/files/settings";
 import { ApiClientError, apiFetch } from "@/shared/lib/api-client";
@@ -12,6 +13,13 @@ export const shareUrls = {
   preview: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/preview`,
   transcode: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/stream?transcode=1`,
   zip: (linkId: string, folderId: string) => `${base(linkId)}/zip?folder=${encodeURIComponent(folderId)}`,
+};
+
+/** What a refused download check (HEAD, no body) means, by status. */
+const HEAD_PROBLEMS: Partial<Record<number, string>> = {
+  [ERRORS.FORBIDDEN.status]: "Download limit reached",
+  [ERRORS.PAYLOAD_TOO_LARGE.status]: "Too many items to download at once. Download the folders inside one by one.",
+  [ERRORS.RATE_LIMITED.status]: "Server busy · downloads for this file are paused",
 };
 
 export const shareApi = {
@@ -30,7 +38,7 @@ export const shareApi = {
   download: async (url: string): Promise<string | null> => {
     const check = await fetch(url, { method: "HEAD" }).catch(() => null);
     if (!check) return "Connection lost";
-    if (!check.ok) return check.status === 429 ? "Server busy · downloads for this file are paused" : check.status === 403 ? "Download limit reached" : "Something went wrong.";
+    if (!check.ok) return HEAD_PROBLEMS[check.status] ?? "Something went wrong.";
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "";

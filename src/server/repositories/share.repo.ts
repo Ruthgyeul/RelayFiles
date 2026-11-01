@@ -1,5 +1,6 @@
 import "server-only";
-import type { DbClient, PrismaClient } from "../db/client";
+import { Prisma, type DbClient, type PrismaClient } from "../db/client";
+import { childStats } from "./node-tree.repo";
 import { NODE_SELECT } from "./node.repo";
 
 export function findByLinkId(db: DbClient, linkId: string) {
@@ -28,23 +29,58 @@ export interface SharedRow {
   createdAt: Date;
 }
 
+/** Columns of a SharedRow, read from "Node" n. */
+const SHARED_COLUMNS = Prisma.sql`n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."hasThumb", n.downloads,
+           n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt"`;
+
 /**
- * The shared item and everything below it that visitors may see. The walk stops at items set
- * to private, at items with their own password (reachable only through their own link, where
- * the password is asked) and at expired items (deleted by the daily cleanup), so neither they
- * nor their contents are listed, sized or zipped.
+ * What visitors of a link may see below it (on "Node" n): not private, without a password of its
+ * own (reachable only through its own link, where the password is asked) and not expired (deleted
+ * by the daily cleanup). Walks stop at anything else, so neither it nor its contents are listed,
+ * sized or zipped (share.service `closedBelowLink` is the same rule for one chain).
  */
-export async function publicTree(db: DbClient, rootId: string, now: Date): Promise<SharedRow[]> {
-  return db.$queryRaw<SharedRow[]>`
+const openBelowLink = (now: Date) => Prisma.sql`n.visibility <> 'PRIVATE' AND n."passwordHash" IS NULL AND (n."expAt" IS NULL OR n."expAt" > ${now})`;
+
+/** The walk of {@link publicTree}, as a WITH RECURSIVE clause named `tree` (the item itself first). */
+const publicWalk = (rootId: string, now: Date) => Prisma.sql`
     WITH RECURSIVE tree AS (
       SELECT id FROM "Node" WHERE id = ${rootId}
       UNION ALL
       SELECT n.id FROM "Node" n JOIN tree t ON n."parentId" = t.id
-      WHERE n.visibility <> 'PRIVATE' AND n."passwordHash" IS NULL AND (n."expAt" IS NULL OR n."expAt" > ${now})
-    )
-    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."hasThumb", n.downloads,
-           n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt"
-    FROM tree JOIN "Node" n ON n.id = tree.id`;
+      WHERE ${openBelowLink(now)}
+    )`;
+
+/**
+ * An item and everything below it that visitors may see ({@link openBelowLink}), at most `limit`
+ * rows (the item included): "Download all" of a folder in a link.
+ */
+export async function publicTree(db: DbClient, rootId: string, now: Date, limit: number): Promise<SharedRow[]> {
+  return db.$queryRaw<SharedRow[]>`
+    ${publicWalk(rootId, now)}
+    SELECT ${SHARED_COLUMNS}
+    FROM (SELECT id FROM tree LIMIT ${limit}) t JOIN "Node" n ON n.id = t.id`;
+}
+
+/** How many rows {@link publicTree} would return, counting no further than `limit`. */
+export async function publicTreeSize(db: DbClient, rootId: string, now: Date, limit: number): Promise<number> {
+  const [row] = await db.$queryRaw<{ count: bigint }[]>`
+    ${publicWalk(rootId, now)}
+    SELECT COUNT(*)::bigint AS count FROM (SELECT id FROM tree LIMIT ${limit}) t`;
+  return Number(row?.count ?? 0);
+}
+
+/** The items directly inside a folder of a link that visitors may see ({@link openBelowLink}). */
+export function publicChildren(db: DbClient, folderId: string, now: Date): Promise<SharedRow[]> {
+  return db.$queryRaw<SharedRow[]>`
+    SELECT ${SHARED_COLUMNS} FROM "Node" n WHERE n."parentId" = ${folderId} AND ${openBelowLink(now)}`;
+}
+
+/**
+ * Bytes and direct item counts of what visitors may see inside each item of a folder in a link
+ * (one walk below the folder, see {@link childStats}).
+ */
+export function publicChildStats(db: DbClient, folderId: string, now: Date) {
+  return childStats(db, folderId, openBelowLink(now));
 }
 
 /**
@@ -69,9 +105,7 @@ export async function sharedChain(db: DbClient, nodeId: string): Promise<ChainRo
       UNION ALL
       SELECT n.id, n."parentId", c.depth + 1 FROM "Node" n JOIN chain c ON n.id = c."parentId"
     )
-    SELECT n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."hasThumb", n.downloads,
-           n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt", n.visibility::text AS visibility,
-           n."linkId", n."expAt", n."passwordHash"
+    SELECT ${SHARED_COLUMNS}, n.visibility::text AS visibility, n."linkId", n."expAt", n."passwordHash"
     FROM chain JOIN "Node" n ON n.id = chain.id
     ORDER BY chain.depth DESC`;
 }

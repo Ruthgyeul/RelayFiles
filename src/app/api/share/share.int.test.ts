@@ -547,6 +547,30 @@ describe("share downloads", () => {
     expect((await prisma.node.findUniqueOrThrow({ where: { id: trip.id } })).downloads).toBe(1);
   });
 
+  it("refuses a zip of more items than SHARE.zipMaxItems, for owners too, before counting anything", async () => {
+    const { m, trip, day } = await sharedTrip();
+    const zipUrl = (folderId: string) => `/api/share/${trip.linkId}/zip?folder=${folderId}`;
+    // Trip holds 4 visible items (a.txt, photo.jpg, Day1, Day1/b.txt; Hidden is left out).
+    const limits = SHARE as { zipMaxItems: number };
+    const limit = limits.zipMaxItems;
+    limits.zipMaxItems = 3;
+    try {
+      const check = await visit(shareZipCheck, zipUrl(trip.id), { linkId: trip.linkId }, { method: "HEAD" });
+      expect(check.status).toBe(413);
+      const refused = await visit(shareZip, zipUrl(trip.id), { linkId: trip.linkId });
+      expect([refused.status, ((await refused.json()) as { error: string }).error]).toEqual([413, "This folder holds more than 3 items. Download the folders inside it one by one."]);
+      expect((await visit(shareZip, zipUrl(trip.id), { linkId: trip.linkId }, { owner: m })).status).toBe(413);
+      expect((await prisma.node.findUniqueOrThrow({ where: { id: trip.id } })).downloads).toBe(0);
+      // A folder inside it is small enough.
+      expect((await visit(shareZip, zipUrl(day.id), { linkId: trip.linkId })).status).toBe(200);
+      limits.zipMaxItems = 4;
+      expect((await visit(shareZipCheck, zipUrl(trip.id), { linkId: trip.linkId }, { method: "HEAD" })).status).toBe(200);
+      expect((await visit(shareZip, zipUrl(trip.id), { linkId: trip.linkId })).status).toBe(200);
+    } finally {
+      limits.zipMaxItems = limit;
+    }
+  });
+
   it("counts suffix ranges and serves later ranges only to the browser whose start was counted", async () => {
     const { trip, a } = await sharedTrip({ downloadLimit: 3 });
     const ip = visitorIp();

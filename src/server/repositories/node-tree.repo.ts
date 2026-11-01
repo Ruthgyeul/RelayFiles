@@ -1,5 +1,5 @@
 import "server-only";
-import type { DbClient } from "../db/client";
+import { Prisma, type DbClient } from "../db/client";
 
 // Recursive queries over a folder tree (WITH RECURSIVE on Node.parentId).
 
@@ -34,6 +34,35 @@ export async function folderSizes(db: DbClient, folderIds: string[]): Promise<Ma
     FROM sub s JOIN "Node" n ON n.id = s.id AND n.type = 'FILE'
     GROUP BY s.top`;
   return new Map(rows.map((row) => [row.id, { size: BigInt(row.size), files: Number(row.files) }]));
+}
+
+/** What one item directly inside a folder holds (a file: itself). */
+export interface ChildStats {
+  /** File bytes in it at any depth (a file: its size). */
+  size: bigint;
+  /** Files in it at any depth (a file: 1). */
+  files: number;
+  /** Items directly inside it (a file: 0). */
+  items: number;
+}
+
+/**
+ * {@link ChildStats} of every item directly inside a folder, from one walk of the folder's tree
+ * grouped by the item each node is under (not one walk per child folder). `open` is a condition
+ * on "Node" n that limits the walk: nodes that fail it are neither entered nor counted.
+ */
+export async function childStats(db: DbClient, folderId: string, open: Prisma.Sql = Prisma.sql`TRUE`): Promise<Map<string, ChildStats>> {
+  const rows = await db.$queryRaw<{ id: string; size: bigint; files: bigint; items: bigint }[]>`
+    WITH RECURSIVE sub AS (
+      SELECT n.id AS top, n.id, n.type, n.size, 0 AS depth FROM "Node" n WHERE n."parentId" = ${folderId} AND ${open}
+      UNION ALL
+      SELECT s.top, n.id, n.type, n.size, s.depth + 1 FROM "Node" n JOIN sub s ON n."parentId" = s.id
+      WHERE s.type = 'FOLDER' AND ${open}
+    )
+    SELECT top AS id, COALESCE(SUM(size) FILTER (WHERE type = 'FILE'), 0)::bigint AS size,
+           COUNT(*) FILTER (WHERE type = 'FILE')::bigint AS files, COUNT(*) FILTER (WHERE depth = 1)::bigint AS items
+    FROM sub GROUP BY top`;
+  return new Map(rows.map((row) => [row.id, { size: BigInt(row.size), files: Number(row.files), items: Number(row.items) }]));
 }
 
 /** Files and folders anywhere below a folder. */

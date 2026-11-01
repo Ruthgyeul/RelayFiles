@@ -184,6 +184,12 @@ export const SHARE = {
    * this long; resuming later, or from another address, starts (and counts) a new download.
    */
   downloadGrantHours: 6,
+  /**
+   * Most items (files and folders at any depth) one "Download all" zip of a folder in a link
+   * holds: the zip reads the folder's whole visible tree into memory first. As many as a member
+   * account can hold (FILES.maxItemsPerAccount), so only admin folders larger than that are refused.
+   */
+  zipMaxItems: 100_000,
 } as const;
 
 export const MEDIA = {
