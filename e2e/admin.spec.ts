@@ -69,6 +69,36 @@ test("admins manage and delete accounts", async ({ page, browser, baseURL, viewp
   await expect(page.getByText(/^(Nothing to clean up|\d+ account\(s\).*deleted)$/)).toBeVisible();
 });
 
+test("lists admin actions in the audit log and filters them", async ({ page }) => {
+  await signInAsAdmin(page);
+  const session = (await (await page.request.get("/api/auth/session")).json()) as { data: { activeAccountId: string } };
+  const adminId = session.data.activeAccountId;
+  expect((await page.request.get("/api/me/token")).status()).toBe(200);
+  expect((await page.request.post("/api/admin/cleanup")).status()).toBe(200);
+
+  await page.goto("/admin/server");
+  const log = page.getByRole("main").getByRole("region", { name: "Audit log" });
+  await log.getByRole("textbox", { name: "Account ID" }).fill(adminId);
+  const entries = log.getByRole("list", { name: "Audit entries" }).getByRole("listitem");
+  await expect(entries).toHaveCount(2);
+  await expect(entries.nth(0)).toContainText("Ran cleanup");
+  await expect(entries.nth(1)).toContainText("Viewed admin token");
+  await expect(entries.nth(1)).toContainText(adminId);
+  await expect(entries.nth(1).getByText(/•••/)).toBeVisible();
+  await expect(entries.nth(1).locator("time")).toHaveText(/\d/);
+
+  await log.getByRole("button", { name: "Tokens" }).click();
+  await expect(entries).toHaveCount(1);
+  await expect(entries.first()).toContainText("Viewed admin token");
+  await log.getByRole("button", { name: "Sign-up" }).click();
+  await expect(log.getByText("No entries match.")).toBeVisible();
+
+  await log.getByRole("textbox", { name: "Account ID" }).fill("nope");
+  await expect(log.getByText("Account IDs are 12 letters and digits.")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
 test("shows live server measurements", async ({ page }) => {
   await signInAsAdmin(page);
   // The page stays live through a server-sent event stream opened on load.

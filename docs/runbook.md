@@ -246,8 +246,11 @@ $C run --rm tools npm run admin:create   # 새 관리자 계정. 이전 관리�
 
 관리자 작업(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대, 관리자 토큰 보기·재발급, 공지, 테마, 장애)과 개인 API 토큰 만들기·폐기는 `AuditEvent`에 1년간 남는다.
 
+관리자 화면 **Server → Audit log** 카드에서 최신순으로 본다. 50건씩 "Load more"로 더 불러오고, 작업 그룹(Accounts · Sign-up · Tokens · Server)과 계정 ID(그 계정이 한 작업 또는 그 계정이 대상인 작업)로 거른다. 행의 관리자 이름을 누르면 그 계정으로 걸러진다. 시간은 브라우저 시간대로, 주소는 저장된 마스킹 값 그대로 보인다.
+
+화면에 들어갈 수 없을 때(관리자 네트워크 밖, 앱 장애)는 DB에서 직접 본다.
+
 ```bash
-curl -s -b "rf_s=<관리자 쿠키>" https://<도메인>/api/admin/audit | jq '.data.events[:20]'
 $C exec postgres psql -U relayfiles -c 'SELECT at, "actorName", action, "targetId", detail FROM "AuditEvent" ORDER BY at DESC LIMIT 50;'
 ```
 

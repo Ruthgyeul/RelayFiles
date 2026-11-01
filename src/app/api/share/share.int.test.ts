@@ -496,6 +496,17 @@ describe("share downloads", () => {
     expect(downloaded.headers.get("cache-control")).toBe("private, no-cache");
   });
 
+  it("does not log the player's subtitle read as a view of the subtitle file", async () => {
+    const { m, trip } = await sharedTrip();
+    const vtt = await addFile(m, trip.id, ["Trip"], "clip.vtt", "WEBVTT\n\n00:00.000 --> 00:01.000\nHello\n", "text/vtt");
+    const views = () => prisma.linkEvent.count({ where: { nodeId: vtt, kind: "VIEW" } });
+    const read = await visit(shareStream, `${path(trip.linkId, vtt, "stream")}?subtitle=1`, fileParams(trip.linkId, vtt), { headers: { range: "bytes=0-1023" } });
+    expect(read.status).toBe(206);
+    // Opening the file itself in the viewer is a view.
+    expect((await visit(shareStream, path(trip.linkId, vtt, "stream"), fileParams(trip.linkId, vtt), { headers: { range: "bytes=0-1023" } })).status).toBe(206);
+    await expect.poll(views).toBe(1);
+  });
+
   it("pauses downloads after 10 in 10 minutes and says when to retry", async () => {
     const { trip, a } = await sharedTrip();
     for (let index = 0; index < SHARE.busyPauseAt; index++) {

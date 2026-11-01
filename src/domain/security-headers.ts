@@ -18,8 +18,9 @@ export interface CspOptions {
  * The policy for app pages and API responses:
  * - scripts only from this origin with the request's nonce (`strict-dynamic` lets them load chunks),
  * - inline styles allowed (React `style` props), nothing else from other origins,
- * - images from this origin plus blob:/data: (SVG and Word previews, docx images), media and
- *   fonts from this origin only,
+ * - images from this origin plus blob:/data: (SVG and Word previews, docx images), media from
+ *   this origin plus blob: (subtitle tracks converted to WebVTT in the browser), fonts from
+ *   this origin only,
  * - fetch, tus uploads, pdf.js range requests and the admin event stream to this origin only,
  * - no plugins, no <base>, forms only to this origin, never framed.
  */
@@ -29,7 +30,7 @@ export function contentSecurityPolicy({ nonce, dev }: CspOptions): string {
     "script-src": ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...(dev ? ["'unsafe-eval'"] : [])],
     "style-src": ["'self'", "'unsafe-inline'"],
     "img-src": ["'self'", "blob:", "data:"],
-    "media-src": ["'self'"],
+    "media-src": ["'self'", "blob:"],
     "font-src": ["'self'"],
     "connect-src": ["'self'"],
     "worker-src": ["'self'"],

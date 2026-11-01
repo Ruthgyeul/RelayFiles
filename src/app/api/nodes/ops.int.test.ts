@@ -5,6 +5,7 @@ import { POST as anonymous } from "@/app/api/auth/anonymous/route";
 import { POST as tokenSignIn } from "@/app/api/auth/token/route";
 import { GET as getFolder } from "@/app/api/folders/[id]/route";
 import { POST as createFolder } from "@/app/api/folders/route";
+import { GET as activityCsv } from "@/app/api/nodes/[id]/activity/csv/route";
 import { GET as activity } from "@/app/api/nodes/[id]/activity/route";
 import { POST as newLink } from "@/app/api/nodes/[id]/link/route";
 import { PUT as pause } from "@/app/api/nodes/[id]/pause/route";
@@ -25,7 +26,7 @@ import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
 import { randomTestIp } from "../../../../test/file-fixtures";
-import { callRoute } from "../../../../test/route-call";
+import { callRoute, callRouteRaw } from "../../../../test/route-call";
 
 const prisma = db();
 const accounts: string[] = [];
@@ -236,6 +237,19 @@ describe("tags, settings and links", () => {
     const log = await callRoute<LinkEventDto[], { id: string }>(activity, { cookie: s.cookie, params: { id: a.id } });
     expect(log.json.data.map((e) => e.kind)).toEqual(["reset"]);
     expect((await callRoute(pause, { method: "PUT", cookie: s.cookie, params: { id: a.id }, body: { paused: true } })).status).toBe(403);
+
+    const csv = await callRouteRaw(activityCsv, { cookie: s.cookie, params: { id: a.id } });
+    expect([csv.status, csv.headers.get("content-type")]).toEqual([200, "text/csv; charset=utf-8"]);
+    expect(csv.headers.get("content-disposition")).toBe(`attachment; filename="Linked activity.csv"; filename*=UTF-8''Linked%20activity.csv`);
+    const bytes = Buffer.from(await csv.arrayBuffer());
+    // A UTF-8 BOM first, so spreadsheet apps read the masked "\u2022" addresses right.
+    expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const lines = bytes.subarray(3).toString("utf8").split("\r\n");
+    expect(lines[0]).toBe("Time (UTC),Event,File,Device,Address,Country");
+    expect(lines[1]).toMatch(/^\d{4}-\d\d-\d\dT[^,]+,reset,Linked,/);
+    // Another account's item is not found, like the activity log itself.
+    const other = await member();
+    expect((await callRoute(activityCsv, { cookie: other.cookie, params: { id: a.id } })).status).toBe(404);
 
     const boss = await admin();
     const f = await folder(boss, "root", "Hot");

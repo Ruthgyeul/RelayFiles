@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { AUTH } from "@/config/policy";
+import { AUDIT_GROUP_KEYS, type AuditAction } from "@/domain/audit";
+import { isAccountId } from "@/domain/ids";
 import { MAX_QUOTA_GB } from "@/domain/quota";
 
 /** One row of the admin Accounts page. File contents are never listed here. */
@@ -39,26 +42,7 @@ export interface CleanupResult {
   items: number;
 }
 
-/** Admin actions written to the audit log. */
-export const AUDIT_ACTIONS = [
-  "account.manage",
-  "account.delete",
-  "signup.mode",
-  "cleanup.run",
-  "invite.create",
-  "invite.revoke",
-  "token.reveal",
-  "token.regenerate",
-  "announcement.publish",
-  "announcement.remove",
-  "theme.set",
-  "incident.post",
-  "incident.edit",
-  "incident.delete",
-  "apiToken.create",
-  "apiToken.revoke",
-] as const;
-export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+export { AUDIT_ACTIONS, type AuditAction } from "@/domain/audit";
 
 /** One audit log entry (GET /api/admin/audit). */
 export interface AuditEntry {
@@ -70,4 +54,20 @@ export interface AuditEntry {
   detail: string | null;
   ipMasked: string;
   at: string;
+}
+
+/** GET /api/admin/audit query: newest first, `cursor` = the last entry id of the previous page. */
+export const auditQuerySchema = z.object({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(AUTH.auditListLimit).default(AUTH.auditPageSize),
+  group: z.enum(AUDIT_GROUP_KEYS).optional(),
+  /** Entries by this account or about it. */
+  account: z.string().refine(isAccountId).optional(),
+});
+export type AuditQuery = z.infer<typeof auditQuerySchema>;
+
+/** One page of the audit log; `nextCursor` is null on the last page. */
+export interface AuditPage {
+  events: AuditEntry[];
+  nextCursor: string | null;
 }

@@ -27,6 +27,8 @@ export const fileUrls = {
   transcode: (id: string) => `/api/files/${encodeURIComponent(id)}/stream?transcode=1`,
   download: (id: string) => `/api/files/${encodeURIComponent(id)}/download`,
   zip: (ids: string[]) => `/api/zip?ids=${ids.map(encodeURIComponent).join(",")}`,
+  /** The item's link activity as a CSV download. */
+  activityCsv: (id: string) => `${node(id)}/activity/csv`,
 };
 
 /** File Manager API calls (reads come from the server render; these refresh or change data). */

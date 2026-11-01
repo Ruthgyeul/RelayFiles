@@ -11,6 +11,8 @@ describe("contentSecurityPolicy", () => {
     expect(directive(policy, "base-uri")).toBe("base-uri 'none'");
     expect(directive(policy, "frame-ancestors")).toBe("frame-ancestors 'none'");
     expect(directive(policy, "img-src")).toBe("img-src 'self' blob: data:");
+    // Subtitle tracks are WebVTT converted in the browser; still nothing from other origins.
+    expect(directive(policy, "media-src")).toBe("media-src 'self' blob:");
     expect(directive(policy, "report-uri")).toBe("report-uri /api/csp-report");
     expect(policy).not.toContain("unsafe-eval");
   });

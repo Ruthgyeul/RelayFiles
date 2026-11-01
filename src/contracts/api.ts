@@ -18,3 +18,6 @@ export const REQUEST_ID_HEADER = "x-request-id";
 
 /** Marks a viewer's look-ahead request for the next image (not counted as a view). */
 export const PREFETCH_HEADER = "x-relayfiles-prefetch";
+
+/** Query parameter a viewer adds when it reads a video's subtitle file through a stream route (not a view of that file). */
+export const SUBTITLE_PARAM = { name: "subtitle", value: "1" } as const;

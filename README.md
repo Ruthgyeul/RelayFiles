@@ -2,6 +2,15 @@
 
 Fast and easy file sharing system. A private file drop for sharing and streaming media from a self-hosted server: upload, get a link, and limit it to a set number of downloads (admins can also make it expire on a date or after the first download).
 
+## Features
+
+- Resumable uploads (tus), folders, tags, search, duplicates and renumbering
+- Share links with expiry, download limits, passwords and stream-only access; upload links (file requests)
+- Link activity per item: opens, views, plays and downloads with 7- and 30-day counts, exportable as CSV
+- Media viewer for pictures (with a slideshow), video (on-the-fly conversion, `.vtt`/`.srt` subtitles from the same folder), audio and documents (text, code, Markdown, tables, PDF, Word, Excel)
+- Admin pages: accounts, live server metrics, sign-up mode, theme, announcements and an audit log of admin actions
+- Status page, personal API tokens (`/api/v1`)
+
 ## Stack
 
 Next.js 16.4 (App Router) · React 19.3 · Tailwind CSS 4.3 · TypeScript 6 · PostgreSQL 16 + Prisma · Redis 7 + BullMQ · Vitest · Playwright

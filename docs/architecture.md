@@ -78,6 +78,8 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
   - SVG·글꼴·docx·xlsx는 파일 전체가 필요해서 20MB(`DOCUMENT_PREVIEW.assetMaxBytes`)까지만 미리 본다. 표는 1,000행·100열까지.
   - 압축 파일, 옛 Office 형식(.doc, .xls, .ppt)과 .pptx, .hwp, 디스크 이미지, 패키지 등은 형식 아이콘과 "No preview"만 보인다.
   - 공유 링크에서 문서를 여는 것은 `VIEW`로 기록된다(영상·오디오만 `PLAY`).
+- 자막: 영상을 열면 같은 폴더 목록에서 이름이 같은 `.vtt`·`.srt`(`movie.vtt`, `movie.mp4.srt`, 언어 태그 `movie.en.srt` → "English")를 찾는다(`domain/subtitles.ts` `subtitlesFor`, 뷰어 `withSubtitles`). 파일은 텍스트 미리보기와 같은 `stream` URL을 Range 요청 하나(`VIEWER.subtitleMaxBytes` = 텍스트 미리보기 한도 1MB, 공유 링크의 `streamReach` 텍스트 한도 안)로 읽고, `.srt`는 브라우저에서 WebVTT로 바꿔(`srtToVtt`: 시간의 `,`→`.`, `<font>` 제거, `&`·`<` 이스케이프) `blob:` URL의 `<track kind="subtitles">`로 붙인다. CSP는 `media-src 'self' blob:`이라 다른 출처는 여전히 막힌다. 한도를 넘거나 바이너리인 파일은 건너뛴다. 뷰어는 자막을 읽을 때 `?subtitle=1`(`SUBTITLE_PARAM`)을 붙인다. 공유 링크는 이 표시가 있고 이름이 자막 파일이면 그 읽기를 `VIEW`로 기록하지 않는다. 다운로드 한도가 걸린 자막 파일은 표시가 있어도 재생처럼 센다(표시만으로 한도를 피할 수 없다).
+- 슬라이드쇼: 그림을 보고 있고 그림이 둘 이상이면 머리글에 재생 버튼이 생긴다(Space도 같다). `VIEWER.slideshowIntervalMs`(4초)마다 목록 순서로 다음 그림을 열고(`domain/slideshow.ts`, 그림이 아닌 파일은 건너뜀), 마지막 그림에서 멈춘다. 사용자가 앞뒤로 넘기거나(버튼·화살표·N/P) 뷰어를 닫으면 멈춘다. 그림은 페이드인하지만 `prefers-reduced-motion: reduce`이면 전환 효과가 없다(`motion-safe:`). 공유 페이지의 폴더 뷰어도 같은 뷰어라 그대로 쓴다.
 
 ### 전송 패널 (파일별 진행률·취소)
 

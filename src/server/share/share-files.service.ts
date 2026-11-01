@@ -1,7 +1,8 @@
 import "server-only";
 import { Readable } from "node:stream";
 import { MEDIA, SHARE } from "@/config/policy";
-import { PREFETCH_HEADER } from "@/contracts/api";
+import { PREFETCH_HEADER, SUBTITLE_PARAM } from "@/contracts/api";
+import { isSubtitleName } from "@/domain/subtitles";
 import { effectiveRange, parseRange, zipName } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadBlock, type DownloadDecision } from "@/domain/share-access";
 import type { NodeKind } from "@/domain/tree";
@@ -134,7 +135,10 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
     if (file.limited) newVisitor = await applyDecision(limitedStreamDecision({ method: req.method, range, granted: await hasDownloadGrant(row.id, viewer.visitorId) }), file, viewer, client, now);
     // Videos and audio are played; pictures and documents are looked at.
     const start = req.method === "GET" && (range === null || (range !== "unsatisfiable" && range.start === 0));
-    if (start) void logLinkEvent(row, row.kind === "VIDEO" || row.kind === "AUDIO" ? "PLAY" : "VIEW", client);
+    // A video's subtitle file read by the player is not a view of that file (it still counts
+    // toward a download limit above, like any playback).
+    const subtitleRead = new URL(req.url).searchParams.get(SUBTITLE_PARAM.name) === SUBTITLE_PARAM.value && isSubtitleName(row.name);
+    if (start && !subtitleRead) void logLinkEvent(row, row.kind === "VIDEO" || row.kind === "AUDIO" ? "PLAY" : "VIEW", client);
   }
   if (mode === "stream" && req.method === "GET") void markActive("stream", `${row.id}:${client.ipKey}`);
   const response = await sendFile(req, {

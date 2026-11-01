@@ -7,6 +7,7 @@ import { zipName } from "@/domain/serving";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useTransfers } from "@/features/transfers/transfers-context";
 import { MediaViewer, type ViewerItem } from "@/features/viewer/MediaViewer";
+import { withSubtitles } from "@/features/viewer/subtitle-tracks";
 import { fileUrls } from "@/shared/lib/files-api";
 
 type Item = Pick<NodeItem, "id" | "type" | "name" | "kind" | "size" | "fileCount"> & Partial<Pick<NodeItem, "hasThumb">>;
@@ -55,7 +56,7 @@ export function useFileMedia(listed: Item[], folderName: string, initialView?: s
 
   const viewer = (
     <MediaViewer
-      items={files.map(toViewerItem)}
+      items={withSubtitles(files.map(toViewerItem))}
       currentId={viewing}
       onSelect={setViewing}
       onClose={() => setViewing(null)}

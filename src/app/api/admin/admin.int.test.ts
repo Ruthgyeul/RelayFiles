@@ -14,7 +14,7 @@ import { POST as tokenSignIn } from "@/app/api/auth/token/route";
 import { GET as revealToken } from "@/app/api/me/token/route";
 import { AUTH, MS } from "@/config/policy";
 import type { SessionState } from "@/contracts/auth";
-import type { AdminAccounts, AuditEntry, CleanupResult } from "@/contracts/admin";
+import type { AdminAccounts, AuditPage, CleanupResult } from "@/contracts/admin";
 import { runMaintenance } from "@/server/jobs/maintenance";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { layoutOf } from "@/server/storage/layout";
@@ -187,12 +187,44 @@ describe("admin sessions", () => {
 
     expect((await remove()).status).toBe(200);
     expect((await callRoute(revealToken, { cookie: admin.cookie })).status).toBe(200);
-    const events = (await callRoute<{ events: AuditEntry[] }>(audit, { cookie: admin.cookie })).json.data.events.filter((event) => event.actorId === admin.id);
+    const events = (await callRoute<AuditPage>(audit, { cookie: admin.cookie, query: `?account=${admin.id}` })).json.data.events.filter((event) => event.actorId === admin.id);
     expect(events.map((event) => [event.action, event.targetId])).toEqual([
       ["token.reveal", admin.id],
       ["account.delete", m.id],
     ]);
     expect(events[0]!.ipMasked).toMatch(/•••/);
+  });
+
+  it("pages the audit log and filters it by group and account", async () => {
+    const admin = await signedInAdmin();
+    const at = Date.now() - MS.minute;
+    const rows = ["theme.set", "signup.mode", "theme.set", "invite.create", "theme.set"].map((action, index) => ({
+      id: randomUUID(),
+      actorId: admin.id,
+      actorName: "admin",
+      action,
+      targetId: null,
+      detail: String(index),
+      ipMasked: "10.0.•••.•••",
+      at: new Date(at + index),
+    }));
+    await prisma.auditEvent.createMany({ data: rows });
+    const page = (query: string) => callRoute<AuditPage>(audit, { cookie: admin.cookie, query });
+
+    const first = (await page(`?account=${admin.id}&limit=2`)).json.data;
+    expect(first.events.map((event) => event.detail)).toEqual(["4", "3"]);
+    const second = (await page(`?account=${admin.id}&limit=2&cursor=${first.nextCursor}`)).json.data;
+    expect(second.events.map((event) => event.detail)).toEqual(["2", "1"]);
+    const last = (await page(`?account=${admin.id}&limit=2&cursor=${second.nextCursor}`)).json.data;
+    expect([last.events.map((event) => event.detail), last.nextCursor]).toEqual([["0"], null]);
+
+    const signup = (await page(`?account=${admin.id}&group=signup`)).json.data;
+    expect(signup.events.map((event) => event.action)).toEqual(["invite.create", "signup.mode"]);
+    expect((await page("?group=nope")).status).toBe(400);
+    expect((await page(`?cursor=${randomUUID()}`)).status).toBe(400);
+    const m = await member();
+    expect((await callRoute(audit, { cookie: m.cookie })).status).toBe(403);
+    await prisma.auditEvent.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
   });
 
   it("ends admin sessions after AUTH.adminSessionDays, member sessions later", async () => {

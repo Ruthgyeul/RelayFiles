@@ -74,7 +74,8 @@
 | `GET` | `/api/tags` | 계정에서 쓰는 태그와 개수(태그 제안) |
 | `PUT` | `/api/nodes/:id/settings` | 공유 설정(공개 범위, 만료·첫 다운로드 후 삭제는 관리자만, 다운로드 한도, 비밀번호(argon2), 접근, 메모, 하위 항목에 적용) |
 | `POST` | `/api/nodes/:id/link` | 공유 링크 재발급(옛 링크 즉시 무효, 활동 기록에 남음) |
-| `GET` | `/api/nodes/:id/activity` | 링크 활동 최신 200개(폴더는 하위 항목 포함) |
+| `GET` | `/api/nodes/:id/activity` | 링크 활동 최신 200개(폴더는 하위 항목 포함). Activity 대화상자가 이 목록으로 종류별(열기·보기·재생·다운로드) 합계와 최근 7일·30일 수를 센다(`domain/link-activity.ts`) |
+| `GET` | `/api/nodes/:id/activity/csv` | 같은 기록을 CSV로 내려받기(`text/csv; charset=utf-8`, UTF-8 BOM, `Content-Disposition: attachment; "<이름> activity.csv"`, `no-store`). 열 `Time (UTC),Event,File,Device,Address,Country`, 최신순 최대 `SHARE.activityExportLimit`(10,000)개. `= + - @`(또는 탭·CR)로 시작하는 칸은 앞에 `'`를 붙여 수식으로 실행되지 않게 한다(`domain/csv.ts`). 소유자만, 다른 계정 항목은 404 |
 | `PUT` | `/api/nodes/:id/pause` | 관리자: 다운로드 일시정지/재개 |
 | `POST` | `/api/uploads` | 업로드 준비 `{ target: home\|root\|폴더id, files: [{ rel, size }], dup?, fallbackName? }` → `{ kind: duplicates, names }` / `{ kind: nothing }` / `{ kind: ready, batchId, endpoint, folder, files }`. 이름 검증, 용량·볼륨 여유 공간(507), Home 업로드 폴더 생성. `dup`: `replace`(새 내용은 새 node id, 공유 링크·설정·태그·링크 기록은 유지) · `keep`("name (2)") · `skip` |
 | `POST` | `/api/uploads/resume` | 새로고침으로 끊긴 업로드 이어 올리기 `{ batchId, slot, uploadId }` → `{ offset }`. 이 계정의 끝나지 않은 업로드이고 길이·파일 이름이 배치의 `slot` 항목과 같으면 그 칸으로 넘겨받는다(이후 같은 업로드 URL로 tus HEAD/PATCH, 완료되면 새 배치의 폴더에 놓인다). 그 밖에는 404 → 처음부터 보낸다 |
@@ -145,7 +146,7 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 | `POST` | `/api/admin/invites` | 일회용 초대 코드 `XXXX-XXXX` 생성 |
 | `DELETE` | `/api/admin/invites/:code` | 사용 전 코드 취소(사용된 코드는 404) |
 | `POST` | `/api/admin/cleanup` | "Run cleanup now": 삭제일이 지난 계정과 만료 항목 삭제 → `{ accounts, items }` |
-| `GET` | `/api/admin/audit` | 감사 로그 최신 200건 `{ events: AuditEntry[] }`(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대 생성·취소, 관리자 토큰 보기·재발급, 공지 게시·내리기, 테마 변경, 장애 등록·수정·삭제, API 토큰 만들기·폐기) |
+| `GET` | `/api/admin/audit` | 감사 로그 최신순 페이지 `{ events: AuditEntry[], nextCursor }`. `?limit=`(기본 `AUTH.auditPageSize` 50, 최대 200) · `?cursor=<이전 페이지 마지막 id>`(없어진 id는 400) · `?group=accounts\|signup\|tokens\|server` · `?account=<계정 id>`(행위자 또는 대상). Server 페이지 "Audit log" 카드가 쓴다(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대 생성·취소, 관리자 토큰 보기·재발급, 공지 게시·내리기, 테마 변경, 장애 등록·수정·삭제, API 토큰 만들기·폐기) |
 | `GET` | `/api/admin/server/stream` | Server 페이지 실측 지표 SSE(1.5초마다 스냅샷, 느린 스냅샷은 겹치지 않고 건너뜀) |
 | `POST` | `/api/admin/incidents` | Status 페이지 Incident 등록 `{ title, text, severity, date, duration, resolved }` |
 | `PUT`·`DELETE` | `/api/admin/incidents/:id` | Incident 수정 / 삭제 |

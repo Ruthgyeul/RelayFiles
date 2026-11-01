@@ -1,7 +1,11 @@
+import { readFile } from "node:fs/promises";
 import type { Browser, Page, ViewportSize } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import type { FolderView, NodeItem } from "@/contracts/nodes";
 import { itemMenu, newFolder, openFiles, silentWav } from "./helpers";
+
+/** 1×1 PNG, detected as an image by the server. */
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 
 const rootItems = (page: Page) => page.evaluate(async () => ((await (await fetch("/api/folders/root")).json()) as { data: FolderView }).data.children);
 
@@ -76,7 +80,49 @@ test("visitors browse, download and view, and see the file manager's Share page"
   await page.goto(`/files/${trip.id}`);
   await page.getByRole("button", { name: "Folder menu" }).click();
   await page.getByRole("menuitem", { name: "Link activity" }).click();
-  await expect(page.getByRole("dialog").getByText("Downloaded")).toBeVisible();
+  const log = page.getByRole("dialog", { name: "Link activity · Trip" });
+  await expect(log.getByText("Downloaded")).toBeVisible();
+  const downloads = log.getByRole("group", { name: "Downloads" });
+  await expect(downloads.getByText("1", { exact: true })).toBeVisible();
+  await expect(downloads.getByText("1 in 7d · 1 in 30d")).toBeVisible();
+  const csv = page.waitForEvent("download");
+  await log.getByRole("link", { name: "Download CSV" }).click();
+  const saved = await csv;
+  expect(saved.suggestedFilename()).toBe("Trip activity.csv");
+  const lines = (await readFile((await saved.path())!, "utf8")).split("\r\n");
+  expect(lines[0]).toBe("﻿Time (UTC),Event,File,Device,Address,Country");
+  expect(lines.some((line) => /^[^,]+,download,notes\.txt,/.test(line))).toBe(true);
+});
+
+test("visitors get subtitles and a slideshow in a shared folder's viewer", async ({ page, browser, baseURL, viewport }) => {
+  const trip = await tripWithFile(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([
+    { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("not really a video") },
+    { name: "clip.ko.srt", mimeType: "application/x-subrip", buffer: Buffer.from("1\n00:00:01,000 --> 00:00:02,000\nannyeong\n") },
+    { name: "a.png", mimeType: "image/png", buffer: PNG },
+    { name: "b.png", mimeType: "image/png", buffer: PNG },
+  ]);
+  await expect(page.locator('[data-item="clip.ko.srt"]')).toBeVisible();
+  await saveSettings(page, trip.id, {});
+
+  const visitor = await visitorPage(browser, baseURL, viewport);
+  await visitor.goto(`/d/${trip.linkId}`);
+  await visitor.locator('[data-item="clip.mp4"]').getByText("clip.mp4").click();
+  const track = visitor.getByRole("dialog", { name: "clip.mp4" }).locator('video track[kind="subtitles"]');
+  await expect(track).toHaveAttribute("label", "Korean");
+  // Read through the share link's playback route and parsed by the browser as WebVTT.
+  await expect
+    .poll(() => track.evaluate((element: HTMLTrackElement) => Array.from(element.track.cues ?? []).map((cue) => `${cue.startTime}-${cue.endTime} ${(cue as VTTCue).text}`)))
+    .toEqual(["1-2 annyeong"]);
+  await visitor.getByRole("button", { name: "Close viewer" }).click();
+
+  await visitor.locator('[data-item="a.png"]').getByText("a.png").click();
+  await visitor.getByRole("dialog", { name: "a.png" }).getByRole("button", { name: "Play slideshow" }).click();
+  await expect(visitor.getByRole("dialog", { name: "b.png" })).toBeVisible({ timeout: 10_000 });
+  await expect(visitor.getByText("Slideshow ended")).toBeVisible({ timeout: 10_000 });
+  await visitor.context().close();
 });
 
 test("password links unlock with the right password", async ({ page, browser, baseURL, viewport }) => {
