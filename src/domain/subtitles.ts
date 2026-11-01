@@ -75,7 +75,7 @@ function vttTime(stamp: string): string {
   return stamp.replace(TIMESTAMP, (_, h: string, m: string, s: string, ms: string) => `${h.padStart(2, "0")}:${m.padStart(2, "0")}:${s.padStart(2, "0")}.${ms.padEnd(3, "0")}`);
 }
 
-/** Cue text as WebVTT wants it: `&` and `<` escaped except entities and <i>/<b>/<u>, no "-->". */
+/** Cue text as WebVTT wants it: `&`, `<` and `>` escaped except entities and <i>/<b>/<u> (so no "-->"). */
 function vttText(line: string): string {
   let out = "";
   for (let index = 0; index < line.length; index += 1) {
@@ -96,9 +96,12 @@ function vttText(line: string): string {
       out += "&lt;";
     } else if (char === "&") {
       out += /^&(#\d+|#x[0-9a-f]+|[a-z]+);/i.test(line.slice(index)) ? "&" : "&amp;";
+    } else if (char === ">") {
+      // Every literal ">" is escaped, so the text can never hold the cue timing arrow "-->".
+      out += "&gt;";
     } else out += char;
   }
-  return out.replace(/-->/g, "--&gt;");
+  return out;
 }
 
 /** SubRip text as WebVTT: numbered blocks become cues, commas in times become dots. */

@@ -50,6 +50,8 @@ describe("srtToVtt", () => {
   it("drops blocks without timing and SubRip font tags, and escapes markup", () => {
     const srt = "garbage\n\n3\n00:01:00,000 --> 00:01:01,000\n<font color=\"#fff\">A & B < C</font> &amp; -->\n\n\n";
     expect(srtToVtt(srt)).toBe("WEBVTT\n\n00:01:00.000 --> 00:01:01.000\nA &amp; B &lt; C &amp; --&gt;\n");
+    // A literal ">" is escaped too, while the tags WebVTT knows keep theirs.
+    expect(srtToVtt("1\n00:00:01,000 --> 00:00:02,000\n<i>3 > 2</i> ->\n")).toBe("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<i>3 &gt; 2</i> -&gt;\n");
   });
 
   it("keeps a header for an empty file", () => {
