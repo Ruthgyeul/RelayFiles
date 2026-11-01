@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { SORT_KEYS, SORT_OPTION_LABEL, SORT_SHORT_LABEL, type SortKey } from "@/domain/tree";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
@@ -31,7 +32,7 @@ function ToolIcon({ icon, label, onClick, className }: { icon: IconName; label: 
   );
 }
 
-/** File Manager toolbar card: selection, folder actions, view, search, sort and refresh. */
+/** File Manager toolbar card: selection, folder actions, view, search, sort, "Recently deleted" and refresh. */
 export function Toolbar(props: ToolbarProps) {
   const [sortAnchor, setSortAnchor] = useState<AnchorRect | null>(null);
   const { selectedCount } = props;
@@ -77,6 +78,9 @@ export function Toolbar(props: ToolbarProps) {
         <Icon name="arrows-down-up" size={20} />
         <span className="max-sm:hidden">{SORT_SHORT_LABEL[props.sort]}</span>
       </button>
+      <Link href="/files/deleted" title="Recently deleted" aria-label="Recently deleted" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
+        <Icon name="clock-counter-clockwise" size={20} />
+      </Link>
       <ToolIcon icon="arrows-clockwise" label="Refresh" onClick={props.onRefresh} className="max-sm:hidden" />
       {sortAnchor && (
         <ActionMenu anchor={sortAnchor} label="Sort" placement="below" onClose={() => setSortAnchor(null)}>

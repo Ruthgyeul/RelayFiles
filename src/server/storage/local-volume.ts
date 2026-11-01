@@ -218,9 +218,36 @@ export class LocalVolumeDriver implements StorageDriver {
     return target;
   }
 
+  /** Checks that `trashPath` names an entry directly inside this volume's trash (as moveToTrash made it). */
+  /**
+   * The trash entry a path returned by {@link moveToTrash} names: only its entry name counts and
+   * must look like one, so nothing outside the trash is reached and an entry is still found after
+   * the volume was mounted at another path (`volume:init` updated mountPath).
+   */
+  private trashEntry(trashPath: string): string {
+    const name = basename(trashPath);
+    if (trashTime(name) === null) throw new Error("Only items in the volume's trash can be restored.");
+    return join(this.layout.trash, name);
+  }
+
   async restoreFromTrash(trashPath: string, location: StorageLocation): Promise<void> {
-    if (!trashPath.startsWith(this.layout.trash)) throw new Error("Only items in the volume's trash can be restored.");
-    await rename(trashPath, await this.pathOf(location));
+    const source = this.trashEntry(trashPath);
+    const target = await this.pathOf(location);
+    // The daily job may have emptied it meanwhile.
+    if (!(await pathExists(source))) throw new StorageEntryMissingError();
+    // A plain rename would replace a file (or an empty folder) that is on disk under that name.
+    if (await pathExists(target)) throw new StorageTargetExistsError();
+    await rename(source, target);
+  }
+
+  async returnToTrash(location: StorageLocation, trashPath: string): Promise<void> {
+    const target = this.trashEntry(trashPath);
+    if (await pathExists(target)) throw new StorageTargetExistsError();
+    await rename(await this.pathOf(location), target);
+  }
+
+  async removeFromTrash(trashPath: string): Promise<void> {
+    await rm(this.trashEntry(trashPath), { recursive: true, force: true });
   }
 
   /** `system/<thumbs|derived|previews|transcoded>/<accountId>/<nodeId>`; ids are generated, never user input. */

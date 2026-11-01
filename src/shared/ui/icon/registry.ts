@@ -7,6 +7,7 @@ import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import {
   ArrowBendLeftUpIcon,
   ArrowBendUpRightIcon,
+  ArrowCounterClockwiseIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowsClockwiseIcon,
@@ -30,6 +31,7 @@ import {
   CheckSquareIcon,
   CircleIcon,
   CircleNotchIcon,
+  ClockCounterClockwiseIcon,
   CloudArrowUpIcon,
   CopyIcon,
   CornersOutIcon,
@@ -156,6 +158,7 @@ import {
 export const ICONS = {
   "arrow-bend-left-up": ArrowBendLeftUpIcon,
   "arrow-bend-up-right": ArrowBendUpRightIcon,
+  "arrow-counter-clockwise": ArrowCounterClockwiseIcon,
   "arrow-left": ArrowLeftIcon,
   "arrow-right": ArrowRightIcon,
   "arrow-up-right": ArrowUpRightIcon,
@@ -179,6 +182,7 @@ export const ICONS = {
   "check-square": CheckSquareIcon,
   "circle": CircleIcon,
   "circle-notch": CircleNotchIcon,
+  "clock-counter-clockwise": ClockCounterClockwiseIcon,
   "cloud-arrow-up": CloudArrowUpIcon,
   "copy": CopyIcon,
   "corners-out": CornersOutIcon,

@@ -34,8 +34,13 @@ export const STORAGE = {
   reservePercent: 5,
   /** How often the volume marker file is checked, in seconds. */
   volumeWatchIntervalSec: 30,
-  /** Deleted items stay in the volume's trash this long before they are removed for good. */
+  /**
+   * Deleted items stay in the volume's trash this long before they are removed for good (the
+   * daily cleanup's first run after it); until then they can be restored from "Recently deleted".
+   */
   trashRetentionHours: 24,
+  /** Most items "Recently deleted" lists (newest first). */
+  recentlyDeletedListMax: 1_000,
   /** Filesystem limits (ext4; the name limit is domain/names MAX_NAME_BYTES). */
   maxPathBytes: 4096,
   maxFolderDepth: 32,

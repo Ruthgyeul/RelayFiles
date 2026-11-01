@@ -48,7 +48,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 
 | 큐 | 작업 | 넣는 곳 |
 |---|---|---|
-| `maintenance` | 매일 `CLEANUP_CRON`(`JOBS_TIMEZONE`): 삭제일이 지난 계정과 만료 항목 삭제, 볼륨 휴지통에서 24시간 지난 항목과 `UPLOAD_TMP_TTL_HOURS`가 지난 미완료 업로드 영구 삭제(`ACTIVE`·`DRAINING` 볼륨). 이 작업만 있는 큐다(동시 1개) | 워커 시작 시 스케줄 등록, 관리자 "Run cleanup now"는 계정·항목 정리만 즉시 실행 |
+| `maintenance` | 매일 `CLEANUP_CRON`(`JOBS_TIMEZONE`): 삭제일이 지난 계정과 만료 항목 삭제, 볼륨 휴지통에서 24시간 지난 항목과 `UPLOAD_TMP_TTL_HOURS`가 지난 미완료 업로드 영구 삭제(`ACTIVE`·`DRAINING` 볼륨), 비운 볼륨의 휴지통 바이트 기록과 "Recently deleted" 항목 정리. 이 작업만 있는 큐다(동시 1개) | 워커 시작 시 스케줄 등록, 관리자 "Run cleanup now"는 계정·항목 정리만 즉시 실행 |
 | `probes` | `METRICS_SAMPLE_INTERVAL_SEC`마다 대역폭·디스크 표본(워커 heartbeat 겸), `HEALTH_PROBE_INTERVAL_SEC`마다 Status 페이지 프로브, `VOLUME_WATCH_INTERVAL_SEC`마다 볼륨 확인. 별도 큐·워커(`JOBS.probeConcurrency` = 종류마다 1개)라 매일 정리가 오래 걸려도 SSD 분리를 제때 알아챈다 | 워커 시작 시 스케줄 등록(예전 릴리스가 `maintenance` 큐에 둔 스케줄은 지운다) |
 | `media` | 썸네일(이미지: sharp, 영상: ffmpeg 1초 프레임 → WebP 576px), 공개 링크용 메타데이터 제거본(JPEG·PNG·WebP는 픽셀을 다시 인코딩하지 않고 메타데이터 구간만 제거, 방향 정보는 유지. GIF·AVIF·TIFF는 같은 형식으로 다시 쓰기), 뷰어 미리보기(512KB 이상 JPEG·PNG·WebP·AVIF·TIFF → 2560px WebP q92, 원본보다 작을 때만 저장), 자주 재생되는 영상의 저장된 변환본(`task: "transcode"`, 아래 "미리보기 전송"), 촬영일(`takenAt`, 아래 "순번 정리". 처리할 때마다 함께 읽고, `task: "taken"`은 촬영일만) | 업로드 완료, 복사, 실시간 변환 재생 횟수, 릴리스 데이터 마이그레이션(`taken`) |
 
@@ -143,6 +143,17 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - **중복 제거 링크**: 업로드가 같은 내용의 파일(twin)에 하드 링크할 때는 트랜잭션 안에서 `lockedLocationOf(tx, accountId, twinId)`(`services/node-location.ts`)로 twin과 조상 폴더를 `FOR SHARE`로 잠그고 경로를 계산한다. 커밋 전에는 그 경로의 이름 변경·이동·삭제가 기다린다. 잠금 순서는 삭제와 같이 루트에서 아래로라 서로 교착되지 않는다.
 - **데이터 마이그레이션**: `npm run data:migrate` 한 번이 advisory lock(`run:data-migrations`)을 쥐고 돈다(`MIGRATION.runLockHours`까지). 두 번째 실행(k3s Job과 수동 실행)은 기다렸다가 끝난 단계를 건너뛴다.
 - 생성 파일(썸네일·미리보기·변환본) 쓰기는 이 잠금을 쓰지 않는다. 이동 중에 만들어져 빠지더라도 다시 만들 수 있다.
+
+### 휴지통 (Recently deleted)
+
+File Manager 툴바의 시계 아이콘(`/files/deleted`)이 지운 항목을 보여 준다(`features/trash`, `services/trash.service.ts`, `repositories/deleted-item.repo.ts`).
+
+- **삭제**(`deleteItems`): 지금처럼 한 스토리지 트랜잭션에서 트리를 `lockSubtrees`로 잠그고 행을 지운 뒤 맨 위 항목마다 `moveToTrash`한다. 같은 트랜잭션에서 잠근 행의 모든 컬럼을 읽어(`nodeRowsByIds`) 맨 위 항목별로 나누고(`domain/trash.ts` `groupByTop`), 항목마다 `TrashedBytes` 행 하나(그 항목의 파일 바이트, `addTrashedBytes`가 id를 돌려준다)와 `DeletedItem`(볼륨, `moveToTrash`가 돌려준 휴지통 경로, 그 `TrashedBytes` id, 이름·종류·크기·항목 수, 원래 부모 id와 당시 폴더 이름, `nodes` = 행 스냅샷 JSON)을 쓴다. 항목별 바이트의 합은 예전의 한 행과 같아서 쿼터 계산은 바뀌지 않는다.
+- **스냅샷**: 다시 넣는 데 필요한 Node 컬럼 전부(id, parentId, 이름, 종류, 크기, sha256, `missing`, `linkId`, 공유 설정, 다운로드 수, 태그, 생성·수정·촬영 시각). 계정은 `DeletedItem`의 것을 쓰고, 생성 파일 표시(`hasThumb`·`hasDerived`·`stripFailed`)는 복원할 때 false(생성 파일은 삭제 때 지워진다), `updatedAt`은 복원 시각. 나중에 Node에 컬럼을 더하면 옛 스냅샷에는 없으므로 기본값을 가져야 한다(zod 스키마가 모르는 키는 버린다).
+- **복원**(`POST /api/trash/:id/restore`): 항목의 볼륨이 계정의 현재 볼륨과 다르면 409(파일은 옛 볼륨의 휴지통에 있고 그 휴지통과 함께 지워진다). `assertItemRoom`으로 항목 수를 확인한 뒤 `withStorageTransaction`에서 `lockAccountForWrite` → `DeletedItem` 삭제(행 잠금이라 같은 항목의 두 번째 복원·영구 삭제는 기다렸다가 없음을 보고 404) → 대상 폴더 결정(원래 부모가 계정의 폴더로 남아 있으면 그 폴더, 아니면 계정 루트. `lockedLocationOf`로 대상과 조상을 `FOR SHARE` 잠가 그 사이 이름 변경·이동·삭제를 막는다) → `uniqName` → 같은 id·`linkId`로 행 삽입(이미 쓰이는 `linkId`가 있으면 그 행만 새 링크) → 그 `TrashedBytes` 행 삭제 → 마지막에 `restoreFromTrash`(실패하면 `returnToTrash`가 같은 휴지통 항목으로 되돌린다). `restoreFromTrash`는 대상 이름에 디스크의 무엇이든 있으면 덮어쓰지 않고 실패한다. 커밋 뒤 이미지·영상을 미디어 큐에 다시 넣는다. 폴더를 먼저 복원하면 그 폴더에서 지웠던 항목은 id가 같으므로 원래 자리로 돌아간다.
+- **복원되지 않는 것**: 링크 활동 기록(`LinkEvent`)과 지운 폴더의 업로드 링크(`FileRequest`)는 삭제 때 cascade로 지워진다. 썸네일·제거본·미리보기·변환본은 다시 만든다. 만료(`expAt`)나 첫 다운로드 후 삭제로 정리 작업이 지운 항목(`recoverable: false`)은 링크가 끝났으므로(`LinkTombstone`) 목록에 넣지 않는다.
+- **영구 삭제**(`DELETE /api/trash/:id`): 같은 잠금 아래 `DeletedItem`과 그 `TrashedBytes`를 지우고, 커밋 뒤 `removeFromTrash`로 디스크에서 지운다(실패하면 매일 정리가 지운다).
+- **정리**: 매일 정리가 `forgetTrashedBefore`와 같은 기준 시각·같은 규칙(실제로 비운 `ACTIVE`·`DRAINING` 볼륨만)으로 `forgetDeletedBefore`를 부른다. `deletedAt`은 휴지통으로 옮긴 뒤의 시각이라 기록이 지워지는 항목은 파일도 이미 지워졌다. 그 반대(파일만 먼저 지워진 짧은 틈)는 복원이 410으로 답한다. 계정을 지우면 `DeletedItem`도 cascade로 지워진다. 휴지통 경로는 항목 이름만 보므로(`trashEntry`) 볼륨 마운트 경로가 바뀌어도 찾는다.
 
 ### 순번 정리 (Renumber files)
 

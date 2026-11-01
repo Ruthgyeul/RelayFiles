@@ -238,6 +238,30 @@ describe("LocalVolumeDriver", () => {
     await driver.restoreFromTrash(trashed, at("old.txt"));
     expect((await driver.stat(at("old.txt")))?.type).toBe("file");
     await expect(driver.restoreFromTrash(join(root, "users", ACCOUNT, "old.txt"), at("x.txt"))).rejects.toThrow(/trash/);
+    await expect(driver.restoreFromTrash(join(layoutOf(root).trash, "..", "users", ACCOUNT, "old.txt"), at("x.txt"))).rejects.toThrow(/trash/);
+  });
+
+  it("restores from the trash without replacing anything, returns there and removes entries for good", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    await mkdir(join(root, "users", ACCOUNT, "Trip"));
+    await writeFile(join(root, "users", ACCOUNT, "Trip", "a.txt"), "a");
+    const trashed = await driver.moveToTrash(at("Trip"));
+
+    // Something on disk under the name (even an empty folder) is never replaced.
+    await mkdir(join(root, "users", ACCOUNT, "Trip"));
+    await expect(driver.restoreFromTrash(trashed, at("Trip"))).rejects.toThrow(StorageTargetExistsError);
+    await driver.restoreFromTrash(trashed, at("Trip (2)"));
+    expect(await readFile(join(root, "users", ACCOUNT, "Trip (2)", "a.txt"), "utf8")).toBe("a");
+
+    await driver.returnToTrash(at("Trip (2)"), trashed);
+    expect(await driver.stat(at("Trip (2)"))).toBeNull();
+    expect(await readFile(join(trashed, "a.txt"), "utf8")).toBe("a");
+
+    await expect(driver.removeFromTrash(join(root, "users", ACCOUNT, "Trip"))).rejects.toThrow(/trash/);
+    await driver.removeFromTrash(trashed);
+    expect(await readdir(layoutOf(root).trash)).toEqual([]);
+    await driver.removeFromTrash(trashed);
   });
 
   it("reports free space", async () => {

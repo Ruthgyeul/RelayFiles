@@ -99,8 +99,16 @@ export interface StorageDriver {
   copy(from: StorageLocation, to: StorageLocation): Promise<void>;
   /** Moves an item (or a whole account root when segments is empty) to the trash area. */
   moveToTrash(location: StorageLocation): Promise<string>;
-  /** Puts an item moved to the trash back (undo of a failed delete). */
+  /**
+   * Puts an item moved to the trash back (undo of a failed delete, a restore from "Recently
+   * deleted"). Throws {@link StorageTargetExistsError} when something is at `location` already,
+   * {@link StorageEntryMissingError} when the trash entry is gone (the daily job emptied it).
+   */
   restoreFromTrash(trashPath: string, location: StorageLocation): Promise<void>;
+  /** Moves a restored item back to the same trash entry it came from (undo of a failed restore). */
+  returnToTrash(location: StorageLocation, trashPath: string): Promise<void>;
+  /** Removes one trash entry for good ("Delete forever"); a missing one is fine. */
+  removeFromTrash(trashPath: string): Promise<void>;
   space(): Promise<SpaceInfo>;
   /** Writes a generated file atomically (temp file + rename), replacing an older one. */
   writeAsset(asset: AssetRef, data: Uint8Array): Promise<void>;

@@ -105,7 +105,8 @@ export async function runCleanup(now: Date): Promise<CleanupResult> {
     if (!owner) continue;
     try {
       await retireLinks(db(), ids, now);
-      result.items += (await deleteItems(owner, ids)).deleted;
+      // Their links ended: they are not kept under "Recently deleted".
+      result.items += (await deleteItems(owner, ids, { recoverable: false })).deleted;
     } catch (error) {
       logger.error("cleanup: items not deleted", { accountId, error });
     }

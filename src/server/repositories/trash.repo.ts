@@ -9,7 +9,24 @@ import type { DbClient } from "../db/client";
 export async function recordTrashed(db: DbClient, accountId: string, bytes: bigint, at: Date = new Date()): Promise<void> {
   if (bytes <= 0n) return;
   const account = await db.account.findUnique({ where: { id: accountId }, select: { volumeId: true } });
-  await db.trashedBytes.create({ data: { id: randomUUID(), accountId, bytes, volumeId: account?.volumeId ?? null, trashedAt: at } });
+  await addTrashedBytes(db, { accountId, volumeId: account?.volumeId ?? null, bytes, at });
+}
+
+/**
+ * Records the bytes of deleted files waiting in `volumeId`'s trash and returns the row's id, so
+ * the item they belong to can take exactly them back (a restore from "Recently deleted").
+ * Null when there were no bytes (no row is written).
+ */
+export async function addTrashedBytes(db: DbClient, entry: { accountId: string; volumeId: string | null; bytes: bigint; at: Date }): Promise<string | null> {
+  if (entry.bytes <= 0n) return null;
+  const id = randomUUID();
+  await db.trashedBytes.create({ data: { id, accountId: entry.accountId, bytes: entry.bytes, volumeId: entry.volumeId, trashedAt: entry.at } });
+  return id;
+}
+
+/** Forgets one TrashedBytes row of an account (its files left the trash: restored or removed for good). */
+export async function removeTrashedBytes(db: DbClient, accountId: string, id: string): Promise<void> {
+  await db.trashedBytes.deleteMany({ where: { id, accountId } });
 }
 
 /** Bytes an account still holds in the trash. */
