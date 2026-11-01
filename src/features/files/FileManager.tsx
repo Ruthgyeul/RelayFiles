@@ -3,13 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FolderView, NodeItem } from "@/contracts/nodes";
-import { withTagQuery } from "@/domain/tags";
-import { emptyTitle, itemCount, type FilterKey } from "@/domain/tree";
+import { emptyTitle, itemCount } from "@/domain/tree";
 import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useTransfers } from "@/features/transfers/transfers-context";
 import { useNow } from "@/shared/hooks/useNow";
-import { ActionMenu, anchorOf, type AnchorRect } from "./ActionMenu";
+import { ActionMenu } from "./ActionMenu";
 import { FilterBar } from "./FilterBar";
 import { FolderHeader } from "./FolderHeader";
 import { buildNodeMenu } from "./node-menu";
@@ -25,9 +24,11 @@ import { useFileDialogs } from "./useFileDialogs";
 import { useFolderDrop } from "./useFolderDrop";
 import { useFolderTools } from "./useFolderTools";
 import { useFileMedia } from "./useFileMedia";
+import { useFileSearch } from "./useFileSearch";
 import { useFileShortcuts } from "./useFileShortcuts";
 import { useFolderItems, type ListedItem } from "./useFolderItems";
 import { useCopyLink } from "./useCopyLink";
+import { useItemMenu } from "./useItemMenu";
 import { useNewFolder } from "./useNewFolder";
 import { useNodeActions } from "./useNodeActions";
 import { useSelection } from "./useSelection";
@@ -49,20 +50,18 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
   const router = useRouter();
   const { notify, activeAccount } = useShell();
   const [prefs, setPrefs] = usePrefs();
-  const [filter, setFilter] = useState<FilterKey>("all");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [menu, setMenu] = useState<{ id: string; anchor: AnchorRect } | null>(null);
+  const search = useFileSearch();
   const [propertiesFor, setPropertiesFor] = useState<string | null>(null);
   const now = useNow(true, CLOCK_TICK_MS);
   usePageTitle(view.folder.name);
 
   const { folder, children, path, isRoot } = view;
   const parentRef = isRoot ? "root" : folder.id;
-  const { items, counts, tagMode, wanted, q } = useFolderItems(children, filter, query, prefs.sort);
+  const { items, counts, tagMode, wanted, q } = useFolderItems(children, search.filter, search.query, prefs.sort);
   const linkOf = (linkId: string) => `${publicUrl}/d/${linkId}`;
   const selection = useSelection(items);
   const clearSelection = selection.clear;
+  const menu = useItemMenu(folder, items);
   const { open, dialogs } = useFileDialogs({ isAdmin, accountDeletesAt: activeAccount?.deletesAt ?? null, linkOf, onChanged: clearSelection });
   const folderTools = useFolderTools(clearSelection);
   const newFolder = useNewFolder(parentRef, children.map((child) => child.name));
@@ -80,27 +79,16 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
   useFileShortcuts({
     upload: () => transfers.pickFiles(uploadTarget),
     selectAll: selection.selectAll,
-    search: () => setSearchOpen(true),
+    search: search.openSearch,
     toggleView: () => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" }),
     parent: () => parentOfCurrent && router.push(folderHref(parentOfCurrent.id, path.length === 2)),
   });
 
   const selectedItems = selection.items;
-  /** The current folder or one of its listed items. */
-  const itemById = (id: string) => (id === folder.id ? folder : items.find((item) => item.id === id));
-  const menuItem = menu && itemById(menu.id);
-  const withItem = (id: string, run: (item: NodeItem) => void) => {
-    const item = itemById(id);
-    if (item) run(item);
-  };
-  const openMenu = (id: string, anchor: HTMLElement) => {
-    const rect = anchorOf(anchor);
-    setMenu((current) => (current?.id === id ? null : { id, anchor: rect }));
-  };
+  const { menuItem, withItem } = menu;
   const searchTag = (tag: string) => {
-    setSearchOpen(true);
+    search.searchTag(tag);
     clearSelection();
-    setQuery((current) => withTagQuery(current, tag));
   };
 
   const itemProps = (item: ListedItem): ItemProps => ({
@@ -112,9 +100,9 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
     onToggle: () => selection.toggle(item.id),
     onPrimary: () => openItem(item),
     onPreview: () => media.preview(item),
-    onMenu: (anchor) => openMenu(item.id, anchor),
+    onMenu: (anchor) => menu.toggle(item.id, anchor),
     onTag: searchTag,
-    menuOpen: menu?.id === item.id,
+    menuOpen: menu.isOpenFor(item.id),
     drag: tagMode ? undefined : drag.dragProps(item.id, item.name),
     drop: item.type === "folder" && !tagMode ? drag.dropProps(item.id) : undefined,
     dropOver: drag.over === item.id,
@@ -140,8 +128,8 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
         now={now}
         onShare={() => copyLink(linkOf(folder.linkId), view.effectiveVisibility)}
         onSharePage={() => router.push(sharePageHref(folder.linkId))}
-        onMenu={(anchor) => openMenu(folder.id, anchor)}
-        menuOpen={menu?.id === folder.id}
+        onMenu={(anchor) => menu.toggle(folder.id, anchor)}
+        menuOpen={menu.isOpenFor(folder.id)}
         upDrop={parentOfCurrent ? drag.dropProps(parentOfCurrent.id) : undefined}
         upOver={parentOfCurrent !== undefined && drag.over === parentOfCurrent.id}
       />
@@ -153,10 +141,7 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
         folderActions={toolbar.folder}
         view={prefs.view}
         onToggleView={() => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" })}
-        onToggleSearch={() => {
-          setSearchOpen((value) => !value);
-          setQuery("");
-        }}
+        onToggleSearch={search.toggleSearch}
         sort={prefs.sort}
         onSort={(sort) => setPrefs({ sort })}
         onRefresh={() => {
@@ -164,31 +149,31 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
           notify("Up to date");
         }}
       />
-      {children.length > 0 && <FilterBar counts={counts} value={filter} onChange={(key) => (setFilter(key), clearSelection())} />}
-      {searchOpen && <SearchBox value={query} onChange={setQuery} />}
+      {children.length > 0 && <FilterBar counts={counts} value={search.filter} onChange={(key) => (search.setFilter(key), clearSelection())} />}
+      {search.searchOpen && <SearchBox value={search.query} onChange={search.setQuery} />}
       {tagMode && (
         <TagModeBar
           label={wanted.length ? wanted.map((tag) => `#${tag}`).join(" + ") : "Type a tag after #"}
           count={itemCount(items.length)}
-          onClear={() => (setQuery(""), setSearchOpen(false))}
+          onClear={search.clear}
         />
       )}
       <FileList
         items={items}
         view={prefs.view}
         itemProps={itemProps}
-        emptyTitle={emptyTitle({ tagMode, wanted, query: q, filter })}
+        emptyTitle={emptyTitle({ tagMode, wanted, query: q, filter: search.filter })}
         emptyActions={toolbar.empty}
         onOpen={openItem}
         onDownload={media.download}
         onDropFiles={dropFiles}
       />
-      {menu && menuItem && (
+      {menu.menu && menuItem && (
         <ActionMenu
-          anchor={menu.anchor}
+          anchor={menu.menu.anchor}
           label={`Actions for ${menuItem.name}`}
           entries={buildNodeMenu(menuItem, menuItem.id === folder.id && isRoot, isAdmin, actionsFor(menuItem))}
-          onClose={() => setMenu(null)}
+          onClose={menu.close}
         />
       )}
       <PropertiesDialog
