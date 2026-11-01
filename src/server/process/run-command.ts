@@ -11,6 +11,8 @@ export interface RunOptions {
   maxStdoutBytes?: number;
   /** Log timeouts, failed starts and non-zero exits (off for commands that fail as a normal answer). */
   logFailures?: boolean;
+  /** Stops the command like a timeout (SIGTERM, then SIGKILL) when aborted: worker shutdown, a lost conversion slot. */
+  signal?: AbortSignal;
 }
 
 export interface CommandResult {
@@ -19,7 +21,7 @@ export interface CommandResult {
   stderr: string;
 }
 
-export type CommandFailure = "exit" | "timeout" | "output-limit" | "spawn";
+export type CommandFailure = "exit" | "timeout" | "output-limit" | "spawn" | "aborted";
 
 /** A command that did not exit with 0. Keeps the output: some tools answer through a non-zero exit. */
 export class CommandError extends Error {
@@ -36,12 +38,12 @@ export class CommandError extends Error {
 /**
  * Runs a program without a shell (no grandchildren that could outlive it) and settles only
  * when the child has exited and been reaped (`close`), so no call leaves a zombie or a
- * running process behind. On timeout the child gets SIGTERM, then SIGKILL after
+ * running process behind. On timeout or abort the child gets SIGTERM, then SIGKILL after
  * PROCESS.killGraceMs. Output is capped in memory. Logs name the program only: arguments can
  * hold file names.
  */
 export function runCommand(command: string, args: readonly string[], options: RunOptions): Promise<CommandResult> {
-  const { timeoutMs, maxStdoutBytes = PROCESS.maxOutputBytes, logFailures = true } = options;
+  const { timeoutMs, maxStdoutBytes = PROCESS.maxOutputBytes, logFailures = true, signal: abortSignal } = options;
   const program = basename(command);
   const started = Date.now();
 
@@ -61,6 +63,9 @@ export function runCommand(command: string, args: readonly string[], options: Ru
       killTimer = setTimeout(() => child.kill("SIGKILL"), PROCESS.killGraceMs);
     };
     const timeout = setTimeout(() => stop("timeout"), timeoutMs);
+    const abort = () => stop("aborted");
+    if (abortSignal?.aborted) abort();
+    else abortSignal?.addEventListener("abort", abort, { once: true });
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutBytes += chunk.length;
@@ -78,6 +83,7 @@ export function runCommand(command: string, args: readonly string[], options: Ru
     child.on("close", (code, signal) => {
       clearTimeout(timeout);
       clearTimeout(killTimer);
+      abortSignal?.removeEventListener("abort", abort);
       const result = { pid: child.pid, stdout: Buffer.concat(chunks), stderr: stderr.trim() };
       if (!failure && code === 0) return resolve(result);
       const reason: CommandFailure = failure ?? "exit";
@@ -88,10 +94,12 @@ export function runCommand(command: string, args: readonly string[], options: Ru
             ? `${program} did not finish within ${timeoutMs} ms`
             : reason === "output-limit"
               ? `${program} wrote more than ${maxStdoutBytes} bytes`
-              : `${program} exited with ${code ?? signal}${result.stderr ? `: ${result.stderr.slice(0, PROCESS.maxStderrBytes)}` : ""}`;
+              : reason === "aborted"
+                ? `${program} was stopped: ${String(abortSignal?.reason ?? "aborted")}`
+                : `${program} exited with ${code ?? signal}${result.stderr ? `: ${result.stderr.slice(0, PROCESS.maxStderrBytes)}` : ""}`;
       if (logFailures) {
         const meta = { program, pid: child.pid, reason, code, signal, durationMs: Date.now() - started };
-        if (reason === "exit") logger.warn("command failed", meta);
+        if (reason === "exit" || reason === "aborted") logger.warn("command failed", meta);
         else logger.error("command stopped", meta);
       }
       reject(new CommandError(reason, { ...result, code, signal }, detail));

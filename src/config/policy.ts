@@ -207,7 +207,12 @@ export const MEDIA = {
    */
   cacheMaxAgeSec: 365 * 24 * 60 * 60,
   workerConcurrency: 2,
-  jobAttempts: 3,
+  /**
+   * A job that fails for a reason outside the file (storage I/O error, volume offline, all
+   * conversion slots busy, a timeout) is tried again with exponential backoff from jobBackoffMs:
+   * 6 attempts span about five minutes, long enough to re-plug an SSD.
+   */
+  jobAttempts: 6,
   jobBackoffMs: 10_000,
 } as const;
 
@@ -317,6 +322,23 @@ export const JOBS = {
   timezone: "Asia/Seoul",
   metricsSampleIntervalSec: 60,
   healthProbeIntervalSec: 60,
+  /**
+   * The probes queue (bandwidth sample, Status probe, volume watch) runs this many jobs at once,
+   * one per kind, so a slow health probe never holds back the volume watch.
+   */
+  probeConcurrency: 3,
+  /**
+   * Finished maintenance and probe jobs kept in Redis (newest first) for inspection; older ones
+   * are removed as new ones finish. The probes alone finish about 5,700 jobs a day.
+   */
+  keepCompleted: 100,
+  keepFailed: 1_000,
+  /**
+   * At start the worker removes finished jobs older than this (left by releases that kept them
+   * all), at most trimBatch per Redis call so a large backlog never blocks Redis for long.
+   */
+  trimFinishedAfterSec: 24 * 60 * 60,
+  trimBatch: 1_000,
 } as const;
 
 export const AUTH = {
@@ -392,6 +414,12 @@ export const TRANSCODE = {
   cacheWindowSec: 7 * 24 * 60 * 60,
   /** Stored conversions are deleted this long after they were made (popular ones are made again). */
   cacheKeepDays: 30,
+  /**
+   * A stored conversion (worker) is stopped after this long. 720p converts faster than real
+   * time on the N95, so this covers videos up to about this length; a longer or hung one is
+   * stopped (SIGTERM, then SIGKILL) and not retried until it is played often enough again.
+   */
+  storeTimeoutSec: 6 * 60 * 60,
 } as const;
 
 /** Personal API tokens and /api/v1 (docs/api.md "API v1"). */
