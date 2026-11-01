@@ -14,7 +14,9 @@ test("shows the account, its retention, usage and this device", async ({ page })
   await expect(profile.getByRole("heading", { level: 2, name: /^anon-[a-z0-9]{6}$/ })).toBeVisible();
   await expect(profile.getByText("Anonymous")).toBeVisible();
   await expect(profile.getByText(/Deletes .* · 14 days left/)).toBeVisible();
-  await expect(page.getByText(/^Anonymous account with its own private root folder\. It is deleted together with all of its files on .*, 14 days after it was created/)).toBeVisible();
+  // Scoped to <main>: while the page streams in, React parks finished content in a hidden
+  // container outside it before moving it into place, so the text briefly exists twice.
+  await expect(page.getByRole("main").getByText(/^Anonymous account with its own private root folder\. It is deleted together with all of its files on .*, 14 days after it was created/)).toBeVisible();
 
   await expect(page.getByRole("region", { name: "Storage" })).toContainText("0 B / 5.0 GB");
   await expect(page.getByRole("region", { name: "Traffic" }).getByText("No data yet")).toBeVisible();
