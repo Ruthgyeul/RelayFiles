@@ -1,15 +1,20 @@
 import "server-only";
 import { STORAGE } from "@/config/policy";
 import type { NodeItem } from "@/contracts/nodes";
+import { newDeletedItemId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
-import { db } from "../db/client";
+import { groupByTop } from "@/domain/trash";
+import { segmentsBelowRoot } from "@/domain/tree";
+import { db, type DbClient } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
+import type { Node } from "../db/generated/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
+import { createDeletedItem, nodeRowsByIds, toSnapshot } from "../repositories/deleted-item.repo";
 import { deleteNodes, findNode, findNodes, findRootFolder, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
-import { ancestorChain, lockSubtrees } from "../repositories/node-tree.repo";
-import { recordTrashed } from "../repositories/trash.repo";
+import { ancestorChain, lockSubtrees, type AncestorRow } from "../repositories/node-tree.repo";
+import { addTrashedBytes, recordTrashed } from "../repositories/trash.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { locationOf } from "./node-location";
 import { toNodeItem } from "./node.service";
@@ -77,12 +82,18 @@ export async function topLevel(accountId: string, ids: string[], allowRoot = fal
   return result;
 }
 
-/** Deletes items with everything inside; files go to the volume's trash for the purge job. */
-export async function deleteItems(owner: NodeOwner, ids: string[]): Promise<{ deleted: number }> {
+/**
+ * Deletes items with everything inside; files go to the volume's trash for the purge job.
+ * Each top-level item stays under "Recently deleted" (a DeletedItem with its rows) until then,
+ * unless `recoverable` is false: items the cleanup deletes because their link expired or was
+ * downloaded once are gone for good (a restore would bring back the ended link).
+ */
+export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable = true }: { recoverable?: boolean } = {}): Promise<{ deleted: number }> {
   const items = await topLevel(owner.id, ids);
   if (items.length === 0) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner, "write");
-  const locations = await Promise.all(items.map((row) => locationOf(owner.id, row.id)));
+  const chains = await Promise.all(items.map((row) => ancestorChain(db(), row.id)));
+  const locations = chains.map((chain) => ({ accountId: owner.id, segments: segmentsBelowRoot(chain) }));
   const files = await withStorageTransaction(db(), async (tx, undo) => {
     await lockAccountForWrite(tx, owner.id, driver.volumeId);
     // Counted from the rows this transaction deletes: nothing can be added below them meanwhile.
@@ -92,24 +103,76 @@ export async function deleteItems(owner: NodeOwner, ids: string[]): Promise<{ de
       STORAGE.subtreeLockAttempts,
     );
     if (!rows) throw new ApiError("CONFLICT", "These items are changing. Try again.");
+    // Every column of the locked rows, read before they go, so a restore can put them back.
+    const full = recoverable ? await nodeRowsByIds(tx, rows.map((row) => row.id)) : [];
     await deleteNodes(
       tx,
       items.map((row) => row.id),
     );
+    const trashed: string[] = [];
     for (const location of locations) {
-      const trashed = await driver.moveToTrash(location);
-      undo.push("restore deleted item", () => driver.restoreFromTrash(trashed, location));
+      const entry = await driver.moveToTrash(location);
+      undo.push("restore deleted item", () => driver.restoreFromTrash(entry, location));
+      trashed.push(entry);
     }
     const deleted = rows.filter((row) => row.type === "FILE");
     // The bytes stay on disk until the daily job empties the trash, and count until then.
-    await recordTrashed(
-      tx,
-      owner.id,
-      deleted.reduce((sum, row) => sum + row.size, 0n),
-    );
+    if (recoverable) await recordDeletedItems(tx, owner.id, driver.volumeId, { items, chains, trashed, rows, full });
+    else
+      await recordTrashed(
+        tx,
+        owner.id,
+        deleted.reduce((sum, row) => sum + row.size, 0n),
+      );
     return deleted;
   });
   // Thumbnails and stripped copies are rebuilt on demand, so they are removed right away.
   await driver.removeAssets(owner.id, files.map((row) => row.id)).catch((error: unknown) => logger.warn("assets not removed", { error }));
   return { deleted: items.length };
+}
+
+interface DeletedTrees {
+  items: NodeRow[];
+  /** Each item's ancestor chain (account root first, the item last). */
+  chains: AncestorRow[][];
+  /** Where each item went in the trash. */
+  trashed: string[];
+  /** The locked rows in lock order (parents before children). */
+  rows: readonly { id: string }[];
+  /** Every column of those rows. */
+  full: Node[];
+}
+
+/**
+ * Keeps each deleted item under "Recently deleted": its rows, where it waits in the trash and
+ * its file bytes as a TrashedBytes row of its own. The rows add up to what one row for all of
+ * them would hold, so the quota counts exactly as before; a restore takes back only its own.
+ */
+async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: string, trees: DeletedTrees): Promise<void> {
+  const byId = new Map(trees.full.map((row) => [row.id, row]));
+  const groups = groupByTop(
+    trees.rows.map((row) => byId.get(row.id)!),
+    trees.items.map((item) => item.id),
+  );
+  const at = new Date();
+  for (const [index, item] of trees.items.entries()) {
+    const tree = groups.get(item.id)!;
+    const bytes = tree.reduce((sum, row) => sum + (row.type === "FILE" ? row.size : 0n), 0n);
+    await createDeletedItem(tx, {
+      id: newDeletedItemId(),
+      accountId,
+      volumeId,
+      trashPath: trees.trashed[index]!,
+      trashedBytesId: await addTrashedBytes(tx, { accountId, volumeId, bytes, at }),
+      name: item.name,
+      type: item.type,
+      kind: item.kind,
+      size: bytes,
+      itemCount: tree.length,
+      originalParentId: item.parentId,
+      originalPath: trees.chains[index]!.slice(0, -1).map((ancestor) => ancestor.name),
+      deletedAt: at,
+      nodes: toSnapshot(tree),
+    });
+  }
 }

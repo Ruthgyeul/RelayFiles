@@ -6,6 +6,7 @@ import {
   newAccountId,
   newAccountToken,
   newAnonName,
+  newDeletedItemId,
   newInviteCode,
   newLinkId,
   newNodeId,
@@ -24,6 +25,7 @@ describe("id generators", () => {
       expect(newAnonName()).toMatch(ID_PATTERN.anonName);
       expect(newInviteCode()).toMatch(ID_PATTERN.invite);
       expect(newSessionId()).toMatch(ID_PATTERN.session);
+      expect(newDeletedItemId()).toMatch(ID_PATTERN.deletedItem);
     }
   });
 

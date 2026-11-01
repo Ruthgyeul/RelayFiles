@@ -87,7 +87,7 @@ export async function purgeExpired(owner: AccountRow, now: Date): Promise<{ dele
   const ids = (await expiredItemIds(db(), owner.id, now)).map((row) => row.id);
   if (ids.length === 0) return { deleted: 0 };
   await retireLinks(db(), ids, now);
-  return deleteItems(owner, ids);
+  return deleteItems(owner, ids, { recoverable: false });
 }
 
 /**

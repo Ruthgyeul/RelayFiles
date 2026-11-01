@@ -11,7 +11,7 @@ export const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 /** Upper-case invite code alphabet. */
 export const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-export const ID_LENGTH = { account: 12, node: 12, link: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12, fileRequest: 12 } as const;
+export const ID_LENGTH = { account: 12, node: 12, link: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12, fileRequest: 12, deletedItem: 12 } as const;
 
 /**
  * Personal API tokens are `rfp_<token id>_<43 random characters>`: the prefix tells them apart
@@ -47,6 +47,7 @@ export const ID_PATTERN = {
   apiToken: new RegExp(`^${API_TOKEN_PREFIX}([${ID_ALPHABET}]{${ID_LENGTH.apiTokenId}})_[${TOKEN_ALPHABET}]{${ID_LENGTH.apiToken}}$`),
   apiTokenId: pattern(ID_LENGTH.apiTokenId, ID_ALPHABET),
   fileRequest: pattern(ID_LENGTH.fileRequest, ID_ALPHABET),
+  deletedItem: pattern(ID_LENGTH.deletedItem, ID_ALPHABET),
   anonName: new RegExp(`^anon-[${ID_ALPHABET}]{${ID_LENGTH.anonSuffix}}$`),
   invite: new RegExp(`^[${INVITE_ALPHABET}]{4}-[${INVITE_ALPHABET}]{4}$`),
   /** Request ids (x-request-id) are UUIDs; anything else a client sends is replaced. */
@@ -65,6 +66,7 @@ export const newAnonName = () => `anon-${randomString(ID_LENGTH.anonSuffix, ID_A
 export const newApiToken = (id: string) => `${API_TOKEN_PREFIX}${id}_${randomString(ID_LENGTH.apiToken, TOKEN_ALPHABET)}`;
 export const newApiTokenId = () => randomString(ID_LENGTH.apiTokenId, ID_ALPHABET);
 export const newFileRequestId = () => randomString(ID_LENGTH.fileRequest, ID_ALPHABET);
+export const newDeletedItemId = () => randomString(ID_LENGTH.deletedItem, ID_ALPHABET);
 export const newInviteCode = () => `${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}-${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}`;
 
 export const isAccountId = (value: string) => ID_PATTERN.account.test(value);

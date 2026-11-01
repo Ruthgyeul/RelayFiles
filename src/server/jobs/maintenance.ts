@@ -4,6 +4,7 @@ import { getEnv } from "@/config/env";
 import { JOBS, MS, STORAGE, TRANSCODE } from "@/config/policy";
 import { db } from "../db/client";
 import { logger } from "../logger";
+import { forgetDeletedBefore } from "../repositories/deleted-item.repo";
 import { forgetTrashedBefore } from "../repositories/trash.repo";
 import { listPurgeableVolumes } from "../repositories/volume.repo";
 import { recordCleanup, recordSample } from "../metrics/history";
@@ -61,6 +62,8 @@ export async function runMaintenance(now: Date) {
   // The same cut-off as the trash itself: those bytes no longer count toward anyone's storage.
   // Only on the volumes emptied above; a READONLY or OFFLINE volume still holds its trash.
   await forgetTrashedBefore(db(), trashBefore, emptied).catch((error: unknown) => logger.warn("trash records not purged", { error }));
+  // Their files went with the trash: they leave "Recently deleted" by the same rule.
+  await forgetDeletedBefore(db(), trashBefore, emptied).catch((error: unknown) => logger.warn("deleted items not purged", { error }));
   await purgeOldAuditEvents(now).catch((error: unknown) => logger.warn("audit log not purged", { error }));
   return { ...cleanup, trash, uploads };
 }
