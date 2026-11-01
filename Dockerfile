@@ -76,7 +76,13 @@ ENV NODE_ENV=production NPM_CONFIG_CACHE=/tmp/.npm
 RUN groupadd --system --gid ${STORAGE_GID} relayfiles \
  && useradd --system --uid ${STORAGE_UID} --gid relayfiles --no-create-home relayfiles \
  && if [ -n "${TOOLS_PACKAGES}" ]; then apt-get update && apt-get install -y --no-install-recommends ${TOOLS_PACKAGES} && rm -rf /var/lib/apt/lists/*; fi
-COPY --chown=relayfiles:relayfiles . .
+# What the worker and scripts need, named one by one: public/ (service worker, app icons) is
+# served by the app image's standalone bundle only.
+COPY --chown=relayfiles:relayfiles package.json package-lock.json prisma.config.ts next.config.ts tsconfig.json postcss.config.mjs ./
+COPY --chown=relayfiles:relayfiles prisma ./prisma
+COPY --chown=relayfiles:relayfiles src ./src
+COPY --chown=relayfiles:relayfiles scripts ./scripts
+COPY --chown=relayfiles:relayfiles deploy ./deploy
 COPY --chmod=0755 deploy/docker-entrypoint.sh /usr/local/bin/relayfiles-entrypoint
 USER relayfiles
 ENTRYPOINT ["/usr/bin/tini", "--", "relayfiles-entrypoint"]
