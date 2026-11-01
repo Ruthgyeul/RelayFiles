@@ -4,14 +4,14 @@ import type { CreatedFolder, FolderNode, FolderView, NodeItem, NodeProperties, T
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { parseSearchQuery, rankByName } from "@/domain/search";
-import { busyBadge } from "@/domain/share";
+import { busyBadge, type Busy } from "@/domain/share";
 import { effectiveVisibility, segmentsBelowRoot } from "@/domain/tree";
 import type { AccountRow } from "../repositories/account.repo";
 import { db } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { childCounts, createFolderNode, findByName, findByTags, findNode, findRootFolder, listChildren, listFolders, listSiblingNames, recentFiles, tagUsage, type NodeRow } from "../repositories/node.repo";
-import { ancestorChain, descendantCounts, folderSizes } from "../repositories/node-tree.repo";
+import { ancestorChain, childStats, descendantCounts, folderSizes, type ChildStats } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
@@ -50,16 +50,21 @@ export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: num
   };
 }
 
-/** Adds folder sizes and child counts to listed rows. */
+/** A listed row with its folder stats (bytes, files and items inside) and busy badge. */
+function listedItem(row: NodeRow, stats: ChildStats | undefined, busy: ReadonlyMap<string, Busy>, now: number): NodeItem {
+  const item = row.type === "FOLDER" ? toNodeItem(row, { size: stats?.size ?? 0n, fileCount: stats?.files ?? 0, itemCount: stats?.items ?? 0 }) : toNodeItem(row);
+  const level = busy.get(row.id);
+  return level ? { ...item, busy: busyBadge(level, now, "app") } : item;
+}
+
+/** Adds folder sizes and child counts to rows from anywhere in the account (search hits, one item). */
 async function withFolderStats(rows: NodeRow[]): Promise<NodeItem[]> {
   const folderIds = rows.filter((row) => row.type === "FOLDER").map((row) => row.id);
   const now = Date.now();
   const [counts, sizes, busy] = await Promise.all([childCounts(db(), folderIds), folderSizes(db(), folderIds), busyLevels(rows, now)]);
   return rows.map((row) => {
-    const stats = sizes.get(row.id);
-    const item = row.type === "FOLDER" ? toNodeItem(row, { size: stats?.size ?? 0n, fileCount: stats?.files ?? 0, itemCount: counts.get(row.id) ?? 0 }) : toNodeItem(row);
-    const level = busy.get(row.id);
-    return level ? { ...item, busy: busyBadge(level, now, "app") } : item;
+    const size = sizes.get(row.id);
+    return listedItem(row, { size: size?.size ?? 0n, files: size?.files ?? 0, items: counts.get(row.id) ?? 0 }, busy, now);
   });
 }
 
@@ -70,16 +75,25 @@ async function resolveFolder(accountId: string, ref: string): Promise<NodeRow> {
   return row;
 }
 
+/**
+ * A folder with its path and children. The sizes of the folder and of every child folder come
+ * from one walk of the folder's tree grouped by child (`childStats`); the folder's own numbers
+ * are the sums over its children.
+ */
 export async function getFolderView(accountId: string, ref: string): Promise<FolderView> {
   const folder = await resolveFolder(accountId, ref);
-  const [chain, children, [stats]] = await Promise.all([ancestorChain(db(), folder.id), listChildren(db(), folder.id), withFolderStats([folder])]);
+  const now = Date.now();
+  const [chain, children, stats] = await Promise.all([ancestorChain(db(), folder.id), listChildren(db(), folder.id), childStats(db(), folder.id)]);
+  const busy = await busyLevels([folder, ...children], now);
+  const inside = [...stats.values()];
+  const total: ChildStats = { size: inside.reduce((sum, child) => sum + child.size, 0n), files: inside.reduce((sum, child) => sum + child.files, 0), items: children.length };
   return {
-    folder: stats!,
+    folder: listedItem(folder, total, busy, now),
     isRoot: folder.parentId === null,
     path: chain.map(({ id, name }) => ({ id, name })),
     effectiveVisibility: effectiveVisibility(chain.map((row) => VISIBILITY[row.visibility]).reverse()),
     parentVisibility: effectiveVisibility(chain.slice(0, -1).map((row) => VISIBILITY[row.visibility]).reverse()),
-    children: await withFolderStats(children),
+    children: children.map((row) => listedItem(row, stats.get(row.id), busy, now)),
   };
 }
 
