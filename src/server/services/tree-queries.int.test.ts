@@ -246,7 +246,8 @@ describe("bulk operations", () => {
     expect(await readFile(join(m.dir, "Moved", "e-1.txt"), "utf8")).toBe("x");
 
     expect(await deleteItems(account, selected)).toEqual({ deleted: 2 });
-    const deleted = await prisma.deletedItem.findMany({ where: { accountId: m.id }, orderBy: { name: "asc" } });
+    // Sorted here by code point: the database's order depends on its collation (C vs en_US).
+    const deleted = (await prisma.deletedItem.findMany({ where: { accountId: m.id } })).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     expect(deleted.map((item) => [item.name, item.itemCount, item.size, item.originalPath])).toEqual([
       ["Trip", 8, 4n, ["root", "Moved"]],
       ["e-1.txt", 1, 1n, ["root", "Moved"]],
