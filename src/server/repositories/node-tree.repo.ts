@@ -107,3 +107,51 @@ export function folderPathsBelow(db: DbClient, folderId: string) {
     )
     SELECT id, path FROM sub`;
 }
+
+/**
+ * Locks items and everything below them FOR UPDATE inside a transaction and returns those rows,
+ * so a delete counts exactly the files it removes: nothing can be added below a locked folder
+ * (the foreign key check waits), moved out or renamed until the transaction ends. The tree is
+ * read again after each lock until no new row appears; null when it kept changing for `attempts`.
+ * Rows are locked from the top down, the order {@link lockAncestorChain} uses too.
+ */
+export async function lockSubtrees(tx: DbClient, topIds: readonly string[], attempts: number): Promise<{ id: string; type: "FILE" | "FOLDER"; size: bigint }[] | null> {
+  const locked = new Set<string>();
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const rows = await tx.$queryRaw<{ id: string; type: "FILE" | "FOLDER"; size: bigint }[]>`
+      WITH RECURSIVE sub AS (
+        SELECT id, 0 AS depth FROM "Node" WHERE id = ANY(${[...topIds]})
+        UNION ALL
+        SELECT n.id, s.depth + 1 FROM "Node" n JOIN sub s ON n."parentId" = s.id
+      )
+      SELECT n.id, n.type::text AS type, n.size FROM "Node" n JOIN (SELECT id, depth FROM sub) d ON d.id = n.id
+      ORDER BY d.depth, n.id
+      FOR UPDATE OF n`;
+    if (rows.length === locked.size && rows.every((row) => locked.has(row.id))) return rows;
+    for (const row of rows) locked.add(row.id);
+  }
+  return null;
+}
+
+/**
+ * Locks a node and its ancestors FOR SHARE inside a transaction and returns the chain from the
+ * account root down (as {@link ancestorChain}), or null when the node is gone (or its chain kept
+ * changing for `attempts`). Until the transaction ends nothing on the chain can be renamed, moved
+ * or deleted, so a path built from it stays valid (an upload deduplicated against this file links
+ * to it inside the transaction).
+ */
+export async function lockAncestorChain(tx: DbClient, nodeId: string, attempts: number): Promise<AncestorRow[] | null> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const chain = await ancestorChain(tx, nodeId);
+    if (chain.length === 0) return null;
+    const ids = chain.map((row) => row.id);
+    // From the root down, like lockSubtrees, so a delete and this lock never wait on each other in a cycle.
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "Node" WHERE id = ANY(${ids}) ORDER BY array_position(${ids}::text[], id) FOR SHARE`;
+    if (locked.length !== ids.length) continue;
+    // Read again under the locks: a rename or move that committed before them changed the chain.
+    const again = await ancestorChain(tx, nodeId);
+    if (again.length === chain.length && again.every((row, index) => row.id === chain[index]!.id && row.name === chain[index]!.name)) return again;
+  }
+  return null;
+}

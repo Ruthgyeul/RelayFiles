@@ -229,6 +229,11 @@ $C run --rm tools npm run storage:fsck -- --account <id>
 
 DB 행은 지우지 않는다. 휴지통은 24시간 뒤 비워지므로 그 전에는 되살릴 수 있다. 심볼릭 링크는 옮기지 않고 "not moved"로 보고하니 직접 지운다.
 
+`--fix`는 앱이 켜져 있어도 된다. 볼륨마다 진행 중인 쓰기(업로드·복사 등의 스토리지 트랜잭션)가 끝나기를 기다린 뒤(최대 `STORAGE.writeDrainTimeoutSec` 600초) 그 볼륨을 `READONLY`로 잡고 고치며, 끝나면(실패해도) 원래 상태로 되돌린다. 그동안 그 볼륨의 변경은 503 `STORAGE_BUSY`, 탐색·다운로드는 계속된다. 커밋되기 전인 업로드의 파일을 "디스크에만 있음"으로 휴지통에 넣지 않기 위해서다. 보고만 하는 실행은 볼륨을 바꾸지 않는다(진행 중인 업로드가 잠깐 차이로 보일 수 있다).
+
+- `Changes to volume … were still running after 600 s, so nothing was changed. Try again.`: 긴 순번 정리 등이 끝나지 않았다. 잠시 뒤 다시 실행한다.
+- `Volume … is held READONLY by another maintenance run …`: `storage:migrate`나 다른 `--fix`가 실행 중이다(`StorageVolume.resumeStatus`가 비어 있지 않음). 끝난 뒤 다시 실행한다. 그런 실행이 없는데 남아 있으면(프로세스가 강제 종료됨) `npm run storage:migrate`가 레이아웃이 최신일 때 잡아 둔 상태를 풀어 준다. `storage:migrate`와 `--fix`를 동시에 돌리지 않는다.
+
 ## 관리자 토큰을 잃었을 때
 
 ```bash
@@ -277,6 +282,8 @@ $C exec postgres psql -U relayfiles -c 'SELECT at, "actorName", action, "targetI
 
 진행 상황은 `DataMigration` 테이블에 남는다. 중간에 멈추면 다음 실행이 저장된 커서 다음부터 이어 간다. 끝난 마이그레이션은 다시 실행하지 않는다.
 
+한 번에 하나만 실행된다. 실행은 PostgreSQL advisory lock을 쥔 트랜잭션 하나를 끝까지 열어 두고(연결 하나, `MIGRATION.runLockHours` 24시간까지), 동시에 시작한 두 번째 실행(k3s Job과 수동 실행 등)은 "Another data:migrate run is in progress; waiting for it to finish."를 출력하고 기다렸다가 끝난 단계를 건너뛴다. 24시간을 넘는 실행은 끝에서 실패로 끝나며, 다음 실행이 커서부터 이어 간다.
+
 ```bash
 $C run --rm tools npm run data:migrate      # 수동 실행
 $C exec postgres psql -U relayfiles -c 'SELECT * FROM "DataMigration" ORDER BY "startedAt";'
@@ -294,11 +301,11 @@ SSD 안의 디렉터리 구조(`users/`, `system/…`)는 `.relayfiles-volume`�
 $C run --rm tools npm run storage:migrate
 ```
 
-1. 볼륨을 `READONLY`로 바꾼다. 업로드·이름 변경·이동·삭제는 "Your files are being moved…"(503 `STORAGE_BUSY`)로 잠시 막히고, 탐색과 다운로드는 계속된다.
+1. 그 볼륨에서 진행 중인 쓰기(스토리지 트랜잭션)가 끝나기를 기다린 뒤(최대 600초, 넘으면 아무것도 바꾸지 않고 실패) 볼륨을 `READONLY`로 바꾸고 원래 상태를 `StorageVolume.resumeStatus`에 적는다. 업로드·이름 변경·이동·삭제는 "Your files are being moved…"(503 `STORAGE_BUSY`)로 잠시 막히고, 탐색과 다운로드는 계속된다.
 2. 단계마다 `system/migration.journal`에 시작·완료를 남기고, 끝난 단계는 표시 파일의 `layoutVersion`에 바로 기록한다.
-3. 모든 단계가 끝나면 볼륨을 원래 상태로 되돌린다.
+3. 모든 단계가 끝나면 볼륨을 첫 실행 전 상태(`resumeStatus`)로 되돌린다. `ACTIVE`는 `ACTIVE`, `DRAINING`은 `DRAINING`, 관리자가 `READONLY`로 둔 볼륨은 `READONLY`로 남는다.
 
-중간에 실패하면 볼륨은 `READONLY`로 남는다. 원인을 고친 뒤 같은 명령을 다시 실행하면 기록된 버전 다음 단계부터 이어 간다. 되돌려야 하면 `migration.journal`의 마지막 `started` 단계를 보고 그 단계의 `rename`을 거꾸로 실행한 뒤 표시 파일의 `layoutVersion`을 이전 값으로 고친다.
+중간에 실패하면 볼륨은 `READONLY`로 남는다(`resumeStatus`는 그대로). 원인을 고친 뒤 같은 명령을 다시 실행하면 기록된 버전 다음 단계부터 이어 가고, 끝나면 첫 실행 전 상태로 돌아간다. 이 기능 전 릴리스에서 실패해 `READONLY`로 남은 볼륨은 `resumeStatus`가 비어 있어 `READONLY`로 남으니, 확인 뒤 `UPDATE "StorageVolume" SET status = 'ACTIVE' WHERE id = '<volumeId>';`로 되돌린다. 되돌려야 하면 `migration.journal`의 마지막 `started` 단계를 보고 그 단계의 `rename`을 거꾸로 실행한 뒤 표시 파일의 `layoutVersion`을 이전 값으로 고친다.
 
 ## 썸네일·미리보기 다시 만들기
 
@@ -350,14 +357,14 @@ $C run --rm tools npm run volume:list      # id, 경로, 상태, layout, 마운�
 $C run --rm tools npm run volume:migrate -- --account <accountId> --to <volumeId>
 ```
 
-1. 계정을 `migrating`으로 표시한 뒤 원본의 해시를 계산한다. 그 계정의 변경은 503 `STORAGE_BUSY`로 잠시 막히고(업로드 시작 포함), 탐색·다운로드·공유 링크는 계속된다.
-2. 사용자 폴더를 새 볼륨에 복사하고(권한 유지), 모든 파일의 SHA-256을 원본과 비교한다(빠진 파일, 다른 파일, 남는 파일). 하나라도 다르면 복사본을 지우고 멈춘다(계정은 원래 볼륨에 그대로).
-3. 한 번의 DB 업데이트로 `volumeId`를 바꾸고 표시를 푼다. `linkId`, 노드 id, 토큰은 바뀌지 않는다.
+1. 그 계정에서 진행 중인 쓰기(복사·업로드의 스토리지 트랜잭션)가 끝나기를 기다린 뒤(최대 600초) 계정을 `migrating`으로 표시하고 원본의 해시를 계산한다. 그 계정의 변경은 503 `STORAGE_BUSY`로 잠시 막히고(업로드 시작과, 표시 전에 시작해 아직 커밋하지 않은 복사·업로드 포함), 탐색·다운로드·공유 링크는 계속된다.
+2. 사용자 폴더를 새 볼륨에 복사하고(권한 유지), 모든 파일의 SHA-256을 원본과 비교한다(빠진 파일, 다른 파일, 남는 파일). 전환 직전에 원본이 해시한 그대로인지, DB의 모든 항목이 복사본에 있는지 다시 본다. 하나라도 다르면 복사본을 지우고 멈춘다(계정은 원래 볼륨에 그대로, `The copy does not match the account now …`). 디스크에 없는데 `missing` 표시가 없는 파일이 원래 있었다면 `storage:fsck -- --fix --account <id>`로 표시한 뒤 다시 실행한다.
+3. 한 번의 DB 업데이트로 `volumeId`를 바꾸고 표시를 푼다. `linkId`, 노드 id, 토큰은 바뀌지 않는다. 그 뒤 원래 볼륨에 쓰려던 작업은 503으로 거절된다.
 4. 원본은 원래 볼륨의 `system/trash/`로 옮겨져 `STORAGE.trashRetentionHours`(24시간) 뒤 정리된다. 그 전에는 되돌릴 수 있다(같은 명령으로 원래 볼륨을 지정).
 
 이미 대상 볼륨에 있으면 아무것도 하지 않는다("The account is already on that volume.").
 
-자동 테스트(`src/app/api/files/volume-move.int.test.ts`)가 이 경로를 매번 확인한다: 이동 후 내용·권한·`linkId` 유지와 휴지통 보관, 이동 중 변경 503(`STORAGE_BUSY`)과 읽기 유지, 레이아웃 마이그레이션 중단 후 저널로 재개.
+자동 테스트(`src/app/api/files/volume-move.int.test.ts`)가 이 경로를 매번 확인한다: 이동 후 내용·권한·`linkId` 유지와 휴지통 보관, 이동 중 변경 503(`STORAGE_BUSY`)과 읽기 유지, 레이아웃 마이그레이션 중단 후 저널로 재개와 원래 상태 복원, 파일 없는 DB 행이 있으면 전환하지 않음. `src/app/api/nodes/storage-races.int.test.ts`는 이동·마이그레이션·`fsck --fix`가 진행 중인 쓰기를 기다리는지와 그 뒤의 쓰기가 거절되는지를 확인한다.
 
 ### SSD 교체 (볼륨 비우기)
 

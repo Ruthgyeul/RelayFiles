@@ -5,18 +5,23 @@ import { newLinkId, newNodeId } from "@/domain/ids";
 import { uniqName } from "@/domain/names";
 import { segmentsBelowRoot } from "@/domain/tree";
 import { db, Prisma } from "../db/client";
+import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
 import { insertNodes, listSiblingNames, updateNode } from "../repositories/node.repo";
 import { ancestorChain, subtreeRows } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
+import { StorageEntryMissingError, type CopyEntry } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
 import { locationOf } from "./node-location";
 import { requireFolder, topLevel, type NodeOwner } from "./node-ops.service";
 import { releaseSpace, reserveSpace } from "./space.service";
-import { driverForAccount } from "./volume.service";
+import { driverForAccount, lockAccountForWrite } from "./volume.service";
+
+const NAME_TAKEN_MESSAGE = "Something with the same name was just added there. Try again.";
+const CHANGED_MESSAGE = "Some items changed while they were being copied. Try again.";
 
 /** True when `nodeId` is the folder or inside it. */
 function isInside(chainIds: string[], nodeId: string): boolean {
@@ -41,18 +46,41 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
   const plan = await Promise.all(
     items.map(async (row) => ({ row, from: await locationOf(owner.id, row.id) })),
   );
-  await withStorageTransaction(db(), async (tx, undo) => {
-    for (const { row, from } of plan) {
-      const name = uniqName(taken, row.name, row.type === "FILE");
-      taken.push(name);
-      if (name !== row.name) renamed++;
-      await updateNode(tx, row.id, { parent: { connect: { id: target.id } }, name });
-      const to = { accountId: owner.id, segments: [...targetSegments, name] };
-      await driver.rename(from, to);
-      undo.push("undo move", () => driver.rename(to, from));
-    }
-  });
+  try {
+    await withStorageTransaction(db(), async (tx, undo) => {
+      await lockAccountForWrite(tx, owner.id, driver.volumeId);
+      for (const { row, from } of plan) {
+        const name = uniqName(taken, row.name, row.type === "FILE");
+        taken.push(name);
+        if (name !== row.name) renamed++;
+        await updateNode(tx, row.id, { parent: { connect: { id: target.id } }, name });
+        const to = { accountId: owner.id, segments: [...targetSegments, name] };
+        await driver.rename(from, to);
+        undo.push("undo move", () => driver.rename(to, from));
+      }
+    });
+  } catch (caught) {
+    // Something got one of the names in the target after they were read: nothing was moved.
+    if (isUniqueViolation(caught)) throw new ApiError("CONFLICT", NAME_TAKEN_MESSAGE);
+    throw caught;
+  }
   return { done: items.length, renamed, targetName: target.name };
+}
+
+/**
+ * What a copied tree holds on disk, by folder names below its top (parents before children, as
+ * subtreeRows returns them). Files flagged missing have nothing to copy; their copies keep the flag.
+ */
+function copyEntries(tree: readonly { id: string; parentId: string | null; name: string; type: "FILE" | "FOLDER"; missing: boolean }[], topId: string): CopyEntry[] {
+  const segments = new Map<string, string[]>();
+  const entries: CopyEntry[] = [];
+  for (const row of tree) {
+    const own = row.id === topId ? [] : [...segments.get(row.parentId!)!, row.name];
+    segments.set(row.id, own);
+    if (row.type === "FILE" && row.missing) continue;
+    entries.push({ segments: own, type: row.type === "FILE" ? "file" : "folder" });
+  }
+  return entries;
 }
 
 /**
@@ -64,6 +92,9 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
  * copied into the volume's temp area first, outside any database transaction: a large copy
  * must not hold a database connection (or run past the transaction timeout and roll back
  * after the work). Only the renames into place and the new rows share one short transaction.
+ * Staging copies the files of the rows read at the start, one by one (not the folder as it is on
+ * disk later), so the new rows and the staged files always match; a file renamed or deleted
+ * meanwhile stops the copy with 409 and nothing is left behind.
  */
 export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: string): Promise<TransferResult> {
   const target = await requireFolder(owner.id, targetRef);
@@ -83,7 +114,8 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
   const staged: string[] = [];
   try {
     const copies = await Promise.all(items.map(async (row) => ({ row, from: await locationOf(owner.id, row.id) })));
-    for (const { from } of copies) staged.push(await driver.stageCopy(from));
+    // Exactly the rows read above, not whatever the folder holds on disk now.
+    for (const [index, { row, from }] of copies.entries()) staged.push(await driver.stageCopy(from, copyEntries(trees[index]!, row.id)));
 
     const targetSegments = segmentsBelowRoot(targetChain);
     const taken = await listSiblingNames(db(), target.id);
@@ -91,6 +123,8 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
     const now = new Date();
     const media: string[] = [];
     await withStorageTransaction(db(), async (tx, undo) => {
+      // Staging can take long: the account may have started moving to another volume meanwhile.
+      await lockAccountForWrite(tx, owner.id, driver.volumeId);
       for (const [index, { row }] of copies.entries()) {
         const name = uniqName(taken, row.name, row.type === "FILE");
         taken.push(name);
@@ -126,6 +160,10 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
     // Assets are keyed by node id, so copies get their own (rebuilt by the worker).
     void enqueueMedia(media);
     return { done: items.length, renamed, targetName: target.name };
+  } catch (caught) {
+    if (caught instanceof StorageEntryMissingError) throw new ApiError("CONFLICT", CHANGED_MESSAGE);
+    if (isUniqueViolation(caught)) throw new ApiError("CONFLICT", NAME_TAKEN_MESSAGE);
+    throw caught;
   } finally {
     // Copies that did not get into place (an error part-way) leave nothing in the temp area.
     for (const path of staged) await driver.discardStaged(path).catch((error: unknown) => logger.warn("staged copy not removed", { error }));

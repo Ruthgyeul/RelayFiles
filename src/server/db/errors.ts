@@ -4,7 +4,16 @@ import { Prisma } from "./client";
 
 /** Shape of a raw query's driver error (Prisma P2010) when PostgreSQL refused the write. */
 interface RawQueryMeta {
-  driverAdapterError?: { cause?: { kind?: string } };
+  driverAdapterError?: { cause?: { kind?: string; originalCode?: string } };
+}
+
+/** PostgreSQL lock_not_available: a lock wait passed the transaction's lock_timeout. */
+const LOCK_NOT_AVAILABLE = "55P03";
+
+/** A lock was not granted within the transaction's lock_timeout (a raw query, e.g. an advisory lock). */
+export function isLockTimeout(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2010") return false;
+  return (error.meta as RawQueryMeta | undefined)?.driverAdapterError?.cause?.originalCode === LOCK_NOT_AVAILABLE;
 }
 
 /**

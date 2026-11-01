@@ -120,9 +120,33 @@ describe("storage layout migrations", () => {
     await stat(join(volume.root, "system", "previews"));
     await stat(join(volume.root, "system", "cache"));
     const row = await prisma.storageVolume.findUniqueOrThrow({ where: { id: volume.id } });
-    expect(row).toMatchObject({ layoutVersion: 3 });
+    // Back to the status it had before the first, interrupted run (not ACTIVE).
+    expect(row).toMatchObject({ layoutVersion: 3, status: "DRAINING", resumeStatus: null });
     const journal = (await readFile(join(volume.root, "system", "migration.journal"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as { step: string; state: string });
     expect(journal.map((entry) => `${entry.step}:${entry.state}`)).toEqual(["1->2:started", "1->2:done", "2->3:started", "2->3:started", "2->3:done"]);
     expect(await migrateVolumeLayout(volume.id, undefined, steps, 3)).toEqual({ from: 3, to: 3 });
+  });
+
+  it("leaves a volume an admin made READONLY read-only", async () => {
+    const volume = await extraVolume("ACTIVE");
+    await prisma.storageVolume.update({ where: { id: volume.id }, data: { status: "READONLY" } });
+    const step: LayoutMigration = { from: 1, to: 2, description: "add system/cache", up: (root) => mkdir(join(root, "system", "cache"), { recursive: true }).then(() => undefined) };
+    expect(await migrateVolumeLayout(volume.id, undefined, [step], 2)).toEqual({ from: 1, to: 2 });
+    expect(await prisma.storageVolume.findUniqueOrThrow({ where: { id: volume.id } })).toMatchObject({ layoutVersion: 2, status: "READONLY", resumeStatus: null });
+  });
+});
+
+describe("checks before a volume switch", () => {
+  it("does not switch when a database row has no file to copy", async () => {
+    const m = await member();
+    const before = await prisma.account.findUniqueOrThrow({ where: { id: m.id } });
+    await addFile(m, m.rootId, [], "kept.txt", "kept", "text/plain");
+    await addFile(m, m.rootId, [], "lost.txt", "lost", "text/plain");
+    await rm(join(m.dir, "lost.txt"));
+    const target = await extraVolume("ACTIVE");
+    await expect(moveAccountToVolume(m.id, target.id)).rejects.toThrow(/does not match the account now.*not copied: lost\.txt/);
+    expect(await prisma.account.findUniqueOrThrow({ where: { id: m.id } })).toMatchObject({ volumeId: before.volumeId, migrating: false });
+    await expect(stat(userRootOf(target.root, m.id))).rejects.toThrow();
+    expect(await readFile(join(m.dir, "kept.txt"), "utf8")).toBe("kept");
   });
 });

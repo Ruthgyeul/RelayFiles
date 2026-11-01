@@ -186,8 +186,13 @@ describe("delete", () => {
     // 8 bytes in the trash + 1 in the file: one 1-byte copy fits in 10, a second does not.
     expect((await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [second], targetId: "root", mode: "copy" } })).status).toBe(200);
     expect((await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [second], targetId: "root", mode: "copy" } })).status).toBe(507);
-    // The daily job's cut-off forgets them.
-    await forgetTrashedBefore(prisma, new Date(Date.now() + 1_000));
+    // A volume the daily job did not empty (READONLY, OFFLINE) still holds them: they keep counting.
+    await forgetTrashedBefore(prisma, new Date(Date.now() + 1_000), ["some-other-volume"]);
+    expect((await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [second], targetId: "root", mode: "copy" } })).status).toBe(507);
+    // The daily job's cut-off forgets them once their volume's trash was emptied.
+    const { volumeId } = await prisma.account.findUniqueOrThrow({ where: { id: s.id }, select: { volumeId: true } });
+    expect((await prisma.trashedBytes.findFirstOrThrow({ where: { accountId: s.id } })).volumeId).toBe(volumeId);
+    await forgetTrashedBefore(prisma, new Date(Date.now() + 1_000), [volumeId]);
     expect((await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [second], targetId: "root", mode: "copy" } })).status).toBe(200);
   });
 });

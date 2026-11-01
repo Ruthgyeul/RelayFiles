@@ -39,6 +39,20 @@ export class StorageTargetExistsError extends Error {
   }
 }
 
+/** One item of a tree to copy, by its folder names below the copied item (empty: the item itself). */
+export interface CopyEntry {
+  segments: readonly string[];
+  type: "file" | "folder";
+}
+
+/** {@link StorageDriver.stageCopy}: an item of the tree is not on disk as the database says (it changed meanwhile). */
+export class StorageEntryMissingError extends Error {
+  constructor() {
+    super("An item to copy is not on the volume.");
+    this.name = "StorageEntryMissingError";
+  }
+}
+
 export interface SpaceInfo {
   total: bigint;
   available: bigint;
@@ -65,8 +79,15 @@ export interface StorageDriver {
    * the file is gone or has another size, no hard links): the caller then places its own bytes.
    */
   linkExisting(from: StorageLocation, to: StorageLocation, size: number): Promise<boolean>;
-  /** Copies an item into the temp area (hard links when deduplicating, else reflinks when possible) and returns its path, for {@link moveIntoPlace}. */
-  stageCopy(from: StorageLocation): Promise<string>;
+  /**
+   * Copies an item into the temp area (hard links when deduplicating, else reflinks when possible)
+   * and returns its path, for {@link moveIntoPlace}. Only `entries` are copied, the rows the
+   * database holds for the item (the item itself has empty segments; parents before children),
+   * so the copy matches the rows it is recorded with: a file added on disk meanwhile is not
+   * copied, and one that is gone fails with {@link StorageEntryMissingError}. A staged copy
+   * counts as fresh for the daily cleanup from when staging started, whatever its files' times.
+   */
+  stageCopy(from: StorageLocation, entries: readonly CopyEntry[]): Promise<string>;
   /** Removes a staged copy or upload from the temp area (missing is fine). */
   discardStaged(tempPath: string): Promise<void>;
   rename(from: StorageLocation, to: StorageLocation): Promise<void>;
@@ -95,7 +116,7 @@ export interface StorageDriver {
   removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void>;
   /**
    * Permanently removes trash entries moved there before `trashBefore` and unfinished uploads
-   * last written before `uploadsBefore`. Returns how many entries were removed.
+   * last written (staged copies: staged) before `uploadsBefore`. Returns how many entries were removed.
    */
   purgeSystem(trashBefore: Date, uploadsBefore: Date, transcodedBefore: Date): Promise<{ trash: number; uploads: number; transcoded: number }>;
   /** Removes every generated file of an account (account deletion). */

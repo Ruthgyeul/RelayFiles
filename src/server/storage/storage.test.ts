@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buffer } from "node:stream/consumers";
@@ -11,7 +11,7 @@ const { UnsafePathError, resolveInsideUserRoot } = await import("./safe-path");
 const { checkVolume, initVolume, readVolumeMarker } = await import("./volume");
 const { withStorageTransaction } = await import("./storage-transaction");
 const { layoutOf } = await import("./layout");
-const { StorageTargetExistsError } = await import("./driver");
+const { StorageEntryMissingError, StorageTargetExistsError } = await import("./driver");
 
 const ACCOUNT = "abcdefghjkmn";
 const OTHER = "pqrstuvwxyz2";
@@ -153,6 +153,43 @@ describe("LocalVolumeDriver", () => {
     expect((await stat(join(user, "g.txt"))).nlink).toBe(3);
     expect(await driver.linkExisting(at("A", "B", "f.txt"), at("h.txt"), 5)).toBe(false);
     expect(await driver.linkExisting(at("gone.txt"), at("h.txt"), 4)).toBe(false);
+  });
+
+  it("stages only the listed entries, refuses one that is gone, and cleans up its staging folder", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    const user = join(root, "users", ACCOUNT);
+    await mkdir(join(user, "A", "B"), { recursive: true });
+    await writeFile(join(user, "A", "B", "f.txt"), "same");
+    await writeFile(join(user, "A", "stray.txt"), "not listed");
+    const entries = [
+      { segments: [], type: "folder" },
+      { segments: ["B"], type: "folder" },
+      { segments: ["B", "f.txt"], type: "file" },
+    ] as const;
+    const staged = await driver.stageCopy(at("A"), entries);
+    expect(await readdir(staged)).toEqual(["B"]);
+    expect(await readFile(join(staged, "B", "f.txt"), "utf8")).toBe("same");
+    await driver.discardStaged(staged);
+    expect(await readdir(layoutOf(root).uploads)).toEqual([]);
+
+    await expect(driver.stageCopy(at("A"), [...entries, { segments: ["gone.txt"], type: "file" }])).rejects.toThrow(StorageEntryMissingError);
+    expect(await readdir(layoutOf(root).uploads)).toEqual([]);
+  });
+
+  it("keeps a staged copy of an old file through the daily cleanup", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    await driver.ensureUserRoot(ACCOUNT);
+    const file = join(root, "users", ACCOUNT, "old.txt");
+    await writeFile(file, "from last year");
+    const longAgo = new Date(Date.now() - 400 * 24 * 3_600_000);
+    await utimes(file, longAgo, longAgo);
+    // Hard links keep the original's mtime; the staging folder's own time is what counts.
+    const staged = await driver.stageCopy(at("old.txt"), [{ segments: [], type: "file" }]);
+    const now = new Date();
+    const purged = await driver.purgeSystem(now, new Date(now.getTime() - 3_600_000), now);
+    expect(purged.uploads).toBe(0);
+    expect(await readFile(staged, "utf8")).toBe("from last year");
   });
 
   it("refuses to copy a folder with a symbolic link inside", async () => {
