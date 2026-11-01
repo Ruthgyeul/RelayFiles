@@ -96,19 +96,6 @@ function shareTags(root: NodeRow, now: number): SettingTag[] {
   return tags;
 }
 
-/** Index of a visible tree: rows by id and children per folder. */
-function indexTree(rows: readonly SharedRow[]) {
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  const children = new Map<string, SharedRow[]>();
-  for (const row of rows) {
-    if (!row.parentId || !byId.has(row.parentId)) continue;
-    const siblings = children.get(row.parentId);
-    if (siblings) siblings.push(row);
-    else children.set(row.parentId, [row]);
-  }
-  return { byId, children };
-}
-
 /** An item below the link that visitors of the link may not reach: private, protected by its own password, or expired. */
 const closedBelowLink = (row: ChainRow, now: number) => row.visibility === "PRIVATE" || row.passwordHash !== null || (row.expAt !== null && row.expAt.getTime() <= now);
 
@@ -387,8 +374,7 @@ export async function assertSharedFolderZippable(shared: SharedFolder, now: numb
 export async function sharedFolderTree(shared: SharedFolder, now: number) {
   const rows = await publicTree(db(), shared.folder.id, new Date(now), zipReadLimit());
   assertZipSize(rows.length);
-  const { byId, children } = indexTree(rows);
-  return { rows, children, wayAbove: wayAboveInTree(shared.folder, shared.aboveFolder, byId) };
+  return { rows, wayAbove: wayAboveInTree(shared.folder, shared.aboveFolder, new Map(rows.map((row) => [row.id, row]))) };
 }
 
 export type SharedFolderTree = Awaited<ReturnType<typeof sharedFolderTree>>;

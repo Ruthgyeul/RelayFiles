@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER, SUBTITLE_PARAM } from "@/contracts/api";
 import { isSubtitleName } from "@/domain/subtitles";
+import { subtreePaths } from "@/domain/subtree";
 import { effectiveRange, parseRange, zipName } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadBlock, type DownloadDecision } from "@/domain/share-access";
 import type { NodeKind } from "@/domain/tree";
@@ -248,24 +249,22 @@ const SKIP_REASONS: Record<ZipSkip, string> = {
 };
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
-function zipPlan({ link, folder }: SharedFolder, { children, wayAbove }: SharedFolderTree, owner: AccountRow, busy: Map<string, Busy>) {
+function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolderTree, owner: AccountRow, busy: Map<string, Busy>) {
   const files: { row: SharedRow; name: string; segments: string[]; skip: ZipSkip | null }[] = [];
   const folders: string[] = [];
-  const walk = (row: SharedRow, inZip: string[], onDisk: string[]) => {
-    for (const child of children.get(row.id) ?? []) {
-      const name = [...inZip, child.name].join("/");
-      const segments = [...onDisk, child.name];
-      if (child.type === "FOLDER") {
-        folders.push(name);
-        walk(child, [...inZip, child.name], segments);
-        continue;
-      }
-      const imageBlock = stripsImage(owner, child) ? publicImageBlock(child) : null;
-      const skip = link.isOwner ? imageBlock : (downloadBlockOf(child, wayAbove(child), busy.get(child.id)) ?? imageBlock);
-      files.push({ row: child, name, segments, skip });
+  for (const { row, segments } of subtreePaths(rows, folder.id)) {
+    // The folder itself is the zip's top folder, named in every entry.
+    if (row.id === folder.id) continue;
+    const name = [folder.name, ...segments].join("/");
+    if (row.type === "FOLDER") {
+      folders.push(name);
+      continue;
     }
-  };
-  return { files, folders, walk: () => walk(folder, [folder.name], []) };
+    const imageBlock = stripsImage(owner, row) ? publicImageBlock(row) : null;
+    const skip = link.isOwner ? imageBlock : (downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? imageBlock);
+    files.push({ row, name, segments, skip });
+  }
+  return { files, folders };
 }
 
 /** "Not included.txt": each left-out file with the reason, so a zip never silently drops files. */
@@ -294,7 +293,6 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
     now,
   );
   const plan = zipPlan(shared, tree, owner, busy);
-  plan.walk();
 
   if (!link.isOwner) {
     const claimed = await claimDownload(db(), shared.counted);

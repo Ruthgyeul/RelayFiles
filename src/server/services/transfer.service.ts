@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { TransferResult } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { uniqName } from "@/domain/names";
+import { subtreePaths, type TreeRow } from "@/domain/subtree";
 import { segmentsBelowRoot } from "@/domain/tree";
 import { db, Prisma } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
@@ -68,19 +69,13 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
 }
 
 /**
- * What a copied tree holds on disk, by folder names below its top (parents before children, as
- * subtreeRowsOf returns them). Files flagged missing have nothing to copy; their copies keep the flag.
+ * What a copied tree holds on disk, by folder names below its top (parents before children).
+ * Files flagged missing have nothing to copy; their copies keep the flag.
  */
-function copyEntries(tree: readonly { id: string; parentId: string | null; name: string; type: "FILE" | "FOLDER"; missing: boolean }[], topId: string): CopyEntry[] {
-  const segments = new Map<string, string[]>();
-  const entries: CopyEntry[] = [];
-  for (const row of tree) {
-    const own = row.id === topId ? [] : [...segments.get(row.parentId!)!, row.name];
-    segments.set(row.id, own);
-    if (row.type === "FILE" && row.missing) continue;
-    entries.push({ segments: own, type: row.type === "FILE" ? "file" : "folder" });
-  }
-  return entries;
+function copyEntries(tree: readonly (TreeRow & { type: "FILE" | "FOLDER"; missing: boolean })[], topId: string): CopyEntry[] {
+  return subtreePaths(tree, topId)
+    .filter(({ row }) => !(row.type === "FILE" && row.missing))
+    .map(({ row, segments }) => ({ segments, type: row.type === "FILE" ? "file" : "folder" }));
 }
 
 /**

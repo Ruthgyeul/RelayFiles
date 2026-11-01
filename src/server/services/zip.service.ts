@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { zipEntryName } from "@/domain/archive";
 import { contentDisposition, zipName } from "@/domain/serving";
+import { subtreePaths } from "@/domain/subtree";
 import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
 import { LazyReadable } from "../http/lazy-readable";
@@ -80,13 +81,10 @@ export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
   let bytes = 0n;
   for (const { row: item, chain } of selected) {
     const base = segmentsBelowRoot(chain);
-    const rows = trees.get(item.id) ?? [];
-    const pathOf = new Map<string, string[]>([[item.id, base]]);
-    for (const row of rows) {
-      if (row.id !== item.id) pathOf.set(row.id, [...pathOf.get(row.parentId!)!, row.name]);
-      const segments = pathOf.get(row.id)!;
+    for (const { row, segments: below } of subtreePaths(trees.get(item.id) ?? [], item.id)) {
+      const segments = [...base, ...below];
       // Entries sit under the selected item's own name ("Trip/day1/a.jpg"); a selected file is just its name.
-      const name = item.type === "FILE" ? item.name : [item.name, ...segments.slice(base.length)].join("/");
+      const name = item.type === "FILE" ? item.name : [item.name, ...below].join("/");
       if (row.type !== "FILE") {
         entries.push({ name, folder: true });
         continue;
