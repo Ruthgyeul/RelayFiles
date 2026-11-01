@@ -28,6 +28,8 @@ interface Budget extends ScopeLimit {
 /** Skip the account quota and the anonymous total (an admin import with --ignore-quota). */
 export interface SpaceOptions {
   quotas?: boolean;
+  /** Unfinished uploads whose reservation already covers part of the bytes checked (left out of the reserved total). */
+  covering?: ReadonlySet<string>;
 }
 
 const scopesOf = (accountId: string, volumeId: string): ReservationScope[] => [{ kind: "account", id: accountId }, { kind: "volume", id: volumeId }, { kind: "anon" }];
@@ -73,7 +75,7 @@ async function budgetsOf(owner: SpaceOwner, volume: SpaceVolume, { quotas = true
 /** Refuses `bytes` that would not fit, counting uploads that started but have not finished. */
 export async function assertSpace(owner: SpaceOwner, bytes: number, volume: SpaceVolume, options: SpaceOptions = {}): Promise<void> {
   for (const budget of await budgetsOf(owner, volume, options)) {
-    const reserved = await reservedBytes(budget.scope);
+    const reserved = await reservedBytes(budget.scope, Date.now(), options.covering);
     if (budget.limit !== null && reserved + BigInt(bytes) > budget.limit) throw budget.full(reserved);
   }
 }

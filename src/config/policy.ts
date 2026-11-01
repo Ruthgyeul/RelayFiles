@@ -128,6 +128,11 @@ export const SEARCH = {
 } as const;
 
 export const UPLOAD = {
+  /**
+   * Earlier unfinished uploads of the same file (tus fingerprint) a new batch asks the server
+   * to continue, newest first, before it sends the file from the start.
+   */
+  resumeCandidates: 3,
   /** tus chunk size; stays below Cloudflare's 100 MB request limit. */
   chunkSizeMb: 50,
   /** Incomplete upload chunks older than this are removed. */

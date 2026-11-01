@@ -1,4 +1,7 @@
+import { writeFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
+import { parseEnvGroup } from "../src/config/env";
+import { BYTES_PER_MB } from "../src/domain/quota";
 import { expect, test } from "./fixtures";
 import { names, openFiles } from "./helpers";
 
@@ -88,4 +91,53 @@ test("lists each file of a batch and cancels one while the others finish", async
   await expect(panel.getByText("1 OF 1 FILE · 2 CANCELLED")).toBeVisible();
   await expect(list.getByRole("listitem").filter({ hasText: "second.txt" })).toContainText("Uploaded");
   await expect.poll(() => names(page)).toEqual(["second.txt"]);
+});
+
+test("asks before leaving mid-upload and continues the same file after a reload", async ({ page }, testInfo) => {
+  // One chunk (UPLOAD_CHUNK_SIZE_MB) plus a little: the second chunk is held, so a reload comes mid-upload.
+  const chunk = parseEnvGroup("uploads", process.env).UPLOAD_CHUNK_SIZE_MB * BYTES_PER_MB;
+  const path = testInfo.outputPath("resume.bin");
+  await writeFile(path, Buffer.alloc(chunk + 1024, 7));
+  await openFiles(page);
+
+  let hold = true;
+  let reached: () => void = () => undefined;
+  const secondChunk = new Promise<void>((resolve) => (reached = resolve));
+  const offsets: string[] = [];
+  let creates = 0;
+  await page.route("**/api/uploads/tus/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "POST") creates += 1;
+    if (request.method() === "PATCH") {
+      offsets.push(request.headers()["upload-offset"] ?? "");
+      if (hold && request.headers()["upload-offset"] !== "0") {
+        reached();
+        return; // Never answered: the reload cuts it off.
+      }
+    }
+    await route.continue().catch(() => undefined);
+  });
+
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles(path);
+  await secondChunk;
+  expect(creates).toBe(1);
+
+  const asked = new Promise<string>((resolve) => page.once("dialog", (dialog) => void dialog.accept().then(() => resolve(dialog.type()))));
+  await page.reload();
+  expect(await asked).toBe("beforeunload");
+  await expect(page.getByRole("heading", { level: 1, name: "root" })).toBeVisible();
+
+  hold = false;
+  const resumed = page.waitForResponse((response) => response.url().endsWith("/api/uploads/resume"));
+  const again = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await again).setFiles(path);
+  expect((await resumed).status()).toBe(200);
+  await expect(page.getByRole("region", { name: "Transfers" }).getByText("COMPLETE")).toBeVisible({ timeout: 30_000 });
+  // No second upload was created; the last chunk continued from where the first one ended.
+  expect(creates).toBe(1);
+  expect(offsets.at(-1)).toBe(String(chunk));
+  await expect.poll(() => names(page)).toEqual(["resume.bin"]);
 });

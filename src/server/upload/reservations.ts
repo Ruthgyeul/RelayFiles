@@ -69,13 +69,22 @@ export async function reserveUpload(uploadId: string, size: number, limits: read
   return full === 0 ? null : (limits[full - 1] ?? null);
 }
 
-/** Bytes reserved by unfinished uploads in a scope (lapsed reservations do not count). */
-export async function reservedBytes(scope: ReservationScope, now = Date.now()): Promise<bigint> {
+/** Live reservations of a scope (lapsed ones are left out): upload id and size. */
+export async function liveReservations(scope: ReservationScope, now = Date.now()): Promise<{ uploadId: string; size: bigint }[]> {
   const [at, sizes] = keysOf(scope) as [string, string];
   const live = await redis().zrangebyscore(at, now, "+inf");
-  if (live.length === 0) return 0n;
+  if (live.length === 0) return [];
   const values = await redis().hmget(sizes, ...live);
-  return values.reduce((sum, value) => sum + BigInt(value ?? 0), 0n);
+  return live.map((uploadId, index) => ({ uploadId, size: BigInt(values[index] ?? 0) }));
+}
+
+/**
+ * Bytes reserved by unfinished uploads in a scope (lapsed reservations do not count), leaving
+ * out the uploads in `except`.
+ */
+export async function reservedBytes(scope: ReservationScope, now = Date.now(), except: ReadonlySet<string> = new Set()): Promise<bigint> {
+  const live = await liveReservations(scope, now);
+  return live.reduce((sum, entry) => (except.has(entry.uploadId) ? sum : sum + entry.size), 0n);
 }
 
 /** Drops an upload's reservation once it finished (its bytes now count as used) or was cancelled. */

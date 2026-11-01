@@ -12,7 +12,7 @@ import { logger } from "../logger";
 import { layoutOf } from "../storage/layout";
 import { releaseSpace } from "../services/space.service";
 import { checkUploadStart, finalizeUpload } from "../services/upload.service";
-import { forgetUpload, loadBatch, setUploadOwner, setUploadRequest, uploadOwner, uploadRequest, type UploadBatch } from "./batches";
+import { forgetUpload, loadBatch, reboundSlot, setUploadOwner, setUploadRequest, uploadOwner, uploadRequest, type UploadBatch, type UploadSlot } from "./batches";
 import { recordRequestUpload, releaseRequestRoom, requestFor, reserveRequestRoom } from "./request-uploads";
 import { markActive } from "../metrics/activity";
 import { RedisLocker } from "./redis-locker";
@@ -46,11 +46,17 @@ async function senderOf(req: Request, batch: UploadBatch | null, starting: boole
   return { owner: request.account, request };
 }
 
-function slotOf(upload: Upload): { batchId: string; slot: number } {
+/** The batch slot from the upload's tus metadata (where it was created). */
+function createdSlotOf(upload: Upload): UploadSlot {
   const batchId = upload.metadata?.[UPLOAD_METADATA.batch] ?? "";
   const slot = Number(upload.metadata?.[UPLOAD_METADATA.index]);
   if (!batchId || !Number.isInteger(slot) || slot < 0) throw tusError("BAD_REQUEST");
   return { batchId, slot };
+}
+
+/** Where a finished upload goes: the batch it was handed to after a reload, else the one it was created for. */
+async function slotOf(upload: Upload): Promise<UploadSlot> {
+  return (await reboundSlot(upload.id)) ?? createdSlotOf(upload);
 }
 
 /** Upload locks shared by every app process (one locker for all volumes' servers). */
@@ -68,7 +74,7 @@ function createServer(volumeId: string, mountPath: string): Server {
     // Uploads come from this site's own pages; other origins get no CORS headers (default: any).
     allowedOrigins: [new URL(getEnv("app").PUBLIC_URL).origin],
     async onUploadCreate(req, upload) {
-      const { batchId, slot } = slotOf(upload);
+      const { batchId, slot } = createdSlotOf(upload);
       const batch = await loadBatch(batchId);
       const { owner, request } = await senderOf(req, batch, true);
       if (request) await reserveRequestRoom(request, upload.id, upload.size ?? 0).catch(rethrow);
@@ -91,7 +97,7 @@ function createServer(volumeId: string, mountPath: string): Server {
       if (req.method === "PATCH") void markActive("upload", uploadId);
     },
     async onUploadFinish(req, upload) {
-      const { batchId, slot } = slotOf(upload);
+      const { batchId, slot } = await slotOf(upload);
       const batch = await loadBatch(batchId);
       if (!batch) throw tusError("NOT_FOUND", "This upload has expired. Start it again.");
       const { owner } = await senderOf(req, batch, false);
@@ -143,4 +149,16 @@ export function tusServerFor(volume: { id: string; mountPath: string }): Server 
   const server = releaseOnTerminate(createServer(volume.id, volume.mountPath), volume.id);
   servers.set(volume.id, { mountPath: volume.mountPath, server });
   return server;
+}
+
+/** An upload still in a volume's upload area: bytes received, declared length and file name; or null. */
+export async function storedUpload(volume: { id: string; mountPath: string }, uploadId: string): Promise<{ offset: number; size: number; fileName: string | null } | null> {
+  try {
+    const upload = await tusServerFor(volume).datastore.getUpload(uploadId);
+    if (upload.size === undefined) return null;
+    return { offset: upload.offset, size: upload.size, fileName: upload.metadata?.[UPLOAD_METADATA.filename] ?? null };
+  } catch {
+    // Unknown, removed by the maintenance job, or its data file is gone.
+    return null;
+  }
 }

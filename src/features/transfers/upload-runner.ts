@@ -1,5 +1,7 @@
-import { DetailedError, Upload } from "tus-js-client";
+import { defaultOptions, DetailedError, Upload, type UploadOptions } from "tus-js-client";
+import { UPLOAD } from "@/config/policy";
 import { UPLOAD_METADATA } from "@/contracts/uploads";
+import { resumeCandidates } from "./resume-candidates";
 
 export interface BatchPlan {
   batchId: string;
@@ -24,9 +26,18 @@ export interface FileEvents {
   onFileCancelled?: (slot: number) => void;
 }
 
+/** Continuing uploads a reload interrupted (signed-in uploads; upload-only links start over). */
+export interface ResumeOptions {
+  /** Keeps one account's stored uploads apart from another's on a shared device (the account id). */
+  scope: string;
+  /** Asks the server to hand an earlier unfinished upload to this batch's file `slot`; false when it can't. */
+  claim: (batchId: string, slot: number, uploadId: string) => Promise<boolean>;
+}
+
 export interface RunnerOptions {
   /** A failed file is reported and the next one starts, instead of stopping the batch. */
   continueOnError?: boolean;
+  resume?: ResumeOptions;
 }
 
 /** Waits before retrying a failed chunk (connection drops); 4xx answers are not retried. */
@@ -65,6 +76,10 @@ export class BatchUploader {
   private readonly skipped = new Set<number>();
   private failed = 0;
   private firstError: string | undefined;
+  /** The current upload once it was decided whether it continues an earlier one (it may then start). */
+  private settled: Upload | null = null;
+  /** Earlier uploads this batch already continues (two equal files must not share one). */
+  private readonly claimed = new Set<string>();
 
   constructor(
     private readonly plan: BatchPlan,
@@ -87,8 +102,9 @@ export class BatchUploader {
   resume(): void {
     if (!this.paused || this.cancelled) return;
     this.paused = false;
-    if (this.current) this.current.start();
-    else this.next();
+    if (!this.current) this.next();
+    // Still being decided: it starts once that is done.
+    else if (this.current === this.settled) this.current.start();
   }
 
   /** Stops the batch and asks the server to discard the unfinished file. */
@@ -134,6 +150,9 @@ export class BatchUploader {
       chunkSize: this.chunkSize,
       retryDelays: RETRY_DELAYS_MS,
       removeFingerprintOnSuccess: true,
+      // Stored in localStorage only where a later batch may continue it.
+      storeFingerprintForResuming: this.options.resume !== undefined,
+      ...this.fingerprintOption(),
       metadata: {
         [UPLOAD_METADATA.batch]: this.plan.batchId,
         [UPLOAD_METADATA.index]: String(slot),
@@ -171,6 +190,40 @@ export class BatchUploader {
       },
     });
     this.current = upload;
-    upload.start();
+    void this.settle(upload, file, slot);
+  }
+
+  private fingerprintOption(): Pick<UploadOptions, "fingerprint"> {
+    const scope = this.options.resume?.scope;
+    if (!scope) return {};
+    return { fingerprint: async (file, options) => `${await defaultOptions.fingerprint(file, options)}-${scope}` };
+  }
+
+  /**
+   * Continues an earlier unfinished upload of the same file when the server hands it to this
+   * slot (the page was reloaded mid-upload), then starts. Stored uploads the server refuses
+   * (finished, expired, changed) are forgotten.
+   */
+  private async settle(upload: Upload, file: File, slot: number): Promise<void> {
+    const resume = this.options.resume;
+    if (resume) {
+      try {
+        const stored = await upload.findPreviousUploads();
+        for (const candidate of resumeCandidates(stored, file.size, this.plan.endpoint, this.claimed, UPLOAD.resumeCandidates)) {
+          if (this.current !== upload || this.cancelled) return;
+          if (await resume.claim(this.plan.batchId, slot, candidate.uploadId)) {
+            this.claimed.add(candidate.uploadId);
+            upload.resumeFromPreviousUpload(candidate.stored);
+            break;
+          }
+          await defaultOptions.urlStorage.removeUpload(candidate.stored.urlStorageKey);
+        }
+      } catch {
+        // Storage blocked or the server unreachable: send the file from the start.
+      }
+    }
+    if (this.current !== upload || this.cancelled) return;
+    this.settled = upload;
+    if (!this.paused) upload.start();
   }
 }
