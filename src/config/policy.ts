@@ -549,6 +549,24 @@ export const NOTIFY = {
   stateTtlSec: 24 * 60 * 60,
 } as const;
 
+/**
+ * Installed app (PWA) and Web Share Target (docs/architecture.md "설치 앱과 공유 대상"). Files
+ * shared from another app are posted to `action`; the service worker (public/sw.js, which repeats
+ * these values: pwa.test.ts checks) keeps them in memory and opens `page`, which uploads them.
+ */
+export const SHARE_TARGET = {
+  /** Where the share sheet posts the files (manifest share_target.action). */
+  action: "/share-target/receive",
+  /** The page that shows the shared files and uploads them to a new Home folder. */
+  page: "/share-target",
+  /** Form field of the shared files (manifest share_target.params.files.name). */
+  filesField: "files",
+  /** The service worker drops shared files no page has picked up after this long (browsers stop an idle worker after 5 minutes). */
+  holdMs: 3 * 60_000,
+  /** The page stops waiting for the service worker's answer after this long. */
+  claimTimeoutMs: 5_000,
+} as const;
+
 /** k3s deployment (deploy/scripts/k3s/deploy.sh). */
 export const K3S = {
   /** App replicas on the one storage node; more add memory, not storage throughput. */

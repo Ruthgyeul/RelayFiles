@@ -102,7 +102,7 @@ describe("proxy", () => {
   it("runs for every page and API path, skipping static files only outside /api", async () => {
     const { config } = await import("./proxy");
     const matches = (url: string) => unstable_doesMiddlewareMatch({ config, url });
-    for (const url of ["/", "/files", "/admin/accounts", "/api/admin/accounts", "/api/admin/x.png", "/api/nodes/abc.svg", "/d/abc"]) expect(matches(url), url).toBe(true);
-    for (const url of ["/_next/static/chunks/a.js", "/icon.svg", "/fonts/a.woff2", "/logo.png", "/api/uploads/tus/vol/123"]) expect(matches(url), url).toBe(false);
+    for (const url of ["/", "/files", "/admin/accounts", "/api/admin/accounts", "/api/admin/x.png", "/api/nodes/abc.svg", "/d/abc", "/share-target", "/manifest.webmanifest", "/sw.js"]) expect(matches(url), url).toBe(true);
+    for (const url of ["/_next/static/chunks/a.js", "/icon.svg", "/fonts/a.woff2", "/logo.png", "/icons/icon-192.png", "/api/uploads/tus/vol/123", "/share-target/receive"]) expect(matches(url), url).toBe(false);
   });
 });

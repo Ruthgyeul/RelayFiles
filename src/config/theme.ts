@@ -25,3 +25,10 @@ export const DEFAULT_THEME: ThemeKey = "sky";
 export function isThemeKey(value: string): value is ThemeKey {
   return Object.hasOwn(THEMES, value);
 }
+
+/**
+ * Colors of the installed app's window (web app manifest, `theme-color`): the default theme's
+ * `--bg` (splash screen) and `--header` (title bar), docs/design/spec.md "Slate Sky". A manifest
+ * cannot follow the theme chosen on the Server page; tokens.test.ts checks these against themes.css.
+ */
+export const APP_WINDOW = { background: "#0f1419", theme: "#12181e" } as const;

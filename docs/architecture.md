@@ -89,6 +89,17 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - 업로드(`BatchUploader`): 대기 중인 파일을 취소하면 건너뛰고, 보내는 중인 파일은 `abort(true)`(tus DELETE → 서버가 예약을 풀고 조각을 지움) 후 다음 파일로 넘어간다. 다 올라간 파일은 취소 대상이 아니다(지우기로 지운다). 웹 앱 배치는 파일 하나가 실패해도 멈추지 않고 나머지를 보낸 뒤 "N of M files failed"로 끝난다(`continueOnError`). 업로드 링크 페이지(`/r/<id>`)는 예전처럼 첫 실패에서 멈춘다. 웹 앱 배치는 tus 지문(`tus-js-client` 기본 지문 + 계정 id, localStorage)을 저장해 두고, 새로고침 뒤 같은 파일을 다시 고르면 파일마다 `findPreviousUploads()`에서 크기·엔드포인트가 같은 최근 업로드(`UPLOAD.resumeCandidates`개까지)를 `POST /api/uploads/resume`으로 넘겨받은 뒤 `resumeFromPreviousUpload()`로 이어 보낸다. 서버가 거절한 저장 항목은 지운다. 업로드가 보내는 중이거나 일시 정지인 동안에만 `beforeunload`로 페이지를 떠나기 전에 확인한다(`shared/hooks/useLeaveGuard`, 업로드 링크 페이지도 같다).
 - 다운로드: 단일 파일·zip은 예전처럼 브라우저 다운로드에 맡긴다(진행률을 볼 수 없어 "saving in your browser"). 여러 항목을 선택해 Download를 누르면 File System Access API가 있는 브라우저(Chromium, https 또는 localhost)에서는 저장할 폴더를 고르게 하고(`FolderDownloader`), 파일마다 `fetch` 응답을 `createWritable()`로 바로 흘려 쓴다(메모리에 쌓지 않음). 폴더는 `<이름>.zip`으로 받고 크기는 추정치다. 같은 이름이 있으면 덮어쓰지 않고 `name (2).ext`로 저장한다. 취소·실패한 파일의 부분 파일은 지운다. Safari·Firefox는 예전 방식.
 
+### 설치 앱과 공유 대상 (PWA, Web Share Target)
+
+- **매니페스트**: `src/app/manifest.ts` → `/manifest.webmanifest`(빌드 때 한 번 만드는 정적 파일, 모든 페이지에 `<link rel="manifest">`). `display: standalone`, 창 색은 기본 테마 Slate Sky의 `--bg`·`--header`(`config/theme.ts` `APP_WINDOW`, `tokens.test.ts`가 `themes.css`와 대조. 서버에서 고른 테마는 따르지 않는다). 아이콘은 `src/app/icon.svg`를 `scripts/pwa-icons.mts`(sharp)로 그린 PNG를 커밋한다: `public/icons/icon-192.png`·`icon-512.png`(any), `maskable-512.png`(모서리 없음, 화살표는 이미 안전 영역 안), `src/app/apple-icon.png`(180px, iOS). 아이콘을 바꾸면 `npx tsx scripts/pwa-icons.mts`를 다시 실행한다.
+- **공유 대상**: 매니페스트의 `share_target`은 모든 형식의 파일(`*/*`)을 `POST /share-target/receive`(multipart, 필드 `files`)로 받는다. 세션 쿠키가 `SameSite=Lax`라 다른 앱(OS 공유 시트)이나 다른 사이트가 시작한 POST 이동에는 쿠키가 붙지 않으므로, 서버는 이 요청으로 누구의 Home인지 알 수 없다. 그래서 서비스 워커가 받는다.
+  1. `public/sw.js`(`(app)` 레이아웃의 `RegisterServiceWorker`가 등록, scope `/`, `updateViaCache: "none"`, 응답 `Cache-Control: no-cache`)가 같은 출처의 그 POST만 가로채 `formData()`의 `files`를 메모리 `Map`에 두고 303으로 `/share-target?share=<uuid>`를 연다. 다른 요청은 건드리지 않고(가로채지 않음) 아무것도 캐시하지 않는다.
+  2. 페이지(`features/pwa/ShareTargetPage.tsx`, `domain/share-target.ts`)가 `MessageChannel`로 그 id의 파일을 한 번 받는다(`share-handoff.ts`, 워커는 건넨 뒤 지운다. 아무도 가져가지 않으면 `SHARE_TARGET.holdMs`(3분) 뒤 지운다). 같은 효과가 다시 돌아도(Strict Mode, 로그인 뒤 새로고침) 첫 답을 다시 쓴다.
+  3. 파일 이름·크기 목록과 "Upload to Home" 버튼을 보여 준다. 로그인한 계정이 없으면 "Sign in"(셸의 로그인 대화상자)을 띄우고 파일은 페이지에 그대로 둔다. 누르면 Home 카드와 같은 업로드(`HOME_TARGET`, `POST /api/uploads` → tus)를 시작한다. 크기·쿼터·항목 수 제한은 일반 업로드와 같고, 거절되면 토스트로 알리고 파일은 페이지에 남는다. 서버가 새 폴더를 만들면(`onStart`) 파일 관리자의 그 폴더로 `router.replace`하고 업로드는 전송 패널에서 이어진다.
+  - 버튼을 눌러야만 올리는 이유: 서비스 워커는 다른 사이트의 폼이 보낸 POST도 똑같이 가로챈다(요청만으로는 공유 시트와 구별할 수 없다). 자동으로 올리면 남의 파일이 로그인한 사람의 Home에 들어간다.
+  - 서비스 워커가 받지 않은 POST(설치 직후 워커가 아직 없음, http LAN 접속처럼 보안 컨텍스트가 아님)는 `src/app/(app)/share-target/receive/route.ts`가 본문을 읽지 않고 303으로 `/share-target?error=unavailable`("Sharing isn't ready yet")에 보낸다. 아무것도 저장하지 않는다. 프록시는 이 경로를 건너뛴다(본문을 버퍼링하지 않게).
+- Nginx는 `/manifest.webmanifest`, `/sw.js`, `/icons/*`, `/share-target*`을 다른 페이지처럼 `location /`으로 앱에 넘긴다(따로 막는 규칙 없음). 점검 모드에서는 503이라 브라우저가 기존 워커를 그대로 쓴다.
+
 ## 교체 가능한 인터페이스
 
 | 인터페이스 | 현재 구현 | 확장 |

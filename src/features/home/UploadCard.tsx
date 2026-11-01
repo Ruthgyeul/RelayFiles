@@ -2,11 +2,9 @@
 
 import { useState, type DragEvent } from "react";
 import { entriesFromDrop, hasFiles } from "@/features/transfers/read-drop";
-import { useTransfers } from "@/features/transfers/transfers-context";
+import { HOME_TARGET as HOME, useTransfers } from "@/features/transfers/transfers-context";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
-
-const HOME = { ref: "home", name: "Home" } as const;
 
 /** Home "Upload files" card: every upload gets its own folder and share link. */
 export function UploadCard() {

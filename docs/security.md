@@ -122,6 +122,14 @@
 - 호스트 이름(DNS 리바인딩): Nginx는 `SERVER_NAME`(공백으로 여러 개)과 `127.0.0.1`(릴리스 스크립트의 헬스 체크)로 온 요청만 앱에 넘기고, 다른 `Host`는 응답 없이 연결을 끊는다(444). Docker·k3s 템플릿은 `default_server`가 이 일을 하고(`SERVER_NAME=_`이면 모든 이름을 받는다), systemd는 `install.sh`가 다른 기본 사이트가 없을 때 `relayfiles-catchall.conf`를 넣는다.
 - k3s: 앱 Pod는 NetworkPolicy로 Nginx Pod와 워커(Status 페이지 프로브)의 연결만 받는다. 앱은 `X-Real-IP`·`CF-Connecting-IP`로 방문자 주소를 정하므로(관리자 대역, 로그인·잠금 해제 제한), 클러스터의 다른 Pod가 앱에 직접 붙어 이 헤더를 꾸미지 못하게 한다. k3s 내장 정책 컨트롤러(kube-router)가 적용한다(`--disable-network-policy`로 띄운 서버에서는 적용되지 않는다).
 
+## 설치 앱 · 공유 대상 · 서비스 워커
+
+- **공유 대상 POST**(`/share-target/receive`)는 서버가 받지 않는다. 세션 쿠키는 `SameSite=Lax`라 OS 공유 시트나 다른 사이트가 시작한 POST 이동에는 붙지 않고, 붙는다 해도 다른 사이트의 폼이 같은 요청을 만들 수 있다(CSRF). 서버 라우트는 본문을 읽지 않고 아무것도 저장하지 않은 채 303으로 설명 페이지에 보낸다. 프록시는 본문 버퍼링을 피하려고 이 경로를 건너뛴다(CSRF 검사는 `/api/` 쓰기에만 있고, 이 라우트는 쓰는 것이 없다).
+- **서비스 워커**(`public/sw.js`)가 같은 출처의 그 POST만 가로채 파일을 메모리에만 두고(Cache Storage·IndexedDB 없음) `/share-target?share=<무작위 uuid>`를 연다. 파일은 같은 출처의 페이지가 `MessageChannel`로 그 id를 물을 때 한 번만 건네고, 아무도 가져가지 않으면 `SHARE_TARGET.holdMs`(3분) 뒤 버린다. 워커는 그 밖의 요청을 가로채지 않고, 캐시하지 않고, 스스로 네트워크 요청을 하지 않는다(`pwa.test.ts`가 `caches`·`indexedDB`·`importScripts`·`fetch(`가 없는지 검사). 비공개 파일이나 페이지가 기기에 남지 않는다.
+- **올리기는 사용자가 누를 때만**: 서비스 워커는 공유 시트의 POST와 다른 사이트 폼의 POST를 구별할 수 없다. 공유 페이지는 받은 파일의 이름·크기와 올릴 계정("Uploading as …")을 보여 주고 "Upload to Home"을 눌러야 일반 업로드(로그인한 세션 쿠키, `POST /api/uploads` → tus, 같은 쿼터·크기·항목 수 제한)를 시작한다. 페이지는 프레임에 넣을 수 없으므로(`frame-ancestors 'none'`, `X-Frame-Options: DENY`) 다른 사이트가 버튼을 대신 누르게 할 수 없다. 로그인한 계정이 없으면 로그인 대화상자를 띄우고 파일은 페이지에만 둔다.
+- 등록은 보안 컨텍스트(https, localhost)에서만 한다. CSP `worker-src 'self'`라 같은 출처의 `/sw.js`만 워커가 될 수 있고, 워커 응답에도 프록시의 CSP가 붙는다. `/sw.js`는 `Cache-Control: no-cache`로 방문할 때마다 새 버전을 확인한다.
+- 매니페스트·아이콘은 공개 정적 파일이다(계정 정보 없음).
+
 ## 응답 헤더·자원 제한
 
 - 모든 응답(`next.config.ts`): `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`(공유 링크 URL이 다른 사이트로 새지 않게), `Permissions-Policy`(카메라·마이크·위치·결제·USB 끔).

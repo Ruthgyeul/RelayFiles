@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { THEME_KEYS } from "@/config/theme";
+import { APP_WINDOW, DEFAULT_THEME, THEME_KEYS } from "@/config/theme";
 import { FIXED_COLOR, KIND_COLOR, THEME_COLOR, TONE } from "./palette";
 
 const themesCss = readFileSync("src/shared/styles/themes.css", "utf8");
@@ -52,5 +52,12 @@ describe("palette.ts", () => {
   it("never contains raw color values", () => {
     const source = readFileSync("src/shared/styles/palette.ts", "utf8");
     expect(source).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
+  });
+});
+
+describe("installed app colors", () => {
+  it("are the default theme's background and header", () => {
+    const sky = parseBlocks(themesCss).get(`:root[data-theme="${DEFAULT_THEME}"]`)!;
+    expect(APP_WINDOW).toEqual({ background: sky["--bg"], theme: sky["--header"] });
   });
 });

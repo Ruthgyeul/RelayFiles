@@ -11,6 +11,16 @@ export interface UploadTarget {
   name: string;
 }
 
+/** A Home upload: every batch gets its own new folder and share link. */
+export const HOME_TARGET: UploadTarget = { ref: "home", name: "Home" };
+
+export interface UploadOptions {
+  /** Called once the server prepared the batch, with the folder the files go to (they are still uploading). */
+  onStart?: (folder: { id: string; name: string }) => void;
+  /** Called when nothing was started (the server refused the batch, or every name was skipped); a toast says why. */
+  onRefused?: () => void;
+}
+
 /** A download handed to the browser: what the panel shows about it. */
 export interface DownloadRequest {
   url: string;
@@ -52,7 +62,7 @@ export interface TransfersContextValue {
   lastUpload: { folderId: string; name: string } | null;
   pickFiles: (target: UploadTarget) => void;
   pickFolder: (target: UploadTarget) => void;
-  upload: (entries: UploadEntry[], target: UploadTarget) => void;
+  upload: (entries: UploadEntry[], target: UploadTarget, options?: UploadOptions) => void;
   download: (request: DownloadRequest) => void;
   /**
    * Saves items into a folder the user picks, with per-file progress and cancel. Must be called

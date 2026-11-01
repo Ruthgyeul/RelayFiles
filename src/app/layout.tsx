@@ -5,6 +5,7 @@ import "@fontsource-variable/figtree/index.css";
 import "@fontsource-variable/jetbrains-mono/index.css";
 import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import { connection } from "next/server";
+import { APP_WINDOW } from "@/config/theme";
 import { currentTheme } from "@/server/services/server-settings.service";
 import "@/shared/styles/globals.css";
 
@@ -18,6 +19,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   colorScheme: "dark",
+  // The installed app's title bar, like the manifest (app/manifest.ts).
+  themeColor: APP_WINDOW.theme,
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
