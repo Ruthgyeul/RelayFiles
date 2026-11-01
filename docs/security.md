@@ -22,6 +22,22 @@
 - `server/logger.ts`의 `redact()`가 `token`, `password`, `secret`, `authorization`, `cookie`, `ip`, `x-forwarded-for`, `cf-connecting-ip` 키의 값을 `[redacted]`로 바꾼다.
 - 운영 로그 레벨은 warn 이상, 파일은 `LOG_DIR`(기본 `/var/log/relayfiles`)에 쓴다.
 
+## 알림 (웹훅)
+
+관리자가 `.env`에 넣은 `NOTIFY_WEBHOOK_URL` 한 곳으로만 보낸다([runbook.md "알림 설정"](runbook.md#알림-설정)). 방문자나 계정이 받는 곳을 정할 수 없다.
+
+| 보내는 것 | 보내지 않는 것 |
+|---|---|
+| 업로드 링크: 소유 계정 이름, 링크 제목, 파일 이름·크기(묶음이면 개수·합계) | 방문자 IP·기기·브라우저, 링크 URL·id, 폴더 id·경로, 파일 내용, 비밀번호 |
+| 볼륨: 볼륨 id, 여유 바이트, 예비 비율, 원인 종류(표시 파일 없음·다른 볼륨·쓰기 불가) | 마운트 경로 등 내부 경로, 디스크 오류 원문 |
+| 백업 검증: 덤프 파일 이름, 문제 목록(`backupProblems`의 문장: 시각, 스키마 이름, 행 수, fsck 차이 수, restic 결과) | 복원 DB 연결 문자열, 계정·파일 이름 |
+| 모든 알림: 사이트 origin(`PUBLIC_URL`), 시각, 제목 | 토큰, 쿠키, 세션 |
+
+- 주소 검사(`env.ts`): https, 또는 LAN 호스트로 가는 http만 받는다(평문이 인터넷을 지나지 않게). URL에 사용자·비밀번호를 넣을 수 없고, 비밀값은 `NOTIFY_WEBHOOK_TOKEN`(`Authorization: Bearer`)으로 따로 둔다. Discord·Telegram은 URL 자체가 비밀이므로 로그·오류 메시지에 URL을 넣지 않는다(`webhook answered 401`, `webhook not reached: ECONNREFUSED`처럼 상태·오류 코드만).
+- 요청: 워커만 보낸다(웹 요청 안에서 외부로 나가지 않는다). `AbortSignal.timeout(NOTIFY.requestTimeoutMs)`, 리디렉트는 따라가지 않고 실패로 본다(다른 호스트로 보내지는 일이 없다). 응답 본문은 읽지 않고 버린다.
+- 내용 주입: 이름의 제어 문자(줄바꿈 등)는 공백으로 바꾼다. Discord는 `allowed_mentions: { parse: [] }`로 `@everyone` 같은 이름이 아무도 부르지 않게 하고, Telegram은 `parse_mode` 없이 평문으로 보낸다. ntfy 헤더(제목·우선순위)에는 고정 문구만 넣는다.
+- 양: 업로드 링크 알림은 링크마다 60초에 한 번으로 묶이고(방문자가 파일 1만 개를 올려도 메시지는 몇 개), 볼륨 경보는 종류·볼륨마다 반복 제한이 있다.
+
 ## API
 
 - 예상하지 못한 예외는 응답에 내용을 싣지 않는다(`apiHandler`). 요청 id로 로그를 찾는다.

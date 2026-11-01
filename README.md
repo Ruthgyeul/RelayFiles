@@ -13,6 +13,7 @@ Fast and easy file sharing system. A private file drop for sharing and streaming
 - Admin pages: accounts, live server metrics, sign-up mode, theme, announcements and an audit log of admin actions
 - Several storage volumes with volume moves, layout migrations and `storage:fsck`; a public Status page
 - Personal API tokens for scripts (`/api/v1`)
+- Owner notifications through a webhook (generic JSON, ntfy, Discord, Telegram): files received through an upload-only link, a storage volume low, offline or not writable, a failed backup check
 
 ## Stack
 

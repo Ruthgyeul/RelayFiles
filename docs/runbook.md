@@ -125,6 +125,43 @@ sudo rsync -aHAX /tmp/rf-restore/<STORAGE_ROOT>/users/ <STORAGE_ROOT>/users/
 15 5 * * 0 cd /opt/relayfiles && deploy/scripts/systemd/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
 ```
 
+## 알림 설정
+
+`NOTIFY_WEBHOOK_URL`을 설정하면 워커가 다음 일을 웹훅으로 알린다(비우면 끈다). 앱·프로브·스크립트는 `notify` 큐에 넣기만 하고 HTTP 호출은 워커가 한다.
+
+| 알림 | 언제 | 반복 제한 (`src/config/policy.ts`의 `NOTIFY`) |
+|---|---|---|
+| File received / Files received | 업로드 링크(`/r/<id>`)로 파일이 들어옴. 첫 파일부터 `fileRequestGroupSec`(60초) 안에 들어온 파일을 한 번에(이름은 `fileRequestListMax`(10)개까지, 나머지는 개수) | 링크마다 60초에 한 번 |
+| Storage volume low | ACTIVE 볼륨의 여유 공간이 업로드 검사의 예비 공간(`STORAGE_RESERVE_PERCENT`, 볼륨별 `reservePct`) 아래 → 그 볼륨 업로드가 거절됨 | 볼륨마다 `volumeLowRepeatHours`(12시간) |
+| Storage volume not writable | 표시 파일은 읽히는데 쓰기가 안 됨(오류 후 읽기 전용으로 다시 마운트된 ext4 등) | 볼륨마다 `volumeReadOnlyRepeatHours`(6시간) |
+| Storage volume offline / back online | 볼륨 확인이 `OFFLINE`으로 바꾸거나 `ACTIVE`로 되돌림(["SSD가 빠졌을 때"](#ssd가-빠졌을-때)) | 볼륨·종류마다 `volumeStatusRepeatMinutes`(30분) |
+| Backup check failed | `npm run backup:verify`가 실패 기록(["백업 검증"](#백업-검증)) | 실행마다 한 번 |
+
+볼륨 공간·쓰기 확인은 알림이 켜져 있을 때만 볼륨 확인(`VOLUME_WATCH_INTERVAL_SEC`, 30초)마다 한다. 반복 제한은 Redis 키(`notify:throttle:*`)라 Redis를 비우면 다시 한 번 온다.
+
+`.env`:
+
+```bash
+# ntfy (휴대폰 앱): 길고 추측하기 어려운 토픽 이름. 자체 호스팅 ntfy는 LAN 주소의 http도 된다
+NOTIFY_WEBHOOK_URL=https://ntfy.sh/relayfiles-<무작위 문자열>
+NOTIFY_WEBHOOK_FORMAT=ntfy
+NOTIFY_WEBHOOK_TOKEN=            # ntfy 접근 토큰(tk_...)을 쓰면 Authorization: Bearer로 보낸다
+
+# Discord: 채널 설정 → 연동 → 웹후크 URL
+NOTIFY_WEBHOOK_FORMAT=discord
+# Telegram: @BotFather로 만든 봇. URL에 봇 토큰이 들어간다
+NOTIFY_WEBHOOK_URL=https://api.telegram.org/bot<봇 토큰>/sendMessage
+NOTIFY_WEBHOOK_FORMAT=telegram
+NOTIFY_TELEGRAM_CHAT_ID=<채팅 id>
+# 그 밖: json(기본) → {"event","title","message","urgent","at","site","data"}를 POST
+```
+
+- URL은 https, 또는 LAN 호스트(127.x, 10.x, 172.16–31.x, 192.168.x, 100.64–127.x(Tailscale), 점 없는 이름, `*.local`·`*.lan`·`*.internal`·`*.home.arpa`)로 가는 http만 받는다. URL에 `user:password@`를 넣지 않는다(토큰은 `NOTIFY_WEBHOOK_TOKEN`). 값이 틀리면 워커가 시작하지 않는다(`npm run env:check`로 미리 확인).
+- 바꾼 뒤 앱과 워커를 재시작한다(둘 다 같은 `.env`를 읽는다. 앱은 업로드 링크 알림을 큐에 넣고 워커가 보낸다).
+- 호출은 `NOTIFY.requestTimeoutMs`(10초)에서 끊고, 리디렉트는 따라가지 않는다(3xx = 설정 오류, 최종 주소를 넣는다). 실패하면 `NOTIFY.jobAttempts`(6)번까지 1분부터 지수 backoff로 다시 시도한다(약 30분). 4xx(408·429 제외)는 다시 시도하지 않는다(URL·토큰이 틀림).
+- 실패는 `worker-error.log`에 `notification failed`(작업 이름, 시도 횟수, `webhook answered 401` 같은 이유)로 남는다. URL, 토큰, 응답 본문은 로그에 남지 않는다.
+- 확인: 업로드 링크를 하나 만들어 파일을 올리면 1분 안에 "File received"가 온다. 큐: `$C exec redis redis-cli -n <REDIS_DB> --scan --pattern '*q:notify:*' | head`.
+
 ## Prometheus·Grafana
 
 `/metrics`가 서버 지표를 Prometheus 형식으로 내보낸다. 관리자 계정으로 My Profile → **API tokens**에서 `Server metrics (admins)` 범위만 있는 토큰을 만들고, Prometheus가 `ADMIN_ALLOWED_CIDRS` 안(예: LAN)에서 긁게 한다.
@@ -217,7 +254,7 @@ $C restart app worker nginx
 
 컨테이너를 재시작하면 앱이 SSD의 `.relayfiles-volume` 표시 파일을 다시 확인하고(Status 페이지 Storage가 정상으로 돌아온다) 정상으로 동작한다. 빈 마운트 지점(내장 디스크)에는 쓰지 않는다.
 
-워커는 `VOLUME_WATCH_INTERVAL_SEC`(기본 30초)마다 ACTIVE 볼륨의 표시 파일을 확인한다(`probes` 큐: 매일 정리가 도는 중에도 멈추지 않는다). 없거나 다른 볼륨이면 그 볼륨을 `OFFLINE`으로 바꾸고 `storage volume went offline` 에러 로그를 남긴다. 다시 마운트되면 다음 확인에서 `ACTIVE`로 돌아온다(`READONLY`·`DRAINING`은 건드리지 않는다).
+워커는 `VOLUME_WATCH_INTERVAL_SEC`(기본 30초)마다 ACTIVE 볼륨의 표시 파일을 확인한다(`probes` 큐: 매일 정리가 도는 중에도 멈추지 않는다). 없거나 다른 볼륨이면 그 볼륨을 `OFFLINE`으로 바꾸고 `storage volume went offline` 에러 로그를 남긴다. 다시 마운트되면 다음 확인에서 `ACTIVE`로 돌아온다(`READONLY`·`DRAINING`은 건드리지 않는다). 알림을 켜 두었으면(["알림 설정"](#알림-설정)) 두 경우 모두 웹훅으로 알린다.
 
 ## DB와 디스크 대조 (storage:fsck)
 
@@ -323,7 +360,7 @@ SSD가 빠졌거나 디스크 I/O 오류가 난 동안 처리하던 사진·영�
 
 ### 작업 큐 기록 (Redis)
 
-`maintenance`(매일 정리)와 `probes`(표본·헬스 프로브·볼륨 확인) 큐는 끝난 작업을 최근 100개, 실패한 작업을 최근 1,000개만 남긴다(`JOBS.keepCompleted`·`keepFailed`). 이 한도가 생기기 전 릴리스는 모든 작업을 남겨 Redis에 하루 5,700개쯤 쌓였다. 업데이트한 뒤 첫 워커 시작에서 하루 넘은 기록을 1,000개씩 지우므로(`old finished jobs removed` 로그) 시작이 몇 초 늦을 수 있다. 확인:
+`maintenance`(매일 정리), `probes`(표본·헬스 프로브·볼륨 확인), `notify`(알림) 큐는 끝난 작업을 최근 100개, 실패한 작업을 최근 1,000개만 남긴다(`JOBS.keepCompleted`·`keepFailed`). 이 한도가 생기기 전 릴리스는 모든 작업을 남겨 Redis에 하루 5,700개쯤 쌓였다. 업데이트한 뒤 첫 워커 시작에서 하루 넘은 기록을 1,000개씩 지우므로(`old finished jobs removed` 로그) 시작이 몇 초 늦을 수 있다. 확인:
 
 ```bash
 $C exec redis redis-cli -n <REDIS_DB> --scan --pattern '*q:*' | wc -l   # 큐 키 수: 작업마다 키가 하나 이상, 수백 개 안팎이 정상

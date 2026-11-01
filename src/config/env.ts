@@ -40,6 +40,36 @@ const secondsList = z
   .transform((value) => value.split(",").map((item) => Number(item.trim())))
   .pipe(z.array(z.number().int().positive()).min(1));
 
+/** IPv4 ranges a LAN service answers on: loopback, RFC 1918, link-local, CGNAT (Tailscale). */
+const LAN_IPV4 = /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/;
+/** Names only a LAN resolves: one label (a compose service such as `ntfy`) or a local suffix. */
+const LAN_NAME = /^([a-z0-9-]+|.+\.(local|lan|internal|home\.arpa))$/i;
+
+/** True for a host that cannot be reached from the internet, so plain http to it stays on the LAN. */
+export function isLanHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host.includes(":")) return host === "::1" || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return LAN_IPV4.test(host);
+  return LAN_NAME.test(host);
+}
+
+/**
+ * Where owner notifications are posted: https anywhere, or plain http to a LAN host (a self-hosted
+ * ntfy next to the server). No user:password in the URL (fetch refuses it; use NOTIFY_WEBHOOK_TOKEN).
+ */
+const webhookUrl = z.url().superRefine((value, ctx) => {
+  // z.url() has reported a value that does not parse; the refinement still runs.
+  if (!URL.canParse(value)) return;
+  const url = new URL(value);
+  if (url.username || url.password) ctx.addIssue({ code: "custom", message: "must not contain a user name or password (use NOTIFY_WEBHOOK_TOKEN)" });
+  if (url.protocol === "https:") return;
+  if (url.protocol !== "http:" || !isLanHost(url.hostname)) {
+    ctx.addIssue({ code: "custom", message: "must be https, or http to a LAN host (127.x, 10.x, 172.16-31.x, 192.168.x, 100.64-127.x, *.local, *.lan)" });
+  }
+});
+
+export const NOTIFY_FORMATS = ["json", "ntfy", "discord", "telegram"] as const;
+
 export const ENV_GROUPS = {
   app: z.object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -209,6 +239,24 @@ export const ENV_GROUPS = {
         .optional(),
     })
     .refine((env) => !env.RESTIC_REPOSITORY || env.RESTIC_PASSWORD, { message: "RESTIC_PASSWORD is required with RESTIC_REPOSITORY", path: ["RESTIC_PASSWORD"] }),
+  notify: z
+    .object({
+      /** Owner notifications (file requests, low or offline volumes, failed backup checks). Empty: off. */
+      NOTIFY_WEBHOOK_URL: webhookUrl.optional(),
+      /** Body the receiver expects: generic JSON, ntfy (topic URL), Discord webhook, Telegram Bot API sendMessage. */
+      NOTIFY_WEBHOOK_FORMAT: z.enum(NOTIFY_FORMATS).default("json"),
+      /** Sent as `Authorization: Bearer <token>` (an ntfy access token, a generic receiver's secret). */
+      NOTIFY_WEBHOOK_TOKEN: z.string().min(1).optional(),
+      /** Telegram only: the chat the bot writes to (numeric id or @channel). */
+      NOTIFY_TELEGRAM_CHAT_ID: z
+        .string()
+        .regex(/^(-?\d+|@\w{5,})$/, "must be a numeric chat id or @channelname")
+        .optional(),
+    })
+    .refine((env) => env.NOTIFY_WEBHOOK_FORMAT !== "telegram" || !env.NOTIFY_WEBHOOK_URL || env.NOTIFY_TELEGRAM_CHAT_ID, {
+      message: "NOTIFY_TELEGRAM_CHAT_ID is required with NOTIFY_WEBHOOK_FORMAT=telegram",
+      path: ["NOTIFY_TELEGRAM_CHAT_ID"],
+    }),
   testing: z.object({
     E2E_PORT: port.default(3100),
     E2E_BASE_URL: z.url().optional(),

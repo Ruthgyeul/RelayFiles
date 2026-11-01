@@ -515,6 +515,40 @@ export const BACKUP = {
   checksKept: 52,
 } as const;
 
+/**
+ * Owner notifications through a webhook (NOTIFY_WEBHOOK_URL; docs/runbook.md "알림 설정"). The
+ * worker sends them from the `notify` queue; the app and scripts only queue them.
+ */
+export const NOTIFY = {
+  /** The webhook call gives up after this long (connect and response). */
+  requestTimeoutMs: 10_000,
+  /**
+   * A failed call is tried again with exponential backoff from jobBackoffMs: 6 attempts span about
+   * 30 minutes, long enough for a phone hotspot or the receiver to come back. 4xx answers other
+   * than 408 and 429 are not retried (the URL or token is wrong).
+   */
+  jobAttempts: 6,
+  jobBackoffMs: 60_000,
+  /** Notifications sent at once (one receiver; order does not matter). */
+  workerConcurrency: 1,
+  /**
+   * Files arriving through one upload-only link within this many seconds of the first are sent as
+   * one notification (a visitor's drop of 100 photos is one message, not 100).
+   */
+  fileRequestGroupSec: 60,
+  /** File names one notification lists; the rest are counted ("and 12 more"). */
+  fileRequestListMax: 10,
+  /** The same alert for the same volume is sent at most once per this window. */
+  volumeLowRepeatHours: 12,
+  volumeReadOnlyRepeatHours: 6,
+  /** Offline and back-online alerts of one volume (a loose cable must not flood the phone). */
+  volumeStatusRepeatMinutes: 30,
+  /** Longest message text per format (Discord allows 2,000 characters, Telegram 4,096, ntfy 4,096 bytes). */
+  maxChars: { json: 4_000, ntfy: 3_500, discord: 2_000, telegram: 4_000 },
+  /** Grouping and throttle keys in Redis expire after this long even if the worker never ran. */
+  stateTtlSec: 24 * 60 * 60,
+} as const;
+
 /** k3s deployment (deploy/scripts/k3s/deploy.sh). */
 export const K3S = {
   /** App replicas on the one storage node; more add memory, not storage throughput. */
