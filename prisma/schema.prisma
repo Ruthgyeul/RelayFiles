@@ -76,6 +76,7 @@ model Account {
   traffic              TrafficDaily[]
   apiTokens            ApiToken[]
   fileRequests         FileRequest[]
+  deletedItems         DeletedItem[]
 
   @@index([volumeId])
 }
@@ -368,6 +369,41 @@ model TrashedBytes {
 
   @@index([accountId])
   @@index([trashedAt])
+}
+
+/// An item deleted from the File Manager, shown under "Recently deleted" until the daily job empties
+/// the trash it is in (STORAGE.trashRetentionHours, docs/architecture.md "휴지통"). Restoring puts its
+/// rows back with the same ids and links and moves its files out of the trash. Link activity and
+/// upload links of the deleted items are not kept.
+model DeletedItem {
+  id               String   @id
+  accountId        String
+  account          Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Volume whose trash holds the item (the account's volume when it was deleted).
+  volumeId         String
+  /// Where the item waits in that trash (what StorageDriver.moveToTrash returned).
+  trashPath        String
+  /// The TrashedBytes row holding this item's file bytes, removed on restore; null without files.
+  trashedBytesId   String?
+  /// The deleted item itself (the top of the snapshot).
+  name             String
+  type             NodeType
+  kind             FileKind?
+  /// Bytes of every file in it.
+  size             BigInt
+  /// Files and folders in the snapshot, the item itself included.
+  itemCount        Int
+  /// The folder it was in; restored there while it exists, else into the account root.
+  originalParentId String?
+  /// Folder names from the account root down to that folder when it was deleted, for display.
+  originalPath     String[] @default([])
+  deletedAt        DateTime @default(now())
+  /// The Node rows of the item and everything inside it, parents before children
+  /// (server/repositories/deleted-item.repo.ts NodeSnapshot).
+  nodes            Json
+
+  @@index([accountId, deletedAt])
+  @@index([deletedAt])
 }
 
 /// One run of deploy/scripts/verify-backup.sh: the newest dump restored into a scratch database
