@@ -1,6 +1,6 @@
 # RelayFiles
 
-Fast and easy file sharing system. A private file drop for sharing and streaming media from a self-hosted server: upload, get a link, and let it expire on a date or after a set number of downloads.
+Fast and easy file sharing system. A private file drop for sharing and streaming media from a self-hosted server: upload, get a link, and limit it to a set number of downloads (admins can also make it expire on a date or after the first download).
 
 ## Stack
 
@@ -28,7 +28,7 @@ Every npm script (development, checks, storage, volumes, keys) is listed with wh
 
 ## Documentation
 
-- [Deployment (Docker)](docs/deploy-ubuntu.md) · [Deployment (systemd)](docs/deploy-systemd.md) · [Runbook](docs/runbook.md)
-- [Architecture](docs/architecture.md)
+- [Deployment (Docker)](docs/deploy-ubuntu.md) · [Deployment (systemd)](docs/deploy-systemd.md) · [Deployment (k3s)](docs/deploy-k3s.md) · [Runbook](docs/runbook.md)
+- [Architecture](docs/architecture.md) · [Security](docs/security.md) · [API](docs/api.md)
 - [Design spec](docs/design/spec.md)
 - [Project rules for contributors and agents](CLAUDE.md)
