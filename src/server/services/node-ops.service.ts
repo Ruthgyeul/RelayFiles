@@ -1,4 +1,5 @@
 import "server-only";
+import { STORAGE } from "@/config/policy";
 import type { NodeItem } from "@/contracts/nodes";
 import { nameError, uniqName } from "@/domain/names";
 import { db } from "../db/client";
@@ -7,12 +8,12 @@ import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
 import { deleteNodes, findNode, findNodes, findRootFolder, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
-import { ancestorChain, subtreeRows } from "../repositories/node-tree.repo";
+import { ancestorChain, lockSubtrees } from "../repositories/node-tree.repo";
 import { recordTrashed } from "../repositories/trash.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { locationOf } from "./node-location";
 import { toNodeItem } from "./node.service";
-import { driverForAccount } from "./volume.service";
+import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
 /** The account an item operation acts for (its own items only). */
 export type NodeOwner = Pick<AccountRow, "id" | "volumeId" | "isAdmin" | "quotaBytes">;
@@ -51,6 +52,7 @@ export async function renameNode(owner: NodeOwner, nodeId: string, requested: st
   const to = { ...from, segments: [...from.segments.slice(0, -1), name] };
   try {
     const updated = await withStorageTransaction(db(), async (tx, undo) => {
+      await lockAccountForWrite(tx, owner.id, driver.volumeId);
       const result = await updateNode(tx, row.id, { name });
       await driver.rename(from, to);
       undo.push("undo rename", () => driver.rename(to, from));
@@ -81,8 +83,15 @@ export async function deleteItems(owner: NodeOwner, ids: string[]): Promise<{ de
   if (items.length === 0) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner, "write");
   const locations = await Promise.all(items.map((row) => locationOf(owner.id, row.id)));
-  const files = (await Promise.all(items.map((row) => subtreeRows(db(), row.id)))).flat().filter((row) => row.type === "FILE");
-  await withStorageTransaction(db(), async (tx, undo) => {
+  const files = await withStorageTransaction(db(), async (tx, undo) => {
+    await lockAccountForWrite(tx, owner.id, driver.volumeId);
+    // Counted from the rows this transaction deletes: nothing can be added below them meanwhile.
+    const rows = await lockSubtrees(
+      tx,
+      items.map((row) => row.id),
+      STORAGE.subtreeLockAttempts,
+    );
+    if (!rows) throw new ApiError("CONFLICT", "These items are changing. Try again.");
     await deleteNodes(
       tx,
       items.map((row) => row.id),
@@ -91,12 +100,14 @@ export async function deleteItems(owner: NodeOwner, ids: string[]): Promise<{ de
       const trashed = await driver.moveToTrash(location);
       undo.push("restore deleted item", () => driver.restoreFromTrash(trashed, location));
     }
+    const deleted = rows.filter((row) => row.type === "FILE");
     // The bytes stay on disk until the daily job empties the trash, and count until then.
     await recordTrashed(
       tx,
       owner.id,
-      files.reduce((sum, row) => sum + row.size, 0n),
+      deleted.reduce((sum, row) => sum + row.size, 0n),
     );
+    return deleted;
   });
   // Thumbnails and stripped copies are rebuilt on demand, so they are removed right away.
   await driver.removeAssets(owner.id, files.map((row) => row.id)).catch((error: unknown) => logger.warn("assets not removed", { error }));

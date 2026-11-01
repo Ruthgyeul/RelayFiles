@@ -12,7 +12,7 @@ import { StorageTargetExistsError, type StorageDriver, type StorageLocation } fr
 import { withStorageTransaction, type UndoStack } from "../storage/storage-transaction";
 import { locationOf } from "./node-location";
 import { requireFolder, type NodeOwner } from "./node-ops.service";
-import { driverForAccount } from "./volume.service";
+import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
 /** Random part of the temporary names of one run (hex). */
 const TEMP_TOKEN_BYTES = 6;
@@ -89,6 +89,7 @@ export async function applyRenumber(owner: NodeOwner, folderRef: string, input: 
 
   try {
     return await withStorageTransaction(db(), async (tx, undo) => {
+      await lockAccountForWrite(tx, owner.id, driver.volumeId);
       // Plans again after the lock: a second run waits here and sees the names the first one left.
       await lockFolderForRenumber(tx, folder.id);
       const { plan, names } = await planFor(tx, folder.id, input.sort, input.order);

@@ -3,11 +3,11 @@ import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { copyFile, link, lstat, mkdir, open, readdir, rename, rm, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import { getEnv } from "@/config/env";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { ASSET_DIRS, DIR_MODE, FILE_MODE, layoutOf, type VolumeLayout } from "./layout";
 import type { DiskEntry } from "@/domain/fsck";
-import { StorageTargetExistsError, type AssetKind, type AssetRef, type ByteSource, type SpaceInfo, type StorageDriver, type StorageLocation, type StorageStat } from "./driver";
+import { StorageEntryMissingError, StorageTargetExistsError, type AssetKind, type AssetRef, type ByteSource, type CopyEntry, type SpaceInfo, type StorageDriver, type StorageLocation, type StorageStat } from "./driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "./safe-path";
 
 /** "2026-10-06T03-12-00-000Z": when an item was moved to the trash (filename-safe ISO time). */
@@ -15,6 +15,8 @@ const trashStamp = (at: Date) => at.toISOString().replace(/[:.]/g, "-");
 const TRASH_STAMP = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-/;
 /** Hex characters of the random part of a trash entry name. */
 const TRASH_NONCE_LENGTH = 8;
+/** Name of the copied item inside its staging folder (`system/tmp/uploads/copy-<id>/item`). */
+const STAGED_ITEM = "item";
 
 function trashTime(name: string): number | null {
   const match = TRASH_STAMP.exec(name);
@@ -143,17 +145,41 @@ export class LocalVolumeDriver implements StorageDriver {
     }
   }
 
-  async stageCopy(from: StorageLocation): Promise<string> {
-    const source = await this.pathOf(from);
-    const target = join(this.layout.uploads, `copy-${randomUUID()}`);
+  async stageCopy(from: StorageLocation, entries: readonly CopyEntry[]): Promise<string> {
+    // The item's own path is checked like any other (inside the account root, no links).
+    await this.pathOf(from);
     await mkdir(this.layout.uploads, { recursive: true, mode: DIR_MODE });
-    await copyEntry(source, target);
+    // Its own new folder: the cleanup reads the folder's time, not the time of hard-linked files,
+    // which keep the original's (an old file copied just now must not look abandoned).
+    const dir = join(this.layout.uploads, `copy-${randomUUID()}`);
+    await mkdir(dir, { mode: DIR_MODE });
+    const target = join(dir, STAGED_ITEM);
+    try {
+      // Parents come before children, so every folder on a file's path was checked to be a real folder.
+      for (const entry of entries) {
+        const source = resolveInsideUserRoot(this.layout.root, from.accountId, [...from.segments, ...entry.segments]);
+        const info = await lstat(source).catch((error: unknown) => {
+          if (errorCode(error) === "ENOENT") return null;
+          throw error;
+        });
+        if (!info || (entry.type === "folder" ? !info.isDirectory() : !info.isFile())) throw new StorageEntryMissingError();
+        const copy = join(target, ...entry.segments);
+        if (entry.type === "folder") await mkdir(copy, { mode: DIR_MODE });
+        else await copyFileEntry(source, copy);
+      }
+    } catch (error) {
+      await rm(dir, { recursive: true, force: true });
+      throw error;
+    }
     return target;
   }
 
   async discardStaged(tempPath: string): Promise<void> {
-    if (!tempPath.startsWith(this.layout.uploads)) throw new Error("Only the volume's upload area holds staged files.");
-    await rm(tempPath, { recursive: true, force: true });
+    if (!tempPath.startsWith(this.layout.uploads + sep)) throw new Error("Only the volume's upload area holds staged files.");
+    // A staged copy sits in its own folder (copy-<id>/item): that folder goes with it.
+    const parent = dirname(tempPath);
+    const own = parent !== this.layout.uploads && dirname(parent) === this.layout.uploads;
+    await rm(own ? parent : tempPath, { recursive: true, force: true });
   }
 
   async rename(from: StorageLocation, to: StorageLocation): Promise<void> {
@@ -275,6 +301,8 @@ export class LocalVolumeDriver implements StorageDriver {
     let uploads = 0;
     for (const name of await entries(this.layout.uploads)) {
       const path = join(this.layout.uploads, name);
+      // The entry's own time: an upload's last write, or when a copy's staging folder was filled
+      // (never the time of the files inside it: hard links keep the original's).
       const info = await lstat(path).catch(() => null);
       if (!info || info.mtime >= uploadsBefore) continue;
       await rm(path, { recursive: true, force: true });

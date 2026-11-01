@@ -15,7 +15,7 @@ import { ancestorChain, descendantCounts, folderSizes } from "../repositories/no
 import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
-import { driverForAccount } from "./volume.service";
+import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
 
 const VISIBILITY: Record<NodeRow["visibility"], Visibility> = { INHERIT: "inherit", PRIVATE: "private", PUBLIC: "public" };
@@ -154,6 +154,7 @@ export async function createFolder(account: Pick<AccountRow, "id" | "volumeId" |
     const name = uniqName(await listSiblingNames(db(), parent.id), wanted, false);
     try {
       const row = await withStorageTransaction(db(), async (tx, undo) => {
+        await lockAccountForWrite(tx, account.id, driver.volumeId);
         const created = await createFolderNode(tx, { id: newNodeId(), accountId: account.id, parentId: parent.id, name, linkId: newLinkId() });
         const location = { accountId: account.id, segments: [...parentSegments, name] };
         await driver.createFolder(location);

@@ -45,6 +45,17 @@ export const STORAGE = {
    * Prisma's 5-second default then aborts the commit.
    */
   transactionTimeoutSec: 60,
+  /**
+   * Longest a volume move, a layout migration or `storage:fsck --fix` waits for the storage
+   * transactions already running on an account or volume (they hold its write lock) before it
+   * gives up, in seconds. Covers a long renumbering run (RENUMBER.transactionMsPerFile).
+   */
+  writeDrainTimeoutSec: 600,
+  /**
+   * Tries to lock a folder tree (a delete) or a file's folder chain (an upload linking to an
+   * existing copy) that keeps changing meanwhile, before giving up.
+   */
+  subtreeLockAttempts: 5,
 } as const;
 
 export const FILES = {
@@ -315,6 +326,12 @@ export const STATUS = {
 export const MIGRATION = {
   /** Rows processed per batch; progress is saved after each batch so a run can resume. */
   batchSize: 1_000,
+  /**
+   * Longest one `npm run data:migrate` run holds the lock that keeps a second run (a k3s job and
+   * a manual run) from processing the same batches, in hours. A longer run fails at the end and
+   * the next run resumes from its cursor.
+   */
+  runLockHours: 24,
 } as const;
 
 export const JOBS = {

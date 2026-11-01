@@ -123,12 +123,24 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - 볼륨 표시 파일이 없거나 `layoutVersion`이 코드와 다르면 그 볼륨에 쓰지 않는다(빈 마운트 지점에 쓰는 사고 방지). 워커가 `VOLUME_WATCH_INTERVAL_SEC`마다 확인해 `ACTIVE` ↔ `OFFLINE`을 바꾼다.
 - 계정은 볼륨 하나에 속하고, 새 계정은 여유 공간이 가장 큰 `ACTIVE` 볼륨에 배정된다. `StorageVolume.mountPath`에 마운트 경로를 저장하므로 경로를 바꾸면 `volume:init`으로 갱신한다.
 - 원본 파일은 수정하지 않는다. 공개 링크용 메타데이터 제거본과 미리보기는 `system/` 아래 별도 파일이다.
-- **중복 제거**(`STORAGE_DEDUPE`, 기본 켬): 원본을 수정하지 않으므로 같은 내용의 파일은 바이트를 공유해도 된다. 복사(`copyNodes`, 폴더 안의 파일까지)는 하드 링크로, 재업로드는 같은 계정에 SHA-256과 크기가 같은 파일이 있으면 그 파일의 하드 링크로 둔다(받은 바이트는 버린다). 하드 링크를 못 만드는 곳(다른 파일시스템, 링크 수 한도)에서는 reflink 또는 일반 복사로 돌아간다.
+- **중복 제거**(`STORAGE_DEDUPE`, 기본 켬): 원본을 수정하지 않으므로 같은 내용의 파일은 바이트를 공유해도 된다. 복사(`copyNodes`, 폴더 안의 파일까지, 처음 읽은 DB 행마다 하나씩 `system/tmp/uploads/copy-<id>/item`에 준비)는 하드 링크로, 재업로드는 같은 계정에 SHA-256과 크기가 같은 파일이 있으면 그 파일의 하드 링크로 둔다(받은 바이트는 버린다). 하드 링크를 못 만드는 곳(다른 파일시스템, 링크 수 한도)에서는 reflink 또는 일반 복사로 돌아간다.
   - 삭제·휴지통은 링크 하나만 옮기므로 다른 사본은 그대로다. 디스크 공간은 마지막 링크가 지워질 때 돌아온다.
   - 계정 용량·휴지통 용량은 사본마다 논리 크기로 센다(사용자가 보는 크기와 같다). 볼륨 여유 공간 검사만 실제 사용량을 본다.
   - 다른 계정의 파일과는 공유하지 않는다(계정 사이에 어떤 연결도 만들지 않는다).
   - `volume:migrate`는 파일마다 복사하므로 새 볼륨에서는 링크가 풀린다(내용은 SHA-256으로 대조). 백업 `rsync`에는 `-H`를 넣어 링크를 유지한다(runbook의 예시는 `-aHAX`).
 - **수정 시각**(`Node.modifiedAt`): 파일 내용이 마지막으로 바뀐 시각. 업로드는 브라우저의 `File.lastModified`(tus 메타데이터 `lastModified`), `storage:import`는 tar 항목의 mtime, 값이 없으면 업로드 시각을 쓴다. 복사본은 원본 값을 그대로 가진다. `updatedAt`은 이름·태그·설정 변경에도 바뀌므로 "수정일"로 쓰지 않는다. 이 컬럼이 생기기 전 파일은 데이터 마이그레이션 `20261101-backfill-modified-at`이 디스크 mtime으로 채운다(이름 변경·하드 링크는 mtime을 바꾸지 않는다).
+
+### 쓰기 잠금
+
+쓰기 허용 여부(`driverForAccount(…, "write")`)는 작업을 시작할 때 확인하지만, 복사 준비(`stageCopy`)나 업로드 해시처럼 오래 걸리는 일은 그 뒤에 쓴다. 그 사이 `volume:migrate`가 해시·복사·전환을 끝내면 새 파일이 떠나는 볼륨에만 남고 휴지통과 함께 지워진다. 그래서 PostgreSQL advisory lock(트랜잭션 단위, `repositories/advisory-lock.repo.ts`)으로 순서를 정한다.
+
+- **쓰는 쪽**: 파일을 바꾸는 모든 스토리지 트랜잭션은 첫 문장으로 `lockAccountForWrite(tx, accountId, driver.volumeId)`(`services/volume.service.ts`)를 부른다. 볼륨 → 계정 순으로 쓰기 잠금을 **공유**로 잡고(쓰기끼리는 막지 않는다) 계정의 `migrating`, 볼륨 상태(`READONLY`·`OFFLINE`), 계정이 아직 그 볼륨에 있는지를 다시 읽는다. 아니면 503 `STORAGE_BUSY`(또는 `STORAGE_OFFLINE`)로 롤백한다. 이름 변경, 이동, 복사, 삭제, 폴더 만들기, 순번 정리, 계정 삭제가 이렇게 한다. 업로드(tus, 업로드 링크, API v1 `POST /files`, `storage:import`)는 모두 `upload.service.ts`의 `ensureFolders`·`placeUpload` 트랜잭션을 거친다.
+- **이동**(`volume:migrate`): 계정 잠금을 **배타**로 잡은 트랜잭션에서 `migrating`을 켠다(`startAccountMove`). 진행 중인 쓰기 트랜잭션이 끝날 때까지 기다리고(최대 `STORAGE.writeDrainTimeoutSec`, 넘으면 아무것도 바꾸지 않고 실패), 그 뒤의 쓰기는 잠금을 잡은 다음 표시를 보고 거절된다. 전환 직전에 원본이 해시한 그대로인지(추가·삭제·크기 변화 없음), DB의 모든 항목(`missing` 표시 파일 제외)이 복사본에 있는지 다시 확인하고, 같은 배타 잠금 아래에서 `volumeId`를 바꾼다(`finishAccountMove`).
+- **레이아웃 마이그레이션·`storage:fsck --fix`**: 볼륨 잠금을 배타로 잡은 트랜잭션에서 볼륨을 `READONLY`로 바꾸고 돌아갈 상태를 `StorageVolume.resumeStatus`에 적는다(`startMaintenanceHold`). 끝나면 그 상태로 되돌린다(`endMaintenanceHold`, `setVolumeLayout`). 관리자가 `READONLY`로 둔 볼륨은 `READONLY`로 남고, 중단 뒤 다시 실행해도 첫 실행 전 상태(`DRAINING` 등)를 안다.
+- **삭제**는 같은 트랜잭션에서 지울 트리를 위에서 아래로 `FOR UPDATE` 잠그고(`lockSubtrees`) 잠근 행으로 휴지통 바이트를 센다. 잠긴 폴더 아래에는 외래 키 확인 때문에 새 행이 들어올 수 없다.
+- **중복 제거 링크**: 업로드가 같은 내용의 파일(twin)에 하드 링크할 때는 트랜잭션 안에서 `lockedLocationOf(tx, accountId, twinId)`(`services/node-location.ts`)로 twin과 조상 폴더를 `FOR SHARE`로 잠그고 경로를 계산한다. 커밋 전에는 그 경로의 이름 변경·이동·삭제가 기다린다. 잠금 순서는 삭제와 같이 루트에서 아래로라 서로 교착되지 않는다.
+- **데이터 마이그레이션**: `npm run data:migrate` 한 번이 advisory lock(`run:data-migrations`)을 쥐고 돈다(`MIGRATION.runLockHours`까지). 두 번째 실행(k3s Job과 수동 실행)은 기다렸다가 끝난 단계를 건너뛴다.
+- 생성 파일(썸네일·미리보기·변환본) 쓰기는 이 잠금을 쓰지 않는다. 이동 중에 만들어져 빠지더라도 다시 만들 수 있다.
 
 ### 순번 정리 (Renumber files)
 

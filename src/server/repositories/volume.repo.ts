@@ -3,7 +3,7 @@ import type { DbClient } from "../db/client";
 // The enum, not the storage/driver.ts interface of the same name.
 import type { StorageDriver as DriverKind, VolumeStatus } from "../db/generated/client";
 
-const VOLUME_SELECT = { id: true, driver: true, mountPath: true, status: true, reservePct: true } as const;
+const VOLUME_SELECT = { id: true, driver: true, mountPath: true, status: true, reservePct: true, resumeStatus: true } as const;
 
 export function listActiveVolumes(db: DbClient) {
   return db.storageVolume.findMany({
@@ -54,9 +54,19 @@ export async function switchVolumeStatus(db: DbClient, volumeId: string, expecte
   return count > 0;
 }
 
-/** Records a finished layout migration and the status the volume returns to. */
+/** Records a finished layout migration and the status the volume returns to (ending its hold). */
 export async function setVolumeLayout(db: DbClient, volumeId: string, layoutVersion: number, status: VolumeStatus): Promise<void> {
-  await db.storageVolume.update({ where: { id: volumeId }, data: { status, layoutVersion } });
+  await db.storageVolume.update({ where: { id: volumeId }, data: { status, layoutVersion, resumeStatus: null } });
+}
+
+/** Makes a volume READONLY for maintenance and remembers the status it returns to afterwards. */
+export async function holdVolumeReadOnly(db: DbClient, volumeId: string, resumeStatus: VolumeStatus): Promise<void> {
+  await db.storageVolume.update({ where: { id: volumeId }, data: { status: "READONLY", resumeStatus } });
+}
+
+/** Ends a maintenance hold: the volume returns to the status it had before. */
+export async function endVolumeHold(db: DbClient, volumeId: string, status: VolumeStatus): Promise<void> {
+  await db.storageVolume.update({ where: { id: volumeId }, data: { status, resumeStatus: null } });
 }
 
 /**

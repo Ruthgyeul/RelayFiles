@@ -51,13 +51,16 @@ export async function runMaintenance(now: Date) {
   const transcodedBefore = new Date(now.getTime() - TRANSCODE.cacheKeepDays * MS.day);
   let trash = 0;
   let uploads = 0;
+  const emptied: string[] = [];
   for (const volume of await listPurgeableVolumes(db())) {
     const purged = await driverFor(volume).purgeSystem(trashBefore, uploadsBefore, transcodedBefore);
     trash += purged.trash;
     uploads += purged.uploads;
+    emptied.push(volume.id);
   }
   // The same cut-off as the trash itself: those bytes no longer count toward anyone's storage.
-  await forgetTrashedBefore(db(), trashBefore).catch((error: unknown) => logger.warn("trash records not purged", { error }));
+  // Only on the volumes emptied above; a READONLY or OFFLINE volume still holds its trash.
+  await forgetTrashedBefore(db(), trashBefore, emptied).catch((error: unknown) => logger.warn("trash records not purged", { error }));
   await purgeOldAuditEvents(now).catch((error: unknown) => logger.warn("audit log not purged", { error }));
   return { ...cleanup, trash, uploads };
 }

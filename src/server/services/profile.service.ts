@@ -16,7 +16,7 @@ import { withStorageTransaction } from "../storage/storage-transaction";
 import { listApiTokens } from "./api-token.service";
 import { revealToken } from "./auth.service";
 import { deleteItems } from "./node-ops.service";
-import { driverForAccount } from "./volume.service";
+import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
 
 export async function listDevices(accountId: string, currentSessionId: string): Promise<DeviceDto[]> {
@@ -111,6 +111,7 @@ export async function deleteOwnAccount(owner: AccountRow): Promise<void> {
 export async function deleteAccount(owner: AccountRow, guard?: (tx: DbClient) => Promise<void>): Promise<void> {
   const driver = await driverForAccount(owner, "write");
   await withStorageTransaction(db(), async (tx, undo) => {
+    await lockAccountForWrite(tx, owner.id, driver.volumeId);
     await guard?.(tx);
     await deleteAccountRow(tx, owner.id);
     const location = { accountId: owner.id, segments: [] };

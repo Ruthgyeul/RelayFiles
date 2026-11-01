@@ -38,6 +38,9 @@ model StorageVolume {
   /// Directory layout version; must match the code (docs/runbook.md "스토리지 레이아웃").
   layoutVersion Int           @default(1)
   reservePct    Int           @default(5)
+  /// Status to return to when a maintenance hold ends (npm run storage:migrate, storage:fsck --fix keep
+  /// the volume READONLY meanwhile). Null when no hold is running; set while it is, also after a failed run.
+  resumeStatus  VolumeStatus?
   createdAt     DateTime      @default(now())
   accounts      Account[]
 }
@@ -358,6 +361,9 @@ model TrashedBytes {
   accountId String
   account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   bytes     BigInt
+  /// Volume whose trash holds the bytes (the account's volume when they were trashed). Rows from
+  /// before this column use the account's current volume.
+  volumeId  String?
   trashedAt DateTime @default(now())
 
   @@index([accountId])

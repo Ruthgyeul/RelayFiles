@@ -1,12 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import { DB_WRITE } from "@/config/policy";
 import { Prisma } from "./client";
-import { isUniqueViolation, retryOnUniqueViolation } from "./errors";
+import { isLockTimeout, isUniqueViolation, retryOnUniqueViolation } from "./errors";
 
 const unique = () => new Prisma.PrismaClientKnownRequestError("Unique constraint failed", { code: "P2002", clientVersion: "test" });
 const rawFailure = (kind: string) =>
   new Prisma.PrismaClientKnownRequestError("Raw query failed", { code: "P2010", clientVersion: "test", meta: { driverAdapterError: { name: "DriverAdapterError", cause: { kind, originalCode: "23505" } } } });
 const missing = () => new Prisma.PrismaClientKnownRequestError("Record not found", { code: "P2025", clientVersion: "test" });
+
+describe("lock timeouts", () => {
+  it("recognises a raw query that passed lock_timeout only", () => {
+    const timedOut = new Prisma.PrismaClientKnownRequestError("Raw query failed", { code: "P2010", clientVersion: "test", meta: { driverAdapterError: { cause: { kind: "postgres", originalCode: "55P03" } } } });
+    expect(isLockTimeout(timedOut)).toBe(true);
+    expect(isLockTimeout(rawFailure("UniqueConstraintViolation"))).toBe(false);
+    expect(isLockTimeout(unique())).toBe(false);
+    expect(isLockTimeout(new Error("55P03"))).toBe(false);
+  });
+});
 
 describe("unique violations", () => {
   it("recognises P2002 and a raw query's unique constraint violation only", () => {

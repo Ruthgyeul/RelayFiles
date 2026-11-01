@@ -1,5 +1,7 @@
 import "server-only";
-import type { DbClient } from "../db/client";
+import { MIGRATION, MS } from "@/config/policy";
+import type { DbClient, PrismaClient } from "../db/client";
+import { tryRunLock, waitForRunLock } from "../repositories/advisory-lock.repo";
 
 /**
  * Data migrations: backfills and value conversions that run after the SQL migrations
@@ -19,7 +21,28 @@ export interface DataMigrationReport {
   skipped: string[];
 }
 
-export async function runDataMigrations(db: DbClient, steps: readonly DataMigrationStep[], log: (message: string) => void = () => undefined): Promise<DataMigrationReport> {
+/** Name of the lock one run holds (a k3s job and a manual `npm run data:migrate` never overlap). */
+const RUN_LOCK = "data-migrations";
+
+/**
+ * Runs the pending steps in order. One run at a time: the run holds a PostgreSQL advisory lock
+ * (in a transaction kept open for at most MIGRATION.runLockHours; the steps use their own
+ * connections), and a second run waits for it, then skips what the first one finished.
+ */
+export async function runDataMigrations(db: PrismaClient, steps: readonly DataMigrationStep[], log: (message: string) => void = () => undefined): Promise<DataMigrationReport> {
+  return db.$transaction(
+    async (lock) => {
+      if (!(await tryRunLock(lock, RUN_LOCK))) {
+        log("Another data:migrate run is in progress; waiting for it to finish.");
+        await waitForRunLock(lock, RUN_LOCK);
+      }
+      return runSteps(db, steps, log);
+    },
+    { timeout: MIGRATION.runLockHours * MS.hour },
+  );
+}
+
+async function runSteps(db: DbClient, steps: readonly DataMigrationStep[], log: (message: string) => void): Promise<DataMigrationReport> {
   const report: DataMigrationReport = { ran: [], skipped: [] };
   for (const step of steps) {
     const existing = await db.dataMigration.findUnique({ where: { id: step.id } });
