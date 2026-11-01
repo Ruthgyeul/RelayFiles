@@ -505,6 +505,20 @@ export const NGINX = {
   /** Upload preparations per client address per minute, and the burst allowed above it. */
   uploadRatePerMin: 60,
   uploadBurst: 30,
+  /**
+   * Personal API token requests (/api/v1/, /metrics) per client address per minute, and the burst:
+   * one token's own limit (API.requestsPerMinute), enforced before argon2 checks the token.
+   */
+  apiRatePerMin: API.requestsPerMinute,
+  apiBurst: 60,
+} as const;
+
+/** Defaults of the stop grace periods (deploy env *_STOP_GRACE_SEC; compose, systemd and k3s use them). */
+export const SHUTDOWN = {
+  /** A stopping app finishes requests in flight (streams, zips, upload chunks) for this long before it is killed. */
+  appStopGraceSec: 30,
+  /** A stopping worker finishes its running jobs: an ffmpeg run (MEDIA.ffmpegTimeoutSec) plus the work around it. */
+  workerStopGraceSec: 90,
 } as const;
 
 export const HEADERS = {

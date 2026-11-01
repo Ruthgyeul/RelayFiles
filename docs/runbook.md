@@ -38,7 +38,7 @@ touch deploy/maintenance/on    # 모든 요청에 503 "Under maintenance" 정적
 rm deploy/maintenance/on       # 해제
 ```
 
-`release.sh`는 마이그레이션 동안 자동으로 켜고 끈다. Server 페이지의 공지(Maintenance)는 앱이 켜져 있을 때 미리 알리는 용도다.
+`release.sh`는 마이그레이션 동안 자동으로 켜고, 새 버전의 `/api/health`가 `ok`일 때만 끈다. 마이그레이션이나 헬스 체크가 실패하면 점검 모드를 켠 채로 끝나고 다음에 할 일을 출력한다(고쳐서 다시 `release.sh`, 또는 아래 "롤백"). `rollback.sh`는 되돌린 버전이 `ok`가 되면 끈다. Server 페이지의 공지(Maintenance)는 앱이 켜져 있을 때 미리 알리는 용도다.
 
 ## 백업
 
@@ -176,8 +176,11 @@ rm deploy/maintenance/on
 
 ```bash
 tail -5 /srv/relayfiles/releases.log           # 이전 태그 확인
-RELEASE_TAG=<이전 태그> $C up -d --no-build app worker
+deploy/scripts/rollback.sh                     # 지금 돌고 있지 않은 가장 최근 릴리스로
+deploy/scripts/rollback.sh <이전 태그>          # 특정 릴리스로
 ```
+
+`rollback.sh`는 `RELEASE_TAG=<태그> $C up -d --no-build app worker`로 다시 띄우고, `/api/health`가 `ok`가 되면 점검 모드를 끄고 `latest` 태그를 그 릴리스로 옮긴다(`RELEASE_TAG` 없이 실행하는 `$C run --rm tools …`가 그 이미지를 쓴다). 헬스 체크를 통과하지 못하면 점검 모드는 그대로 둔다. systemd는 `deploy/scripts/systemd/rollback.sh`(앱 번들), k3s는 `deploy/scripts/k3s/deploy.sh <이전 태그>`(롤아웃이나 헬스 체크가 실패하면 스크립트가 직접 `kubectl rollout undo`를 한다).
 
 이전 버전으로 되돌릴 때 DB 스키마는 그대로 둔다. 스키마 변경은 expand → migrate → contract 순서로 나눠서 넣기 때문에(CLAUDE.md), 바로 이전 릴리스는 새 스키마에서도 동작한다. 파괴적 변경이 들어간 릴리스를 되돌려야 하면 그 릴리스 직전의 DB 백업을 복구한다(위 "DB 복구").
 
@@ -236,7 +239,7 @@ $C run --rm tools npm run admin:create   # 새 관리자 계정. 이전 관리�
 
 ## 감사 로그 보기
 
-관리자 작업(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대, 관리자 토큰 보기·재발급, 공지, 테마, 장애)은 `AuditEvent`에 1년간 남는다.
+관리자 작업(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대, 관리자 토큰 보기·재발급, 공지, 테마, 장애)과 개인 API 토큰 만들기·폐기는 `AuditEvent`에 1년간 남는다.
 
 ```bash
 curl -s -b "rf_s=<관리자 쿠키>" https://<도메인>/api/admin/audit | jq '.data.events[:20]'
@@ -437,6 +440,30 @@ $C exec postgres psql -U relayfiles -c "ALTER USER relayfiles PASSWORD '<새 비
 # .env의 POSTGRES_PASSWORD를 바꾼 뒤
 $C up -d app worker
 ```
+
+## CSP 강제 적용
+
+`CSP_MODE=report-only`(기본)는 아무것도 막지 않고 위반만 로그에 남긴다. 운영에서는 위반 로그를 확인한 뒤 `enforce`로 바꾼다. 그전까지 `npm run env:check -- --production`이 경고한다. 정책 내용은 [security.md "응답 헤더·자원 제한"](security.md#응답-헤더자원-제한).
+
+1. report-only로 배포한 뒤 며칠(최소 한 번의 일상적인 사용 주기) 동안 주요 화면을 실제로 쓴다: 로그인·계정 전환, 파일 목록, 사진·영상·PDF·문서·SVG 미리보기, 업로드, 공유 링크(비밀번호 포함), 업로드 전용 링크, Server·관리자 페이지.
+2. 위반 로그를 본다. 같은 위반은 1시간에 한 번만 남는다.
+
+   ```bash
+   grep '"csp violation"' /var/log/relayfiles/app-combined.log | tail -50    # LOG_DIR이 다르면 그 경로
+   grep '"csp violation"' /var/log/relayfiles/app-combined.log | grep -o '"directive":"[^"]*","blocked":"[^"]*"' | sort | uniq -c | sort -rn
+   ```
+
+3. 판단한다. `blocked`가 `chrome-extension`, `moz-extension`, `safari-web-extension`이거나 페이지와 관계없는 외부 주소(광고 차단기·번역기가 넣은 스크립트)면 무시한다. RelayFiles 자신의 주소(`page`가 우리 화면이고 `blocked`가 `self`, `inline`, `eval`, `blob`, `data`)인 위반이 있으면 강제하면 그 기능이 깨진다. 이슈로 남기고 고친 릴리스가 나올 때까지 report-only로 둔다.
+4. 바꾼다. `.env`에 `CSP_MODE=enforce`를 쓰고 앱을 다시 만든다.
+
+   ```bash
+   $C up -d app                                         # Docker (env_file이 바뀌면 컨테이너를 다시 만든다)
+   sudo systemctl restart relayfiles-app                # systemd
+   deploy/scripts/k3s/deploy.sh <지금 태그> && kubectl -n relayfiles rollout restart deployment/relayfiles-app   # k3s
+   ```
+
+5. 확인한다. `curl -sI http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/ | grep -i '^content-security-policy'`가 `content-security-policy:`(뒤에 `-report-only` 없음)를 보여 주고, 브라우저 개발자 도구 콘솔에 `Refused to …` 오류 없이 1번의 화면이 동작한다. 며칠 동안 `csp violation` 로그를 계속 본다(enforce에서도 막은 것을 보고한다).
+6. 문제가 생기면 `CSP_MODE=report-only`로 되돌리고 4번처럼 다시 시작한다. 데이터에는 영향이 없다.
 
 ## 의존성 업데이트
 

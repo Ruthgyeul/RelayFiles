@@ -35,7 +35,7 @@ await runScript(async () => {
       `    disable_symlinks on from=${root};\n` +
       // Cache-Control comes from the app (kept by X-Accel-Redirect); a second one would disable caching.
       `    add_header X-Content-Type-Options nosniff always;\n` +
-      // The app's ETag, which resumed downloads send back in If-Range (see default.conf.template).
+      // The app's ETag, which resumed downloads send back in If-Range (see relayfiles-site.inc.template).
       `    etag off;\n    add_header ETag $upstream_http_etag;\n}\n`;
     try {
       await writeFile(new URL(`../${name}`, import.meta.url), location);

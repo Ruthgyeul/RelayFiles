@@ -5,6 +5,9 @@
 # the files are host paths on that disk and Nginx sends them itself (X-Accel-Redirect).
 # PostgreSQL and Redis are in data.yaml.template. The app can run more than one replica:
 # upload locks and conversion slots are shared through Redis.
+# Stopping a pod (rollout, drain): preStop waits K3S_PRESTOP_SEC so the Service and Nginx stop
+# sending it new requests first, then SIGTERM lets Node finish the requests in flight within
+# APP_STOP_GRACE_SEC (terminationGracePeriodSeconds covers both).
 apiVersion: v1
 kind: Service
 metadata:
@@ -13,6 +16,26 @@ metadata:
 spec:
   selector: { app.kubernetes.io/name: relayfiles-app }
   ports: [{ port: ${APP_PORT}, targetPort: ${APP_PORT} }]
+---
+# The app takes the visitor's address from X-Real-IP / CF-Connecting-IP, which only Nginx may set
+# (admin networks, sign-in and unlock limits depend on it). Only the Nginx pods (and the worker's
+# Status page probes) may connect; any other pod in the cluster is dropped, so it cannot forge
+# those headers. k3s enforces this with its built-in policy controller (kube-router; not when the
+# server runs with --disable-network-policy). The kubelet's probes come from the node and pass.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: relayfiles-app
+  namespace: ${K3S_NAMESPACE}
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: relayfiles-app }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/name: relayfiles-nginx } }
+        - podSelector: { matchLabels: { app.kubernetes.io/name: relayfiles-worker } }
+      ports: [{ protocol: TCP, port: ${APP_PORT} }]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -29,6 +52,7 @@ spec:
     spec:
       nodeSelector: { relayfiles/storage: "true" }
       securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: ${STORAGE_GID}, runAsNonRoot: true }
+      terminationGracePeriodSeconds: ${APP_TERMINATION_GRACE_SEC}
       containers:
         - name: app
           image: ${APP_IMAGE}
@@ -52,9 +76,26 @@ spec:
             - { name: OFFSITE_ACCESS_KEY_ID, value: "" }
             - { name: OFFSITE_SECRET_ACCESS_KEY, value: "" }
           ports: [{ containerPort: ${APP_PORT} }]
+          # Started and alive: HEAD /api/health answers without touching PostgreSQL, Redis or the
+          # SSD (the image's Docker health check script), so an outage of those never restarts the
+          # app; a hung server does. The startup probe gives a slow Pi two minutes.
+          startupProbe:
+            exec: { command: ["node", "/usr/local/lib/relayfiles/healthcheck.mjs"] }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            exec: { command: ["node", "/usr/local/lib/relayfiles/healthcheck.mjs"] }
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Ready: GET /api/health, 503 while PostgreSQL is down (no traffic goes to the pod then).
           readinessProbe:
             httpGet: { path: /api/health, port: ${APP_PORT} }
             periodSeconds: 5
+            timeoutSeconds: 5
+          lifecycle:
+            preStop: { exec: { command: ["sleep", "${K3S_PRESTOP_SEC}"] } }
           resources:
             limits: { memory: ${APP_MEMORY_MAX}, cpu: "${APP_CPUS}" }
           securityContext: { readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
@@ -87,7 +128,7 @@ spec:
       nodeSelector: { relayfiles/storage: "true" }
       securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: ${STORAGE_GID}, runAsNonRoot: true }
       # Running jobs (thumbnails, cleanup) finish before the worker exits.
-      terminationGracePeriodSeconds: 60
+      terminationGracePeriodSeconds: ${WORKER_STOP_GRACE_SEC}
       containers:
         - name: worker
           image: ${TOOLS_IMAGE}
@@ -149,6 +190,8 @@ spec:
       nodeSelector: { relayfiles/storage: "true" }
       # Same account as the files on the SSD (0600), group 0 for the image's writable dirs.
       securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: 0 }
+      # The image stops Nginx with SIGQUIT (graceful): downloads it is sending finish like the app's.
+      terminationGracePeriodSeconds: ${APP_TERMINATION_GRACE_SEC}
       containers:
         - name: nginx
           image: ${NGINX_IMAGE}
@@ -167,7 +210,16 @@ spec:
             - { name: NGINX_AUTH_BURST, value: "${NGINX_AUTH_BURST}" }
             - { name: NGINX_UPLOAD_RATE_PER_MIN, value: "${NGINX_UPLOAD_RATE_PER_MIN}" }
             - { name: NGINX_UPLOAD_BURST, value: "${NGINX_UPLOAD_BURST}" }
+            - { name: NGINX_API_RATE_PER_MIN, value: "${NGINX_API_RATE_PER_MIN}" }
+            - { name: NGINX_API_BURST, value: "${NGINX_API_BURST}" }
           ports: [{ containerPort: 8080 }]
+          # A TCP check: an HTTP probe names the pod's address as Host, which Nginx closes (444)
+          # unless SERVER_NAME is "_".
+          readinessProbe:
+            tcpSocket: { port: 8080 }
+            periodSeconds: 5
+          lifecycle:
+            preStop: { exec: { command: ["sleep", "${K3S_PRESTOP_SEC}"] } }
           securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
           volumeMounts:
             - { name: templates, mountPath: /etc/nginx/templates, readOnly: true }

@@ -17,9 +17,12 @@ ExecStart=${NODE_BIN} --import tsx --conditions=react-server scripts/worker.mts
 UMask=0077
 Restart=on-failure
 RestartSec=5
-# SIGTERM lets running jobs (thumbnails, cleanup) finish before the worker exits.
+# SIGTERM to Node only (KillMode=mixed, as tini does in the container) lets running jobs
+# (thumbnails and their ffmpeg, cleanup) finish before the worker exits; whatever is left after
+# WORKER_STOP_GRACE_SEC is killed.
+KillMode=mixed
 KillSignal=SIGTERM
-TimeoutStopSec=60
+TimeoutStopSec=${STOP_GRACE_SEC}
 NoNewPrivileges=true
 # Resource limits (APP_/WORKER_MEMORY_MAX, _CPUS in .env): a runaway ffmpeg conversion or
 # thumbnail job hits this service's own limit instead of starving PostgreSQL.

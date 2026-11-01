@@ -57,7 +57,7 @@
 
 ### 요청이 흐르는 방식
 
-1. **방문자 → Nginx**: cloudflared(같은 서버의 `127.0.0.1`) 또는 LAN에서 Nginx `:80`으로 들어온다. `server_name`이 `SERVER_NAME`과 같은 요청만 이 사이트가 받는다.
+1. **방문자 → Nginx**: cloudflared(같은 서버의 `127.0.0.1`) 또는 LAN에서 Nginx `:80`으로 들어온다. `server_name`이 `SERVER_NAME`과 같은 요청만 이 사이트가 받는다. 다른 이름은 그 포트의 기본 서버로 간다. 다른 기본 사이트가 없으면 `install.sh`가 넣는 `relayfiles-catchall.conf`가 응답 없이 연결을 끊는다(444, DNS 리바인딩 방지).
 2. **Nginx → 앱**: `127.0.0.1:APP_PORT`로 넘긴다. 업로드(`/api/uploads/tus`)는 버퍼링 없이 바로 흘리고, 다운로드는 Nginx 임시 파일에 쌓지 않는다(`proxy_max_temp_file_size 0`).
 3. **클라이언트 주소**: Nginx는 `127.0.0.1`(로컬 cloudflared)이 보낸 `CF-Connecting-IP`만 방문자 주소로 믿고, 그 밖의 요청은 TCP 상대 주소를 쓴다. 확정한 주소를 `X-Real-IP`로 앱에 넘기고, 방문자가 보낸 `CF-Connecting-IP`는 비운다. 앱은 이 값으로 로그인 잠금·가입 제한·관리자 대역을 판단하므로, **앱 포트는 반드시 루프백에만** 열어야 한다(`APP_HOST=127.0.0.1`).
 4. **파일 전송**: 앱이 권한을 확인한 뒤 SSD에서 직접 읽어 보낸다.
@@ -133,7 +133,7 @@ nano .env
 | `APP_HOST` | `127.0.0.1` (기본값, 그대로 둔다) | Nginx만 앱에 접속한다. `0.0.0.0`으로 바꾸지 않는다 |
 | `APP_PORT` | `6000` | |
 | `PUBLIC_URL` | `https://relayfiles.io` | 공유 링크 주소. `https`면 쿠키에 `Secure`가 붙는다 |
-| `SERVER_NAME` | `relayfiles.io` | Nginx `server_name` |
+| `SERVER_NAME` | `relayfiles.io` | Nginx `server_name` (공백으로 여러 개). `_`는 쓰지 않는다(모르는 이름을 끊는 기본 서버가 설치되지 않는다) |
 | `NGINX_LISTEN_PORT` | `80` | cloudflared가 `127.0.0.1:80`으로 연결한다 |
 | `POSTGRES_HOST` / `REDIS_HOST` | `127.0.0.1` | |
 | `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `TOKEN_ENC_KEY`, `TOKEN_HMAC_KEY`, `COOKIE_SECRET` | `env:secrets` 출력 | |
@@ -144,6 +144,8 @@ nano .env
 | `ADMIN_ALLOWED_CIDRS` | `192.168.0.0/24` (선택) | 관리자 페이지를 집 LAN에서만 연다 (아래 주의) |
 | `HEALTH_PROBE_URL` | 비워 둔다 | 기본값 `http://127.0.0.1:6000` |
 | `APP_MEMORY_MAX`·`APP_CPUS`·`WORKER_MEMORY_MAX`·`WORKER_CPUS` | 기본 `2G`·`3`·`2G`·`2` | 유닛의 `MemoryMax`·`CPUQuota`가 된다. 서버 사양에 맞춘다 |
+| `APP_STOP_GRACE_SEC`·`WORKER_STOP_GRACE_SEC` | 기본 `30`·`90` | 유닛의 `TimeoutStopSec`. 멈출 때 진행 중인 요청·작업을 마무리할 시간 |
+| `NGINX_API_RATE_PER_MIN`·`NGINX_API_BURST` | 기본 `120`·`60` | 개인 API 토큰 요청(`/api/v1/`, `/metrics`)의 주소별 제한 ([deploy-ubuntu.md §3](deploy-ubuntu.md#3-env-작성)) |
 
 `NGINX_LISTEN_HOST`, `DOCKER_DATA_ROOT`, `DOCKER_SUBNET`, `CLOUDFLARED_IP`, `TRUSTED_PROXY_IP`, `CLOUDFLARE_TUNNEL_TOKEN`, `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`은 Docker 배포에서만, `POSTGRES_PUBLISH`, `REDIS_PUBLISH`는 개발용 compose에서만 쓴다. 그대로 둬도 된다. 계정 용량·만료·업로드 크기 같은 정책 값은 [deploy-ubuntu.md §3 "상황에 따라 조정할 값"](deploy-ubuntu.md#3-env-작성)과 같다.
 
@@ -227,9 +229,11 @@ sudo deploy/scripts/systemd/install.sh
 2. `LOG_DIR`, `DATA_DIR`, `.app/`을 만든다.
 3. `.env`를 `0640`, 그룹 `relayfiles`로 바꿔 서비스만 읽게 한다.
 4. `deploy/systemd/*.service.template`을 `/etc/systemd/system/relayfiles-{app,worker}.service`로 렌더링하고 `enable`한다. 서비스를 시작하지는 않는다.
-5. `deploy/nginx/host/relayfiles.conf.template`을 `/etc/nginx/sites-available/relayfiles.conf`로 렌더링하고 `sites-enabled`에 링크한다. 그 뒤 `nginx -t`를 거쳐 reload한다.
+5. `deploy/nginx/host/relayfiles.conf.template`을 `/etc/nginx/sites-available/relayfiles.conf`로 렌더링하고 `sites-enabled`에 링크한다.
+6. `NGINX_LISTEN_PORT`의 기본 서버(`default_server`)를 정한다. 다른 사이트가 이미 기본 서버면(Ubuntu의 `sites-enabled/default` 등) 그대로 두고 그 파일을 알려 준다. 없으면 `relayfiles-catchall.conf.template`을 `/etc/nginx/sites-available/relayfiles-catchall.conf`로 렌더링해 링크한다. 이 서버는 이름을 모르는 요청(다른 도메인으로 들어온 DNS 리바인딩, 주소로 훑는 스캐너)의 연결을 응답 없이 끊는다(444). `SERVER_NAME=_`이면 넣지 않는다.
+7. `nginx -t`를 거쳐 reload한다.
 
-기존 Nginx 사이트(`/var/www/html` 기본 페이지 등)는 그대로 둔다. `relayfiles.io`로 들어온 요청만 이 사이트가 받는다. 렌더링된 파일은 직접 고치지 말고 템플릿을 고친 뒤 `install.sh`를 다시 실행한다. 템플릿에 `.env`에 없는 값이 있으면 렌더링이 멈추고 빠진 키를 알려 준다(반쯤 채워진 설정이 만들어지지 않는다).
+기존 Nginx 사이트(`/var/www/html` 기본 페이지 등)는 그대로 둔다. `relayfiles.io`로 들어온 요청만 이 사이트가 받는다. Ubuntu 기본 사이트 대신 444로 끊으려면 `sudo rm /etc/nginx/sites-enabled/default` 후 `install.sh`를 다시 실행한다. 렌더링된 파일은 직접 고치지 말고 템플릿을 고친 뒤 `install.sh`를 다시 실행한다. 템플릿에 `.env`에 없는 값이 있으면 렌더링이 멈추고 빠진 키를 알려 준다(반쯤 채워진 설정이 만들어지지 않는다).
 
 서비스 유닛에 들어가는 보호 설정:
 
@@ -240,7 +244,7 @@ sudo deploy/scripts/systemd/install.sh
 | `ProtectKernel*`, `ProtectControlGroups`, `ProtectClock`, `RestrictAddressFamilies`, `RestrictNamespaces`, `RestrictSUIDSGID`, `LockPersonality`, `SystemCallArchitectures=native` | 커널 설정·모듈·로그, cgroup, 시계를 바꾸지 못하고, 네트워크는 Unix·IPv4·IPv6(와 네트워크 인터페이스 목록용 netlink)만, 새 네임스페이스·setuid·다른 아키텍처 시스템 콜을 쓰지 못한다 |
 | `MemoryMax`, `CPUQuota`, `TasksMax=512` | 영상 변환·썸네일 작업이 폭주해도 자기 상한에서 멈춘다(PostgreSQL을 굶기지 않는다) |
 | `Restart=on-failure`, `RestartSec=5` | 비정상 종료 시 5초 뒤 다시 시작 |
-| 워커 `TimeoutStopSec=60` | 멈출 때 진행 중인 작업이 끝날 시간을 준다 |
+| `KillMode=mixed`, `TimeoutStopSec` (`APP_STOP_GRACE_SEC` 30·`WORKER_STOP_GRACE_SEC` 90) | 멈출 때 SIGTERM은 Node에만 간다(컨테이너의 tini와 같다). 앱은 새 연결을 받지 않고 진행 중인 요청(스트리밍, zip, 업로드 조각과 그 ffmpeg)을, 워커는 실행 중인 작업을 끝낸 뒤 종료한다. 시간이 지나면 남은 프로세스를 강제 종료한다. 앱의 종료 코드 143(SIGTERM)은 정상으로 본다(`SuccessExitStatus=143`) |
 
 확인:
 
@@ -276,7 +280,7 @@ curl -fsS -H 'Host: relayfiles.io' http://127.0.0.1/api/health      # Nginx 경�
 systemctl status relayfiles-app relayfiles-worker
 ```
 
-두 `curl` 모두 `{"success":true,"data":{"status":"ok",…,"components":{"database":"ok","redis":"ok","storage":"ok"}}}`가 나와야 한다. `degraded`면 HTTP 200이어도 `components`에서 `down`인 항목을 본다. 앱 직접 호출은 되는데 Nginx 경유가 기본 페이지(Welcome to nginx)를 돌려주면 `Host`가 `SERVER_NAME`과 다른 것이다.
+두 `curl` 모두 `{"success":true,"data":{"status":"ok",…,"components":{"database":"ok","redis":"ok","storage":"ok"}}}`가 나와야 한다. `degraded`면 HTTP 200이어도 `components`에서 `down`인 항목을 본다. 앱 직접 호출은 되는데 Nginx 경유가 `Empty reply from server`(catch-all의 444)나 기본 페이지(Welcome to nginx)를 돌려주면 `Host`가 `SERVER_NAME`과 다른 것이다. `curl -sv -H 'Host: nope.example' http://127.0.0.1/`가 `Empty reply from server`면 모르는 이름이 앱에 닿지 않는다.
 
 LAN에서 바로 보려면 PC의 `hosts` 파일(macOS·Linux `/etc/hosts`, Windows `C:\Windows\System32\drivers\etc\hosts`)에 `192.168.0.100 relayfiles.io`를 넣고 `http://relayfiles.io`를 연다. 출력된 토큰으로 로그인한다(사이드바 Add account → Sign in). `PUBLIC_URL`이 `https`인 상태에서 `http`로 열면 `Secure` 쿠키가 저장되지 않아 로그인이 유지되지 않는다. LAN에서 http로 시험할 때는 외부 공개(§7) 전까지 `PUBLIC_URL=http://relayfiles.io`로 두었다가 바꾸고 `sudo systemctl restart relayfiles-app relayfiles-worker`.
 
@@ -382,13 +386,13 @@ git pull
 deploy/scripts/systemd/release.sh
 ```
 
-`release.sh`는 순서대로 아래를 한다. 하나라도 실패하면 멈춘다.
+`release.sh`는 순서대로 아래를 한다. 하나라도 실패하면 멈추고, 점검 모드를 켠 뒤(4단계부터)에 실패하면 **점검 모드를 켠 채로** 끝나며 다음에 할 일(상태 확인 명령, 로그, `rollback.sh`)을 출력한다. 아무도 확인하지 않은 릴리스가 방문자에게 열리지 않게 하기 위해서다.
 
 1. DB를 백업한다(`DATA_DIR/backups`, 최근 14개).
 2. `npm ci`와 `npm run build`를 한다. 그동안 실행 중인 앱은 자기 번들(`.app/current`)로 계속 응답한다.
 3. 새 번들을 `.app/<시각>-<커밋>`에 복사한다(빌드가 복사해 넣은 `.env`는 지운다. 앱은 체크아웃의 `.env`를 읽는다).
 4. 점검 모드를 켜고 마이그레이션을 실행한다: `db:deploy`, `data:migrate`, `storage:migrate`.
-5. `.app/current`를 새 번들로 바꾸고 app과 worker를 재시작한다.
+5. `.app/current`를 새 번들로 바꾸고 app과 worker를 재시작한다. 멈추는 서비스는 진행 중인 요청·작업을 `TimeoutStopSec` 동안 마무리한다(§5).
 6. 앱 포트의 `/api/health`가 `status: "ok"`를 돌려줄 때까지 확인한 뒤(`degraded`는 실패로 본다) 점검 모드를 끄고 `DATA_DIR/releases.log`에 기록한다. 번들은 최근 3개만 남긴다.
 
 `HEALTH_TRIES`(기본 30, 2초 간격), `BUNDLE_KEEP`(기본 3), `BACKUP_KEEP`(기본 14)으로 동작을 바꿀 수 있다.
@@ -403,8 +407,8 @@ deploy/scripts/systemd/release.sh
 |---|---|---|
 | 1 백업 | 아무것도 바뀌지 않았다 | `/srv/relayfiles` 권한, PostgreSQL 접속 확인 후 다시 실행 |
 | 2 `npm ci`·빌드 | 이전 번들이 계속 응답한다. 워커는 재시작 전까지 옛 코드로 돈다 | 로그를 보고 고친 뒤 다시 실행 |
-| 4 마이그레이션 | 스크립트가 끝나면서 점검 모드가 풀리고 이전 번들이 그대로 돈다. 스키마는 실패한 마이그레이션 직전까지 적용됐을 수 있다 | `deploy/scripts/systemd/rf.sh db:deploy`의 출력과 `npx prisma migrate status`로 상태를 본다. 원인을 고친 뒤 다시 `release.sh`. 실패로 표시된 마이그레이션은 `npx prisma migrate resolve --rolled-back <이름>` 후 다시 적용 |
-| 6 헬스 체크 | 새 번들로 바뀌었지만 응답이 없거나 `degraded`다. 스크립트가 끝나면서 점검 모드는 풀린다 | `journalctl -u relayfiles-app -u relayfiles-worker -n 200`으로 원인을 보고, 급하면 아래 롤백 |
+| 4 마이그레이션 | **점검 모드가 켜진 채로** 끝난다. 이전 번들이 그대로 돌고, 스키마는 실패한 마이그레이션 직전까지 적용됐을 수 있다 | `deploy/scripts/systemd/rf.sh db:deploy`의 출력과 `npx prisma migrate status`로 상태를 본다. 원인을 고친 뒤 다시 `release.sh`. 실패로 표시된 마이그레이션은 `npx prisma migrate resolve --rolled-back <이름>` 후 다시 적용. 이전 릴리스를 그대로 다시 열어도 되면 `rm deploy/maintenance/on` |
+| 5–6 재시작·헬스 체크 | 새 번들로 바뀌었지만 응답이 없거나 `degraded`다. **점검 모드가 켜진 채로** 끝난다(`releases.log`에 기록하지 않고 옛 번들도 지우지 않는다) | `journalctl -u relayfiles-app -u relayfiles-worker -n 200`으로 원인을 본다. 되돌리려면 `deploy/scripts/systemd/rollback.sh`(아래). 고쳐서 다시 `release.sh`를 실행해도 된다 |
 
 뷰어 미리보기가 들어간 릴리스로 처음 올릴 때는 한 번 `deploy/scripts/systemd/rf.sh media:backfill -- --previews`를 실행한다.
 
@@ -416,7 +420,7 @@ deploy/scripts/systemd/rollback.sh <번들 이름>    # ls .app
 ```
 
 롤백할 때는 다음을 알아 둔다(DB 스키마 규칙은 [runbook.md "롤백"](runbook.md#롤백)).
-- 앱 번들만 바뀐다.
+- 앱 번들만 바뀐다. 재시작 뒤 앱 포트의 `/api/health`가 `ok`가 되면 점검 모드를 끈다. 통과하지 못하면 점검 모드는 그대로 두고 실패한다. `release.sh`가 헬스 체크에서 실패했을 때 "바로 이전 번들"은 그 직전에 살아 있던 번들이다.
 - 파괴적 변경이 있었다면 [runbook.md "DB 복구"](runbook.md#db-복구)대로 그 릴리스 직전 백업을 복구한다. systemd 배포에서는 `$C exec -T postgres pg_restore …` 대신 아래를 쓴다.
 
   ```bash
@@ -463,7 +467,9 @@ Node.js, PostgreSQL, Redis, Nginx, ffmpeg는 apt가 관리한다. `sudo apt upgr
 | `install.sh`: `Move the checkout out of home directories` | 코드가 `/home` 아래에 있다 | `/opt/relayfiles`로 옮긴다(§2) |
 | `install.sh`: `relayfiles cannot read …` | 체크아웃 권한이 닫혀 있다 | `chmod 755 /opt/relayfiles` |
 | `install.sh`: `Set these in .env before rendering …` | 템플릿에 필요한 키가 비어 있다 | 출력된 키를 `.env`에 채운다 |
-| `nginx -t` 실패: `duplicate default server` 등 | 다른 사이트와 충돌 | `SERVER_NAME`을 실제 도메인으로, 다른 사이트의 `default_server` 확인 |
+| `nginx -t` 실패: `duplicate default server` 등 | 다른 사이트와 충돌 | `SERVER_NAME`을 실제 도메인으로, 다른 사이트의 `default_server` 확인. `install.sh` 뒤에 다른 기본 사이트를 켰다면 `install.sh`를 다시 실행한다(`relayfiles-catchall.conf`를 내린다) |
+| 점검 페이지가 계속 보인다 | `release.sh`가 마이그레이션이나 헬스 체크에서 실패해 점검 모드를 켜 둔 채 끝났다 | 스크립트가 출력한 안내대로 고쳐서 다시 `release.sh`, 또는 `rollback.sh`(§9) |
+| LAN 주소(`http://192.168.0.100`)로 열면 응답 없음 | 그 이름이 `SERVER_NAME`에 없어 catch-all이 끊었다 | `hosts` 파일로 도메인을 쓰거나(§6) `SERVER_NAME`에 주소를 더하고 `install.sh` |
 | 서비스가 `status=203/EXEC` | `NODE_BIN` 경로가 바뀌었다(Node 재설치) | `sudo deploy/scripts/systemd/install.sh` 다시 실행 |
 | 서비스가 바로 죽고 로그에 키 목록 | `.env` 값이 잘못됐다 | `npm run env:check -- --production` |
 | `.app/current/server.js not found` | 아직 `release.sh`를 실행하지 않았다 | §6의 `release.sh` |
@@ -490,4 +496,5 @@ Node.js, PostgreSQL, Redis, Nginx, ffmpeg는 apt가 관리한다. `sudo apt upgr
 | `.env` | `0640 <배포 사용자>:relayfiles` |
 | ufw | 활성화, SSH와 필요한 포트만 |
 | cloudflared | `127.0.0.1:80`으로 연결 (`localhost`·LAN IP 아님) |
+| 모르는 호스트 이름 | `curl -sv -H 'Host: nope.example' http://127.0.0.1/`가 `Empty reply from server`(catch-all) 또는 다른 기본 사이트의 정적 페이지. 앱 응답이 아니어야 한다 |
 | 패키지 | `unattended-upgrades`로 보안 업데이트 자동 적용 |

@@ -41,6 +41,16 @@ health_ok() {
   status_ok "$body"
 }
 
+# wait_healthy URL → health_ok every 2 s until it passes (true) or HEALTH_TRIES (default 30) run out.
+wait_healthy() {
+  local _
+  for _ in $(seq 1 "${HEALTH_TRIES:-30}"); do
+    if health_ok "$1"; then return 0; fi
+    sleep 2
+  done
+  return 1
+}
+
 log() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 
 # systemd deployment (docs/deploy-systemd.md): the account that owns the SSD files and runs

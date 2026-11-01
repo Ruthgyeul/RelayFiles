@@ -199,7 +199,7 @@ nano .env
 | `DATA_DIR` | PostgreSQL·Redis·백업. 예: `/mnt/RuthVault2T/relayfilesDB/data` |
 | `LOG_DIR` | 예: `/mnt/RuthVault2T/relayfilesDB/logs` |
 | `DOCKER_DATA_ROOT` | Docker data-root. 예: `/mnt/RuthVault2T/relayfilesDB/docker` |
-| `SERVER_NAME` | 도메인 또는 `_` (모든 이름) |
+| `SERVER_NAME` | Nginx가 받을 호스트 이름(공백으로 여러 개, 예: `files.example.com 192.168.0.100`). 다른 `Host`로 온 요청은 응답 없이 연결을 끊는다(444, DNS 리바인딩 방지). `127.0.0.1`은 늘 받는다(`release.sh`의 헬스 체크). `_`면 모든 이름을 받는다(이름 검사 없음) |
 | `NGINX_LISTEN_HOST` | 호스트 Nginx가 앞에 있거나 Tunnel만 쓰면 `127.0.0.1`, 컨테이너 Nginx를 LAN에 바로 열면 `0.0.0.0` |
 | `NGINX_LISTEN_PORT` | 컨테이너 Nginx를 여는 포트 (기본 80. 호스트 Nginx가 80을 쓰면 다른 포트) |
 | `ADMIN_ALLOWED_CIDRS` | 관리자 페이지를 LAN에서만 열려면 `192.168.0.0/24` (아래 주의 참고) |
@@ -217,6 +217,8 @@ nano .env
 | `UPLOAD_MAX_FILE_SIZE_GB` | 없음 | 파일 하나의 최대 크기 |
 | `UPLOAD_CHUNK_SIZE_MB` | 50 | Cloudflare를 쓰면 100 미만으로 둔다 (Nginx `client_max_body_size`는 `NGINX_MAX_BODY_MB`, 기본 100) |
 | `NGINX_MAX_BODY_MB`, `NGINX_AUTH_RATE_PER_MIN`, `NGINX_AUTH_BURST`, `NGINX_UPLOAD_RATE_PER_MIN`, `NGINX_UPLOAD_BURST` | 100, 20, 20, 60, 30 | 두 Nginx 템플릿(compose·호스트)의 요청 크기와 주소별 요청 수 제한. 바꾸면 nginx를 다시 만든다(`docker compose up -d nginx`, systemd는 `install.sh`) |
+| `NGINX_API_RATE_PER_MIN`, `NGINX_API_BURST` | 120, 60 | 개인 API 토큰 요청(`/api/v1/`, `/metrics`)의 주소별 분당 수와 버스트. 앱이 토큰을 argon2로 확인하기 전에 Nginx가 먼저 막는다. 스크립트가 한 주소에서 더 많이 보내면 올린다 |
+| `APP_STOP_GRACE_SEC`·`WORKER_STOP_GRACE_SEC` | 30·90 | 멈출 때(릴리스, 재시작) 앱이 진행 중인 요청(스트리밍, zip, 업로드 조각)을, 워커가 실행 중인 작업을 끝낼 시간(초). 지나면 강제 종료한다. compose `stop_grace_period`, systemd `TimeoutStopSec`, k3s `terminationGracePeriodSeconds` |
 | `APP_MEMORY_MAX`·`APP_CPUS`·`WORKER_MEMORY_MAX`·`WORKER_CPUS` | 2G·3·2G·2 | 서버 사양에 맞춰. 둘의 합이 전체 메모리의 절반 정도면 PostgreSQL이 여유 있다 |
 | `VIDEO_TRANSCODE_MAX` | 2 | 동시 영상 변환 수. CPU가 약하면 1, 끄려면 0 |
 | `JOBS_TIMEZONE`·`CLEANUP_CRON` | `Asia/Seoul`·`0 4 * * *` | 매일 정리 작업 시각 |
@@ -232,7 +234,7 @@ nano .env
 # (1) Cloudflare Tunnel로만 공개, LAN에서는 관리자 페이지만 직접 접속
 NODE_ENV=production
 PUBLIC_URL=https://files.example.com
-SERVER_NAME=_
+SERVER_NAME=files.example.com 192.168.0.100   # 도메인과 LAN 주소만 받는다 (_면 모든 이름)
 NGINX_LISTEN_HOST=0.0.0.0        # LAN 접속이 필요 없으면 127.0.0.1 (cloudflared는 내부 네트워크로 nginx에 붙는다)
 NGINX_LISTEN_PORT=80
 ADMIN_ALLOWED_CIDRS=192.168.0.0/24
@@ -246,6 +248,7 @@ TRUSTED_PROXY_IP=172.28.0.1
 
 # (3) LAN 전용
 PUBLIC_URL=http://192.168.0.100
+SERVER_NAME=192.168.0.100
 NGINX_LISTEN_HOST=0.0.0.0
 NGINX_LISTEN_PORT=80
 ```
@@ -399,7 +402,7 @@ Cloudflare 무료 요금제의 요청 크기 제한은 100MB다. 업로드는 `U
 NGINX_LISTEN_HOST=127.0.0.1     # 컨테이너 Nginx는 호스트 Nginx만 접속 (LAN·외부에 직접 노출 안 함)
 NGINX_LISTEN_PORT=8081          # 호스트 Nginx가 80을 쓰므로 다른 포트
 TRUSTED_PROXY_IP=172.28.0.1     # DOCKER_SUBNET 게이트웨이
-SERVER_NAME=_                   # 도메인 검사는 호스트 Nginx가 한다
+SERVER_NAME=_                   # 도메인 검사는 호스트 Nginx가 한다 (아래 예시의 server_name)
 PUBLIC_URL=https://files.example.com
 ```
 
@@ -477,13 +480,13 @@ git pull
 deploy/scripts/release.sh
 ```
 
-`release.sh`는 순서대로 다음을 한다. 하나라도 실패하면 멈춘다.
+`release.sh`는 순서대로 다음을 한다. 하나라도 실패하면 멈추고, 점검 모드를 켠 뒤(3단계부터)에 실패하면 **점검 모드를 켠 채로** 끝나며 다음에 할 일(상태 확인 명령, 로그, 롤백)을 출력한다. 아무도 확인하지 않은 릴리스가 방문자에게 열리지 않게 하기 위해서다.
 
 1. DB 백업 (`DATA_DIR/backups`, 최근 14개 유지)
 2. 이미지 빌드 (태그 = git 커밋)
 3. 점검 모드 켜기 (Nginx가 503 점검 페이지를 보여 준다)
 4. `prisma migrate deploy`, 데이터 마이그레이션(`data:migrate`), 스토리지 레이아웃(`storage:migrate`)
-5. app·worker·nginx 재시작
+5. app·worker·nginx 재시작. 멈추는 컨테이너는 진행 중인 요청·작업을 `APP_STOP_GRACE_SEC`(30초)·`WORKER_STOP_GRACE_SEC`(90초) 동안 마무리한다(tini가 Node에 SIGTERM을 넘기고, Next.js 서버는 새 연결을 받지 않고 남은 응답을 끝낸 뒤 종료한다. 워커는 실행 중인 작업이 끝나면 종료한다)
 6. `/api/health`의 `status`가 `ok`가 될 때까지 확인한 뒤(`degraded`는 실패로 본다) 점검 모드를 끄고 `DATA_DIR/releases.log`에 기록. 점검 중에도 Nginx는 `/api/health`만 앱으로 넘긴다
 7. 새 이미지에 `latest` 태그도 붙인다. `RELEASE_TAG` 없이 실행하는 `$C run --rm tools …`가 지금 릴리스 이미지를 쓴다.
 8. `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시를 정리한다([runbook.md](runbook.md#디스크-정리-autoclean)). 정리가 실패해도 릴리스는 그대로 살아 있다. 건너뛰려면 `AUTOCLEAN=0 deploy/scripts/release.sh`.
@@ -506,12 +509,17 @@ deploy/scripts/release.sh
 |---|---|---|
 | 1 백업 | 아무것도 바뀌지 않았다 | `DATA_DIR/backups` 권한·디스크 여유를 확인하고 다시 실행 |
 | 2 빌드 | 이전 컨테이너가 그대로 돈다 | 빌드 로그를 확인한다. 디스크 부족이면 `deploy/scripts/autoclean.sh` |
-| 4 마이그레이션 | 스크립트가 끝나면서 점검 모드가 풀리고 **이전 앱이 그대로 돈다**. 스키마는 실패한 마이그레이션 직전까지 적용됐을 수 있다 | `$C run --rm tools npx prisma migrate status`로 상태를 본다. 원인을 고친 뒤 다시 `release.sh`. 실패로 표시된 마이그레이션은 `npx prisma migrate resolve --rolled-back <이름>`으로 정리한 뒤 다시 적용한다. 데이터·스토리지 마이그레이션은 저장된 커서·저널에서 이어서 실행된다 |
-| 6 헬스 체크 | 새 컨테이너가 떠 있지만 응답이 없거나 `degraded`다. 스크립트가 끝나면서 점검 모드는 풀린다 | `$C logs --tail 200 app worker`로 원인을 보고, 급하면 아래 롤백 |
+| 4 마이그레이션 | **점검 모드가 켜진 채로** 끝난다. 이전 앱이 그대로 돌고, 스키마는 실패한 마이그레이션 직전까지 적용됐을 수 있다 | `$C run --rm tools npx prisma migrate status`로 상태를 본다. 원인을 고친 뒤 다시 `release.sh`. 실패로 표시된 마이그레이션은 `npx prisma migrate resolve --rolled-back <이름>`으로 정리한 뒤 다시 적용한다. 데이터·스토리지 마이그레이션은 저장된 커서·저널에서 이어서 실행된다. 이전 릴리스를 그대로 다시 열어도 되면(스키마 변경은 expand라 이전 앱이 동작한다) `rm deploy/maintenance/on` |
+| 5–6 재시작·헬스 체크 | 새 컨테이너가 떠 있지만 응답이 없거나 `degraded`다. **점검 모드가 켜진 채로** 끝난다(`releases.log`에 기록하지 않고 `latest` 태그도 옮기지 않는다) | `$C logs --tail 200 app worker`로 원인을 본다. 되돌리려면 `deploy/scripts/rollback.sh`(아래). 고쳐서 다시 `release.sh`를 실행해도 된다 |
 
 ### 롤백
 
-절차와 DB 스키마 규칙은 [runbook.md "롤백"](runbook.md#롤백)에 있다(이전 이미지 태그로 `app`·`worker`를 다시 띄운다).
+```bash
+deploy/scripts/rollback.sh          # releases.log에서 지금 돌고 있지 않은 가장 최근 릴리스로
+deploy/scripts/rollback.sh <태그>    # 특정 릴리스 (tail /srv/relayfiles/releases.log)
+```
+
+이전 이미지 태그로 `app`·`worker`를 다시 띄우고, `/api/health`가 `ok`가 되면 점검 모드를 끄고 `latest` 태그를 그 릴리스로 옮긴다. 헬스 체크를 통과하지 못하면 점검 모드는 그대로 두고 실패한다. `release.sh`가 헬스 체크에서 실패했을 때 기본값은 그 직전에 살아 있던 릴리스다. DB 스키마 규칙은 [runbook.md "롤백"](runbook.md#롤백).
 
 ### 특정 릴리스에서 한 번만 할 일
 
@@ -547,6 +555,9 @@ PostgreSQL 메이저 버전(16 → 17)은 데이터 디렉터리를 그대로 �
 | 지표 | Server 페이지 값과 `htop`, `df -h`가 비슷하다 (컨테이너 안에서 재므로 아래 참고) |
 | 앱 중단 | `$C stop app` → Nginx의 "Server unreachable" 페이지 → `$C start app`으로 복구 |
 | 점검 모드 | `touch deploy/maintenance/on` → `/api/health`를 뺀 모든 요청이 503 "Under maintenance" → `rm`으로 해제 |
+| 모르는 호스트 이름 | `curl -sv -H 'Host: nope.example' http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/`가 `Empty reply from server`(444). `SERVER_NAME=_`이면 이 검사는 없다 |
+| API 요청 제한 | 같은 주소에서 `/api/v1/me`를 분당 `NGINX_API_RATE_PER_MIN`+`NGINX_API_BURST`회 넘게 보내면 429 `RATE_LIMITED` |
+| 정상 종료 | 큰 파일을 내려받는 중에 `$C restart app` → `APP_STOP_GRACE_SEC` 안에 끝나는 전송은 끊기지 않는다(`docker inspect -f '{{.Config.StopTimeout}}' relayfiles-app-1`가 30) |
 | 클라이언트 주소 | 다른 기기에서 틀린 토큰으로 5번 로그인하면 그 기기만 잠기고, 이 기기는 로그인된다 (모두가 같이 잠기면 §6 "호스트 Nginx 뒤" 설정 확인) |
 | 관리자 대역 | `ADMIN_ALLOWED_CIDRS` 밖(휴대폰 LTE 등)에서 `/admin`이 403 |
 | 노출 포트 | `ss -tlnp`에 `NGINX_LISTEN_HOST:NGINX_LISTEN_PORT`(과 SSH)만 열려 있다 |
@@ -602,6 +613,8 @@ crontab -e      # docker 그룹에 속한 배포 사용자로
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
+| 브라우저가 `ERR_EMPTY_RESPONSE`, curl이 `Empty reply from server` (Tunnel은 502) | 접속한 이름(도메인, LAN 주소)이 `SERVER_NAME`에 없어 Nginx가 연결을 끊었다(444) | `SERVER_NAME`에 그 이름을 공백으로 더하고 `$C up -d nginx`. 이름 검사를 하지 않으려면 `_` |
+| 점검 페이지가 계속 보인다 | `release.sh`가 마이그레이션이나 헬스 체크에서 실패해 점검 모드를 켜 둔 채 끝났다 | 스크립트가 출력한 안내대로 고쳐서 다시 `release.sh`, 또는 `deploy/scripts/rollback.sh`(§7) |
 | `required variable STORAGE_ROOT is missing a value` | 저장소 루트가 아닌 곳에서 실행했거나 `--env-file .env`를 빠뜨렸다 | 저장소 루트에서 `$C ...`로 실행 |
 | `invalid mount config … bind source path does not exist` | `STORAGE_ROOT`·`LOG_DIR`·`DATA_DIR/pg` 등이 없다. 디스크가 마운트되지 않았거나 §4를 건너뛰었다 | `findmnt <경로>`로 마운트 확인 → `sudo deploy/scripts/setup-docker.sh` |
 | `permission denied … docker.sock` | `docker` 그룹이 아직 적용되지 않았다 | 로그아웃 후 다시 로그인 (`id`에 `docker`가 보여야 한다) |
@@ -629,6 +642,8 @@ crontab -e      # docker 그룹에 속한 배포 사용자로
 | 관리자 | `ADMIN_ALLOWED_CIDRS` 설정, 관리자 토큰은 비밀번호 관리자에, 쓰지 않는 관리자 계정은 삭제 |
 | 가입 | 공개 서버면 Invite only/Closed, 열어 둔다면 `ANON_TOTAL_QUOTA_GB` 설정 |
 | 노출 | `ss -tlnp`에 nginx 포트와 SSH만. 공유기 포트 포워딩 없음(Tunnel 사용 시) |
+| 호스트 이름 | `SERVER_NAME`에 실제 도메인(과 LAN 주소)을 적어 다른 이름은 444로 끊는다. `_`는 호스트 Nginx가 앞에서 이름을 검사할 때만 |
+| CSP | `CSP_MODE=enforce` (report-only면 `env:check`가 경고한다. 바꾸는 절차는 [runbook.md "CSP 강제 적용"](runbook.md#csp-강제-적용)) |
 | SSH | 공개키 인증만(`PasswordAuthentication no`), root 로그인 금지, fail2ban |
 | 디스크 | SSD LUKS2 확인(`cryptsetup status`), 키 파일·헤더 백업이 서버 밖에 있음 |
 | 업데이트 | Dependabot PR을 정기적으로 머지하고 `release.sh`, 외부 이미지 `pull`(§7), `sudo apt upgrade` (unattended-upgrades 권장) |

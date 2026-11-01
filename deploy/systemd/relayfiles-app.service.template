@@ -18,7 +18,14 @@ ExecStart=${NODE_BIN} ${APP_DIR}/scripts/start-server.mjs ${APP_DIR}/.app/curren
 UMask=0077
 Restart=on-failure
 RestartSec=5
-TimeoutStopSec=30
+# Stopping: SIGTERM to Node only (KillMode=mixed, as tini does in the container), which stops
+# accepting connections and finishes the requests in flight (streams, zips, upload chunks, and
+# their ffmpeg children); whatever is left after APP_STOP_GRACE_SEC is killed. Next.js exits with
+# 143 after a SIGTERM, which is a clean stop, not a failure.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=${STOP_GRACE_SEC}
+SuccessExitStatus=143
 NoNewPrivileges=true
 # Resource limits (APP_/WORKER_MEMORY_MAX, _CPUS in .env): a runaway ffmpeg conversion or
 # thumbnail job hits this service's own limit instead of starving PostgreSQL.

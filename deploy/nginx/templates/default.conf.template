@@ -1,5 +1,7 @@
 # RelayFiles behind Nginx (rendered by the nginx image's envsubst at start-up; values come
 # from .env through docker compose). Nginx variables ($host, $1, …) are left untouched.
+# The site itself (locations, limits, error pages) is relayfiles-site.inc.template, included by
+# the two server blocks at the end of this file.
 
 # The cluster's DNS (Docker: 127.0.0.11, k3s: the kube-dns service): the app gets a new
 # address whenever a release recreates it, so the upstream is resolved again instead of being
@@ -53,102 +55,41 @@ map "$request_method $uri" $relay_upload_limit {
     "POST /api/uploads" $relay_client_ip;
     default "";
 }
+# Personal API token requests: a token with a known id but a wrong secret costs an argon2 check
+# in the app before its own per-token limit, so Nginx limits them per client address first.
+map $uri $relay_api_limit {
+    "~^/api/v1/" $relay_client_ip;
+    "/metrics"   $relay_client_ip;
+    default "";
+}
 limit_req_zone $relay_auth_limit zone=relay_auth:10m rate=${NGINX_AUTH_RATE_PER_MIN}r/m;
 limit_req_zone $relay_upload_limit zone=relay_uploads:10m rate=${NGINX_UPLOAD_RATE_PER_MIN}r/m;
+limit_req_zone $relay_api_limit zone=relay_api:10m rate=${NGINX_API_RATE_PER_MIN}r/m;
 
 # No client addresses in Nginx logs (same rule as the app's logs).
 log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
 
+# Host names. SERVER_NAME, and 127.0.0.1 (the release script's health check through this Nginx),
+# reach the site through the first server. Any other Host header lands on the default server: with
+# SERVER_NAME=_ (every name) it serves the same site; otherwise Nginx closes the connection
+# without an answer (444), so a page on another domain that resolves to this server (DNS
+# rebinding) or a scanner using the bare address never reaches the app.
+map "${SERVER_NAME}" $relay_reject_unknown_host {
+    "_"     "";
+    default 1;
+}
+
 server {
     listen 8080;
-    server_name ${SERVER_NAME};
-    server_tokens off;
-    access_log /dev/stdout relayfiles;
+    server_name ${SERVER_NAME} 127.0.0.1;
+    include /etc/nginx/conf.d/relayfiles-site.inc;
+}
 
-    # Uploads arrive in tus chunks of UPLOAD_CHUNK_SIZE_MB (at most 95 MB), below this.
-    client_max_body_size ${NGINX_MAX_BODY_MB}m;
-
-    sendfile on;
-    tcp_nopush on;
-
-    # Over the limits above: the API's own error format, so the app shows its usual message.
-    limit_req_status 429;
-    error_page 429 = @relay_rate_limited;
-    location @relay_rate_limited {
-        default_type application/json;
-        add_header Retry-After 60 always;
-        return 429 '{"success":false,"error":"Too many requests. Try again later.","code":"RATE_LIMITED"}';
+server {
+    listen 8080 default_server;
+    server_name "";
+    if ($relay_reject_unknown_host) {
+        return 444;
     }
-
-    # When the app is down or the server is in maintenance, Nginx answers with static pages.
-    error_page 502 /_errors/502.html;
-    error_page 503 /_errors/503.html;
-    error_page 504 /_errors/504.html;
-    location ^~ /_errors/ {
-        internal;
-        alias /usr/share/nginx/error/;
-    }
-
-    # Additional volumes (deploy/nginx/volumes/<volumeId>.conf, written by volume:init).
-    include /etc/nginx/volumes/*.conf;
-
-    # Files are sent by Nginx after the app has checked access (X-Accel-Redirect):
-    # ${STORAGE_ACCEL_PREFIX}<volumeId>/<accountId>/<path> → ${STORAGE_ROOT}/users/<accountId>/<path>
-    location ~ ^${STORAGE_ACCEL_PREFIX}[a-z0-9-]+/(.+)$ {
-        internal;
-        alias ${STORAGE_ROOT}/users/$1;
-        # The app checked the path with lstat, but Nginx opens it again: refuse a symlink that
-        # appeared in between (below STORAGE_ROOT; the mount point itself may be one).
-        disable_symlinks on from=${STORAGE_ROOT};
-        # Cache-Control comes from the app (kept by X-Accel-Redirect): playback is cacheable,
-        # downloads are not. Adding one here would send two and disable the browser cache.
-        add_header X-Content-Type-Options nosniff always;
-        # The app's ETag (the file's SHA-256), not Nginx's mtime-size one: resumed downloads send
-        # it back in If-Range, and the app decides what to count by the same validator.
-        etag off;
-        add_header ETag $upstream_http_etag;
-    }
-
-    # Resumable uploads stream straight to the app.
-    location ^~ /api/uploads/tus {
-        if (-f /etc/nginx/maintenance/on) { return 503; }
-        proxy_pass http://relayfiles_app;
-        proxy_http_version 1.1;
-        proxy_request_buffering off;
-        proxy_buffering off;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $relay_client_ip;
-        proxy_set_header CF-Connecting-IP "";
-        proxy_set_header X-Forwarded-For $relay_client_ip;
-        proxy_set_header X-Forwarded-Proto $relay_proto;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header Connection "";
-        proxy_read_timeout 1h;
-        proxy_send_timeout 1h;
-    }
-
-    location / {
-        # Maintenance mode: touch deploy/maintenance/on (remove it to come back). The health
-        # probe stays reachable so a release can confirm the new version before lifting it.
-        set $relay_maintenance "";
-        if (-f /etc/nginx/maintenance/on) { set $relay_maintenance on; }
-        if ($uri = /api/health) { set $relay_maintenance ""; }
-        if ($relay_maintenance) { return 503; }
-        limit_req zone=relay_auth burst=${NGINX_AUTH_BURST} nodelay;
-        limit_req zone=relay_uploads burst=${NGINX_UPLOAD_BURST} nodelay;
-        proxy_pass http://relayfiles_app;
-        # Next.js internals the browser never needs (a proxy rewrite names the upstream address).
-        proxy_hide_header X-Middleware-Rewrite;
-        proxy_http_version 1.1;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $relay_client_ip;
-        proxy_set_header CF-Connecting-IP "";
-        proxy_set_header X-Forwarded-For $relay_client_ip;
-        proxy_set_header X-Forwarded-Proto $relay_proto;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header Connection "";
-        # Streams, zips and the Server page's live updates can run long.
-        proxy_read_timeout 1h;
-        proxy_send_timeout 1h;
-    }
+    include /etc/nginx/conf.d/relayfiles-site.inc;
 }

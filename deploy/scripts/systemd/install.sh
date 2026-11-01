@@ -2,8 +2,8 @@
 # One-time setup of the systemd deployment (safe to run again after changing .env or the
 # templates). Run from the checkout after `npm ci`:
 #   sudo deploy/scripts/systemd/install.sh
-# Renders deploy/systemd/*.service.template and deploy/nginx/host/relayfiles.conf.template
-# with values from .env, then enables the services. It does not start the app; the first
+# Renders deploy/systemd/*.service.template and deploy/nginx/host/*.conf.template with values
+# from .env, then enables the services. It does not start the app; the first
 # deploy/scripts/systemd/release.sh does.
 set -euo pipefail
 # shellcheck source=../lib.sh
@@ -49,16 +49,16 @@ render() {
 
 # Cores as a CPUQuota percentage: 1.5 -> 150%.
 cpu_quota() { awk -v cpus="$1" 'BEGIN { printf "%d%%", cpus * 100 }'; }
-# unit, memory limit, CPU cores (defaults as in src/config/env.ts)
+# unit, memory limit, CPU cores, stop grace period in seconds (defaults as in src/config/env.ts)
 render_unit() {
-  MEMORY_MAX="$2" CPU_QUOTA="$(cpu_quota "$3")" STORAGE_ROOT="$(env_value STORAGE_ROOT /mnt/relayfilesDB)" LOG_DIR="$(env_value LOG_DIR /var/log/relayfiles)" \
-    render "$ROOT/deploy/systemd/$1.service.template" APP_DIR STORAGE_USER STORAGE_HOME NODE_BIN MEMORY_MAX CPU_QUOTA STORAGE_ROOT LOG_DIR > "$UNIT_DIR/$1.service.partial"
+  MEMORY_MAX="$2" CPU_QUOTA="$(cpu_quota "$3")" STOP_GRACE_SEC="$4" STORAGE_ROOT="$(env_value STORAGE_ROOT /mnt/relayfilesDB)" LOG_DIR="$(env_value LOG_DIR /var/log/relayfiles)" \
+    render "$ROOT/deploy/systemd/$1.service.template" APP_DIR STORAGE_USER STORAGE_HOME NODE_BIN MEMORY_MAX CPU_QUOTA STOP_GRACE_SEC STORAGE_ROOT LOG_DIR > "$UNIT_DIR/$1.service.partial"
   mv "$UNIT_DIR/$1.service.partial" "$UNIT_DIR/$1.service"
 }
 
 log "systemd units"
-render_unit relayfiles-app "$(env_value APP_MEMORY_MAX 2G)" "$(env_value APP_CPUS 3)"
-render_unit relayfiles-worker "$(env_value WORKER_MEMORY_MAX 2G)" "$(env_value WORKER_CPUS 2)"
+render_unit relayfiles-app "$(env_value APP_MEMORY_MAX 2G)" "$(env_value APP_CPUS 3)" "$(env_value APP_STOP_GRACE_SEC 30)"
+render_unit relayfiles-worker "$(env_value WORKER_MEMORY_MAX 2G)" "$(env_value WORKER_CPUS 2)" "$(env_value WORKER_STOP_GRACE_SEC 90)"
 systemctl daemon-reload
 systemctl enable relayfiles-app relayfiles-worker
 
@@ -68,10 +68,30 @@ grep -q "managed by Certbot" "$SITE" 2> /dev/null && CERTBOT=true
 # Request limits default as in src/config/policy.ts NGINX.
 NGINX_MAX_BODY_MB="$(env_value NGINX_MAX_BODY_MB 100)" NGINX_AUTH_RATE_PER_MIN="$(env_value NGINX_AUTH_RATE_PER_MIN 20)" NGINX_AUTH_BURST="$(env_value NGINX_AUTH_BURST 20)" \
   NGINX_UPLOAD_RATE_PER_MIN="$(env_value NGINX_UPLOAD_RATE_PER_MIN 60)" NGINX_UPLOAD_BURST="$(env_value NGINX_UPLOAD_BURST 30)" \
-  render "$ROOT/deploy/nginx/host/relayfiles.conf.template" APP_DIR APP_PORT SERVER_NAME NGINX_LISTEN_PORT \
-  NGINX_MAX_BODY_MB NGINX_AUTH_RATE_PER_MIN NGINX_AUTH_BURST NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST > "$SITE.partial"
+  NGINX_API_RATE_PER_MIN="$(env_value NGINX_API_RATE_PER_MIN 120)" NGINX_API_BURST="$(env_value NGINX_API_BURST 60)" \
+  render "$ROOT/deploy/nginx/host/relayfiles.conf.template" APP_DIR APP_PORT SERVER_NAME NGINX_LISTEN_PORT NGINX_MAX_BODY_MB \
+  NGINX_AUTH_RATE_PER_MIN NGINX_AUTH_BURST NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST NGINX_API_RATE_PER_MIN NGINX_API_BURST > "$SITE.partial"
 mv "$SITE.partial" "$SITE"
 ln -sfn "$SITE" /etc/nginx/sites-enabled/relayfiles.conf
+
+# Unknown Host names: closed by relayfiles-catchall.conf (444), unless SERVER_NAME=_ (this site is
+# then meant to answer every name) or another enabled site is already the port's default server
+# (two would fail nginx -t; Ubuntu's stock "default" site is one and shows its welcome page).
+CATCHALL="/etc/nginx/sites-available/relayfiles-catchall.conf"
+CATCHALL_LINK="/etc/nginx/sites-enabled/relayfiles-catchall.conf"
+LISTEN_PORT="$(env_value NGINX_LISTEN_PORT 80)"
+rm -f "$CATCHALL_LINK"
+OTHER_DEFAULT="$(grep -lsE "^[[:space:]]*listen[[:space:]]+([^;]*:)?$LISTEN_PORT([[:space:]][^;]*)?[[:space:]]default_server" /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf | head -n 1 || true)"
+if [ "$(env_value SERVER_NAME)" = "_" ]; then
+  echo "SERVER_NAME=_: requests for any host name reach RelayFiles (no catch-all installed)." >&2
+elif [ -n "$OTHER_DEFAULT" ]; then
+  echo "Unknown host names on port $LISTEN_PORT go to $OTHER_DEFAULT (its default_server), not to RelayFiles." >&2
+  echo "  To close them instead: remove that site (e.g. sudo rm /etc/nginx/sites-enabled/default) and run install.sh again." >&2
+else
+  NGINX_LISTEN_PORT="$LISTEN_PORT" render "$ROOT/deploy/nginx/host/relayfiles-catchall.conf.template" NGINX_LISTEN_PORT > "$CATCHALL.partial"
+  mv "$CATCHALL.partial" "$CATCHALL"
+  ln -sfn "$CATCHALL" "$CATCHALL_LINK"
+fi
 nginx -t
 systemctl reload nginx
 
