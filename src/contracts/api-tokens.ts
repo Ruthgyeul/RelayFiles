@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { API } from "@/config/policy";
 import { MAX_NAME_BYTES } from "@/domain/names";
-import { folderRefSchema } from "./nodes";
+import { folderRefSchema, renameSchema, settingsSchema, type NodeSettingsDto } from "./nodes";
 import type { UploadedFile } from "./uploads";
 
 /**
@@ -14,7 +14,7 @@ export const ADMIN_ONLY_SCOPES: readonly ApiScope[] = ["metrics:read"];
 
 export const API_SCOPE_LABEL: Record<ApiScope, string> = {
   "files:read": "Read files and folders",
-  "files:write": "Upload, create folders and delete",
+  "files:write": "Upload, rename, move, share and delete",
   "metrics:read": "Server metrics (admins)",
 };
 
@@ -67,3 +67,55 @@ export interface ApiV1UploadedFile extends UploadedFile {
   linkId: string;
   url: string;
 }
+
+/** PATCH /api/v1/nodes/:id: rename, move into another folder ("root" or an id), or both. */
+export const apiV1NodePatchSchema = z
+  .object({ name: renameSchema.shape.name.optional(), parentId: folderRefSchema.optional() })
+  .refine((input) => input.name !== undefined || input.parentId !== undefined, "Send a name, a parentId or both.");
+
+export type ApiV1NodePatch = z.infer<typeof apiV1NodePatchSchema>;
+
+const share = settingsSchema.shape;
+
+/**
+ * PATCH /api/v1/nodes/:id/share: only the fields sent change. `password`: a string sets it,
+ * null or "" removes it. `expiry` and `burn` are for admins (403 otherwise), like the web app.
+ */
+export const apiV1SharePatchSchema = z
+  .object({
+    visibility: share.visibility.optional(),
+    access: share.access.optional(),
+    downloadLimit: share.downloadLimit.optional(),
+    note: share.note.optional(),
+    password: share.password.unwrap().nullable().optional(),
+    expiry: share.expiry.optional(),
+    burn: share.burn.optional(),
+    /** Folders: reset the visibility of everything inside to "inherit". */
+    applyDown: z.boolean().optional(),
+  })
+  .strict();
+
+export type ApiV1SharePatch = z.infer<typeof apiV1SharePatchSchema>;
+
+/** GET/PATCH /api/v1/nodes/:id/share and POST /api/v1/nodes/:id/link: an item's share link and settings. */
+export interface ApiV1Share {
+  id: string;
+  name: string;
+  type: "file" | "folder";
+  linkId: string;
+  url: string;
+  /** The item's own setting ("inherit" follows the folder above). */
+  visibility: NodeSettingsDto["visibility"];
+  /** What visitors get: the item's setting or the one it inherits. */
+  effectiveVisibility: "private" | "public";
+  access: NodeSettingsDto["access"];
+  downloadLimit: number | null;
+  downloads: number;
+  note: string;
+  hasPassword: boolean;
+  /** Admin settings (read by anyone, changed by admins only). */
+  expiry: string;
+  expAt: string | null;
+  burn: boolean;
+}
+

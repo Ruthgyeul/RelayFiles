@@ -106,7 +106,7 @@
 
 - 토큰이 없거나 틀리거나 만료됐거나 계정이 삭제일에 닿으면 401, 범위(scope)가 없으면 403.
 - 토큰마다 분당 `API.requestsPerMinute`(120)회를 넘기면 429 + `Retry-After`.
-- 범위: `files:read`(보기·다운로드), `files:write`(업로드·폴더 만들기·삭제), `metrics:read`(관리자, `/metrics`용).
+- 범위: `files:read`(보기·다운로드·검색·공유 설정 읽기), `files:write`(업로드·폴더 만들기·이름 변경·이동·공유 설정 변경·링크 재발급·삭제), `metrics:read`(관리자, `/metrics`용).
 - 다른 계정의 항목은 404.
 
 | 메서드 | 경로 | 범위 | 설명 |
@@ -115,8 +115,13 @@
 | `GET` | `/api/v1/folders/:id` | `files:read` | 폴더(`root` 또는 id), 경로, 하위 항목(웹 앱의 `/api/folders/:id`와 같은 형식) |
 | `POST` | `/api/v1/folders` | `files:write` | `{ parentId: "root"\|id, name }` 폴더 만들기(201). 이름이 겹치면 "Name (2)" |
 | `POST` | `/api/v1/files?folder=root\|id&name=` | `files:write` | 요청 본문 전체가 파일 하나(`Content-Length` 필수). 이름이 겹치면 "name (2)". 용량·항목 수·크기 한도는 tus 업로드와 같다. 201 `{ nodeId, name, folderId, linkId, url }` — `url`은 공유 링크(공개 여부는 폴더 설정을 따른다). 본문은 Nginx `client_max_body_size`(`NGINX_MAX_BODY_MB`)까지, 더 큰 파일은 웹 앱(tus)으로 |
-| `GET` | `/api/v1/files/:id` | `files:read` | 원본 다운로드(Range·ETag는 웹 앱과 같다) |
+| `GET`·`HEAD` | `/api/v1/files/:id` | `files:read` | 원본 다운로드(Range·ETag는 웹 앱과 같다). `HEAD`는 같은 헤더(`Content-Length`·`ETag`)에 본문 없음, 트래픽으로 세지 않는다 |
+| `GET` | `/api/v1/search?q=` | `files:read` | 웹 앱 `/api/search`와 같다: 빈 값이면 최근 파일, `#태그`(URL에서는 `%23`)는 모든 태그를 가진 항목, 그 밖에는 이름. `?tags=a,b`도 받는다. 결과마다 폴더 경로(`TaggedItem[]`) |
+| `PATCH` | `/api/v1/nodes/:id` | `files:write` | `{ name?, parentId?: "root"\|id }`(하나 이상) 이름 변경·이동(디스크도 함께) → `NodeItem`. 이동이 먼저라 새 이름은 대상 폴더에서 검사한다. 끝나는 곳에 같은 이름이 있으면 409와 `Suggested:` 문구(웹 앱 이동과 달리 "Name (2)"로 바꾸지 않는다). 자기 자신·하위·루트 이동은 400 |
 | `DELETE` | `/api/v1/nodes/:id` | `files:write` | 파일이나 폴더(안의 모든 것 포함) 삭제, 볼륨 휴지통으로 → `{ deleted }` |
+| `GET` | `/api/v1/nodes/:id/share` | `files:read` | 공유 링크와 설정 `ApiV1Share { id, name, type, linkId, url, visibility: inherit\|private\|public, effectiveVisibility, access: both\|stream, downloadLimit, downloads, note, hasPassword, expiry, expAt, burn }` |
+| `PATCH` | `/api/v1/nodes/:id/share` | `files:write` | 보낸 필드만 바꾼다 `{ visibility?, access?, downloadLimit?(null=없음), note?, password?(문자열=설정, null·""=해제), applyDown?, expiry?, burn? }` → `ApiV1Share`. 모르는 필드는 400. `expiry`·`burn`은 관리자만(그 밖에는 403) |
+| `POST` | `/api/v1/nodes/:id/link` | `files:write` | 공유 링크 재발급(옛 링크 즉시 무효, 활동 기록에 남음) → `ApiV1Share` |
 
 ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Method `POST`, Body `Binary`, Header `Authorization: Bearer rfp_…`, URL `{json:data.url}`. curl: `curl -H "Authorization: Bearer $TOKEN" --data-binary @a.png "https://<도메인>/api/v1/files?name=a.png"`.
 
