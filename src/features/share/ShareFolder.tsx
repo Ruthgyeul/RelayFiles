@@ -8,6 +8,7 @@ import { formatDateTime, formatSize } from "@/domain/format";
 import { itemCount } from "@/domain/tree";
 import { kindOf } from "@/shared/ui/node-kind";
 import { MediaViewer } from "@/features/viewer/MediaViewer";
+import { withSubtitles } from "@/features/viewer/subtitle-tracks";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
@@ -128,15 +129,17 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
       <span className="pt-2 text-center text-[12px] text-t5">Shared privately with RelayFiles</span>
 
       <MediaViewer
-        items={files.map((item) => ({
-          id: item.id,
-          name: item.name,
-          kind: item.kind ?? "other",
-          src: shareUrls.stream(linkId, item.id),
-          thumbSrc: item.hasThumb ? shareUrls.thumb(linkId, item.id) : null,
-          previewSrc: shareUrls.preview(linkId, item.id),
-          transcodeSrc: shareUrls.transcode(linkId, item.id),
-        }))}
+        items={withSubtitles(
+          files.map((item) => ({
+            id: item.id,
+            name: item.name,
+            kind: item.kind ?? "other",
+            src: shareUrls.stream(linkId, item.id),
+            thumbSrc: item.hasThumb ? shareUrls.thumb(linkId, item.id) : null,
+            previewSrc: shareUrls.preview(linkId, item.id),
+            transcodeSrc: shareUrls.transcode(linkId, item.id),
+          })),
+        )}
         currentId={viewing}
         onSelect={setViewing}
         onClose={() => setViewing(null)}

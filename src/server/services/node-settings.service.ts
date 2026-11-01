@@ -3,6 +3,7 @@ import { hash } from "@node-rs/argon2";
 import { FILES, SHARE } from "@/config/policy";
 import type { LinkEventDto, NodeItem, SettingsInput } from "@/contracts/nodes";
 import { newLinkId } from "@/domain/ids";
+import { activityCsv, activityCsvName } from "@/domain/link-activity";
 import { isExpiryOption, nextExpiry } from "@/domain/share";
 import { normalizeTag } from "@/domain/tags";
 import { db, type Prisma } from "../db/client";
@@ -74,10 +75,20 @@ export async function regenerateLink(owner: NodeOwner, nodeId: string): Promise<
 
 /** Link activity of an item; a folder's log also lists activity on everything inside it. */
 export async function linkActivity(owner: NodeOwner, nodeId: string): Promise<LinkEventDto[]> {
+  return (await activityOf(owner, nodeId, SHARE.activityListLimit)).events;
+}
+
+/** The kept link activity of an item as a CSV file (newest first), named after the item. */
+export async function linkActivityCsv(owner: NodeOwner, nodeId: string): Promise<{ name: string; csv: string }> {
+  const { name, events } = await activityOf(owner, nodeId, SHARE.activityExportLimit);
+  return { name: activityCsvName(name), csv: activityCsv(events) };
+}
+
+async function activityOf(owner: NodeOwner, nodeId: string, limit: number): Promise<{ name: string; events: LinkEventDto[] }> {
   const row = await requireNode(owner.id, nodeId);
   const ids = row.type === "FOLDER" ? [row.id, ...(await descendantIds(db(), row.id))] : [row.id];
-  const events = await listLinkEvents(db(), ids, SHARE.activityListLimit);
-  return events.map((event) => ({ ...event, kind: event.kind.toLowerCase() as LinkEventDto["kind"], at: event.at.toISOString() }));
+  const events = await listLinkEvents(db(), ids, limit);
+  return { name: row.name, events: events.map((event) => ({ ...event, kind: event.kind.toLowerCase() as LinkEventDto["kind"], at: event.at.toISOString() })) };
 }
 
 /** Admin switch that stops downloads of an item ("Downloads paused"). */

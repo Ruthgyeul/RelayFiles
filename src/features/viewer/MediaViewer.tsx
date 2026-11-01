@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { documentPreviewOf } from "@/domain/file-format";
 import { formatClock } from "@/domain/format";
@@ -14,6 +14,9 @@ import { playbackProps } from "./playback";
 import { prefetchImage } from "./prefetch";
 import { resumeStore } from "./resume";
 import { StageImage, StageVideo, type MediaHandlers } from "./StageMedia";
+import type { SubtitleSource } from "./subtitle-tracks";
+import { useSlideshow } from "./useSlideshow";
+import { useViewerKeys } from "./useViewerKeys";
 
 export interface ViewerItem {
   id: string;
@@ -27,6 +30,8 @@ export interface ViewerItem {
   previewSrc?: string;
   /** The video converted while it plays, for containers the browser cannot decode. */
   transcodeSrc?: string;
+  /** Subtitle files beside a video (see `withSubtitles`). */
+  subtitles?: SubtitleSource[];
 }
 
 interface MediaViewerProps {
@@ -39,15 +44,12 @@ interface MediaViewerProps {
   notify: (message: string) => void;
 }
 
-const SEEK = { short: 5, long: 10 } as const;
-const VOLUME_STEP = 0.1;
-const PERCENT = 100;
-
-function ViewerButton({ icon, label, onClick, large }: { icon: IconName; label: string; onClick: () => void; large: boolean }) {
+function ViewerButton({ icon, label, onClick, large, pressed }: { icon: IconName; label: string; onClick: () => void; large: boolean; pressed?: boolean }) {
   return (
     <button
       type="button"
       aria-label={label}
+      aria-pressed={pressed}
       onClick={onClick}
       className={cn("flex shrink-0 items-center justify-center border-0 bg-transparent text-t2", large ? "size-9 rounded-lg hover:bg-viewer-hover" : "size-11")}
     >
@@ -57,7 +59,7 @@ function ViewerButton({ icon, label, onClick, large }: { icon: IconName; label: 
 }
 
 /** Image, video, audio or a document (text, code, PDF, ...), with resume for audio and video. */
-function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: boolean; onDownload?: () => void; notify: (message: string) => void }) {
+function Stage({ item, large, slideshow, onDownload, notify }: { item: ViewerItem; large: boolean; slideshow: boolean; onDownload?: () => void; notify: (message: string) => void }) {
   const handlers: MediaHandlers = {
     "data-viewer-media": true,
     onTimeUpdate: (event: React.SyntheticEvent<HTMLMediaElement>) => resumeStore.track(item.id, event.currentTarget),
@@ -72,9 +74,9 @@ function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: b
   if (docFormat) return <DocumentStage key={item.id} name={item.name} src={item.src} format={docFormat} onDownload={large ? onDownload : undefined} notify={notify} />;
   switch (item.kind) {
     case "video":
-      return <StageVideo key={item.id} name={item.name} src={item.src} thumbSrc={thumbSrc} transcodeSrc={item.transcodeSrc} handlers={handlers} />;
+      return <StageVideo key={item.id} name={item.name} src={item.src} thumbSrc={thumbSrc} transcodeSrc={item.transcodeSrc} subtitles={item.subtitles} handlers={handlers} />;
     case "image":
-      return <StageImage key={item.id} name={item.name} src={item.previewSrc ?? item.src} thumbSrc={thumbSrc} />;
+      return <StageImage key={item.id} name={item.name} src={item.previewSrc ?? item.src} thumbSrc={thumbSrc} fade={slideshow} />;
     case "audio":
       return (
         <div className={cn("flex flex-col items-center gap-5", large ? "w-[min(420px,90%)]" : "w-[90%]")}>
@@ -91,55 +93,25 @@ function Stage({ item, large, onDownload, notify }: { item: ViewerItem; large: b
 
 /**
  * Media viewer from the design: an 880px modal on wider screens, full screen below 720px.
- * Keys: Space/K play, ←/→ 5 s (or previous/next file for images), J/L 10 s, ↑/↓ volume,
- * M mute, F fullscreen, N/P next/previous, Esc close.
+ * Keys (see `useViewerKeys`): Space/K play or slideshow, arrows, J/L, M, F, N/P, Esc. Pictures
+ * play as a slideshow from the play button or Space; stepping or closing stops it.
  */
 export function MediaViewer({ items, currentId, onSelect, onClose, onDownload, notify }: MediaViewerProps) {
   const { small } = useViewport();
   const mounted = useMounted();
   const index = items.findIndex((item) => item.id === currentId);
   const item = index >= 0 ? items[index]! : null;
-  const latest = useRef({ items, index, onSelect, notify, onClose, small });
-  useEffect(() => {
-    latest.current = { items, index, onSelect, notify, onClose, small };
-  });
-
-  useEffect(() => {
-    if (!item) return;
-    const step = (delta: number) => {
-      const { items: list, index: at, onSelect: select } = latest.current;
-      if (list.length > 0) select(list[(at + delta + list.length) % list.length]!.id);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      const media = document.querySelector<HTMLMediaElement>("[data-viewer-media]");
-      const key = event.key.toLowerCase();
-      // The modal closes itself on Escape; the full-screen mobile viewer is not a Modal.
-      if (event.key === "Escape" && latest.current.small) latest.current.onClose();
-      else if (media && (key === " " || key === "k")) {
-        event.preventDefault();
-        if (media.paused) void media.play();
-        else media.pause();
-      } else if (media && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
-        event.preventDefault();
-        media.currentTime = Math.max(0, media.currentTime + (event.key === "ArrowRight" ? SEEK.short : -SEEK.short));
-      } else if (media && (key === "j" || key === "l")) {
-        media.currentTime = Math.max(0, media.currentTime + (key === "l" ? SEEK.long : -SEEK.long));
-      } else if (media && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        event.preventDefault();
-        media.volume = Math.min(1, Math.max(0, media.volume + (event.key === "ArrowUp" ? VOLUME_STEP : -VOLUME_STEP)));
-        latest.current.notify(`Volume ${Math.round(media.volume * PERCENT)}%`);
-      } else if (media && key === "m") {
-        media.muted = !media.muted;
-        latest.current.notify(media.muted ? "Muted" : "Sound on");
-      } else if (media && key === "f") {
-        if (document.fullscreenElement) void document.exitFullscreen();
-        else void media.requestFullscreen?.();
-      } else if (event.key === "ArrowRight" || key === "n") step(1);
-      else if (event.key === "ArrowLeft" || key === "p") step(-1);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [item]);
+  const slideshow = useSlideshow(items, index, onSelect, notify);
+  /** The user's own step to another file (a slideshow stops). */
+  const step = (delta: number) => {
+    slideshow.stop();
+    if (items.length > 0) onSelect(items[(index + delta + items.length) % items.length]!.id);
+  };
+  const close = () => {
+    slideshow.stop();
+    onClose();
+  };
+  useViewerKeys(item !== null, { step, close, small, notify, slideshow });
 
   // The previous and next pictures load in the background, so stepping shows them at once.
   useEffect(() => {
@@ -155,10 +127,19 @@ export function MediaViewer({ items, currentId, onSelect, onClose, onDownload, n
   const download = onDownload ? () => onDownload(item.id) : undefined;
   const buttons = (large: boolean): ReactNode => (
     <>
-      <ViewerButton icon="caret-left" label="Previous file" large={large} onClick={() => onSelect(items[(index - 1 + items.length) % items.length]!.id)} />
-      <ViewerButton icon="caret-right" label="Next file" large={large} onClick={() => onSelect(items[(index + 1) % items.length]!.id)} />
+      {slideshow.available && (
+        <ViewerButton
+          icon={slideshow.playing ? "pause" : "play"}
+          label={slideshow.playing ? "Pause slideshow" : "Play slideshow"}
+          pressed={slideshow.playing}
+          large={large}
+          onClick={slideshow.toggle}
+        />
+      )}
+      <ViewerButton icon="caret-left" label="Previous file" large={large} onClick={() => step(-1)} />
+      <ViewerButton icon="caret-right" label="Next file" large={large} onClick={() => step(1)} />
       {download && <ViewerButton icon="download-simple" label="Download" large={large} onClick={download} />}
-      <ViewerButton icon="x" label="Close viewer" large={large} onClick={onClose} />
+      <ViewerButton icon="x" label="Close viewer" large={large} onClick={close} />
     </>
   );
 
@@ -170,7 +151,7 @@ export function MediaViewer({ items, currentId, onSelect, onClose, onDownload, n
           {buttons(false)}
         </div>
         <div className="flex min-h-0 flex-1 items-center justify-center">
-          <Stage item={item} large={false} notify={notify} />
+          <Stage item={item} large={false} slideshow={slideshow.playing} notify={notify} />
         </div>
         <div className="flex h-10 shrink-0 items-center justify-center text-[12px] text-t4">{position}</div>
       </div>,
@@ -179,14 +160,14 @@ export function MediaViewer({ items, currentId, onSelect, onClose, onDownload, n
   }
 
   return (
-    <Modal open onClose={onClose} width={880} gutter={48} layer="viewer" backdrop="viewer" label={item.name} className="overflow-hidden rounded-[14px] border-0 bg-black shadow-viewer">
+    <Modal open onClose={close} width={880} gutter={48} layer="viewer" backdrop="viewer" label={item.name} className="overflow-hidden rounded-[14px] border-0 bg-black shadow-viewer">
       <div className="flex h-[52px] shrink-0 items-center gap-1 border-b border-viewer-line pr-2 pl-4">
         <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{item.name}</span>
         <span className="px-2 text-[12px] text-t4">{position}</span>
         {buttons(true)}
       </div>
       <div className="flex h-[min(70vh,520px)] items-center justify-center bg-black">
-        <Stage item={item} large onDownload={download} notify={notify} />
+        <Stage item={item} large slideshow={slideshow.playing} onDownload={download} notify={notify} />
       </div>
     </Modal>
   );

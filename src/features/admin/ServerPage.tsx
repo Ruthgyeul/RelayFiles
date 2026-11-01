@@ -8,6 +8,7 @@ import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { AnnouncementCard } from "./AnnouncementCard";
+import { AuditCard } from "./AuditCard";
 import { ServerMetrics } from "./ServerMetrics";
 import { settingsApi } from "./settings-api";
 import { SignupCard } from "./SignupCard";
@@ -15,18 +16,21 @@ import { ThemeCard } from "./ThemeCard";
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
-/** Admin "Server" page: announcement, live metrics, services, new accounts and theme. */
+/** Admin "Server" page: announcement, live metrics, services, new accounts, theme and the audit log. */
 export function ServerPage({ settings, snapshot }: { settings: ServerSettings; snapshot: ServerSnapshot }) {
   usePageTitle("Server");
   const router = useRouter();
   const { notify } = useShell();
   const [busy, setBusy] = useState(false);
+  // Each saved change adds an audit entry; the log reloads from the newest one.
+  const [changes, setChanges] = useState(0);
 
   const run = async (action: () => Promise<string | null>) => {
     setBusy(true);
     try {
       const message = await action();
       if (message) notify(message);
+      setChanges((count) => count + 1);
       router.refresh();
     } catch (caught) {
       notify(errorText(caught));
@@ -93,6 +97,7 @@ export function ServerPage({ settings, snapshot }: { settings: ServerSettings; s
           })
         }
       />
+      <AuditCard changes={changes} />
     </div>
   );
 }

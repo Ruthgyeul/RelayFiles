@@ -19,8 +19,8 @@ export interface CallResult<T> {
   cookie: string | undefined;
 }
 
-/** Calls a route handler directly, carrying the device cookie between calls. */
-export async function callRoute<T, P = Record<string, never>>(handler: Handler<P>, options: CallOptions<P> = {}): Promise<CallResult<T>> {
+/** Calls a route handler directly and returns its raw response (CSV, files, streams). */
+export function callRouteRaw<P = Record<string, never>>(handler: Handler<P>, options: CallOptions<P> = {}): Promise<Response> {
   const headers = new Headers({ "content-type": "application/json", "user-agent": "Mozilla/5.0 (X11; Linux x86_64) Firefox/143.0" });
   if (options.cookie) headers.set("cookie", `${SESSION_COOKIE}=${options.cookie}`);
   if (options.ip) headers.set("x-real-ip", options.ip);
@@ -29,7 +29,12 @@ export async function callRoute<T, P = Record<string, never>>(handler: Handler<P
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
-  const res = await handler(req, { params: Promise.resolve((options.params ?? {}) as P) });
+  return handler(req, { params: Promise.resolve((options.params ?? {}) as P) });
+}
+
+/** Calls a route handler directly, carrying the device cookie between calls. */
+export async function callRoute<T, P = Record<string, never>>(handler: Handler<P>, options: CallOptions<P> = {}): Promise<CallResult<T>> {
+  const res = await callRouteRaw(handler, options);
   const setCookie = res.headers.getSetCookie().find((line) => line.startsWith(`${SESSION_COOKIE}=`));
   const cookie = setCookie === undefined ? options.cookie : setCookie.split(";")[0]!.slice(SESSION_COOKIE.length + 1) || undefined;
   return { status: res.status, json: (await res.json()) as CallResult<T>["json"], cookie };

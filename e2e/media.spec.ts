@@ -158,3 +158,77 @@ test("shows a saved playback position in the row", async ({ page }) => {
   await page.reload();
   await expect(page.locator('[data-item="notes.txt"]')).toContainText("1:12 / 4:05");
 });
+
+test("loads subtitle files beside a video as WebVTT tracks", async ({ page }) => {
+  await openFiles(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([
+    // Not a playable video: the track list does not depend on playback.
+    { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("not really a video") },
+    { name: "clip.srt", mimeType: "application/x-subrip", buffer: Buffer.from('1\r\n00:00:01,000 --> 00:00:02,500\r\nHello, <font color="red">relay</font>\r\n') },
+    { name: "clip.en.vtt", mimeType: "text/vtt", buffer: Buffer.from("WEBVTT\n\n00:01.000 --> 00:02.000\nHi\n") },
+  ]);
+  await expect(page.locator('[data-item="clip.en.vtt"]')).toBeVisible();
+  await page.getByRole("region", { name: "Transfers" }).getByRole("button", { name: "Close transfers" }).click();
+
+  await page.locator('[data-item="clip.mp4"]').getByRole("button", { name: "Preview" }).click();
+  const tracks = page.getByRole("dialog", { name: "clip.mp4" }).locator('video track[kind="subtitles"]');
+  await expect(tracks).toHaveCount(2);
+  // The browser parses the converted WebVTT into cues (a hidden track loads too); the first track shows.
+  const parsed = () =>
+    tracks.evaluateAll((elements) =>
+      (elements as HTMLTrackElement[]).map((element) => {
+        const showing = element.track.mode === "showing";
+        if (element.track.mode === "disabled") element.track.mode = "hidden";
+        const cues = Array.from(element.track.cues ?? []).map((cue) => `${cue.startTime}-${cue.endTime} ${(cue as VTTCue).text}`);
+        return { label: element.label, lang: element.srclang, blob: element.src.startsWith("blob:"), showing, cues };
+      }),
+    );
+  await expect
+    .poll(parsed)
+    .toEqual([
+      { label: "Subtitles", lang: "", blob: true, showing: true, cues: ["1-2.5 Hello, relay"] },
+      { label: "English", lang: "en", blob: true, showing: false, cues: ["1-2 Hi"] },
+    ]);
+  const width = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+  expect(width[0]).toBeLessThanOrEqual(width[1]!);
+});
+
+test("plays pictures as a slideshow that stops at the end", async ({ page }) => {
+  await openFiles(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([
+    { name: "a.png", mimeType: "image/png", buffer: PNG },
+    { name: "b.png", mimeType: "image/png", buffer: PNG },
+    { name: "c.png", mimeType: "image/png", buffer: PNG },
+    { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello relay") },
+  ]);
+  await expect(page.locator('[data-item="notes.txt"]')).toBeVisible();
+  await page.getByRole("region", { name: "Transfers" }).getByRole("button", { name: "Close transfers" }).click();
+
+  await page.locator('[data-item="a.png"]').getByRole("button", { name: "Preview" }).click();
+  await page.getByRole("dialog", { name: "a.png" }).getByRole("button", { name: "Play slideshow" }).click();
+  await expect(page.getByText("Slideshow started")).toBeVisible();
+  // Each picture shows for VIEWER.slideshowIntervalMs (4 s) and fades in.
+  const picture = page.getByRole("dialog", { name: "b.png" }).getByRole("img", { name: "b.png" });
+  await expect(picture).toBeVisible({ timeout: 10_000 });
+  expect(await picture.evaluate((img) => getComputedStyle(img).transitionDuration)).toBe("0.4s");
+  await expect(page.getByRole("dialog", { name: "c.png" })).toBeVisible({ timeout: 10_000 });
+  // The last picture ends the slideshow; it does not go on to notes.txt or wrap around.
+  await expect(page.getByText("Slideshow ended")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("dialog", { name: "c.png" }).getByRole("button", { name: "Play slideshow" })).toBeVisible();
+
+  // Space starts again from the first picture, without the fade under reduced motion; the user's own step stops it.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.keyboard.press(" ");
+  const first = page.getByRole("dialog", { name: "a.png" });
+  await expect(first.getByRole("button", { name: "Pause slideshow" })).toBeVisible();
+  expect(await first.getByRole("img", { name: "a.png" }).evaluate((img) => getComputedStyle(img).transitionDuration)).toBe("0s");
+  await page.keyboard.press("ArrowRight");
+  const second = page.getByRole("dialog", { name: "b.png" });
+  await expect(second.getByRole("button", { name: "Play slideshow" })).toBeVisible();
+  await page.waitForTimeout(5_000);
+  await expect(second).toBeVisible();
+});

@@ -166,6 +166,10 @@ export const SHARE = {
   eventsKeptPerNode: 200,
   /** Entries the Activity dialog shows; a folder's log merges everything inside it. */
   activityListLimit: 200,
+  /** Recent periods the Activity summary counts besides the whole kept log. */
+  activitySummaryDays: [7, 30],
+  /** Events the Activity CSV export holds (everything kept for a folder's items, newest first). */
+  activityExportLimit: 10_000,
   /** Password unlocks one device remembers; the oldest are dropped first. */
   unlockCookieMaxLinks: 50,
   /** Links of expired items keep answering "This link has expired" for this long. */
@@ -255,6 +259,17 @@ export const DOCUMENT_PREVIEW = {
   pdfMaxPixelRatio: 2,
   /** Width PDF pages are laid out at before the stage has been measured. */
   pdfFallbackWidthPx: 800,
+} as const;
+
+/** The media viewer's subtitles and slideshow. */
+export const VIEWER = {
+  /**
+   * Subtitle files (.vtt/.srt next to a video) larger than this are not loaded. Same as the
+   * text preview cap, so a share link's playback route serves them (`streamReach` for text).
+   */
+  subtitleMaxBytes: DOCUMENT_PREVIEW.textMaxBytes,
+  /** How long each picture shows in a slideshow. */
+  slideshowIntervalMs: 4_000,
 } as const;
 
 export const METRICS = {
@@ -381,8 +396,10 @@ export const AUTH = {
   reauthWindowMin: 10,
   /** Admin audit entries are kept this long. */
   auditRetentionDays: 365,
-  /** Audit entries the admin page loads at once. */
+  /** Most audit entries one request returns. */
   auditListLimit: 200,
+  /** Audit entries the admin screen loads per page. */
+  auditPageSize: 50,
   /** The device cookie lives a year; the sessions inside it end with their own lifetimes. */
   sessionCookieMaxAgeSec: 365 * 24 * 60 * 60,
   /** Accounts signed in on one device at most. */
