@@ -25,10 +25,10 @@ import { recordTrashed } from "../repositories/trash.repo";
 import { assertItemRoom } from "./item-limit.service";
 import { createFolder } from "./node.service";
 import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
-import { assertAccountWritable, driverForAccount } from "./volume.service";
+import { assertAccountWritable, driverForAccount, lockAccountForWrite } from "./volume.service";
 import { enqueueMedia } from "../jobs/queue";
 import { countOne } from "../metrics/counters";
-import { locationOf } from "./node-location";
+import { lockedLocationOf } from "./node-location";
 import { logger } from "../logger";
 
 type Owner = SpaceOwner;
@@ -141,6 +141,8 @@ async function ensureFolders(owner: Owner, driver: StorageDriver, baseId: string
       // A file already has this name: put the folder next to it as "Name (2)".
       const name = existing ? uniqName(await listSiblingNames(db(), parentId), dir, false) : dir;
       const created = await withStorageTransaction(db(), async (tx, undo) => {
+        // Waits for and blocks a move of the account to another volume (docs/architecture.md "쓰기 잠금").
+        await lockAccountForWrite(tx, owner.id, driver.volumeId);
         const row = await createFolderNode(tx, { id: newNodeId(), accountId: owner.id, parentId, name, linkId: newLinkId() });
         const location = { accountId: owner.id, segments: [...segments, name] };
         await driver.createFolder(location);
@@ -202,10 +204,10 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
   const location = { accountId: owner.id, segments: [...folder.segments, name] };
   // The same bytes already in the account: link to them instead of keeping a second copy.
   const twin = await findFileWithContent(db(), owner.id, sha256, BigInt(entry.size), replace?.id ?? null);
-  const twinLocation = twin ? await locationOf(owner.id, twin.id) : null;
   let linked = false;
 
   const row = await withStorageTransaction(db(), async (tx, undo) => {
+    await lockAccountForWrite(tx, owner.id, driver.volumeId);
     if (replace) {
       const trashed = await driver.moveToTrash(location);
       undo.push("restore replaced file", () => driver.restoreFromTrash(trashed, location));
@@ -232,6 +234,9 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       await moveLinkEvents(tx, replace.id, placed.id);
       await deleteNodes(tx, [replace.id]);
     }
+    // The twin's path is read with it and its folders locked, so a rename or move meanwhile
+    // cannot leave the link pointing at another file of the same size.
+    const twinLocation = twin ? await lockedLocationOf(tx, owner.id, twin.id) : null;
     linked = twinLocation !== null && (await driver.linkExisting(twinLocation, location, entry.size));
     if (!linked) await driver.moveIntoPlace(tempPath, location);
     undo.push("remove placed file", async () => {
