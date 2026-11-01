@@ -230,6 +230,42 @@ describe("settings on the way to a file", () => {
     expect((await stream()).status).toBe(403);
   });
 
+  it("counts password guesses per locked item, across links and without resets by another password", async () => {
+    const { a, day, b } = await sharedTrip({ passwordHash: await hash("trip pass") });
+    await prisma.node.update({ where: { id: day.id }, data: { visibility: "PUBLIC", passwordHash: await hash("day pass") } });
+    await prisma.node.update({ where: { id: a }, data: { visibility: "PUBLIC" } });
+    await prisma.node.update({ where: { id: b }, data: { visibility: "PUBLIC" } });
+    const [dayLink, aLink, bLink] = [await linkOf(day.id), await linkOf(a), await linkOf(b)];
+    const guess = (linkId: string, password: string, ip: string) => visit(unlock, `/api/share/${linkId}/unlock`, { linkId }, { method: "POST", body: { password }, ip });
+
+    // Knowing the folder's password does not reset the guesses at the subfolder's.
+    const ip = visitorIp();
+    for (let attempt = 1; attempt < SHARE.unlockMaxAttempts; attempt++) expect((await guess(dayLink, `day ${attempt}`, ip)).status).toBe(403);
+    expect((await guess(dayLink, "trip pass", ip)).status).toBe(200);
+    expect((await guess(dayLink, "day again", ip)).status).toBe(429);
+
+    // Two links to files of the same locked folder share its budget.
+    const other = visitorIp();
+    for (let attempt = 0; attempt < SHARE.unlockMaxAttempts; attempt++) expect((await guess(aLink, `trip ${attempt}`, other)).status).toBe(403);
+    expect((await guess(bLink, "trip next", other)).status).toBe(429);
+  });
+
+  it("applies Stream only and paused downloads of a folder to links above it", async () => {
+    const { trip, day, b } = await sharedTrip();
+    const download = () => visit(shareDownload, path(trip.linkId, b, "download"), fileParams(trip.linkId, b));
+    expect((await download()).status).toBe(200);
+    await prisma.node.update({ where: { id: day.id }, data: { access: "STREAM" } });
+    const streamOnly = await download();
+    expect([streamOnly.status, ((await streamOnly.json()) as { error: string }).error]).toEqual([403, "Downloads are disabled for this link."]);
+    expect((await visit(shareStream, path(trip.linkId, b, "stream"), fileParams(trip.linkId, b))).status).toBe(200);
+    expect((await sharePage(trip.linkId, day.id, noViewer, Date.now()))!.page.view!.items.find((item) => item.name === "b.txt")!.canDownload).toBe(false);
+    expect((await visit(shareZip, `/api/share/${trip.linkId}/zip?folder=${day.id}`, { linkId: trip.linkId }, { headers: {} })).status).toBe(403);
+
+    await prisma.node.update({ where: { id: day.id }, data: { access: "BOTH", dlPaused: true } });
+    const paused = await download();
+    expect([paused.status, ((await paused.json()) as { error: string }).error]).toEqual([429, "Server busy · downloads for this file are paused"]);
+  });
+
   it("locks a link to the account's root folder with the root's own password", async () => {
     const m = await member();
     await prisma.node.update({ where: { id: m.rootId }, data: { visibility: "PUBLIC", passwordHash: await hash("root pass") } });

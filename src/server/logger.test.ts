@@ -6,7 +6,7 @@ describe("redact", () => {
     const input = {
       accountId: "abcdefghjkmn",
       token: "AbCd1234",
-      nested: { password: "hunter2", headers: { authorization: "Bearer x", cookie: "rf_s=1", "x-forwarded-for": "1.2.3.4" } },
+      nested: { password: "hunter2", headers: { authorization: "Bearer x", cookie: "rf_s=1", "x-forwarded-for": "1.2.3.4", "x-real-ip": "1.2.3.4", "true-client-ip": "1.2.3.4" } },
       list: [{ ip: "1.2.3.4", name: "ok" }],
       tokenEnc: "...",
       COOKIE_SECRET: "...",
@@ -14,7 +14,7 @@ describe("redact", () => {
     expect(redact(input)).toEqual({
       accountId: "abcdefghjkmn",
       token: "[redacted]",
-      nested: { password: "[redacted]", headers: { authorization: "[redacted]", cookie: "[redacted]", "x-forwarded-for": "[redacted]" } },
+      nested: { password: "[redacted]", headers: { authorization: "[redacted]", cookie: "[redacted]", "x-forwarded-for": "[redacted]", "x-real-ip": "[redacted]", "true-client-ip": "[redacted]" } },
       list: [{ ip: "[redacted]", name: "ok" }],
       tokenEnc: "[redacted]",
       COOKIE_SECRET: "[redacted]",
