@@ -5,6 +5,7 @@ import { useRef, useState, type DragEvent } from "react";
 import type { FileRequestView } from "@/contracts/file-requests";
 import { formatSize } from "@/domain/format";
 import { BatchUploader } from "@/features/transfers/upload-runner";
+import { useLeaveGuard } from "@/shared/hooks/useLeaveGuard";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
@@ -39,6 +40,7 @@ export function RequestUploader({ view, chunkBytes }: { view: FileRequestView; c
   const [batches, setBatches] = useState<Sending[]>([]);
   const [dragging, setDragging] = useState(false);
   const nextKey = useRef(0);
+  useLeaveGuard(batches.some((batch) => batch.state === "sending"));
 
   const update = (key: number, change: Partial<Sending>) => setBatches((current) => current.map((batch) => (batch.key === key ? { ...batch, ...change } : batch)));
 

@@ -37,6 +37,27 @@ export type PrepareUploadResult =
       files: { index: number; rel: string; size: number }[];
     };
 
+/** Characters of a batch id (`prepareUpload`) and a tus upload id (16 random bytes, hex). */
+const BATCH_ID = /^[a-z0-9]{24}$/;
+const TUS_UPLOAD_ID = /^[0-9a-f]{32}$/;
+
+/**
+ * Asks to continue an unfinished upload of this device (one a reload interrupted) as file
+ * `slot` of a new batch, instead of sending the file again from the start.
+ */
+export const resumeUploadSchema = z.object({
+  batchId: z.string().regex(BATCH_ID),
+  slot: z.number().int().nonnegative().lt(MAX_FILES_PER_BATCH),
+  uploadId: z.string().regex(TUS_UPLOAD_ID),
+});
+
+export type ResumeUploadInput = z.infer<typeof resumeUploadSchema>;
+
+/** The upload can be continued from `offset` bytes (the tus HEAD answers the same). */
+export interface ResumedUpload {
+  offset: number;
+}
+
 /** Body returned by the tus server when a file finishes. */
 export interface UploadedFile {
   nodeId: string;

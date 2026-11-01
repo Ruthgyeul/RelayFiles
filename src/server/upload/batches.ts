@@ -27,6 +27,11 @@ const ttl = () => getEnv("uploads").UPLOAD_TMP_TTL_HOURS * HOUR_SECONDS;
 const batchKey = (batchId: string) => `upload:batch:${batchId}`;
 const ownerKey = (uploadId: string) => `upload:owner:${uploadId}`;
 const requestKey = (uploadId: string) => `upload:request:${uploadId}`;
+const slotKey = (uploadId: string) => `upload:slot:${uploadId}`;
+const slotSchema = z.object({ batchId: z.string(), slot: z.number().int().nonnegative() });
+
+/** Where a tus upload's file goes: its batch and position in it. */
+export type UploadSlot = z.infer<typeof slotSchema>;
 
 export async function saveBatch(batchId: string, batch: UploadBatch): Promise<void> {
   await redis().set(batchKey(batchId), JSON.stringify(batch), "EX", ttl());
@@ -57,6 +62,22 @@ export async function uploadRequest(uploadId: string): Promise<string | null> {
   return redis().get(requestKey(uploadId));
 }
 
+/**
+ * Hands an unfinished upload to a newer batch (resuming after a reload): its tus metadata
+ * still names the batch it was created for, so the finishing step reads this first.
+ */
+export async function rebindUpload(uploadId: string, slot: UploadSlot): Promise<void> {
+  await redis().set(slotKey(uploadId), JSON.stringify(slot), "EX", ttl());
+}
+
+/** The batch slot an upload was handed to by {@link rebindUpload}, if any. */
+export async function reboundSlot(uploadId: string): Promise<UploadSlot | null> {
+  const raw = await redis().get(slotKey(uploadId));
+  if (!raw) return null;
+  const parsed = slotSchema.safeParse(JSON.parse(raw));
+  return parsed.success ? parsed.data : null;
+}
+
 export async function forgetUpload(uploadId: string): Promise<void> {
-  await redis().del(ownerKey(uploadId), requestKey(uploadId));
+  await redis().del(ownerKey(uploadId), requestKey(uploadId), slotKey(uploadId));
 }

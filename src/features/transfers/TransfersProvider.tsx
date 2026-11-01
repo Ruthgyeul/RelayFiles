@@ -7,10 +7,13 @@ import type { DuplicatePolicy, PrepareUploadResult } from "@/contracts/uploads";
 import { nameError } from "@/domain/names";
 import { folderCount, uploadFallbackName } from "@/domain/upload";
 import { useShell } from "@/features/shell/ShellProvider";
+import { useLeaveGuard } from "@/shared/hooks/useLeaveGuard";
 import { ApiClientError, apiFetch } from "@/shared/lib/api-client";
+import { claimUpload } from "./api";
 import { DuplicateDialog, type DuplicateRequest } from "./DuplicateDialog";
 import { canSaveToFolder, FolderDownloader, pickSaveFolder } from "./download-runner";
 import type { UploadEntry } from "./read-drop";
+import { hasUnfinishedUploads } from "./resume-candidates";
 import { initialItems } from "./transfer-items";
 import { TransfersContext, type DownloadRequest, type FolderDownloadRequest, type Transfer, type TransfersContextValue, type UploadTarget } from "./transfers-context";
 import { BatchUploader } from "./upload-runner";
@@ -38,7 +41,8 @@ interface Runner {
  */
 export function TransfersProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { notify, config } = useShell();
+  const { notify, config, activeAccount } = useShell();
+  const accountId = activeAccount?.id;
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [panel, setPanelState] = useState({ open: false, expanded: true });
   const [lastUpload, setLastUpload] = useState<{ folderId: string; name: string } | null>(null);
@@ -108,7 +112,8 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
                 router.refresh();
               },
             },
-            { continueOnError: true },
+            // A file whose upload a reload interrupted continues where it stopped.
+            { continueOnError: true, resume: accountId ? { scope: accountId, claim: claimUpload } : undefined },
           );
           runners.current.set(id, runner);
           setTransfers((list) => [transfer, ...list]);
@@ -119,7 +124,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
         }
       })();
     },
-    [config.uploadChunkBytes, fileEvents, finish, notify, router, update],
+    [accountId, config.uploadChunkBytes, fileEvents, finish, notify, router, update],
   );
 
   const upload = useCallback(
@@ -219,6 +224,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
   );
 
   useOfflinePause(transfers, pause, resume);
+  useLeaveGuard(hasUnfinishedUploads(transfers));
   const pickers = useFilePickers(upload);
 
   const value = useMemo<TransfersContextValue>(

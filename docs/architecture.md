@@ -83,7 +83,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 
 - 2개 이상인 배치(`TRANSFERS.fileListMin`)는 카드의 "Show files"로 파일 목록을 연다. 파일마다 진행 막대(`Meter`), 받은/보낸 바이트, 속도 스파크라인(`LineChart`, 1초 간격 최근 30개), 취소 버튼.
 - 상태는 `features/transfers/transfer-items.ts`의 순수 함수로 바꾼다. 바이트 수는 `TRANSFERS.progressFlushMs`마다 모아서 반영하고(파일 1만 개 배치에서도 렌더가 밀리지 않게), 시작·완료·실패·취소는 바로 반영한다. 행은 `memo`라 바뀐 파일만 다시 그린다.
-- 업로드(`BatchUploader`): 대기 중인 파일을 취소하면 건너뛰고, 보내는 중인 파일은 `abort(true)`(tus DELETE → 서버가 예약을 풀고 조각을 지움) 후 다음 파일로 넘어간다. 다 올라간 파일은 취소 대상이 아니다(지우기로 지운다). 웹 앱 배치는 파일 하나가 실패해도 멈추지 않고 나머지를 보낸 뒤 "N of M files failed"로 끝난다(`continueOnError`). 업로드 링크 페이지(`/r/<id>`)는 예전처럼 첫 실패에서 멈춘다.
+- 업로드(`BatchUploader`): 대기 중인 파일을 취소하면 건너뛰고, 보내는 중인 파일은 `abort(true)`(tus DELETE → 서버가 예약을 풀고 조각을 지움) 후 다음 파일로 넘어간다. 다 올라간 파일은 취소 대상이 아니다(지우기로 지운다). 웹 앱 배치는 파일 하나가 실패해도 멈추지 않고 나머지를 보낸 뒤 "N of M files failed"로 끝난다(`continueOnError`). 업로드 링크 페이지(`/r/<id>`)는 예전처럼 첫 실패에서 멈춘다. 웹 앱 배치는 tus 지문(`tus-js-client` 기본 지문 + 계정 id, localStorage)을 저장해 두고, 새로고침 뒤 같은 파일을 다시 고르면 파일마다 `findPreviousUploads()`에서 크기·엔드포인트가 같은 최근 업로드(`UPLOAD.resumeCandidates`개까지)를 `POST /api/uploads/resume`으로 넘겨받은 뒤 `resumeFromPreviousUpload()`로 이어 보낸다. 서버가 거절한 저장 항목은 지운다. 업로드가 보내는 중이거나 일시 정지인 동안에만 `beforeunload`로 페이지를 떠나기 전에 확인한다(`shared/hooks/useLeaveGuard`, 업로드 링크 페이지도 같다).
 - 다운로드: 단일 파일·zip은 예전처럼 브라우저 다운로드에 맡긴다(진행률을 볼 수 없어 "saving in your browser"). 여러 항목을 선택해 Download를 누르면 File System Access API가 있는 브라우저(Chromium, https 또는 localhost)에서는 저장할 폴더를 고르게 하고(`FolderDownloader`), 파일마다 `fetch` 응답을 `createWritable()`로 바로 흘려 쓴다(메모리에 쌓지 않음). 폴더는 `<이름>.zip`으로 받고 크기는 추정치다. 같은 이름이 있으면 덮어쓰지 않고 `name (2).ext`로 저장한다. 취소·실패한 파일의 부분 파일은 지운다. Safari·Firefox는 예전 방식.
 
 ## 교체 가능한 인터페이스
