@@ -2,7 +2,7 @@ import "server-only";
 import { verify } from "@node-rs/argon2";
 import { getAppEnv, getEnv } from "@/config/env";
 import { MS, SHARE } from "@/config/policy";
-import type { ShareCrumb, ShareItem, SharePage, ShareView } from "@/contracts/share";
+import type { ShareItem, SharePage, ShareView } from "@/contracts/share";
 import { deletionDate } from "@/domain/account";
 import { shareStatus, busyBadge, strictestGuard, type Busy, type ShareStatus } from "@/domain/share";
 import { downloadBlock, type DownloadBlock } from "@/domain/share-access";
@@ -14,7 +14,8 @@ import { ApiError } from "../http/api-error";
 import { findAccountById } from "../repositories/account.repo";
 import type { NodeRow } from "../repositories/node.repo";
 import { isRetiredLink } from "../repositories/link-tombstone.repo";
-import { findByLinkId, publicTree, sharedChain, type ChainRow, type SharedRow } from "../repositories/share.repo";
+import type { ChildStats } from "../repositories/node-tree.repo";
+import { findByLinkId, publicChildren, publicChildStats, publicTree, publicTreeSize, sharedChain, type ChainRow, type SharedRow } from "../repositories/share.repo";
 import { countInWindow, redis } from "../redis";
 import { busyLevels } from "./busy";
 import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "./unlock-cookie";
@@ -95,23 +96,20 @@ function shareTags(root: NodeRow, now: number): SettingTag[] {
   return tags;
 }
 
-/** Index of a visible tree: children per folder and total file bytes below each node. */
-function indexTree(rows: readonly SharedRow[]) {
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  const children = new Map<string, SharedRow[]>();
-  for (const row of rows) {
-    if (!row.parentId || !byId.has(row.parentId)) continue;
-    children.set(row.parentId, [...(children.get(row.parentId) ?? []), row]);
-  }
-  const sizes = new Map<string, bigint>();
-  const sizeOf = (row: SharedRow): bigint => {
-    const known = sizes.get(row.id);
-    if (known !== undefined) return known;
-    const size = row.type === "FILE" ? row.size : (children.get(row.id) ?? []).reduce((sum, child) => sum + sizeOf(child), 0n);
-    sizes.set(row.id, size);
-    return size;
-  };
-  return { byId, children, sizeOf };
+/** An item below the link that visitors of the link may not reach: private, protected by its own password, or expired. */
+const closedBelowLink = (row: ChainRow, now: number) => row.visibility === "PRIVATE" || row.passwordHash !== null || (row.expAt !== null && row.expAt.getTime() <= now);
+
+/** The chain from the account root down to an item (the link's own chain is already loaded). */
+const chainTo = (link: LoadedLink, nodeId: string): Promise<ChainRow[]> => (nodeId === link.root.id ? Promise.resolve(link.chain) : sharedChain(db(), nodeId));
+
+/**
+ * The rows from the link's item down to the last row of `chain`, or null when that row is not
+ * inside the link or something between them is closed to visitors (as in publicTree).
+ */
+function trailInLink(chain: readonly ChainRow[], rootId: string, now: number): ChainRow[] | null {
+  const rootAt = chain.findIndex((at) => at.id === rootId);
+  if (rootAt < 0 || chain.slice(rootAt + 1).some((at) => closedBelowLink(at, now))) return null;
+  return chain.slice(rootAt);
 }
 
 /**
@@ -131,16 +129,14 @@ const through = (way: WayAbove, row: WayRow): WayAbove => ({ streamOnly: way.str
 /** The way above the last row of a chain (account root first). */
 const wayAboveEnd = (chain: readonly WayRow[]) => chain.slice(0, -1).reduce(through, NOTHING_ABOVE);
 
-/** The way above each row of a link's tree, starting from the folders above the link itself. */
-function wayAboveInTree(link: LoadedLink, byId: ReadonlyMap<string, SharedRow>): (row: SharedRow) => WayAbove {
-  const aboveRoot = wayAboveEnd(link.chain);
-  const known = new Map<string, WayAbove>();
+/** The way above each row of a tree read from `top` down, starting from the way above `top`. */
+function wayAboveInTree(top: SharedRow, aboveTop: WayAbove, byId: ReadonlyMap<string, SharedRow>): (row: SharedRow) => WayAbove {
+  const known = new Map<string, WayAbove>([[top.id, aboveTop]]);
   const wayAbove = (row: SharedRow): WayAbove => {
-    if (row.id === link.root.id) return aboveRoot;
     const cached = known.get(row.id);
     if (cached) return cached;
     const parent = byId.get(row.parentId ?? "");
-    const way = parent ? through(wayAbove(parent), parent) : aboveRoot;
+    const way = parent ? through(wayAbove(parent), parent) : aboveTop;
     known.set(row.id, way);
     return way;
   };
@@ -162,27 +158,32 @@ export function downloadBlockOf(row: SharedRow, above: WayAbove, busy: Busy | un
   });
 }
 
-/** The open share page for a folder inside the link (or the shared file). Null if not inside. */
+/**
+ * The open share page for a folder inside the link (or the shared file). Null if not inside.
+ * Reads only that folder: its chain (for the crumbs and the settings above it), the items in it
+ * and, in one aggregate query, what visitors may see inside each of them (bytes, item count).
+ */
 async function buildView(link: LoadedLink, folderId: string | null, now: number): Promise<ShareView | null> {
   const { root } = link;
-  const tree = await publicTree(db(), root.id, new Date(now));
-  const { byId, children, sizeOf } = indexTree(tree);
-  const rootRow = byId.get(root.id)!;
   const fileLink = root.type === "FILE";
-  const folder = fileLink ? rootRow : byId.get(folderId ?? root.id);
-  if (!folder || (!fileLink && folder.type !== "FOLDER")) return null;
+  // A file link shows its file whichever folder is asked for.
+  const chain = await chainTo(link, fileLink ? root.id : (folderId ?? root.id));
+  const trail = trailInLink(chain, root.id, now);
+  const folder = trail?.at(-1);
+  if (!trail || !folder || (!fileLink && folder.type !== "FOLDER")) return null;
 
-  const crumbs: ShareCrumb[] = [];
-  for (let at: SharedRow | undefined = folder; at; at = at.id === root.id ? undefined : byId.get(at.parentId ?? "")) crumbs.unshift({ id: at.id, name: at.name });
-
-  const listed = fileLink ? [rootRow] : (children.get(folder.id) ?? []);
+  const at = new Date(now);
+  const [listed, stats] = fileLink ? [[folder], new Map<string, ChildStats>()] : await Promise.all([publicChildren(db(), folder.id, at), publicChildStats(db(), folder.id, at)]);
+  const sizeOf = (row: SharedRow) => (row.type === "FILE" ? row.size : (stats.get(row.id)?.size ?? 0n));
   const sorted = sortNodes(
     listed.map((row) => ({ row, type: lower(row.type) as "file" | "folder", name: row.name, kind: kindOf(row), size: Number(sizeOf(row)), createdAt: row.createdAt.getTime() })),
     "name",
   ).map((entry) => entry.row);
-  const wayAbove = wayAboveInTree(link, byId);
+  const aboveFolder = wayAboveEnd(chain);
+  // The file of a file link is the "folder" itself.
+  const aboveItems = fileLink ? aboveFolder : through(aboveFolder, folder);
   const busy = await busyLevels(
-    [folder, ...sorted].map((row) => ({ id: row.id, dlPaused: pausedOn(row, wayAbove(row)) })),
+    [{ id: folder.id, dlPaused: pausedOn(folder, aboveFolder) }, ...sorted.map((row) => ({ id: row.id, dlPaused: pausedOn(row, aboveItems) }))],
     now,
   );
 
@@ -192,17 +193,17 @@ async function buildView(link: LoadedLink, folderId: string | null, now: number)
     name: row.name,
     kind: kindOf(row),
     size: sizeOf(row).toString(),
-    itemCount: (children.get(row.id) ?? []).length,
+    itemCount: stats.get(row.id)?.items ?? 0,
     busy: busyBadge(busy.get(row.id)!, now, "share"),
-    canDownload: downloadBlockOf(row, wayAbove(row), busy.get(row.id)) === null,
+    canDownload: downloadBlockOf(row, aboveItems, busy.get(row.id)) === null,
     hasThumb: row.type === "FILE" && row.hasThumb,
   }));
   return {
     root: { id: root.id, type: fileLink ? "file" : "folder", kind: kindOf(root), createdAt: root.createdAt.toISOString() },
     folder: { id: folder.id, name: folder.name, parentId: folder.id === root.id ? null : folder.parentId },
-    crumbs,
+    crumbs: trail.map(({ id, name }) => ({ id, name })),
     count: items.length,
-    size: (fileLink ? rootRow.size : sizeOf(folder)).toString(),
+    size: (fileLink ? folder.size : sorted.reduce((sum, row) => sum + sizeOf(row), 0n)).toString(),
     tags: shareTags(root, now),
     note: folder.id === root.id && root.note ? root.note : null,
     downloadsAllowed: root.access !== "STREAM",
@@ -293,9 +294,6 @@ export interface SharedFile {
 export const limitingIds = (rows: readonly Pick<SharedRow, "id" | "burn" | "downloadLimit">[]) =>
   rows.filter((row) => row.burn || (row.downloadLimit !== null && row.downloadLimit > 0)).map((row) => row.id);
 
-/** An item below the link that visitors of the link may not reach: private, protected by its own password, or expired. */
-const closedBelowLink = (row: ChainRow, now: number) => row.visibility === "PRIVATE" || row.passwordHash !== null || (row.expAt !== null && row.expAt.getTime() <= now);
-
 /**
  * Checks that a visitor may play or download a file through a link: the link is open, the
  * file is inside it and visible, and (for downloads) downloads are allowed and not paused.
@@ -307,11 +305,11 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
   // Only the way from the file up to the account root, not the link's whole tree (every
   // Range request of a video comes through here).
   const chain = await sharedChain(db(), nodeId);
-  const rootAt = chain.findIndex((at) => at.id === link.root.id);
-  const row = chain.at(-1);
   // Inside the link, and nothing between the link and the file is closed to it (as in publicTree).
-  if (!row || row.id !== nodeId || row.type !== "FILE" || rootAt < 0 || chain.slice(rootAt + 1).some((at) => closedBelowLink(at, now))) throw new ApiError("NOT_FOUND");
-  const path = chain.slice(rootAt).map((at) => at.id);
+  const trail = trailInLink(chain, link.root.id, now);
+  const row = chain.at(-1);
+  if (!trail || !row || row.id !== nodeId || row.type !== "FILE") throw new ApiError("NOT_FOUND");
+  const path = trail.map((at) => at.id);
   const guarded = limitingIds(chain);
   const counted = [...new Set([row.id, link.root.id, ...guarded])];
   const above = wayAboveEnd(chain);
@@ -331,27 +329,55 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
   return { link, row, path, segments: segmentsBelowRoot(chain), counted, limited: guarded.length > 0, busy };
 }
 
-/** Visible items of a link for "Download all" (zip), with the same checks as single downloads. */
-export async function resolveSharedTree(linkId: string, folderId: string, viewer: ShareViewer, now: number) {
+/**
+ * A folder of a link for "Download all" (zip), with the same checks as single downloads. Reads
+ * only its chain; the zip reads what is inside with {@link sharedFolderTree}.
+ */
+export async function resolveSharedFolder(linkId: string, folderId: string, viewer: ShareViewer, now: number) {
   const link = await loadLink(linkId, viewer, now);
   if (!link) throw await missingLinkError(linkId);
   if (link.status !== "open") throw statusError(link.status);
-  const tree = await publicTree(db(), link.root.id, new Date(now));
-  const { byId, children } = indexTree(tree);
-  const folder = byId.get(folderId);
-  if (!folder) throw new ApiError("NOT_FOUND");
-  const wayAbove = wayAboveInTree(link, byId);
-  const atFolder = through(wayAbove(folder), folder);
+  const chain = await chainTo(link, folderId);
+  const trail = trailInLink(chain, link.root.id, now);
+  const folder = trail?.at(-1);
+  if (!trail || !folder) throw new ApiError("NOT_FOUND");
+  const aboveFolder = wayAboveEnd(chain);
+  const atFolder = through(aboveFolder, folder);
   if (atFolder.streamOnly) throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
   const busy = (await busyLevels([{ id: folder.id, dlPaused: atFolder.dlPaused }], now)).get(folder.id)!;
   if (busy.level === 2) throw busyError(busy, now);
-  const path: string[] = [];
-  for (let at: SharedRow | undefined = folder; at; at = at.id === link.root.id ? undefined : byId.get(at.parentId ?? "")) path.unshift(at.id);
+  const path = trail.map((at) => at.id);
   // Counted for a "Download all" like a single download: the folder, the link and every item
   // on the way that limits downloads (the files inside are counted one by one).
-  const counted = [...new Set([folder.id, link.root.id, ...limitingIds(link.chain), ...limitingIds(path.map((id) => byId.get(id)!))])];
-  return { link, folder, children, byId, path, counted, busy, wayAbove };
+  const counted = [...new Set([folder.id, link.root.id, ...limitingIds(link.chain), ...limitingIds(trail)])];
+  return { link, folder, chain, aboveFolder, path, counted, busy };
 }
+
+export type SharedFolder = Awaited<ReturnType<typeof resolveSharedFolder>>;
+
+/** Rows a zip reads at most: the folder itself, SHARE.zipMaxItems items and one more to tell a larger folder. */
+const zipReadLimit = () => SHARE.zipMaxItems + 2;
+
+/** Refuses a zip of more than SHARE.zipMaxItems items (`rows`: the folder and what was read below it). */
+function assertZipSize(rows: number): void {
+  if (rows - 1 > SHARE.zipMaxItems) {
+    throw new ApiError("PAYLOAD_TOO_LARGE", `This folder holds more than ${SHARE.zipMaxItems.toLocaleString("en-US")} items. Download the folders inside it one by one.`);
+  }
+}
+
+/** HEAD for "Download all": refuses a folder too large to zip, counting its items without reading them. */
+export async function assertSharedFolderZippable(shared: SharedFolder, now: number): Promise<void> {
+  assertZipSize(await publicTreeSize(db(), shared.folder.id, new Date(now), zipReadLimit()));
+}
+
+/** Everything visitors may see inside a shared folder, for its zip (at most SHARE.zipMaxItems items). */
+export async function sharedFolderTree(shared: SharedFolder, now: number) {
+  const rows = await publicTree(db(), shared.folder.id, new Date(now), zipReadLimit());
+  assertZipSize(rows.length);
+  return { rows, wayAbove: wayAboveInTree(shared.folder, shared.aboveFolder, new Map(rows.map((row) => [row.id, row]))) };
+}
+
+export type SharedFolderTree = Awaited<ReturnType<typeof sharedFolderTree>>;
 
 /**
  * Checks a password for a link. The link may need several (its own and those of folders

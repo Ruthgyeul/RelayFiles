@@ -300,6 +300,20 @@ export async function renameChildren(tx: DbClient, folderId: string, renames: re
     WHERE n.id = v.id AND n."parentId" = ${folderId}`;
 }
 
+/**
+ * Moves items of an account into a folder under new names, in one statement. Returns how many
+ * moved (fewer when an item is gone); a taken name fails on the (parentId, name) unique index.
+ */
+export async function moveIntoFolder(tx: DbClient, accountId: string, folderId: string, moves: readonly { id: string; name: string }[]): Promise<number> {
+  if (moves.length === 0) return 0;
+  const ids = moves.map((move) => move.id);
+  const names = moves.map((move) => move.name);
+  return tx.$executeRaw`
+    UPDATE "Node" AS n SET "parentId" = ${folderId}, name = v.name, "updatedAt" = now()
+    FROM unnest(${ids}::text[], ${names}::text[]) AS v(id, name)
+    WHERE n.id = v.id AND n."accountId" = ${accountId}`;
+}
+
 /** Photos and videos whose date taken was never read, by id (the release data migration queues them). */
 export function mediaWithoutDateTaken(db: DbClient, take: number, afterId: string | null) {
   return db.node.findMany({

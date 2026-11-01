@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER, SUBTITLE_PARAM } from "@/contracts/api";
 import { isSubtitleName } from "@/domain/subtitles";
+import { subtreePaths } from "@/domain/subtree";
 import { effectiveRange, parseRange, zipName } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadBlock, type DownloadDecision } from "@/domain/share-access";
 import type { NodeKind } from "@/domain/tree";
@@ -20,7 +21,6 @@ import { canStripType } from "../media/process";
 import { transcodeResponse } from "../media/transcode";
 import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
 import { findAccountById, type AccountRow } from "../repositories/account.repo";
-import { ancestorChain } from "../repositories/node-tree.repo";
 import { claimDownload, claimEachDownload, type SharedRow } from "../repositories/share.repo";
 import { addTraffic } from "../repositories/traffic.repo";
 import { busyLevels, recordDownload } from "./busy";
@@ -28,7 +28,19 @@ import { grantDownload, hasDownloadGrant } from "./download-grant";
 import { logLinkEvent } from "./events";
 import { newVisitorId, setVisitorCookie } from "./visitor-cookie";
 import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driver";
-import { downloadBlockOf, pausedOn, resolveSharedFile, resolveSharedTree, type LoadedLink, type SharedFile, type ShareViewer } from "./share.service";
+import {
+  assertSharedFolderZippable,
+  downloadBlockOf,
+  pausedOn,
+  resolveSharedFile,
+  resolveSharedFolder,
+  sharedFolderTree,
+  type LoadedLink,
+  type SharedFile,
+  type SharedFolder,
+  type SharedFolderTree,
+  type ShareViewer,
+} from "./share.service";
 import { driverForAccount } from "../services/volume.service";
 import { zipResponse, type ZipEntry } from "../services/zip.service";
 import { markActive } from "../metrics/activity";
@@ -237,25 +249,22 @@ const SKIP_REASONS: Record<ZipSkip, string> = {
 };
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
-function zipPlan(shared: Awaited<ReturnType<typeof resolveSharedTree>>, owner: AccountRow, busy: Map<string, Busy>) {
-  const { link, folder, children, wayAbove } = shared;
+function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolderTree, owner: AccountRow, busy: Map<string, Busy>) {
   const files: { row: SharedRow; name: string; segments: string[]; skip: ZipSkip | null }[] = [];
   const folders: string[] = [];
-  const walk = (row: SharedRow, inZip: string[], onDisk: string[]) => {
-    for (const child of children.get(row.id) ?? []) {
-      const name = [...inZip, child.name].join("/");
-      const segments = [...onDisk, child.name];
-      if (child.type === "FOLDER") {
-        folders.push(name);
-        walk(child, [...inZip, child.name], segments);
-        continue;
-      }
-      const imageBlock = stripsImage(owner, child) ? publicImageBlock(child) : null;
-      const skip = link.isOwner ? imageBlock : (downloadBlockOf(child, wayAbove(child), busy.get(child.id)) ?? imageBlock);
-      files.push({ row: child, name, segments, skip });
+  for (const { row, segments } of subtreePaths(rows, folder.id)) {
+    // The folder itself is the zip's top folder, named in every entry.
+    if (row.id === folder.id) continue;
+    const name = [folder.name, ...segments].join("/");
+    if (row.type === "FOLDER") {
+      folders.push(name);
+      continue;
     }
-  };
-  return { files, folders, walk: () => walk(folder, [folder.name], []) };
+    const imageBlock = stripsImage(owner, row) ? publicImageBlock(row) : null;
+    const skip = link.isOwner ? imageBlock : (downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? imageBlock);
+    files.push({ row, name, segments, skip });
+  }
+  return { files, folders };
 }
 
 /** "Not included.txt": each left-out file with the reason, so a zip never silently drops files. */
@@ -271,19 +280,19 @@ function skippedNote(skipped: readonly { name: string; skip: ZipSkip }[]): strin
  */
 export async function zipSharedFolder(linkId: string, folderId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
   const now = Date.now();
-  const shared = await resolveSharedTree(linkId, folderId, viewer, now);
-  const { link, folder, children, wayAbove } = shared;
+  const shared = await resolveSharedFolder(linkId, folderId, viewer, now);
+  const { link, folder } = shared;
+  const tree = await sharedFolderTree(shared, now);
   const owner = await ownerOf(link);
   const driver = await driverForAccount(owner);
-  const base = segmentsBelowRoot(await ancestorChain(db(), folder.id));
+  const base = segmentsBelowRoot(shared.chain);
 
-  const allFiles = [...children.values()].flat().filter((row) => row.type === "FILE");
+  const allFiles = tree.rows.filter((row) => row.type === "FILE");
   const busy = await busyLevels(
-    allFiles.map((row) => ({ id: row.id, dlPaused: pausedOn(row, wayAbove(row)) })),
+    allFiles.map((row) => ({ id: row.id, dlPaused: pausedOn(row, tree.wayAbove(row)) })),
     now,
   );
-  const plan = zipPlan(shared, owner, busy);
-  plan.walk();
+  const plan = zipPlan(shared, tree, owner, busy);
 
   if (!link.isOwner) {
     const claimed = await claimDownload(db(), shared.counted);
@@ -317,8 +326,9 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   return zipResponse(entries, zipName([{ name: folder.name, folder: true }], folder.name));
 }
 
-/** HEAD for "Download all": the same checks as the zip, without building or counting it. */
+/** HEAD for "Download all": the same checks as the zip (its size too), without building or counting it. */
 export async function checkSharedFolder(linkId: string, folderId: string, viewer: ShareViewer): Promise<Response> {
-  await resolveSharedTree(linkId, folderId, viewer, Date.now());
+  const now = Date.now();
+  await assertSharedFolderZippable(await resolveSharedFolder(linkId, folderId, viewer, now), now);
   return new Response(null, { status: 200, headers: { "content-type": "application/zip", "cache-control": "private, no-store" } });
 }

@@ -38,6 +38,10 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 ```
 
 - 공유 링크(`/d/<linkId>`)의 규칙과 응답은 `src/server/share/`에 모여 있다(`share.service.ts` 링크 해석·잠금, `share-files.service.ts` 파일·zip 응답, 쿠키·다운로드 허가·이벤트). 파일 바이트를 보내는 HTTP 도구(`send-file.ts`, `send-thumb.ts`, `throttle.ts`)는 `src/server/http/`에 있다.
+  - 공유 페이지는 보고 있는 폴더만 읽는다: 링크 해석(`findByLinkId`, 링크의 `sharedChain`, 소유자) 뒤 폴더의 `sharedChain`(경로 표시, 위 폴더 설정, 링크 안인지·사이에 닫힌 항목이 없는지 `trailInLink`), 방문자가 볼 수 있는 자식(`publicChildren`), 자식마다의 크기·항목 수(`publicChildStats`, 폴더 아래를 한 번 걷는 재귀 CTE를 맨 위 자식별로 묶음)까지 쿼리 6개다. 링크 아래 트리 크기와 관계없다(개발 환경 측정: 하위 폴더 2,000개·약 18,000항목 링크의 하위 폴더 보기 3.2초 → 9ms). 비공개·자기 비밀번호·만료 항목은 예전 `publicTree`처럼 그 아래까지 빠진다(같은 조건 `openBelowLink`).
+  - "Download all"만 폴더 아래 전체(`publicTree`, 그 폴더부터)를 읽고, 항목이 `SHARE.zipMaxItems`(100,000, 멤버 계정이 가질 수 있는 수와 같다)를 넘으면 소유자에게도 413 `PAYLOAD_TOO_LARGE`로 거절한다. 그 이상은 읽지 않는다(`LIMIT`). HEAD 확인은 행을 읽지 않고 같은 한도까지 센다(`publicTreeSize`).
+- File Manager 폴더 보기(`getFolderView`)는 쿼리 4개다: 폴더, `ancestorChain`, 자식(`listChildren`), 자식마다의 바이트·파일 수·바로 아래 항목 수(`childStats`, 폴더 아래를 한 번 걷는 재귀 CTE를 맨 위 자식별로 `GROUP BY`). 폴더 자신의 크기·파일 수는 자식 값의 합이라 트리를 두 번 걷지 않는다(예전: 폴더 한 번 + 자식 폴더들 한 번, 쿼리 7개). 응답 모양은 같고 자식은 여전히 한 번에 모두 보낸다. 클라이언트에 페이지 나누기가 없고 긴 목록은 렌더링만 미룬다(`FILES.lazyRenderAfter`, `content-visibility`). 검색 결과·Properties처럼 계정 곳곳의 항목은 예전처럼 `folderSizes`·`childCounts`(id 목록 하나로 쿼리 하나씩)를 쓴다.
+- 여러 항목 작업(삭제·이동·복사·zip)은 고른 항목 수와 관계없이 쿼리 수가 같다. `topLevel`이 행(`findNodes`)과 모든 항목의 조상 체인(`ancestorChains`, 재귀 CTE 한 번)을 읽어 `{ row, chain }`을 돌려주고, 위치(`topLocation`)·원래 경로는 그 체인에서 계산한다(항목마다 `locationOf`를 부르지 않는다). 하위 트리는 `subtreeRowsOf`(CTE 한 번 + 행 읽기 한 번)로 한꺼번에 읽는다. 트랜잭션 안의 쓰기도 한 문장씩이다: 이동 `moveIntoFolder`(`unnest` UPDATE, 바뀐 행 수가 모자라면 409), 복사 `insertNodes` 한 번, 삭제 기록 `addTrashedBytesEach`·`createDeletedItems`(`createMany`). 디스크 작업(rename, 휴지통, 복사 준비)만 항목마다다. 하위 트리를 디스크·zip 경로로 펼치는 일은 `domain/subtree.ts` `subtreePaths`(깊이 우선, 부모가 먼저) 하나가 한다(소유자 zip, 공유 "Download all", 복사 준비). 개발 환경 측정(1,000개 선택, 10개일 때와 같은 쿼리 수): `topLevel` 1,003 → 2, zip 4,004 → 7, 복사 5,020 → 24, 이동 5,012 → 14(6.9초 → 0.46초), 삭제 4,013 → 16(4.0초 → 1.4초). `src/server/services/tree-queries.int.test.ts`가 쿼리 수가 늘지 않는지 검사한다(`test/query-counter.ts`).
 
 - 쿼리는 repository에만 쓴다. 서비스·잡·스크립트에서 `db()`는 repository 함수에 넘기거나 트랜잭션(`$transaction`)을 열 때만 쓴다(`no-restricted-syntax`). `src/app`은 `@/server/db`·`@/server/repositories`를 import하지 않고 서비스를 부른다(`no-restricted-imports`).
 - 예외: tus 업로드 라우트(`src/app/api/uploads/tus`)는 `apiHandler`를 거치지 않는다. tus가 자체 평문 프로토콜로 응답하기 때문이며, 같은 방식으로 try-catch와 에러 마스킹을 직접 한다. 볼륨 조회는 `upload.service.tusVolume()`이 한다.
@@ -105,6 +109,8 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 | 인터페이스 | 현재 구현 | 확장 |
 |---|---|---|
 | `StorageDriver` | `LocalVolumeDriver` (외장 SSD, 볼륨 여러 개) | `S3Driver` (MinIO/R2) |
+
+`LocalVolumeDriver`(`storage/local-volume.ts`)는 볼륨 레이아웃을 묶는 조립만 한다. 실제 작업은 `storage/local/`에 영역별로 있다: `locations.ts`(계정 트리 안의 경로 확인·읽기·이름 변경·복사), `staging.ts`(업로드 영역에서 준비한 바이트를 제자리로, 복사 준비), `trash.ts`(휴지통), `assets.ts`(썸네일·제거본·미리보기·변환본), `maintenance.ts`(매일 정리, 쓰기 확인, 여유 공간), `listing.ts`(fsck용 디스크 목록), 공용 `copy.ts`(하드 링크·reflink·복사)와 `fs-errors.ts`. 메서드는 클래스 프로토타입에 남아 있어 테스트가 그대로 바꿔 끼울 수 있다.
 
 지표(`systeminformation`), 위치(Cloudflare 헤더)는 인터페이스 없이 직접 쓴다. 시각은 함수의 `now` 인자로 받아 테스트에서 고정한다.
 

@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { zipEntryName } from "@/domain/archive";
 import { contentDisposition, zipName } from "@/domain/serving";
+import { subtreePaths } from "@/domain/subtree";
 import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
 import { LazyReadable } from "../http/lazy-readable";
@@ -10,7 +11,7 @@ import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
 import { findNode } from "../repositories/node.repo";
-import { ancestorChain, subtreeRows } from "../repositories/node-tree.repo";
+import { subtreeRowsOf } from "../repositories/node-tree.repo";
 import { addTraffic } from "../repositories/traffic.repo";
 import { topLevel } from "./node-ops.service";
 import { driverForAccount } from "./volume.service";
@@ -65,22 +66,25 @@ export function zipResponse(entries: readonly ZipEntry[], fileName: string): Res
  * each selected item's name.
  */
 export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
-  const items = await topLevel(owner.id, ids, true);
-  if (items.length === 0) throw new ApiError("NOT_FOUND");
+  const selected = await topLevel(owner.id, ids, true);
+  if (selected.length === 0) throw new ApiError("NOT_FOUND");
+  const items = selected.map(({ row }) => row);
   const driver = await driverForAccount(owner);
   const parent = items[0]!.parentId ? await findNode(db(), owner.id, items[0]!.parentId) : null;
+  // Every selected tree in one walk.
+  const trees = await subtreeRowsOf(
+    db(),
+    items.map((item) => item.id),
+  );
 
   const entries: ZipEntry[] = [];
   let bytes = 0n;
-  for (const item of items) {
-    const base = segmentsBelowRoot(await ancestorChain(db(), item.id));
-    const rows = await subtreeRows(db(), item.id);
-    const pathOf = new Map<string, string[]>([[item.id, base]]);
-    for (const row of rows) {
-      if (row.id !== item.id) pathOf.set(row.id, [...pathOf.get(row.parentId!)!, row.name]);
-      const segments = pathOf.get(row.id)!;
+  for (const { row: item, chain } of selected) {
+    const base = segmentsBelowRoot(chain);
+    for (const { row, segments: below } of subtreePaths(trees.get(item.id) ?? [], item.id)) {
+      const segments = [...base, ...below];
       // Entries sit under the selected item's own name ("Trip/day1/a.jpg"); a selected file is just its name.
-      const name = item.type === "FILE" ? item.name : [item.name, ...segments.slice(base.length)].join("/");
+      const name = item.type === "FILE" ? item.name : [item.name, ...below].join("/");
       if (row.type !== "FILE") {
         entries.push({ name, folder: true });
         continue;
