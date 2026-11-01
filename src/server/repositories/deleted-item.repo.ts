@@ -118,8 +118,9 @@ export interface NewDeletedItem {
   nodes: Prisma.InputJsonValue;
 }
 
-export async function createDeletedItem(db: DbClient, data: NewDeletedItem): Promise<void> {
-  await db.deletedItem.create({ data });
+/** Keeps deleted items under "Recently deleted" (one statement for all of them). */
+export async function createDeletedItems(db: DbClient, data: readonly NewDeletedItem[]): Promise<void> {
+  if (data.length > 0) await db.deletedItem.createMany({ data: [...data] });
 }
 
 /** What "Recently deleted" lists (without the snapshot). */

@@ -9,19 +9,19 @@ import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
-import { insertNodes, listSiblingNames, updateNode } from "../repositories/node.repo";
-import { ancestorChain, subtreeRows } from "../repositories/node-tree.repo";
+import { insertNodes, listSiblingNames, moveIntoFolder } from "../repositories/node.repo";
+import { ancestorChain, subtreeRowsOf } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { StorageEntryMissingError, type CopyEntry } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
-import { locationOf } from "./node-location";
-import { requireFolder, topLevel, type NodeOwner } from "./node-ops.service";
+import { requireFolder, topLevel, topLocation, type NodeOwner } from "./node-ops.service";
 import { releaseSpace, reserveSpace } from "./space.service";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
 const NAME_TAKEN_MESSAGE = "Something with the same name was just added there. Try again.";
 const CHANGED_MESSAGE = "Some items changed while they were being copied. Try again.";
+const MOVE_CHANGED_MESSAGE = "Some items changed while they were being moved. Try again.";
 
 /** True when `nodeId` is the folder or inside it. */
 function isInside(chainIds: string[], nodeId: string): boolean {
@@ -36,25 +36,25 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
   const target = await requireFolder(owner.id, targetRef);
   const targetChain = await ancestorChain(db(), target.id);
   const targetIds = targetChain.map((row) => row.id);
-  const items = (await topLevel(owner.id, ids)).filter((row) => row.id !== target.id && row.parentId !== target.id && !isInside(targetIds, row.id));
+  const items = (await topLevel(owner.id, ids)).filter(({ row }) => row.id !== target.id && row.parentId !== target.id && !isInside(targetIds, row.id));
   if (items.length === 0) throw new ApiError("BAD_REQUEST", "Can't move there");
 
   const driver = await driverForAccount(owner, "write");
   const targetSegments = segmentsBelowRoot(targetChain);
   const taken = await listSiblingNames(db(), target.id);
-  let renamed = 0;
-  const plan = await Promise.all(
-    items.map(async (row) => ({ row, from: await locationOf(owner.id, row.id) })),
-  );
+  const plan = items.map((item) => {
+    const name = uniqName(taken, item.row.name, item.row.type === "FILE");
+    taken.push(name);
+    return { id: item.row.id, name, from: topLocation(owner.id, item), to: { accountId: owner.id, segments: [...targetSegments, name] } };
+  });
+  const renamed = plan.filter((move, index) => move.name !== items[index]!.row.name).length;
   try {
     await withStorageTransaction(db(), async (tx, undo) => {
       await lockAccountForWrite(tx, owner.id, driver.volumeId);
-      for (const { row, from } of plan) {
-        const name = uniqName(taken, row.name, row.type === "FILE");
-        taken.push(name);
-        if (name !== row.name) renamed++;
-        await updateNode(tx, row.id, { parent: { connect: { id: target.id } }, name });
-        const to = { accountId: owner.id, segments: [...targetSegments, name] };
+      // Every row in one statement; an item deleted meanwhile leaves the count short.
+      const moved = await moveIntoFolder(tx, owner.id, target.id, plan);
+      if (moved !== plan.length) throw new ApiError("CONFLICT", MOVE_CHANGED_MESSAGE);
+      for (const { from, to } of plan) {
         await driver.rename(from, to);
         undo.push("undo move", () => driver.rename(to, from));
       }
@@ -69,7 +69,7 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
 
 /**
  * What a copied tree holds on disk, by folder names below its top (parents before children, as
- * subtreeRows returns them). Files flagged missing have nothing to copy; their copies keep the flag.
+ * subtreeRowsOf returns them). Files flagged missing have nothing to copy; their copies keep the flag.
  */
 function copyEntries(tree: readonly { id: string; parentId: string | null; name: string; type: "FILE" | "FOLDER"; missing: boolean }[], topId: string): CopyEntry[] {
   const segments = new Map<string, string[]>();
@@ -99,10 +99,15 @@ function copyEntries(tree: readonly { id: string; parentId: string | null; name:
 export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: string): Promise<TransferResult> {
   const target = await requireFolder(owner.id, targetRef);
   const targetChain = await ancestorChain(db(), target.id);
-  const items = (await topLevel(owner.id, ids)).filter((row) => !isInside(targetChain.map((ancestor) => ancestor.id), row.id));
+  const items = (await topLevel(owner.id, ids)).filter(({ row }) => !isInside(targetChain.map((ancestor) => ancestor.id), row.id));
   if (items.length === 0) throw new ApiError("BAD_REQUEST", "Can't copy there");
 
-  const trees = await Promise.all(items.map((row) => subtreeRows(db(), row.id)));
+  // Every selected tree in one walk.
+  const byTop = await subtreeRowsOf(
+    db(),
+    items.map(({ row }) => row.id),
+  );
+  const trees = items.map(({ row }) => byTop.get(row.id) ?? []);
   await assertItemRoom(owner, trees.reduce((sum, tree) => sum + tree.length, 0));
   const bytes = trees.flat().reduce((sum, row) => sum + (row.type === "FILE" ? row.size : 0n), 0n);
   const driver = await driverForAccount(owner, "write");
@@ -113,7 +118,7 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
 
   const staged: string[] = [];
   try {
-    const copies = await Promise.all(items.map(async (row) => ({ row, from: await locationOf(owner.id, row.id) })));
+    const copies = items.map((item) => ({ row: item.row, from: topLocation(owner.id, item) }));
     // Exactly the rows read above, not whatever the folder holds on disk now.
     for (const [index, { row, from }] of copies.entries()) staged.push(await driver.stageCopy(from, copyEntries(trees[index]!, row.id)));
 
@@ -125,7 +130,7 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
     await withStorageTransaction(db(), async (tx, undo) => {
       // Staging can take long: the account may have started moving to another volume meanwhile.
       await lockAccountForWrite(tx, owner.id, driver.volumeId);
-      for (const [index, { row }] of copies.entries()) {
+      const placed = copies.map(({ row }, index) => {
         const name = uniqName(taken, row.name, row.type === "FILE");
         taken.push(name);
         if (name !== row.name) renamed++;
@@ -148,8 +153,14 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
             updatedAt: now,
           } satisfies Prisma.NodeCreateManyInput;
         });
-        await insertNodes(tx, rows);
-        const to = { accountId: owner.id, segments: [...targetSegments, name] };
+        return { rows, to: { accountId: owner.id, segments: [...targetSegments, name] } };
+      });
+      // The rows of every copy in one statement, then each copy into place on disk.
+      await insertNodes(
+        tx,
+        placed.flatMap(({ rows }) => rows),
+      );
+      for (const [index, { rows, to }] of placed.entries()) {
         await driver.moveIntoPlace(staged[index]!, to);
         undo.push("remove copy", async () => {
           await driver.moveToTrash(to);

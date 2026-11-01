@@ -24,6 +24,17 @@ export async function addTrashedBytes(db: DbClient, entry: { accountId: string; 
   return id;
 }
 
+/**
+ * {@link addTrashedBytes} for several entries in one statement; returns each entry's row id in
+ * the same order (null for an entry without bytes).
+ */
+export async function addTrashedBytesEach(db: DbClient, entries: readonly { accountId: string; volumeId: string | null; bytes: bigint; at: Date }[]): Promise<(string | null)[]> {
+  const ids = entries.map((entry) => (entry.bytes > 0n ? randomUUID() : null));
+  const rows = entries.flatMap((entry, index) => (ids[index] ? [{ id: ids[index], accountId: entry.accountId, bytes: entry.bytes, volumeId: entry.volumeId, trashedAt: entry.at }] : []));
+  if (rows.length > 0) await db.trashedBytes.createMany({ data: rows });
+  return ids;
+}
+
 /** Forgets one TrashedBytes row of an account (its files left the trash: restored or removed for good). */
 export async function removeTrashedBytes(db: DbClient, accountId: string, id: string): Promise<void> {
   await db.trashedBytes.deleteMany({ where: { id, accountId } });

@@ -11,10 +11,11 @@ import type { Node } from "../db/generated/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
-import { createDeletedItem, nodeRowsByIds, toSnapshot } from "../repositories/deleted-item.repo";
+import { createDeletedItems, nodeRowsByIds, toSnapshot } from "../repositories/deleted-item.repo";
 import { deleteNodes, findNode, findNodes, findRootFolder, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
-import { ancestorChain, lockSubtrees, type AncestorRow } from "../repositories/node-tree.repo";
-import { addTrashedBytes, recordTrashed } from "../repositories/trash.repo";
+import { ancestorChains, lockSubtrees, type AncestorRow } from "../repositories/node-tree.repo";
+import { addTrashedBytesEach, recordTrashed } from "../repositories/trash.repo";
+import type { StorageLocation } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { locationOf } from "./node-location";
 import { toNodeItem } from "./node.service";
@@ -70,17 +71,33 @@ export async function renameNode(owner: NodeOwner, nodeId: string, requested: st
   }
 }
 
-/** Top-level items only: drops items whose ancestor is also in the list (and the root unless allowed). */
-export async function topLevel(accountId: string, ids: string[], allowRoot = false): Promise<NodeRow[]> {
+/** A selected item that is not inside another selected one, with its chain from the account root. */
+export interface TopItem {
+  row: NodeRow;
+  /** Account root first, the item last (its storage location is `segmentsBelowRoot(chain)`). */
+  chain: AncestorRow[];
+}
+
+/**
+ * Top-level items only: drops items whose ancestor is also in the list (and the root unless
+ * allowed). Two queries for any number of ids: the rows, then every chain in one walk.
+ */
+export async function topLevel(accountId: string, ids: string[], allowRoot = false): Promise<TopItem[]> {
   const rows = (await findNodes(db(), accountId, [...new Set(ids)])).filter((row) => allowRoot || row.parentId !== null);
   const chosen = new Set(rows.map((row) => row.id));
-  const result: NodeRow[] = [];
+  const chains = await ancestorChains(db(), [...chosen]);
+  const result: TopItem[] = [];
   for (const row of rows) {
-    const chain = await ancestorChain(db(), row.id);
-    if (!chain.slice(0, -1).some((ancestor) => chosen.has(ancestor.id))) result.push(row);
+    const chain = chains.get(row.id);
+    // Deleted since it was read: nothing to act on.
+    if (!chain) continue;
+    if (!chain.slice(0, -1).some((ancestor) => chosen.has(ancestor.id))) result.push({ row, chain });
   }
   return result;
 }
+
+/** Where a top-level item is on its account's volume. */
+export const topLocation = (accountId: string, item: TopItem): StorageLocation => ({ accountId, segments: segmentsBelowRoot(item.chain) });
 
 /**
  * Deletes items with everything inside; files go to the volume's trash for the purge job.
@@ -92,23 +109,16 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
   const items = await topLevel(owner.id, ids);
   if (items.length === 0) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner, "write");
-  const chains = await Promise.all(items.map((row) => ancestorChain(db(), row.id)));
-  const locations = chains.map((chain) => ({ accountId: owner.id, segments: segmentsBelowRoot(chain) }));
+  const locations = items.map((item) => topLocation(owner.id, item));
+  const itemIds = items.map(({ row }) => row.id);
   const files = await withStorageTransaction(db(), async (tx, undo) => {
     await lockAccountForWrite(tx, owner.id, driver.volumeId);
     // Counted from the rows this transaction deletes: nothing can be added below them meanwhile.
-    const rows = await lockSubtrees(
-      tx,
-      items.map((row) => row.id),
-      STORAGE.subtreeLockAttempts,
-    );
+    const rows = await lockSubtrees(tx, itemIds, STORAGE.subtreeLockAttempts);
     if (!rows) throw new ApiError("CONFLICT", "These items are changing. Try again.");
     // Every column of the locked rows, read before they go, so a restore can put them back.
     const full = recoverable ? await nodeRowsByIds(tx, rows.map((row) => row.id)) : [];
-    await deleteNodes(
-      tx,
-      items.map((row) => row.id),
-    );
+    await deleteNodes(tx, itemIds);
     const trashed: string[] = [];
     for (const location of locations) {
       const entry = await driver.moveToTrash(location);
@@ -117,7 +127,7 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
     }
     const deleted = rows.filter((row) => row.type === "FILE");
     // The bytes stay on disk until the daily job empties the trash, and count until then.
-    if (recoverable) await recordDeletedItems(tx, owner.id, driver.volumeId, { items, chains, trashed, rows, full });
+    if (recoverable) await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full });
     else
       await recordTrashed(
         tx,
@@ -132,9 +142,7 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
 }
 
 interface DeletedTrees {
-  items: NodeRow[];
-  /** Each item's ancestor chain (account root first, the item last). */
-  chains: AncestorRow[][];
+  items: TopItem[];
   /** Where each item went in the trash. */
   trashed: string[];
   /** The locked rows in lock order (parents before children). */
@@ -152,27 +160,35 @@ async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: str
   const byId = new Map(trees.full.map((row) => [row.id, row]));
   const groups = groupByTop(
     trees.rows.map((row) => byId.get(row.id)!),
-    trees.items.map((item) => item.id),
+    trees.items.map(({ row }) => row.id),
   );
   const at = new Date();
-  for (const [index, item] of trees.items.entries()) {
-    const tree = groups.get(item.id)!;
-    const bytes = tree.reduce((sum, row) => sum + (row.type === "FILE" ? row.size : 0n), 0n);
-    await createDeletedItem(tx, {
+  const deleted = trees.items.map(({ row }) => {
+    const tree = groups.get(row.id)!;
+    return { tree, bytes: tree.reduce((sum, node) => sum + (node.type === "FILE" ? node.size : 0n), 0n) };
+  });
+  // One statement each for all items, however many were selected.
+  const trashedBytesIds = await addTrashedBytesEach(
+    tx,
+    deleted.map(({ bytes }) => ({ accountId, volumeId, bytes, at })),
+  );
+  await createDeletedItems(
+    tx,
+    trees.items.map(({ row, chain }, index) => ({
       id: newDeletedItemId(),
       accountId,
       volumeId,
       trashPath: trees.trashed[index]!,
-      trashedBytesId: await addTrashedBytes(tx, { accountId, volumeId, bytes, at }),
-      name: item.name,
-      type: item.type,
-      kind: item.kind,
-      size: bytes,
-      itemCount: tree.length,
-      originalParentId: item.parentId,
-      originalPath: trees.chains[index]!.slice(0, -1).map((ancestor) => ancestor.name),
+      trashedBytesId: trashedBytesIds[index]!,
+      name: row.name,
+      type: row.type,
+      kind: row.kind,
+      size: deleted[index]!.bytes,
+      itemCount: deleted[index]!.tree.length,
+      originalParentId: row.parentId,
+      originalPath: chain.slice(0, -1).map((ancestor) => ancestor.name),
       deletedAt: at,
-      nodes: toSnapshot(tree),
-    });
-  }
+      nodes: toSnapshot(deleted[index]!.tree),
+    })),
+  );
 }

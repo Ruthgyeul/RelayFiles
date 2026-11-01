@@ -1,5 +1,6 @@
 import "server-only";
 import { Prisma, type DbClient } from "../db/client";
+import type { Node } from "../db/generated/client";
 
 // Recursive queries over a folder tree (WITH RECURSIVE on Node.parentId).
 
@@ -19,6 +20,28 @@ export async function ancestorChain(db: DbClient, nodeId: string): Promise<Ances
     )
     SELECT id, name, visibility::text AS visibility, depth FROM chain ORDER BY depth DESC`;
   return rows.map(({ id, name, visibility }) => ({ id, name, visibility }));
+}
+
+/**
+ * The chain of each node from the account root down to it (inclusive), as {@link ancestorChain}
+ * gives one: a single walk for a whole selection. Nodes that do not exist are missing from the map.
+ */
+export async function ancestorChains(db: DbClient, nodeIds: readonly string[]): Promise<Map<string, AncestorRow[]>> {
+  if (nodeIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<(AncestorRow & { start: string })[]>`
+    WITH RECURSIVE chain AS (
+      SELECT id AS start, id, "parentId", name, visibility, 0 AS depth FROM "Node" WHERE id = ANY(${[...new Set(nodeIds)]})
+      UNION ALL
+      SELECT c.start, n.id, n."parentId", n.name, n.visibility, c.depth + 1 FROM "Node" n JOIN chain c ON n.id = c."parentId"
+    )
+    SELECT start, id, name, visibility::text AS visibility FROM chain ORDER BY start, depth DESC`;
+  const chains = new Map<string, AncestorRow[]>();
+  for (const { start, id, name, visibility } of rows) {
+    const chain = chains.get(start);
+    if (chain) chain.push({ id, name, visibility });
+    else chains.set(start, [{ id, name, visibility }]);
+  }
+  return chains;
 }
 
 /** Total file bytes and file count below each folder (recursive). */
@@ -89,12 +112,30 @@ export async function descendantIds(db: DbClient, folderId: string): Promise<str
   return rows.map((row) => row.id);
 }
 
-/** Full rows of a node and everything below it, parents before children (for copying). */
-export async function subtreeRows(db: DbClient, nodeId: string) {
-  const ids = [nodeId, ...(await descendantIds(db, nodeId))];
-  const rows = await db.node.findMany({ where: { id: { in: ids } } });
-  const order = new Map(ids.map((id, index) => [id, index]));
-  return rows.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+/**
+ * Full rows of each item and everything below it, parents before children (for copying and
+ * zipping a selection): one walk for all items and one read of their rows, whatever their number.
+ */
+export async function subtreeRowsOf(db: DbClient, topIds: readonly string[]): Promise<Map<string, Node[]>> {
+  if (topIds.length === 0) return new Map();
+  const walk = await db.$queryRaw<{ top: string; id: string }[]>`
+    WITH RECURSIVE sub AS (
+      SELECT id AS top, id, 0 AS depth FROM "Node" WHERE id = ANY(${[...new Set(topIds)]})
+      UNION ALL
+      SELECT s.top, n.id, s.depth + 1 FROM "Node" n JOIN sub s ON n."parentId" = s.id
+    )
+    SELECT top, id FROM sub ORDER BY top, depth`;
+  const rows = new Map((await db.node.findMany({ where: { id: { in: walk.map((entry) => entry.id) } } })).map((row) => [row.id, row]));
+  const trees = new Map<string, Node[]>();
+  for (const { top, id } of walk) {
+    const row = rows.get(id);
+    // Deleted between the walk and the read.
+    if (!row) continue;
+    const tree = trees.get(top);
+    if (tree) tree.push(row);
+    else trees.set(top, [row]);
+  }
+  return trees;
 }
 
 /** "Apply to all subfolders and files": everything inside follows the folder again. */
