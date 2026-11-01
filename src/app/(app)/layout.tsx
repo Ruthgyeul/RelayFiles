@@ -1,5 +1,6 @@
 import { getAppEnv, getEnv } from "@/config/env";
 import { BYTES_PER_MB } from "@/domain/quota";
+import { RegisterServiceWorker } from "@/features/pwa/RegisterServiceWorker";
 import { AppShell } from "@/features/shell/AppShell";
 import { ShellProvider } from "@/features/shell/ShellProvider";
 import { TransfersPanel } from "@/features/transfers/TransfersPanel";
@@ -24,6 +25,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <TransfersProvider>
         <AppShell announcement={announcement}>{children}</AppShell>
         <TransfersPanel />
+        <RegisterServiceWorker />
       </TransfersProvider>
     </ShellProvider>
   );

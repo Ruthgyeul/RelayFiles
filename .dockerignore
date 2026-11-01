@@ -13,6 +13,8 @@
 !next.config.ts
 !tsconfig.json
 !postcss.config.mjs
+# static files served as they are: the service worker and the installed app's icons
+!public/
 # tools image: worker, migrations and admin scripts (tsx resolves @/ through tsconfig.json)
 !scripts/
 # both images

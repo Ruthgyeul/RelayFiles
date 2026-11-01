@@ -23,7 +23,11 @@ const nextConfig: NextConfig = {
     // Enables forbidden() / unauthorized() and their 403 / 401 pages.
     authInterrupts: true,
   },
-  headers: async () => [{ source: "/:path*", headers: SECURITY_HEADERS }],
+  headers: async () => [
+    { source: "/:path*", headers: SECURITY_HEADERS },
+    // The share-target service worker (public/sw.js): browsers check it for updates on each visit.
+    { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }] },
+  ],
 };
 
 export default nextConfig;

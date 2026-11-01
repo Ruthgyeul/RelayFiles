@@ -14,6 +14,7 @@ import { releaseSpace } from "../services/space.service";
 import { checkUploadStart, finalizeUpload } from "../services/upload.service";
 import { forgetUpload, loadBatch, reboundSlot, setUploadOwner, setUploadRequest, uploadOwner, uploadRequest, type UploadBatch, type UploadSlot } from "./batches";
 import { recordRequestUpload, releaseRequestRoom, requestFor, reserveRequestRoom } from "./request-uploads";
+import { noteRequestArrival } from "../jobs/notify-queue";
 import { markActive } from "../metrics/activity";
 import { RedisLocker } from "./redis-locker";
 
@@ -100,12 +101,17 @@ function createServer(volumeId: string, mountPath: string): Server {
       const { batchId, slot } = await slotOf(upload);
       const batch = await loadBatch(batchId);
       if (!batch) throw tusError("NOT_FOUND", "This upload has expired. Start it again.");
-      const { owner } = await senderOf(req, batch, false);
+      const { owner, request } = await senderOf(req, batch, false);
       const { requestId } = batch;
       try {
         const modifiedAt = clientModifiedAt(upload.metadata?.[UPLOAD_METADATA.lastModified] ?? undefined, new Date());
         const file = await finalizeUpload(owner, batch, slot, upload.id, modifiedAt).catch(rethrow);
-        if (requestId) await recordRequestUpload(requestId, upload.id, batch.files[slot]?.size ?? 0);
+        if (requestId) {
+          const size = batch.files[slot]?.size ?? 0;
+          await recordRequestUpload(requestId, upload.id, size);
+          // The owner hears about it from the worker (grouped, never with the visitor's address).
+          await noteRequestArrival({ requestId, owner: owner.name, request: request?.title ?? "", file: { name: file.name, size } });
+        }
         await forgetUpload(upload.id);
         // A visitor learns only that the file arrived, not where it went.
         const data = requestId ? { name: file.name } : { nodeId: file.nodeId, name: file.name, folderId: file.folderId };

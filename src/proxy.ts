@@ -117,8 +117,10 @@ export function proxy(req: NextRequest) {
 export const config = {
   // Skip build assets and static files, and uploads (the proxy would buffer their bodies): tus
   // and API v1's whole-body upload, which is Bearer-only, so the cross-site check has nothing to
-  // protect there. Everything else (pages and API) goes through the proxy.
+  // protect there. The share sheet's post (/share-target/receive, normally answered by the service
+  // worker) is skipped for the same reason: its route never reads the body and stores nothing.
+  // Everything else (pages and API) goes through the proxy.
   // Static file names are skipped only outside /api: an API path ending in ".png" must still get
   // the CSRF and admin-range checks.
-  matcher: ["/((?!_next/static|_next/image|api/uploads/tus|api/v1/files$|favicon.ico|icon.svg|(?!api/).*\\.(?:woff2?|png|jpe?g|webp|svg|ico)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|api/uploads/tus|api/v1/files$|share-target/receive$|favicon.ico|icon.svg|(?!api/).*\\.(?:woff2?|png|jpe?g|webp|svg|ico)$).*)"],
 };

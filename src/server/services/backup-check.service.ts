@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { BACKUP } from "@/config/policy";
 import { backupProblems } from "@/domain/backup-check";
 import { db, openDatabase } from "../db/client";
+import { queueNotification } from "../jobs/notify-queue";
 import { logger } from "../logger";
 import { backupCounts, lastAppliedMigration, pruneBackupChecks, recordBackupCheck, type NewBackupCheck } from "../repositories/backup-check.repo";
 import { runFsck, type FsckReport } from "./fsck.service";
@@ -95,6 +96,10 @@ export async function verifyBackup(input: BackupVerifyInput, now: Date = new Dat
       : await compare({ ...input, dump: input.dump, restoredUrl: input.restoredUrl }, now);
   await recordBackupCheck(db(), check);
   await pruneBackupChecks(db(), BACKUP.checksKept);
-  if (!check.ok) logger.error("backup check failed", { dump: check.dumpName, problems: check.problems });
+  if (!check.ok) {
+    logger.error("backup check failed", { dump: check.dumpName, problems: check.problems });
+    // One message per failed run (the id is the run's time), sent by the worker.
+    await queueNotification({ kind: "backup-failed", dump: check.dumpName, problems: check.problems }, `backup-failed-${now.getTime()}`);
+  }
   return check;
 }

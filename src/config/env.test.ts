@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { checkAllEnv, databaseUrlOf, ENV_KEYS, EnvError, logLevelOf, parseEnvGroup, redisUrlOf } from "./env";
+import { checkAllEnv, databaseUrlOf, ENV_KEYS, EnvError, isLanHost, logLevelOf, parseEnvGroup, redisUrlOf } from "./env";
 
 const SECRETS = {
   TOKEN_ENC_KEY: Buffer.alloc(32, 7).toString("base64"),
@@ -110,5 +110,36 @@ describe("offsite backup settings", () => {
     expect(() => parseEnvGroup("offsite", { RESTIC_PASSWORD: "short" })).toThrow(EnvError);
     expect(parseEnvGroup("offsite", { OFFSITE_EXTRA_PATHS: "/mnt/a/users /mnt/b/users" }).OFFSITE_EXTRA_PATHS).toBe("/mnt/a/users /mnt/b/users");
     expect(() => parseEnvGroup("offsite", { OFFSITE_EXTRA_PATHS: "relative/users" })).toThrow(EnvError);
+  });
+});
+
+describe("notification settings", () => {
+  it("is off without a URL and posts generic JSON by default", () => {
+    expect(parseEnvGroup("notify", {})).toEqual({ NOTIFY_WEBHOOK_FORMAT: "json" });
+  });
+
+  it("accepts https anywhere and plain http only to a LAN host", () => {
+    for (const url of ["https://ntfy.sh/relay-topic", "http://192.168.0.10:8080/relay", "http://127.0.0.1:9000/hook", "http://ntfy/relay", "http://nas.local/hook", "http://100.101.1.2/hook"]) {
+      expect(parseEnvGroup("notify", { NOTIFY_WEBHOOK_URL: url }).NOTIFY_WEBHOOK_URL).toBe(url);
+    }
+    for (const url of ["http://ntfy.sh/relay-topic", "http://8.8.8.8/hook", "ftp://192.168.0.10/x", "https://user:pass@ntfy.sh/topic", "not a url"]) {
+      expect(() => parseEnvGroup("notify", { NOTIFY_WEBHOOK_URL: url }), url).toThrow(EnvError);
+    }
+  });
+
+  it("needs a chat id for Telegram", () => {
+    const url = "https://api.telegram.org/bot123:abc/sendMessage";
+    expect(() => parseEnvGroup("notify", { NOTIFY_WEBHOOK_URL: url, NOTIFY_WEBHOOK_FORMAT: "telegram" })).toThrow(/NOTIFY_TELEGRAM_CHAT_ID/);
+    expect(parseEnvGroup("notify", { NOTIFY_WEBHOOK_URL: url, NOTIFY_WEBHOOK_FORMAT: "telegram", NOTIFY_TELEGRAM_CHAT_ID: "-1001234" }).NOTIFY_TELEGRAM_CHAT_ID).toBe("-1001234");
+    expect(() => parseEnvGroup("notify", { NOTIFY_WEBHOOK_FORMAT: "slack" })).toThrow(EnvError);
+  });
+});
+
+describe("isLanHost", () => {
+  it("knows private, loopback, CGNAT and local names", () => {
+    const lan = ["10.0.0.1", "172.16.0.1", "172.31.255.1", "192.168.1.1", "127.0.0.1", "169.254.1.1", "100.64.0.1", "100.127.0.1", "localhost", "ntfy", "nas.lan", "box.home.arpa", "[::1]", "fd12:3456::1"];
+    expect(lan.filter((host) => !isLanHost(host))).toEqual([]);
+    const internet = ["8.8.8.8", "172.32.0.1", "100.128.0.1", "example.com", "ntfy.sh", "2001:db8::1"];
+    expect(internet.filter(isLanHost)).toEqual([]);
   });
 });

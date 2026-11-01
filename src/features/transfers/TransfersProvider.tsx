@@ -15,7 +15,7 @@ import { canSaveToFolder, FolderDownloader, pickSaveFolder } from "./download-ru
 import type { UploadEntry } from "./read-drop";
 import { hasUnfinishedUploads } from "./resume-candidates";
 import { initialItems } from "./transfer-items";
-import { TransfersContext, type DownloadRequest, type FolderDownloadRequest, type Transfer, type TransfersContextValue, type UploadTarget } from "./transfers-context";
+import { TransfersContext, type DownloadRequest, type FolderDownloadRequest, type Transfer, type TransfersContextValue, type UploadOptions, type UploadTarget } from "./transfers-context";
 import { BatchUploader } from "./upload-runner";
 import { useItemProgress } from "./useItemProgress";
 import { useFilePickers } from "./useFilePickers";
@@ -46,7 +46,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [panel, setPanelState] = useState({ open: false, expanded: true });
   const [lastUpload, setLastUpload] = useState<{ folderId: string; name: string } | null>(null);
-  const [duplicate, setDuplicate] = useState<(DuplicateRequest & { entries: UploadEntry[]; target: UploadTarget }) | null>(null);
+  const [duplicate, setDuplicate] = useState<(DuplicateRequest & { entries: UploadEntry[]; target: UploadTarget; options?: UploadOptions }) | null>(null);
   const runners = useRef(new Map<string, Runner>());
   // crypto.randomUUID() exists only in secure contexts; plain-http LAN access must work too.
   const downloadSeq = useRef(0);
@@ -67,14 +67,14 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
   );
 
   const start = useCallback(
-    (entries: UploadEntry[], target: UploadTarget, dup?: DuplicatePolicy) => {
+    (entries: UploadEntry[], target: UploadTarget, dup?: DuplicatePolicy, options?: UploadOptions) => {
       void (async () => {
         try {
           const plan = await apiFetch<PrepareUploadResult>("/api/uploads", {
             method: "POST",
             json: { target: target.ref, dup, files: entries.map((entry) => ({ rel: entry.rel, size: entry.file.size })), fallbackName: uploadFallbackName(new Date()) },
           });
-          if (plan.kind === "duplicates") return setDuplicate({ names: plan.names, folderName: target.name, entries, target });
+          if (plan.kind === "duplicates") return setDuplicate({ names: plan.names, folderName: target.name, entries, target, options });
           if (plan.kind === "nothing") return notify("Nothing to upload · all files already exist");
           const files = plan.files.map((file) => entries[file.index]!.file);
           const id = plan.batchId;
@@ -119,8 +119,10 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
           setTransfers((list) => [transfer, ...list]);
           setPanelState({ open: true, expanded: true });
           runner.start();
+          options?.onStart?.({ id: plan.folder.id, name: plan.folder.name });
         } catch (caught) {
           notify(errorText(caught));
+          options?.onRefused?.();
         }
       })();
     },
@@ -128,7 +130,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
   );
 
   const upload = useCallback(
-    (entries: UploadEntry[], target: UploadTarget) => {
+    (entries: UploadEntry[], target: UploadTarget, options?: UploadOptions) => {
       // Names the file system can't store are skipped, like the design.
       const bad = entries.filter((entry) => entry.rel.split("/").some((part) => nameError(part)));
       if (bad.length) {
@@ -136,7 +138,8 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
         notify(`${bad.length} ${bad.length === 1 ? "file" : "files"} skipped: ${nameError(first)}`);
       }
       const good = entries.filter((entry) => !bad.includes(entry));
-      if (good.length) start(good, target);
+      if (good.length) start(good, target, undefined, options);
+      else options?.onRefused?.();
     },
     [notify, start],
   );
@@ -261,7 +264,7 @@ export function TransfersProvider({ children }: { children: ReactNode }) {
     <TransfersContext value={value}>
       {children}
       {pickers.inputs}
-      <DuplicateDialog request={duplicate} onChoose={(policy) => duplicate && start(duplicate.entries, duplicate.target, policy)} onClose={() => setDuplicate(null)} />
+      <DuplicateDialog request={duplicate} onChoose={(policy) => duplicate && start(duplicate.entries, duplicate.target, policy, duplicate.options)} onClose={() => setDuplicate(null)} />
     </TransfersContext>
   );
 }

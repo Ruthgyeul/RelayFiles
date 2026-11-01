@@ -22,6 +22,22 @@
 - `server/logger.ts`의 `redact()`가 `token`, `password`, `secret`, `authorization`, `cookie`, `ip`, `x-forwarded-for`, `cf-connecting-ip` 키의 값을 `[redacted]`로 바꾼다.
 - 운영 로그 레벨은 warn 이상, 파일은 `LOG_DIR`(기본 `/var/log/relayfiles`)에 쓴다.
 
+## 알림 (웹훅)
+
+관리자가 `.env`에 넣은 `NOTIFY_WEBHOOK_URL` 한 곳으로만 보낸다([runbook.md "알림 설정"](runbook.md#알림-설정)). 방문자나 계정이 받는 곳을 정할 수 없다.
+
+| 보내는 것 | 보내지 않는 것 |
+|---|---|
+| 업로드 링크: 소유 계정 이름, 링크 제목, 파일 이름·크기(묶음이면 개수·합계) | 방문자 IP·기기·브라우저, 링크 URL·id, 폴더 id·경로, 파일 내용, 비밀번호 |
+| 볼륨: 볼륨 id, 여유 바이트, 예비 비율, 원인 종류(표시 파일 없음·다른 볼륨·쓰기 불가) | 마운트 경로 등 내부 경로, 디스크 오류 원문 |
+| 백업 검증: 덤프 파일 이름, 문제 목록(`backupProblems`의 문장: 시각, 스키마 이름, 행 수, fsck 차이 수, restic 결과) | 복원 DB 연결 문자열, 계정·파일 이름 |
+| 모든 알림: 사이트 origin(`PUBLIC_URL`), 시각, 제목 | 토큰, 쿠키, 세션 |
+
+- 주소 검사(`env.ts`): https, 또는 LAN 호스트로 가는 http만 받는다(평문이 인터넷을 지나지 않게). URL에 사용자·비밀번호를 넣을 수 없고, 비밀값은 `NOTIFY_WEBHOOK_TOKEN`(`Authorization: Bearer`)으로 따로 둔다. Discord·Telegram은 URL 자체가 비밀이므로 로그·오류 메시지에 URL을 넣지 않는다(`webhook answered 401`, `webhook not reached: ECONNREFUSED`처럼 상태·오류 코드만).
+- 요청: 워커만 보낸다(웹 요청 안에서 외부로 나가지 않는다). `AbortSignal.timeout(NOTIFY.requestTimeoutMs)`, 리디렉트는 따라가지 않고 실패로 본다(다른 호스트로 보내지는 일이 없다). 응답 본문은 읽지 않고 버린다.
+- 내용 주입: 이름의 제어 문자(줄바꿈 등)는 공백으로 바꾼다. Discord는 `allowed_mentions: { parse: [] }`로 `@everyone` 같은 이름이 아무도 부르지 않게 하고, Telegram은 `parse_mode` 없이 평문으로 보낸다. ntfy 헤더(제목·우선순위)에는 고정 문구만 넣는다.
+- 양: 업로드 링크 알림은 링크마다 60초에 한 번으로 묶이고(방문자가 파일 1만 개를 올려도 메시지는 몇 개), 볼륨 경보는 종류·볼륨마다 반복 제한이 있다.
+
 ## API
 
 - 예상하지 못한 예외는 응답에 내용을 싣지 않는다(`apiHandler`). 요청 id로 로그를 찾는다.
@@ -105,6 +121,14 @@
 - Nginx `limit_req`(앱의 Redis 제한 앞단): `POST /api/auth/*`·`POST /api/share/*/unlock` 분당 20회(버스트 20, `NGINX_AUTH_RATE_PER_MIN`·`NGINX_AUTH_BURST`), `POST /api/uploads` 분당 60회(버스트 30, `NGINX_UPLOAD_RATE_PER_MIN`·`NGINX_UPLOAD_BURST`), 개인 API 토큰 요청 `/api/v1/*`·`/metrics` 분당 120회(버스트 60, `NGINX_API_RATE_PER_MIN`·`NGINX_API_BURST`. 있는 토큰 id에 틀린 비밀값을 보내면 앱의 토큰별 제한 전에 argon2가 돈다), 클라이언트 주소마다. 요청 본문은 `NGINX_MAX_BODY_MB`(100)까지. 넘으면 API 형식 JSON 429와 `Retry-After: 60`.
 - 호스트 이름(DNS 리바인딩): Nginx는 `SERVER_NAME`(공백으로 여러 개)과 `127.0.0.1`(릴리스 스크립트의 헬스 체크)로 온 요청만 앱에 넘기고, 다른 `Host`는 응답 없이 연결을 끊는다(444). Docker·k3s 템플릿은 `default_server`가 이 일을 하고(`SERVER_NAME=_`이면 모든 이름을 받는다), systemd는 `install.sh`가 다른 기본 사이트가 없을 때 `relayfiles-catchall.conf`를 넣는다.
 - k3s: 앱 Pod는 NetworkPolicy로 Nginx Pod와 워커(Status 페이지 프로브)의 연결만 받는다. 앱은 `X-Real-IP`·`CF-Connecting-IP`로 방문자 주소를 정하므로(관리자 대역, 로그인·잠금 해제 제한), 클러스터의 다른 Pod가 앱에 직접 붙어 이 헤더를 꾸미지 못하게 한다. k3s 내장 정책 컨트롤러(kube-router)가 적용한다(`--disable-network-policy`로 띄운 서버에서는 적용되지 않는다).
+
+## 설치 앱 · 공유 대상 · 서비스 워커
+
+- **공유 대상 POST**(`/share-target/receive`)는 서버가 받지 않는다. 세션 쿠키는 `SameSite=Lax`라 OS 공유 시트나 다른 사이트가 시작한 POST 이동에는 붙지 않고, 붙는다 해도 다른 사이트의 폼이 같은 요청을 만들 수 있다(CSRF). 서버 라우트는 본문을 읽지 않고 아무것도 저장하지 않은 채 303으로 설명 페이지에 보낸다. 프록시는 본문 버퍼링을 피하려고 이 경로를 건너뛴다(CSRF 검사는 `/api/` 쓰기에만 있고, 이 라우트는 쓰는 것이 없다).
+- **서비스 워커**(`public/sw.js`)가 같은 출처의 그 POST만 가로채 파일을 메모리에만 두고(Cache Storage·IndexedDB 없음) `/share-target?share=<무작위 uuid>`를 연다. 파일은 같은 출처의 페이지가 `MessageChannel`로 그 id를 물을 때 한 번만 건네고, 아무도 가져가지 않으면 `SHARE_TARGET.holdMs`(3분) 뒤 버린다. 워커는 그 밖의 요청을 가로채지 않고, 캐시하지 않고, 스스로 네트워크 요청을 하지 않는다(`pwa.test.ts`가 `caches`·`indexedDB`·`importScripts`·`fetch(`가 없는지 검사). 비공개 파일이나 페이지가 기기에 남지 않는다.
+- **올리기는 사용자가 누를 때만**: 서비스 워커는 공유 시트의 POST와 다른 사이트 폼의 POST를 구별할 수 없다. 공유 페이지는 받은 파일의 이름·크기와 올릴 계정("Uploading as …")을 보여 주고 "Upload to Home"을 눌러야 일반 업로드(로그인한 세션 쿠키, `POST /api/uploads` → tus, 같은 쿼터·크기·항목 수 제한)를 시작한다. 페이지는 프레임에 넣을 수 없으므로(`frame-ancestors 'none'`, `X-Frame-Options: DENY`) 다른 사이트가 버튼을 대신 누르게 할 수 없다. 로그인한 계정이 없으면 로그인 대화상자를 띄우고 파일은 페이지에만 둔다.
+- 등록은 보안 컨텍스트(https, localhost)에서만 한다. CSP `worker-src 'self'`라 같은 출처의 `/sw.js`만 워커가 될 수 있고, 워커 응답에도 프록시의 CSP가 붙는다. `/sw.js`는 `Cache-Control: no-cache`로 방문할 때마다 새 버전을 확인한다.
+- 매니페스트·아이콘은 공개 정적 파일이다(계정 정보 없음).
 
 ## 응답 헤더·자원 제한
 
