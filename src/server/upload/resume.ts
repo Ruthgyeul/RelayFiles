@@ -7,6 +7,7 @@ import { reserveSpace, type SpaceOwner } from "../services/space.service";
 import { assertAccountWritable } from "../services/volume.service";
 import { driverFor } from "../storage/registry";
 import { loadBatch, reboundSlot, rebindUpload, setUploadOwner, uploadOwner, uploadRequest } from "./batches";
+import { liveReservations } from "./reservations";
 import { storedUpload } from "./tus";
 
 const fileNameOf = (rel: string) => rel.split("/").at(-1) ?? rel;
@@ -40,4 +41,26 @@ export async function resumeUpload(owner: SpaceOwner, input: ResumeUploadInput):
   await setUploadOwner(uploadId, owner.id);
   await rebindUpload(uploadId, { batchId, slot });
   return { offset: stored.offset };
+}
+
+/**
+ * The account's unfinished uploads a new batch may resume: same file name and size as one of
+ * its files (each used once). A page reloaded mid-upload prepares a batch for the same files
+ * while their old reservations still stand; counting both would refuse a resume that fits.
+ * The real limit stays the atomic reservation when an upload starts (`reserveSpace`).
+ */
+export async function resumableUploads(owner: { id: string }, volume: Parameters<typeof storedUpload>[0], files: readonly { rel: string; size: number }[]): Promise<Set<string>> {
+  const pending = await liveReservations({ kind: "account", id: owner.id });
+  const wanted = files.map((file) => ({ name: fileNameOf(file.rel), size: file.size }));
+  const covering = new Set<string>();
+  for (const { uploadId } of pending) {
+    if ((await uploadOwner(uploadId)) !== owner.id) continue;
+    const stored = await storedUpload(volume, uploadId);
+    if (!stored || stored.offset >= stored.size) continue;
+    const at = wanted.findIndex((file) => file.size === stored.size && file.name === stored.fileName);
+    if (at < 0) continue;
+    wanted.splice(at, 1);
+    covering.add(uploadId);
+  }
+  return covering;
 }

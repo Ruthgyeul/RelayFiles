@@ -25,6 +25,7 @@ import { recordTrashed } from "../repositories/trash.repo";
 import { assertItemRoom } from "./item-limit.service";
 import { createFolder } from "./node.service";
 import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
+import { resumableUploads } from "../upload/resume";
 import { assertAccountWritable, driverForAccount, lockAccountForWrite } from "./volume.service";
 import { enqueueMedia } from "../jobs/queue";
 import { countOne } from "../metrics/counters";
@@ -62,6 +63,12 @@ export async function tusVolume(volumeId: string | undefined) {
  * dialog, checks quota and disk space, creates the Home upload folder, and stores the batch
  * the tus server will accept files for.
  */
+/** Space for a batch, not counting twice the unfinished uploads it may resume (`resumableUploads`). */
+async function assertBatchSpace(owner: Owner, files: readonly { rel: string; size: number }[], space: Parameters<typeof assertSpace>[2], volume: Parameters<typeof resumableUploads>[1]): Promise<void> {
+  const covering = await resumableUploads(owner, volume, files);
+  await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space, { covering });
+}
+
 export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Promise<PrepareUploadResult> {
   input.files.forEach((file) => checkRelPath(file.rel));
   await assertAccountWritable(owner.id);
@@ -83,7 +90,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
     // The root, the new upload folder, then each file's folders.
     if (files.some((file) => HOME_UPLOAD_DEPTH + file.rel.split("/").length > STORAGE.maxFolderDepth)) throw new ApiError("BAD_REQUEST", "Folders are nested too deeply.");
     await assertItemRoom(owner, newItemCount(files.map((file) => file.rel)) + 1);
-    await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space);
+    await assertBatchSpace(owner, files, space, volume);
     folder = (await createFolder(owner, "root", plan.name)).folder;
   } else {
     const target = input.target === "root" ? await findRootFolder(db(), owner.id) : await findNode(db(), owner.id, input.target);
@@ -97,7 +104,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
     if (input.dup === "skip") files = files.filter((file) => !isDuplicate(file.rel));
     if (files.length === 0) return { kind: "nothing" };
     await assertItemRoom(owner, newItemCount(files.map((file) => file.rel)));
-    await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space);
+    await assertBatchSpace(owner, files, space, volume);
     folder = target;
   }
 

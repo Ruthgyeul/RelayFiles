@@ -71,6 +71,19 @@ afterAll(async () => {
 describe("resuming an upload after a reload", () => {
   const content = Buffer.from("0123456789abcdef");
 
+  it("lets a nearly full account prepare the batch that resumes its own unfinished upload", async () => {
+    const s = await member();
+    // Room for this file once, not twice.
+    await prisma.account.update({ where: { id: s.id }, data: { quotaBytes: BigInt(content.length) } });
+    const first = await plan(s, "root", [{ rel: "movie.bin", size: content.length }]);
+    const uploadId = await startFile(s, first, 0, "movie.bin", content, 6);
+    const again = await plan(s, "root", [{ rel: "movie.bin", size: content.length }]);
+    expect((await claim(s, again.batchId, 0, uploadId)).status).toBe(200);
+    // A different file of another size still does not fit while the upload is pending.
+    const other = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "other.bin", size: 1 }] } });
+    expect(other.status).toBe(507);
+  });
+
   it("continues the earlier upload as a file of the new batch, keeping one reservation", async () => {
     const s = await member();
     const first = await plan(s, "home", [{ rel: "movie.bin", size: content.length }]);
