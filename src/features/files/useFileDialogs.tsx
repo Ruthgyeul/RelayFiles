@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { STORAGE } from "@/config/policy";
 import type { NodeItem } from "@/contracts/nodes";
 import { formatSize } from "@/domain/format";
+import { retentionText } from "@/domain/trash";
 import { nameError, splitExtension } from "@/domain/names";
 import { useShell } from "@/features/shell/ShellProvider";
 import { ApiClientError } from "@/shared/lib/api-client";
@@ -29,7 +31,7 @@ const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caugh
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 const labelOf = (items: NodeItem[]) => (items.length === 1 ? `"${items[0]!.name}"` : `${items.length} items`);
 
-/** Delete confirmation text from the design. */
+/** Delete confirmation text (the design's, with the "Recently deleted" window instead of "can't be undone"). */
 export function deleteText(items: NodeItem[]): { title: string; text: string } {
   const one = items.length === 1 ? items[0]! : null;
   const size = items.reduce((sum, item) => sum + Number(item.size), 0);
@@ -37,7 +39,7 @@ export function deleteText(items: NodeItem[]): { title: string; text: string } {
   const what = one && one.type === "file" ? formatSize(size) : `${plural(files, "file")} · ${formatSize(size)}`;
   return {
     title: one ? `Delete "${one.name}"?` : `Delete ${items.length} items?`,
-    text: `${what} will be permanently deleted. Share links to ${one ? "it" : "them"} stop working. This can't be undone.`,
+    text: `${what} will be moved to Recently deleted and can be restored for ${retentionText(STORAGE.trashRetentionHours)}, then ${one ? "it is" : "they are"} removed for good. Share links to ${one ? "it" : "them"} stop working.`,
   };
 }
 

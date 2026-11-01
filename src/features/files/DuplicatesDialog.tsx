@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FILES } from "@/config/policy";
+import { FILES, STORAGE } from "@/config/policy";
 import type { DuplicateFile, DuplicatesResult } from "@/contracts/nodes";
 import { defaultDuplicateSelection, fullySelectedGroups } from "@/domain/duplicates";
 import { formatCount, formatSize } from "@/domain/format";
+import { retentionText } from "@/domain/trash";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { filesApi } from "@/shared/lib/files-api";
 import { Button } from "@/shared/ui/Button";
@@ -128,7 +129,7 @@ export function DuplicatesDialog({ request, onClose, onDone, onReveal }: { reque
         tone="danger"
         icon="trash"
         title={`Delete ${files(selected.size)}?`}
-        description={`${formatSize(freed)} of copies will be permanently deleted; one copy of each file stays. Share links to the deleted copies stop working. Copies that share their bytes on disk free quota, not always disk space. This can't be undone.`}
+        description={`${formatSize(freed)} of copies will be moved to Recently deleted and can be restored for ${retentionText(STORAGE.trashRetentionHours)}; one copy of each file stays. Share links to the deleted copies stop working. Copies that share their bytes on disk free quota, not always disk space.`}
         confirmLabel="Delete"
         busy={busy}
         onCancel={() => setConfirming(false)}
