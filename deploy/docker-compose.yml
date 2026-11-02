@@ -98,7 +98,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
+    image: redis:7@sha256:b6b6e3dc0c0952737748e55d5d885272840c7e42ba41ab1d5489f693419882f5
     restart: unless-stopped
     logging: *logging
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--appendonly", "yes", "--appendfsync", "everysec"]
