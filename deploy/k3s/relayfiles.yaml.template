@@ -210,6 +210,8 @@ spec:
             - { name: NGINX_AUTH_BURST, value: "${NGINX_AUTH_BURST}" }
             - { name: NGINX_UPLOAD_RATE_PER_MIN, value: "${NGINX_UPLOAD_RATE_PER_MIN}" }
             - { name: NGINX_UPLOAD_BURST, value: "${NGINX_UPLOAD_BURST}" }
+            - { name: NGINX_TUS_RATE_PER_MIN, value: "${NGINX_TUS_RATE_PER_MIN}" }
+            - { name: NGINX_TUS_BURST, value: "${NGINX_TUS_BURST}" }
             - { name: NGINX_API_RATE_PER_MIN, value: "${NGINX_API_RATE_PER_MIN}" }
             - { name: NGINX_API_BURST, value: "${NGINX_API_BURST}" }
           ports: [{ containerPort: 8080 }]

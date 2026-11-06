@@ -45,25 +45,38 @@ map "$relay_trusted_peer|$http_x_forwarded_proto" $relay_proto {
 
 # First line of defense before the app's own Redis limits (and before argon2 checks link
 # passwords): sign-in, sign-up, account switching, link unlocks and new upload batches, per
-# client address. Requests whose key is empty (everything else) are not limited.
+# client address. Requests whose key is empty (everything else) are not limited. Upload-only
+# link unlocks and CSP reports (unauthenticated, written to the logs) count as sign-ins too.
 map "$request_method $uri" $relay_auth_limit {
     "~^POST /api/auth/"                $relay_client_ip;
     "~^POST /api/share/[^/]+/unlock$"  $relay_client_ip;
+    "~^POST /api/r/[^/]+/unlock$"      $relay_client_ip;
+    "POST /api/csp-report"             $relay_client_ip;
     default "";
 }
 map "$request_method $uri" $relay_upload_limit {
-    "POST /api/uploads" $relay_client_ip;
+    "POST /api/uploads"              $relay_client_ip;
+    "~^POST /api/r/[^/]+/uploads$"   $relay_client_ip;
+    default "";
+}
+# Each new tus upload (one file) per address: generous, as a folder of small files sends many
+# in a row (the browser retries a 429 after a pause). The chunks (PATCH) are not limited.
+map "$request_method $uri" $relay_tus_limit {
+    "~^POST /api/uploads/tus/" $relay_client_ip;
     default "";
 }
 # Personal API token requests: a token with a known id but a wrong secret costs an argon2 check
 # in the app before its own per-token limit, so Nginx limits them per client address first.
+# Share pages (/d/<id>) share the zone: guessing link ids is limited here before the app.
 map $uri $relay_api_limit {
     "~^/api/v1/" $relay_client_ip;
     "/metrics"   $relay_client_ip;
+    "~^/d/"      $relay_client_ip;
     default "";
 }
 limit_req_zone $relay_auth_limit zone=relay_auth:10m rate=${NGINX_AUTH_RATE_PER_MIN}r/m;
 limit_req_zone $relay_upload_limit zone=relay_uploads:10m rate=${NGINX_UPLOAD_RATE_PER_MIN}r/m;
+limit_req_zone $relay_tus_limit zone=relay_tus:10m rate=${NGINX_TUS_RATE_PER_MIN}r/m;
 limit_req_zone $relay_api_limit zone=relay_api:10m rate=${NGINX_API_RATE_PER_MIN}r/m;
 
 # No client addresses in Nginx logs (same rule as the app's logs).

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, DUPLICATES, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, RENUMBER, SHUTDOWN, STORAGE, TRANSCODE, UPLOAD } from "./policy";
+import { ACCOUNT, AUTH, DUPLICATES, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, REDIS_SERVER, RENUMBER, SHUTDOWN, STORAGE, TRANSCODE, UPLOAD } from "./policy";
 import { DEFAULT_THEME, THEME_KEYS } from "./theme";
 
 /**
@@ -80,8 +80,8 @@ export const ENV_GROUPS = {
     SERVER_LOCATION: z.string().default("Seoul, KR"),
     ENABLE_UI_CATALOG: bool.default(false),
     ADMIN_ALLOWED_CIDRS: cidrList.default([]),
-    /** "report-only" logs violations without blocking (to /api/csp-report); "enforce" blocks them. */
-    CSP_MODE: z.enum(["report-only", "enforce"]).default("report-only"),
+    /** "enforce" blocks what the policy does not allow; "report-only" only logs it (to /api/csp-report). */
+    CSP_MODE: z.enum(["report-only", "enforce"]).default("enforce"),
     /** Strict-Transport-Security max-age when PUBLIC_URL is https (0 = do not send it, e.g. Cloudflare already does). */
     HSTS_MAX_AGE_SEC: z.coerce.number().int().min(0).default(HEADERS.hstsMaxAgeSec),
     /** Adds includeSubDomains; only when every subdomain of PUBLIC_URL's domain is https. */
@@ -121,14 +121,22 @@ export const ENV_GROUPS = {
     UPLOAD_MAX_FILE_SIZE_GB: z.coerce.number().positive().optional(),
     UPLOAD_TMP_TTL_HOURS: positiveInt.default(UPLOAD.tmpTtlHours),
   }),
-  secrets: z.object({
-    TOKEN_ENC_KEY: base64Key32,
-    TOKEN_HMAC_KEY: secret(32),
-    COOKIE_SECRET: secret(32),
-    TOKEN_ENC_KEY_PREVIOUS: base64Key32.optional(),
-    TOKEN_HMAC_KEY_PREVIOUS: secret(32).optional(),
-    COOKIE_SECRET_PREVIOUS: secret(32).optional(),
-  }),
+  secrets: z
+    .object({
+      TOKEN_ENC_KEY: base64Key32,
+      TOKEN_HMAC_KEY: secret(32),
+      COOKIE_SECRET: secret(32),
+      TOKEN_ENC_KEY_PREVIOUS: base64Key32.optional(),
+      TOKEN_HMAC_KEY_PREVIOUS: secret(32).optional(),
+      COOKIE_SECRET_PREVIOUS: secret(32).optional(),
+    })
+    .superRefine((env, ctx) => {
+      // A *_PREVIOUS key equal to the current one is a rotation that did not happen: values made
+      // with the real old key would stop working, and nothing warns until users are locked out.
+      for (const key of ["TOKEN_ENC_KEY", "TOKEN_HMAC_KEY", "COOKIE_SECRET"] as const) {
+        if (env[`${key}_PREVIOUS`] === env[key]) ctx.addIssue({ code: "custom", path: [`${key}_PREVIOUS`], message: `must differ from ${key} (set it to the old key while rotating, or leave it empty)` });
+      }
+    }),
   policy: z.object({
     ACCOUNT_TTL_DAYS: positiveInt.default(ACCOUNT.ttlDays),
     DEFAULT_QUOTA_GB: z.coerce.number().positive().default(ACCOUNT.defaultQuotaGb),
@@ -178,10 +186,17 @@ export const ENV_GROUPS = {
     NGINX_AUTH_BURST: positiveInt.default(NGINX.authBurst),
     NGINX_UPLOAD_RATE_PER_MIN: positiveInt.default(NGINX.uploadRatePerMin),
     NGINX_UPLOAD_BURST: positiveInt.default(NGINX.uploadBurst),
+    NGINX_TUS_RATE_PER_MIN: positiveInt.default(NGINX.tusRatePerMin),
+    NGINX_TUS_BURST: positiveInt.default(NGINX.tusBurst),
     /** Personal API token requests (/api/v1/, /metrics) per client address per minute, and the burst. */
     NGINX_API_RATE_PER_MIN: positiveInt.default(NGINX.apiRatePerMin),
     NGINX_API_BURST: positiveInt.default(NGINX.apiBurst),
     CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
+    /**
+     * Memory Redis may use, in MB (compose and k3s `--maxmemory`, with `noeviction`: when full,
+     * writes fail loudly instead of dropping queued jobs, upload reservations or lockouts).
+     */
+    REDIS_MAXMEMORY_MB: positiveInt.default(REDIS_SERVER.maxMemoryMb),
     /** Host directory for PostgreSQL, Redis and backups (docker compose). */
     DATA_DIR: z.string().startsWith("/").default("/srv/relayfiles"),
     /** Docker's data-root (images, containers, build cache); set by deploy/scripts/setup-docker.sh. */

@@ -51,6 +51,8 @@ location ~ ^${STORAGE_ACCEL_PREFIX}[a-z0-9-]+/(.+)$ {
 # Resumable uploads stream straight to the app.
 location ^~ /api/uploads/tus {
     if (-f /etc/nginx/maintenance/on) { return 503; }
+    # New uploads (POST) per address; the chunks of a running upload are not counted.
+    limit_req zone=relay_tus burst=${NGINX_TUS_BURST} nodelay;
     proxy_pass http://relayfiles_app;
     proxy_http_version 1.1;
     proxy_request_buffering off;
