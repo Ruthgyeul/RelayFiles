@@ -75,7 +75,7 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 - 기능끼리는 한 방향으로만 import한다(`npm run check:cycles`). 둘 다 쓰는 코드는 `src/shared`로, 여러 기능을 묶는 조립은 `src/app`에서 한다.
 - `src/domain`은 React, Next, Prisma, Node API에 의존하지 않는 순수 함수만 둔다. 모든 함수에 `*.test.ts`를 둔다.
 - `src/server/**` 파일은 `import "server-only"`로 시작한다.
-- 매직 넘버는 금지한다. 정책 값은 `src/config/policy.ts`, 배포별 값은 env(`src/config/env.ts`에서만 읽음)에 둔다.
+- 매직 넘버는 금지한다. 정책 값은 `src/config/policy/<영역>.ts`(`@/config/policy`로 가져온다), 배포별 값은 env(그룹 스키마는 `src/config/env/<영역>.ts`, 읽기는 `src/config/env.ts`에서만)에 둔다.
 - 파일 하나에 책임 하나. 컴포넌트는 200줄 이하를 목표로 한다.
 - 이름: 컴포넌트 `PascalCase.tsx`, 훅 `useX.ts`, 서비스 `x.service.ts`, 리포지토리 `x.repo.ts`, 스키마 `x.schema.ts`, 테스트 `*.test.ts`.
 
@@ -94,7 +94,7 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 - 커밋되는 env 파일은 `.env.example` 하나다. 사용자가 복사해서 `.env`를 직접 만든다(`npm run env:secrets`로 비밀값 생성, `npm run env:check`로 검증).
 - 포트, 호스트, 경로, 도메인, 비밀값을 코드·compose·nginx 설정에 하드코딩하지 않는다.
 - 앱은 `src/config/env.ts`의 그룹별 getter(`getAppEnv()`, `getEnv("database")` 등)로만 읽는다. 그룹은 처음 쓰일 때 검증된다.
-- 새 설정은 `env.ts` 스키마와 `.env.example`을 같은 PR에서 함께 바꾼다(`env.test.ts`가 두 목록이 같은지 검사).
+- 새 설정은 `src/config/env/`의 그룹 스키마와 `.env.example`을 같은 PR에서 함께 바꾼다(`env.test.ts`가 두 목록이 같은지 검사).
 
 ## API · 보안
 
