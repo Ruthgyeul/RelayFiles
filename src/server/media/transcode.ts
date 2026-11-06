@@ -41,9 +41,11 @@ export function storedTranscodeArgs(path: string, output: string): string[] {
   return [...encodeArgs(path), ...["-movflags", "+faststart", "-fs", String(TRANSCODE.maxOutputBytes), "-f", "mp4", output]];
 }
 
-/** Passes bytes through and fails once more than `limit` went by. */
+/** Passes bytes through, fails once more than `limit` went by, and remembers when bytes last moved. */
 class OutputLimit extends Transform {
   private sent = 0;
+  /** When output last passed through (a stalled reader stops the flow through backpressure). */
+  lastFlowAt = Date.now();
 
   constructor(private readonly limit: number) {
     super();
@@ -51,53 +53,82 @@ class OutputLimit extends Transform {
 
   override _transform(chunk: Buffer, _encoding: BufferEncoding, done: TransformCallback): void {
     this.sent += chunk.length;
+    this.lastFlowAt = Date.now();
     done(this.sent > this.limit ? new Error("conversion output limit reached") : null, chunk);
   }
 }
 
 const busy = () => new ApiError("RATE_LIMITED", "The server is converting other videos. Try again shortly.", { retryAfter: TRANSCODE.busyRetrySec });
+const ownBusy = () => new ApiError("RATE_LIMITED", "Another video is already converting for you. Close it or try again shortly.", { retryAfter: TRANSCODE.busyRetrySec });
 /** Stands in for the shared slot while Redis is unreachable; the process limit still applies. */
 const PROCESS_ONLY: SemaphoreSlot = { signal: new AbortController().signal, release: async () => undefined };
 
-/** One of the VIDEO_TRANSCODE_MAX slots shared by every app process, or null when all are in use. */
-export async function sharedSlot(limit: number): Promise<SemaphoreSlot | null> {
+/** One of the `limit` slots `name` shared by every app process, or null when all are in use. */
+async function slotOf(name: string, limit: number): Promise<SemaphoreSlot | null> {
   try {
-    return await acquireSlot("transcode", limit, TRANSCODE.slotLeaseMs);
+    return await acquireSlot(name, limit, TRANSCODE.slotLeaseMs);
   } catch (error) {
     logger.warn("shared conversion slots unavailable; limiting this process only", { error });
     return PROCESS_ONLY;
   }
 }
 
+/** One of the VIDEO_TRANSCODE_MAX slots shared by every app process, or null when all are in use. */
+export const sharedSlot = (limit: number) => slotOf("transcode", limit);
+
+/** Releases slots, logging (not throwing) when Redis is unreachable. */
+function releaseAll(held: readonly SemaphoreSlot[]): void {
+  for (const slot of held) slot.release().catch((error: unknown) => logger.warn("conversion slot not released", { error }));
+}
+
 /**
  * Plays a video the browser cannot decode by converting it while it streams. At most
- * VIDEO_TRANSCODE_MAX conversions run at once across every app process (Redis slots); each
- * one is killed (SIGKILL) as soon as the viewer leaves, the output limit is reached or its
- * shared slot is lost, and is always reaped (`close`).
+ * VIDEO_TRANSCODE_MAX conversions run at once across every app process (Redis slots), and at
+ * most TRANSCODE.maxPerRequester for one `requester` (an account, or a link visitor's address
+ * key). Each one is killed (SIGKILL) as soon as the viewer leaves, the output limit is
+ * reached, nobody reads its output for TRANSCODE.idleTimeoutMs, it ran TRANSCODE.maxRunMs or
+ * its shared slot is lost, and is always reaped (`close`).
  */
-export async function transcodeResponse(req: Request, path: string): Promise<Response> {
+export async function transcodeResponse(req: Request, path: string, requester: string): Promise<Response> {
   // A finished conversion is kept by the browser: watching again costs no CPU.
   const headers = new Headers({ "content-type": "video/mp4", "cache-control": IMMUTABLE_CACHE, "x-content-type-options": "nosniff", "x-accel-buffering": "no" });
   const { FFMPEG_PATH, VIDEO_TRANSCODE_MAX } = getEnv("jobs");
   if (VIDEO_TRANSCODE_MAX === 0) throw new ApiError("NOT_FOUND");
   if (req.method === "HEAD") return new Response(null, { headers });
   if (slots.running >= VIDEO_TRANSCODE_MAX) throw busy();
+  const own = await slotOf(`transcode:by:${requester}`, TRANSCODE.maxPerRequester);
+  if (!own) throw ownBusy();
   const slot = await sharedSlot(VIDEO_TRANSCODE_MAX);
-  if (!slot) throw busy();
+  if (!slot) {
+    releaseAll([own]);
+    throw busy();
+  }
 
   slots.running++;
   void countOne("transcodes_started");
   const started = Date.now();
   const child = spawn(FFMPEG_PATH, transcodeArgs(path), { stdio: ["ignore", "pipe", "ignore"], shell: false });
+  const output = new OutputLimit(TRANSCODE.maxOutputBytes);
+  const stop = () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  };
+  // A reader that stopped reading (paused, or slow on purpose) or a conversion that ran too
+  // long gives its slots back.
+  const watch = setInterval(() => {
+    const now = Date.now();
+    if (now - output.lastFlowAt < TRANSCODE.idleTimeoutMs && now - started < TRANSCODE.maxRunMs) return;
+    logger.warn("video conversion stopped: output not read or running too long", { durationMs: now - started });
+    stop();
+  }, TRANSCODE.watchIntervalMs);
+  watch.unref();
+
   let released = false;
   const release = () => {
     if (released) return;
     released = true;
     slots.running--;
-    slot.release().catch((error: unknown) => logger.warn("conversion slot not released", { error }));
-  };
-  const stop = () => {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    clearInterval(watch);
+    releaseAll([slot, own]);
   };
   child.on("error", (error) => {
     logger.warn("video conversion could not start", { error });
@@ -114,10 +145,11 @@ export async function transcodeResponse(req: Request, path: string): Promise<Res
     logger.warn("video conversion stopped: its conversion slot was lost");
     stop();
   };
-  slot.signal.addEventListener("abort", lost, { once: true });
-  child.once("close", () => slot.signal.removeEventListener("abort", lost));
+  for (const held of [slot, own]) {
+    held.signal.addEventListener("abort", lost, { once: true });
+    child.once("close", () => held.signal.removeEventListener("abort", lost));
+  }
 
-  const output = new OutputLimit(TRANSCODE.maxOutputBytes);
   // The viewer closed, seeked away or the limit was hit: stop converting right away.
   pipeline(child.stdout, output, () => stop());
   output.once("close", stop);

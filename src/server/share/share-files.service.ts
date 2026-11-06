@@ -9,6 +9,7 @@ import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type
 import type { NodeKind } from "@/domain/tree";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
+import { countInWindow } from "../redis";
 import { db } from "../db/client";
 import type { Busy } from "@/domain/share";
 import { segmentsBelowRoot } from "@/domain/tree";
@@ -223,18 +224,18 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
     if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
     void markActive("stream", `${row.id}:${client.ipKey}`);
   }
-  const response = (await sendStoredTranscode(req, driver, owner.id, row)) ?? (await liveTranscode(req, driver, owner.id, file, row.id));
+  const response = (await sendStoredTranscode(req, driver, owner.id, row)) ?? (await liveTranscode(req, driver, owner.id, file, row.id, link.isOwner ? `account:${owner.id}` : `visitor:${client.ipKey}`));
   return newVisitor ? setVisitorCookie(response, newVisitor) : response;
 }
 
 /** Length passed to parseRange when only the start of a request matters. */
 const UNKNOWN_LENGTH = Number.MAX_SAFE_INTEGER;
 
-async function liveTranscode(req: Request, driver: StorageDriver, accountId: string, file: SharedFile, nodeId: string): Promise<Response> {
+async function liveTranscode(req: Request, driver: StorageDriver, accountId: string, file: SharedFile, nodeId: string, requester: string): Promise<Response> {
   const path = await driver.localPath({ accountId, segments: file.segments });
   if (!path) throw new ApiError("NOT_FOUND");
   if (req.method === "GET") void notePlay(nodeId);
-  return transcodeResponse(req, path);
+  return transcodeResponse(req, path, requester);
 }
 
 /** Why a file is left out of "Download all", as written in "Not included.txt". */
@@ -327,7 +328,10 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
 }
 
 /** HEAD for "Download all": the same checks as the zip (its size too), without building or counting it. */
-export async function checkSharedFolder(linkId: string, folderId: string, viewer: ShareViewer): Promise<Response> {
+export async function checkSharedFolder(linkId: string, folderId: string, viewer: ShareViewer, client: Pick<ClientInfo, "ipKey">): Promise<Response> {
+  if ((await countInWindow(`zipcheck:${client.ipKey}`, SHARE.zipCheckWindowSec)) > SHARE.zipChecksPerAddress) {
+    throw new ApiError("RATE_LIMITED", "Too many requests. Try again later.", { retryAfter: SHARE.zipCheckWindowSec });
+  }
   const now = Date.now();
   await assertSharedFolderZippable(await resolveSharedFolder(linkId, folderId, viewer, now), now);
   return new Response(null, { status: 200, headers: { "content-type": "application/zip", "cache-control": "private, no-store" } });

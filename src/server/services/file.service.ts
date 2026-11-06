@@ -67,5 +67,5 @@ export async function serveOwnTranscode(req: Request, owner: Owner, nodeId: stri
   const path = await driver.localPath(await locationOf(owner.id, row.id));
   if (!path) throw new ApiError("NOT_FOUND");
   if (req.method === "GET") void notePlay(row.id);
-  return transcodeResponse(req, path);
+  return transcodeResponse(req, path, `account:${owner.id}`);
 }
