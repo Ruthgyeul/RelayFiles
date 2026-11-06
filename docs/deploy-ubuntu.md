@@ -206,6 +206,7 @@ nano .env
 | `CLOUDFLARE_TUNNEL_TOKEN` | 터널을 쓸 때만 |
 | `DISK_DEVICE` | Server 페이지 Disk health 대상 (예: `/dev/sda`) |
 | `TRUSTED_PROXY_IP` | 호스트 Nginx가 앞에 있을 때만 Docker 게이트웨이(기본 `172.28.0.1`, §6) |
+| `PROXY_SHARED_SECRET` | `env:secrets` 출력. Nginx가 모든 요청에 `X-Relay-Proxy`로 붙이고, 앱은 이 값이 맞는 요청의 `X-Real-IP`만 방문자 주소로 믿는다. 같은 Docker 네트워크의 다른 컨테이너(cloudflared 등)가 앱 포트로 바로 와서 주소를 꾸미지 못한다. 바꾸면 `$C up -d app nginx` |
 | `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE` | 컨테이너 로그 회전 (기본 `10m`, `5`) |
 
 상황에 따라 조정할 값:
@@ -383,6 +384,8 @@ Cloudflare 무료 요금제의 요청 크기 제한은 100MB다. 업로드는 `U
 
 1. 호스트 Nginx의 `location`에 `proxy_set_header X-Real-IP $remote_addr;`를 둔다.
 2. `.env`에 `TRUSTED_PROXY_IP=172.28.0.1`을 넣고(`DOCKER_SUBNET`을 바꿨다면 그 게이트웨이) `$C up -d nginx`.
+
+Compose 네트워크는 둘이다. `relay`(Nginx·cloudflared·app·worker, `DOCKER_SUBNET`)와 `data`(PostgreSQL·Redis와 app·worker·tools, `internal: true`: 인터넷으로 나가는 길이 없고 Nginx·cloudflared는 DB에 닿지 못한다). 위의 게이트웨이는 `relay`의 것이다. PostgreSQL·Redis는 `cap_drop: [ALL]`에 자기 데이터 디렉터리를 넘기고 계정을 바꾸는 데 필요한 권한(`CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID`)만 돌려받고, Nginx·cloudflared는 읽기 전용 루트 파일시스템으로 돈다.
 
 컨테이너 Nginx는 이 주소에서 온 요청의 `X-Real-IP`만 클라이언트 주소로 믿는다. cloudflared의 `CF-Connecting-IP` 처리는 그대로이고, 다른 출처의 `X-Real-IP`는 무시한다. 게이트웨이 주소는 `docker network inspect relayfiles_relay --format '{{(index .IPAM.Config 0).Gateway}}'`로 확인한다.
 

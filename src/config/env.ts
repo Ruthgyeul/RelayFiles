@@ -80,6 +80,11 @@ export const ENV_GROUPS = {
     SERVER_LOCATION: z.string().default("Seoul, KR"),
     ENABLE_UI_CATALOG: bool.default(false),
     ADMIN_ALLOWED_CIDRS: cidrList.default([]),
+    /**
+     * Secret Nginx sends in X-Relay-Proxy (both templates). When set, the app believes the
+     * visitor address headers only on requests that carry it (domain/network.ts clientIp).
+     */
+    PROXY_SHARED_SECRET: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/, "must be 32-128 letters, digits, - or _ (run npm run env:secrets)").optional(),
     /** "enforce" blocks what the policy does not allow; "report-only" only logs it (to /api/csp-report). */
     CSP_MODE: z.enum(["report-only", "enforce"]).default("enforce"),
     /** Strict-Transport-Security max-age when PUBLIC_URL is https (0 = do not send it, e.g. Cloudflare already does). */

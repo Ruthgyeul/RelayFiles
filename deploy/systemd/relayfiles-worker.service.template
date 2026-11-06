@@ -48,6 +48,18 @@ RestrictRealtime=true
 RestrictSUIDSGID=true
 LockPersonality=true
 SystemCallArchitectures=native
+# No capabilities, not even for programs it starts (the service runs as an unprivileged user).
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Other users' processes are hidden in /proc (/proc/stat and /proc/meminfo for metrics stay).
+ProtectProc=invisible
+RemoveIPC=true
+# The system calls an ordinary service makes; anything else fails with EPERM (libuv then falls
+# back from io_uring to its thread pool).
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# The worker needs no device files (thumbnails and conversions read the SSD's files, not the disk).
+PrivateDevices=true
 
 [Install]
 WantedBy=multi-user.target
