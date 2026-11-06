@@ -57,6 +57,8 @@ kubectl create namespace "$NS" --dry-run=client -o yaml | apply
 APP_ENV_FILE="$(mktemp)"
 trap 'rm -f "$APP_ENV_FILE"' EXIT
 grep -vE '^(RESTIC_REPOSITORY|RESTIC_PASSWORD|OFFSITE_ACCESS_KEY_ID|OFFSITE_SECRET_ACCESS_KEY|CLOUDFLARE_TUNNEL_TOKEN)=' "$ENV_FILE" > "$APP_ENV_FILE" || true
+# Nginx reads PROXY_SHARED_SECRET from the Secret; an .env without the line still defines it (empty).
+grep -q '^PROXY_SHARED_SECRET=' "$APP_ENV_FILE" || echo 'PROXY_SHARED_SECRET=' >> "$APP_ENV_FILE"
 kubectl -n "$NS" create secret generic relayfiles-env --from-env-file="$APP_ENV_FILE" --dry-run=client -o yaml | apply
 for map in relayfiles-nginx-templates:deploy/nginx/templates relayfiles-error-pages:deploy/error-pages relayfiles-nginx-volumes:deploy/nginx/volumes; do
   kubectl -n "$NS" create configmap "${map%%:*}" --from-file="$ROOT/${map#*:}" --dry-run=client -o yaml | apply

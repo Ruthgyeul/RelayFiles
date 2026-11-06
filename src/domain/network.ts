@@ -115,12 +115,28 @@ export function rateLimitNetwork(ip: string): string {
 /** Longest address accepted from a header (IPv6 with zone id fits easily). */
 const MAX_IP_LENGTH = 64;
 
+/** Header Nginx adds with PROXY_SHARED_SECRET, so the app can tell its own proxy from anyone else. */
+export const PROXY_SECRET_HEADER = "x-relay-proxy";
+
+/** Compares two strings in time that depends only on their length (no early exit on the first difference). */
+function sameText(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let difference = 0;
+  for (let i = 0; i < a.length; i++) difference |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return difference === 0;
+}
+
 /**
  * Client address set by the reverse proxy: Cloudflare's CF-Connecting-IP, then Nginx's
  * X-Real-IP. The app port must only be reachable through Nginx so these cannot be forged
  * (see .env.example). Empty when the request did not pass through a proxy (local dev).
+ *
+ * With `proxySecret` (PROXY_SHARED_SECRET), the headers count only when the request also
+ * carries that secret: another process on the host or container next to the app could
+ * otherwise reach the app port and name any address (admin networks, lockouts).
  */
-export function clientIp(headers: Pick<Headers, "get">): string {
+export function clientIp(headers: Pick<Headers, "get">, proxySecret?: string): string {
+  if (proxySecret && !sameText(headers.get(PROXY_SECRET_HEADER) ?? "", proxySecret)) return "";
   const raw = headers.get("cf-connecting-ip") ?? headers.get("x-real-ip") ?? "";
   return raw.trim().slice(0, MAX_IP_LENGTH);
 }

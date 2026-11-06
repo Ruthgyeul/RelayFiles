@@ -234,7 +234,7 @@ sudo deploy/scripts/systemd/install.sh
 4. `deploy/systemd/*.service.template`을 `/etc/systemd/system/relayfiles-{app,worker}.service`로 렌더링하고 `enable`한다. 서비스를 시작하지는 않는다.
 5. `deploy/nginx/host/relayfiles.conf.template`을 `/etc/nginx/sites-available/relayfiles.conf`로 렌더링하고 `sites-enabled`에 링크한다.
 6. `NGINX_LISTEN_PORT`의 기본 서버(`default_server`)를 정한다. 다른 사이트가 이미 기본 서버면(Ubuntu의 `sites-enabled/default` 등) 그대로 두고 그 파일을 알려 준다. 없으면 `relayfiles-catchall.conf.template`을 `/etc/nginx/sites-available/relayfiles-catchall.conf`로 렌더링해 링크한다. 이 서버는 이름을 모르는 요청(다른 도메인으로 들어온 DNS 리바인딩, 주소로 훑는 스캐너)의 연결을 응답 없이 끊는다(444). `SERVER_NAME=_`이면 넣지 않는다.
-7. `nginx -t`를 거쳐 reload한다.
+7. `nginx -t`를 거쳐 reload한다. 사이트 파일은 `PROXY_SHARED_SECRET`을 담으므로 root만 읽을 수 있다(`0600`). `.env`에 그 값을 넣거나 바꾸면 `install.sh`를 다시 실행한다(앱과 Nginx의 값이 다르면 앱이 방문자 주소를 알 수 없다)
 
 기존 Nginx 사이트(`/var/www/html` 기본 페이지 등)는 그대로 둔다. `relayfiles.io`로 들어온 요청만 이 사이트가 받는다. Ubuntu 기본 사이트 대신 444로 끊으려면 `sudo rm /etc/nginx/sites-enabled/default` 후 `install.sh`를 다시 실행한다. 렌더링된 파일은 직접 고치지 말고 템플릿을 고친 뒤 `install.sh`를 다시 실행한다. 템플릿에 `.env`에 없는 값이 있으면 렌더링이 멈추고 빠진 키를 알려 준다(반쯤 채워진 설정이 만들어지지 않는다).
 
@@ -245,6 +245,7 @@ sudo deploy/scripts/systemd/install.sh
 | `User=relayfiles`, `UMask=0077` | SSD에 쓰는 파일·폴더가 `0600`/`0700`이 된다 |
 | `NoNewPrivileges`, `ProtectSystem=strict` + `ReadWritePaths`, `ProtectHome`, `PrivateTmp` | 서비스는 SSD(`STORAGE_ROOT`), `LOG_DIR`, 서비스 홈, (앱) `.app/`에만 쓸 수 있고 홈 디렉터리를 읽지 못하며 자기 `/tmp`를 따로 쓴다. SSD를 하나 더 붙이면 `sudo systemctl edit relayfiles-app`(worker도)에서 `[Service]` 아래 `ReadWritePaths=<마운트 경로>`를 더한다 |
 | `ProtectKernel*`, `ProtectControlGroups`, `ProtectClock`, `RestrictAddressFamilies`, `RestrictNamespaces`, `RestrictSUIDSGID`, `LockPersonality`, `SystemCallArchitectures=native` | 커널 설정·모듈·로그, cgroup, 시계를 바꾸지 못하고, 네트워크는 Unix·IPv4·IPv6(와 네트워크 인터페이스 목록용 netlink)만, 새 네임스페이스·setuid·다른 아키텍처 시스템 콜을 쓰지 못한다 |
+| `CapabilityBoundingSet=`(빈 값), `AmbientCapabilities=`, `ProtectProc=invisible`, `RemoveIPC`, `SystemCallFilter=@system-service` + `SystemCallErrorNumber=EPERM`, (워커) `PrivateDevices` | 서비스와 그것이 띄운 프로그램(ffmpeg 등)은 어떤 권한(capability)도 얻지 못하고, 다른 사용자의 프로세스가 보이지 않으며, 일반 서비스가 쓰는 시스템 콜만 쓴다(나머지는 EPERM). 워커는 장치 파일을 보지 못한다. 앱은 Server 페이지의 Disk health(`DISK_DEVICE`, smartctl) 때문에 `PrivateDevices`를 쓰지 않는다. Node·ffmpeg 업데이트 뒤 서비스가 `EPERM`으로 멈추면 `journalctl -u relayfiles-app`에서 막힌 호출을 확인하고, 급하면 `sudo systemctl edit relayfiles-app`으로 `SystemCallFilter=`(빈 값)를 넣어 끈다 |
 | `MemoryMax`, `CPUQuota`, `TasksMax=512` | 영상 변환·썸네일 작업이 폭주해도 자기 상한에서 멈춘다(PostgreSQL을 굶기지 않는다) |
 | `Restart=on-failure`, `RestartSec=5` | 비정상 종료 시 5초 뒤 다시 시작 |
 | `KillMode=mixed`, `TimeoutStopSec` (`APP_STOP_GRACE_SEC` 30·`WORKER_STOP_GRACE_SEC` 90) | 멈출 때 SIGTERM은 Node에만 간다(컨테이너의 tini와 같다). 앱은 새 연결을 받지 않고 진행 중인 요청(스트리밍, zip, 업로드 조각과 그 ffmpeg)을, 워커는 실행 중인 작업을 끝낸 뒤 종료한다. 시간이 지나면 남은 프로세스를 강제 종료한다. 앱의 종료 코드 143(SIGTERM)은 정상으로 본다(`SuccessExitStatus=143`) |

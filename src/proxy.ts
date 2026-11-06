@@ -99,7 +99,7 @@ export function proxy(req: NextRequest) {
   if (isApi && !SAFE_METHODS.has(req.method) && isCrossSite(req)) return withSecurityHeaders(apiFailure("FORBIDDEN", requestId), security);
 
   const allowed = getEnv("app").ADMIN_ALLOWED_CIDRS;
-  if (allowed.length > 0 && ADMIN_PATH.test(pathname) && !ipInCidrs(clientIp(req.headers), allowed)) {
+  if (allowed.length > 0 && ADMIN_PATH.test(pathname) && !ipInCidrs(clientIp(req.headers, getAppEnv().PROXY_SHARED_SECRET), allowed)) {
     return withSecurityHeaders(isApi ? apiFailure("FORBIDDEN", requestId) : deniedPage(requestId), security);
   }
 

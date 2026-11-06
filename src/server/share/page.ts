@@ -2,9 +2,8 @@ import "server-only";
 import { headers } from "next/headers";
 import { after } from "next/server";
 import { SHARE } from "@/config/policy";
-import { clientIp } from "@/domain/network";
 import type { SharePage } from "@/contracts/share";
-import { clientInfo } from "../auth/client-info";
+import { clientInfo, requestIp } from "../auth/client-info";
 import { countInWindow, redis } from "../redis";
 import { retiredSharePage, sharePage } from "./share.service";
 import { logLinkEvent } from "./events";
@@ -21,7 +20,7 @@ export async function sharePageForRequest(linkId: string, folderId: string | nul
   const requestHeaders = await headers();
   const client = clientInfo(requestHeaders);
   // Requests without a proxy address (local development) all share one key: they are not limited.
-  const missKey = clientIp(requestHeaders) ? `share:miss:${client.ipKey}` : null;
+  const missKey = requestIp(requestHeaders) ? `share:miss:${client.ipKey}` : null;
   // An address that looked up many links that do not exist gets "not found" for every link for a while.
   if (missKey && Number((await redis().get(missKey)) ?? 0) >= SHARE.linkMissesPerAddress) return null;
   const missed = async () => {
