@@ -13,6 +13,7 @@ const values = {
   TOKEN_ENC_KEY: randomBytes(32).toString("base64"),
   TOKEN_HMAC_KEY: alnum(48),
   COOKIE_SECRET: alnum(48),
+  PROXY_SHARED_SECRET: alnum(48),
   // Only if you set up the offsite backup (RESTIC_REPOSITORY); keep a copy outside the server.
   RESTIC_PASSWORD: alnum(32),
 };

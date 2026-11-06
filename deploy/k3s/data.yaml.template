@@ -1,6 +1,27 @@
 # PostgreSQL and Redis on k3s (docs/deploy-k3s.md), rendered by deploy/scripts/k3s/deploy.sh.
 # They run on the storage node with their data in DATA_DIR/pg and DATA_DIR/redis, the same
 # directories docker compose uses, so a server can move between the two.
+#
+# Only the app, the worker and the migration Job may connect to them: without this policy every
+# pod in the cluster (other workloads on the Pi nodes) could reach them with only the password
+# in the way. Enforced by k3s's built-in policy controller (kube-router).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: relayfiles-data
+  namespace: ${K3S_NAMESPACE}
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [relayfiles-postgres, relayfiles-redis] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app.kubernetes.io/name, operator: In, values: [relayfiles-app, relayfiles-worker, relayfiles-migrate] }
+      ports: [{ protocol: TCP, port: 5432 }, { protocol: TCP, port: 6379 }]
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -24,10 +45,14 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: relayfiles-postgres }
     spec:
+      automountServiceAccountToken: false
+      securityContext: { seccompProfile: { type: RuntimeDefault } }
       nodeSelector: { relayfiles/storage: "true" }
       containers:
         - name: postgres
           image: ${POSTGRES_IMAGE}
+          # Root only to hand the data directory to its own account and switch to it.
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL], add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID] } }
           env:
             - { name: POSTGRES_DB, valueFrom: { secretKeyRef: { name: relayfiles-env, key: POSTGRES_DB } } }
             - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: relayfiles-env, key: POSTGRES_USER } } }
@@ -63,10 +88,14 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: relayfiles-redis }
     spec:
+      automountServiceAccountToken: false
+      securityContext: { seccompProfile: { type: RuntimeDefault } }
       nodeSelector: { relayfiles/storage: "true" }
       containers:
         - name: redis
           image: ${REDIS_IMAGE}
+          # Root only to hand the data directory to its own account and switch to it.
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL], add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID] } }
           env:
             - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: relayfiles-env, key: REDIS_PASSWORD } } }
             - { name: REDISCLI_AUTH, valueFrom: { secretKeyRef: { name: relayfiles-env, key: REDIS_PASSWORD } } }

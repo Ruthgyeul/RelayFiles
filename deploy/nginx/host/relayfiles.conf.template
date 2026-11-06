@@ -103,6 +103,8 @@ server {
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header CF-Connecting-IP "";
+        # Lets the app believe X-Real-IP from this proxy only (PROXY_SHARED_SECRET).
+        proxy_set_header X-Relay-Proxy "${PROXY_SHARED_SECRET}";
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $relayfiles_proto;
         proxy_set_header X-Forwarded-Host $host;
@@ -128,6 +130,8 @@ server {
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header CF-Connecting-IP "";
+        # Lets the app believe X-Real-IP from this proxy only (PROXY_SHARED_SECRET).
+        proxy_set_header X-Relay-Proxy "${PROXY_SHARED_SECRET}";
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $relayfiles_proto;
         proxy_set_header X-Forwarded-Host $host;

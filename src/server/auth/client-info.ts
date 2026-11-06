@@ -46,8 +46,11 @@ function headerText(headers: Headers, name: string): string | null {
   }
 }
 
+/** The visitor's address for this request ("" when unknown), checked against PROXY_SHARED_SECRET. */
+export const requestIp = (headers: Pick<Headers, "get">): string => clientIp(headers, getEnv("app").PROXY_SHARED_SECRET);
+
 export function clientInfo(headers: Headers): ClientInfo {
-  const ip = clientIp(headers);
+  const ip = requestIp(headers);
   const { os, browser } = parseUserAgent(headers.get("user-agent") ?? "");
   const local = ip === "" || isPrivateIp(ip);
   const country = local ? null : headerText(headers, "cf-ipcountry");

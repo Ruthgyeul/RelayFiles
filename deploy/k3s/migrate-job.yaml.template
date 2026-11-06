@@ -9,10 +9,14 @@ spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 604800
   template:
+    metadata:
+      # Lets the data NetworkPolicy (data.yaml.template) admit it to PostgreSQL and Redis.
+      labels: { app.kubernetes.io/name: relayfiles-migrate }
     spec:
       restartPolicy: Never
+      automountServiceAccountToken: false
       nodeSelector: { relayfiles/storage: "true" }
-      securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: ${STORAGE_GID}, runAsNonRoot: true }
+      securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: ${STORAGE_GID}, runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: migrate
           image: ${TOOLS_IMAGE}

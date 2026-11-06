@@ -41,6 +41,17 @@ describe("clientIp", () => {
     expect(clientIp(new Headers({ "x-real-ip": " 10.0.0.1 " }))).toBe("10.0.0.1");
     expect(clientIp(new Headers())).toBe("");
   });
+
+  it("trusts the address headers only with the proxy's shared secret, when one is set", () => {
+    const secret = "s".repeat(32);
+    const forwarded = { "x-real-ip": "10.0.0.1" };
+    expect(clientIp(new Headers({ ...forwarded, "x-relay-proxy": secret }), secret)).toBe("10.0.0.1");
+    expect(clientIp(new Headers(forwarded), secret)).toBe("");
+    expect(clientIp(new Headers({ ...forwarded, "x-relay-proxy": "t".repeat(32) }), secret)).toBe("");
+    expect(clientIp(new Headers({ ...forwarded, "x-relay-proxy": "short" }), secret)).toBe("");
+    // Without a secret configured the header is not needed (and ignored).
+    expect(clientIp(new Headers(forwarded), undefined)).toBe("10.0.0.1");
+  });
 });
 
 describe("rateLimitSubject", () => {
