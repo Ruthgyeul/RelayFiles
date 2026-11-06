@@ -11,7 +11,8 @@ export const metadata: Metadata = { title: "Server" };
 export default async function AdminServerPage() {
   const device = await currentDevice();
   if (!device.active) return null;
-  if (!device.active.account.isAdmin) forbidden();
+  // Checked here too (not only in the layout and the proxy): a page renders on its own.
+  if (!device.active.account.isAdmin || !device.adminNetwork) forbidden();
   const [settings, snapshot] = await Promise.all([serverSettings(), serverSnapshot()]);
   return <ServerPage settings={settings} snapshot={snapshot} />;
 }

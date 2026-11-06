@@ -13,7 +13,8 @@ import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
-import { createAccount, findAccountByLookups, findAccountToken, touchAccountLogin, updateAccountToken, type AccountRow } from "../repositories/account.repo";
+import { createAccount, findAccountByLookups, findAccountToken, touchAccountLoginIf, updateAccountToken, type AccountRow } from "../repositories/account.repo";
+import { deleteApiTokensOf } from "../repositories/api-token.repo";
 import { createRootFolder } from "../repositories/node.repo";
 import { consumeInvite, getServerConfig } from "../repositories/server-config.repo";
 import { createSession, markReauthenticated, revokeOtherSessions, revokeSession } from "../repositories/session.repo";
@@ -144,11 +145,13 @@ export async function signInWithToken(token: string, client: ClientInfo, signedI
 
   const sessionId = newSessionId();
   await db().$transaction(async (tx) => {
+    // The token was checked outside this transaction: if it was replaced since ("Generate a
+    // new token" elsewhere), the old token must not sign in, nor be written back below.
+    if (!(await touchAccountLoginIf(tx, found.id, found.tokenLookup, now))) throw failedTokenEntry(token, attempt);
     // Values written with a rotated-out key are upgraded on the next sign-in.
     if (needsReencryption(found.tokenEnc, keys) || found.tokenLookup !== tokenLookups(token, keys)[0]) {
       await updateAccountToken(tx, found.id, { tokenLookup: tokenLookups(token, keys)[0]!, tokenEnc: bytes(encryptToken(token, keys)) });
     }
-    await touchAccountLogin(tx, found.id, now);
     await createSession(tx, { id: sessionId, accountId: found.id, ...sessionFields(client) });
   });
   const { tokenEnc: _enc, tokenLookup: _lookup, ...account } = found;
@@ -186,8 +189,10 @@ export async function revealToken(accountId: string): Promise<string> {
 }
 
 /**
- * Replaces the account token: the old one stops working at once and every other device is
- * signed out (design "Generate a new token"). Returns the new token to show once.
+ * Replaces the account token: the old one stops working at once, every other device is
+ * signed out and every personal API token is revoked (design "Generate a new token"). A
+ * leaked account token is replaced to lock someone out, and an API token they made with it
+ * would otherwise keep working. Returns the new token to show once.
  */
 export async function regenerateToken(accountId: string, keepSessionId: string): Promise<string> {
   const keys = tokenKeys();
@@ -196,6 +201,7 @@ export async function regenerateToken(accountId: string, keepSessionId: string):
     await db().$transaction(async (tx) => {
       await updateAccountToken(tx, accountId, { tokenLookup: tokenLookups(token, keys)[0]!, tokenEnc: bytes(encryptToken(token, keys)) });
       await revokeOtherSessions(tx, accountId, keepSessionId, new Date());
+      await deleteApiTokensOf(tx, accountId);
     });
     return token;
   });
