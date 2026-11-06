@@ -86,6 +86,13 @@ export function ProfilePage({ data }: { data: ProfileData }) {
             return on ? "Metadata is removed from public photos" : "Public photos keep their metadata";
           })
         }
+        notifyLinks={data.notifyAvailable ? data.account.notifyLinkEvents : null}
+        onNotifyLinks={(on) =>
+          void run(async () => {
+            await profileApi.savePreferences({ notifyLinkEvents: on });
+            return on ? "You'll be notified about your share links" : "Share link notifications are off";
+          })
+        }
         onPurge={() =>
           void run(async () => {
             const { deleted } = await profileApi.purgeExpired();

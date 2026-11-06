@@ -10,6 +10,7 @@ import type { NodeKind } from "@/domain/tree";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { countInWindow } from "../redis";
+import { noteUsedUp } from "./link-notify";
 import { downloadsUsedUp, limitingFoldersBelow, type LimitFacts } from "@/domain/share-limits";
 import { db } from "../db/client";
 import type { Busy } from "@/domain/share";
@@ -99,7 +100,9 @@ const kindOf = (row: Pick<SharedRow, "kind">) => (row.kind ? (row.kind.toLowerCa
  */
 async function countSharedDownload(file: SharedFile, viewer: ShareViewer, client: ClientInfo, now: number): Promise<string> {
   const { row } = file;
-  if (!(await claimDownload(db(), file.counted))) throw new ApiError("FORBIDDEN", "Download limit reached");
+  const claimed = await claimDownload(db(), file.counted);
+  if (!claimed) throw new ApiError("FORBIDDEN", "Download limit reached");
+  noteUsedUp(file.link.root.accountId, claimed.usedUp);
   const visitorId = viewer.visitorId ?? newVisitorId();
   await grantDownload(row.id, visitorId);
   await recordDownload(file.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
@@ -307,12 +310,13 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
     if (!claimed) throw new ApiError("FORBIDDEN", "Download limit reached");
     // Each limiting folder inside counts once for the zip; one at its limit by now leaves its files out.
     const innerOf = (file: (typeof plan.files)[number]) => (inner.get(file.row.id) ?? []).map((row) => row.id);
-    const insideCounted = await claimEachDownload(db(), [...new Set(plan.files.filter((file) => file.skip === null).flatMap(innerOf))]);
-    for (const file of plan.files) if (file.skip === null && innerOf(file).some((id) => !insideCounted.has(id))) file.skip = "limit";
+    const inside = await claimEachDownload(db(), [...new Set(plan.files.filter((file) => file.skip === null).flatMap(innerOf))]);
+    for (const file of plan.files) if (file.skip === null && innerOf(file).some((id) => !inside.counted.has(id))) file.skip = "limit";
     // A file at its limit by now (a download finished meanwhile) is left out like one already used up.
     const included = plan.files.filter((file) => file.skip === null);
-    const counted = await claimEachDownload(db(), included.map((file) => file.row.id));
-    for (const file of included) if (!counted.has(file.row.id)) file.skip = "limit";
+    const files = await claimEachDownload(db(), included.map((file) => file.row.id));
+    for (const file of included) if (!files.counted.has(file.row.id)) file.skip = "limit";
+    noteUsedUp(link.root.accountId, [...claimed.usedUp, ...inside.usedUp, ...files.usedUp]);
     await recordDownload(shared.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
     void logLinkEvent(folder, "DOWNLOAD", client);
   }

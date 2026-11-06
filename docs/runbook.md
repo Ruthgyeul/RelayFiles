@@ -138,8 +138,12 @@ sudo rsync -aHAX /tmp/rf-restore/<STORAGE_ROOT>/users/ <STORAGE_ROOT>/users/
 | Storage volume not writable | 표시 파일은 읽히는데 쓰기가 안 됨(오류 후 읽기 전용으로 다시 마운트된 ext4 등) | 볼륨마다 `volumeReadOnlyRepeatHours`(6시간) |
 | Storage volume offline / back online | 볼륨 확인이 `OFFLINE`으로 바꾸거나 `ACTIVE`로 되돌림(["SSD가 빠졌을 때"](#ssd가-빠졌을-때)) | 볼륨·종류마다 `volumeStatusRepeatMinutes`(30분) |
 | Backup check failed | `npm run backup:verify`가 실패 기록(["백업 검증"](#백업-검증)) | 실행마다 한 번 |
+| Share link opened | 공유 링크의 맨 위(`/d/<id>`)를 소유자 아닌 방문자가 열었다. 프로필 Preferences의 "Notify me about my share links"를 켠 계정만. 항목 이름과 Cloudflare 국가만 담고 링크·주소는 넣지 않는다 | 링크마다 `linkOpenRememberDays`(30일)에 한 번(링크를 재발급하면 새 링크로 다시) |
+| Download limit reached / Downloaded once, deleting | 방문자 다운로드(단일 파일·zip 모두)가 항목의 다운로드 한도를 채웠거나, 첫 다운로드 후 삭제 항목을 받았다. 같은 설정을 켠 계정만 | 항목·다운로드 수마다 한 번(한도를 늘려 다시 채우면 다시) |
 
 볼륨 공간·쓰기 확인은 알림이 켜져 있을 때만 볼륨 확인(`VOLUME_WATCH_INTERVAL_SEC`, 30초)마다 한다. 반복 제한은 Redis 키(`notify:throttle:*`)라 Redis를 비우면 다시 한 번 온다.
+
+계정의 공유 링크 알림은 서버 전체 웹훅(`NOTIFY_WEBHOOK_URL`) 하나로 간다. 웹훅이 설정되어 있을 때만 프로필에 그 설정이 보인다.
 
 `.env`:
 

@@ -14,7 +14,7 @@ Fast and easy file sharing system. A private file drop for sharing and streaming
 - Several storage volumes with volume moves, layout migrations and `storage:fsck`; a public Status page
 - Personal API tokens for scripts (`/api/v1`)
 - Installable app (web app manifest) that appears in the phone's share sheet: files shared from another app go to a new Home folder after one tap (Web Share Target through a minimal service worker that caches nothing)
-- Owner notifications through a webhook (generic JSON, ntfy, Discord, Telegram): files received through an upload-only link, a storage volume low, offline or not writable, a failed backup check
+- Owner notifications through a webhook (generic JSON, ntfy, Discord, Telegram): files received through an upload-only link, a storage volume low, offline or not writable, a failed backup check, and (per account, opt-in) share links opened or their downloads used up
 
 ## Stack
 

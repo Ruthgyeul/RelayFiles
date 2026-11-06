@@ -131,6 +131,8 @@ export const NOTIFY = {
   volumeStatusRepeatMinutes: 30,
   /** Longest message text per format (Discord allows 2,000 characters, Telegram 4,096, ntfy 4,096 bytes). */
   maxChars: { json: 4_000, ntfy: 3_500, discord: 2_000, telegram: 4_000 },
+  /** A share link's "opened" notification is sent again only when it was not opened for this long. */
+  linkOpenRememberDays: 30,
   /** Grouping and throttle keys in Redis expire after this long even if the worker never ran. */
   stateTtlSec: 24 * 60 * 60,
 } as const;

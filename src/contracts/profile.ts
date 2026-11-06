@@ -28,7 +28,11 @@ export interface ProfileData {
     deletesAt: string | null;
     quotaBytes: string | null;
     stripMetadataOnShare: boolean;
+    /** Owner notifications about its share links (opened, downloads used up). */
+    notifyLinkEvents: boolean;
   };
+  /** The server sends owner notifications (NOTIFY_WEBHOOK_URL is set). */
+  notifyAvailable: boolean;
   /** First 4 + 28 dots + last 4 characters; the full token is fetched on demand. */
   maskedToken: string;
   usage: { usedBytes: string; files: number; folders: number };
@@ -39,5 +43,8 @@ export interface ProfileData {
   apiTokens: ApiTokenDto[];
 }
 
-export const preferencesSchema = z.object({ stripMetadataOnShare: z.boolean() });
+/** The preferences sent change; the others keep their values. */
+export const preferencesSchema = z
+  .object({ stripMetadataOnShare: z.boolean().optional(), notifyLinkEvents: z.boolean().optional() })
+  .refine((input) => input.stripMetadataOnShare !== undefined || input.notifyLinkEvents !== undefined, "Send a preference.");
 export type Preferences = z.infer<typeof preferencesSchema>;

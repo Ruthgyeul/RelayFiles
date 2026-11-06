@@ -76,7 +76,12 @@ export function findAccountById(db: DbClient, accountId: string) {
   return db.account.findUnique({ where: { id: accountId }, select: ACCOUNT_SELECT });
 }
 
-export async function updatePreferences(db: DbClient, accountId: string, data: { stripMetadataOnShare: boolean }): Promise<void> {
+/** The owner's name and whether it wants share link notifications (link-notify.ts). */
+export function findLinkNotifyOwner(db: DbClient, accountId: string) {
+  return db.account.findUnique({ where: { id: accountId }, select: { name: true, notifyLinkEvents: true } });
+}
+
+export async function updatePreferences(db: DbClient, accountId: string, data: { stripMetadataOnShare?: boolean; notifyLinkEvents?: boolean }): Promise<void> {
   await db.account.update({ where: { id: accountId }, data });
 }
 
