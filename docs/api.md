@@ -106,6 +106,8 @@
 
 ### API v1 (스크립트·앱용, 개인 API 토큰)
 
+기계가 읽는 명세는 [`docs/openapi.json`](openapi.json)(OpenAPI 3.1)이다. `src/contracts/api-v1-routes.ts`의 라우트 목록과 zod 스키마에서 `npm run openapi`로 만들고, `npm run check:openapi`(`npm run check`·CI)가 코드와 다르면 실패한다. 응답 스키마는 앱이 쓰는 TypeScript 타입과 같은지 타입 검사가 확인하고(`api-v1.test.ts`), `src/app/api/v1`의 라우트가 목록에 빠지면 `api-v1-routes.test.ts`가 실패한다.
+
 프로필 "API tokens"에서 만든 토큰(`rfp_<id>_<43자>`)을 `Authorization: Bearer <token>`으로 보낸다. 쿠키는 읽지 않는다(브라우저 세션으로는 호출할 수 없다). 응답 형식과 에러 코드는 위와 같다.
 
 - 토큰이 없거나 틀리거나 만료됐거나 계정이 삭제일에 닿으면 401, 범위(scope)가 없으면 403.
