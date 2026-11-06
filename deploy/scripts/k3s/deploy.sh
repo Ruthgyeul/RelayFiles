@@ -27,8 +27,35 @@ export K3S_PRESTOP_SEC="${K3S_PRESTOP_SEC:-5}"
 NODES="$(kubectl get nodes -l relayfiles/storage=true -o name | wc -l)"
 [ "$NODES" = 1 ] || { echo "Label the node with the storage SSD, and only it: kubectl label node <node> relayfiles/storage=true (labelled now: $NODES)." >&2; exit 1; }
 
+# image@sha256:… for a tag, so the cluster runs exactly the image that was checked (a tag can be
+# moved). Uses whichever of docker buildx, crane or skopeo is installed; without one, the tag.
+pinned() {
+  local digest=""
+  if docker buildx version > /dev/null 2>&1; then
+    digest="$(docker buildx imagetools inspect "$1" --format '{{json .Manifest.Digest}}' 2> /dev/null | tr -d '"')"
+  elif command -v crane > /dev/null; then
+    digest="$(crane digest "$1" 2> /dev/null)"
+  elif command -v skopeo > /dev/null; then
+    digest="$(skopeo inspect --format '{{.Digest}}' "docker://$1" 2> /dev/null)"
+  fi
+  if [[ "$digest" != sha256:* ]]; then
+    echo "Warning: could not resolve $1 to a digest (install docker buildx, crane or skopeo); deploying the tag." >&2
+    echo "$1"
+    return
+  fi
+  # Signed build provenance from images.yml, checked when the GitHub CLI is installed.
+  if command -v gh > /dev/null; then
+    gh attestation verify "oci://${1%:*}@$digest" --owner "$(cut -d/ -f2 <<< "$REPO")" > /dev/null \
+      || { echo "The build provenance of $1 ($digest) does not verify; not deploying it." >&2; exit 1; }
+  fi
+  echo "${1%:*}@$digest"
+}
+
 # Values the templates need, with the defaults of src/config/env.ts; images as compose pins them.
-export K3S_NAMESPACE="$NS" APP_IMAGE="$REPO-app:$TAG" TOOLS_IMAGE="$REPO-tools:$TAG"
+# One assignment each: set -e only sees the status of the last substitution on a line.
+APP_IMAGE="$(pinned "$REPO-app:$TAG")"
+TOOLS_IMAGE="$(pinned "$REPO-tools:$TAG")"
+export K3S_NAMESPACE="$NS" APP_IMAGE TOOLS_IMAGE
 export RELEASE_ID="${TAG//[^a-zA-Z0-9]/-}"
 RELEASE_ID="${RELEASE_ID,,}"
 POSTGRES_IMAGE="$(compose_image postgres)" REDIS_IMAGE="$(compose_image redis)" NGINX_IMAGE="$(compose_image nginx)"

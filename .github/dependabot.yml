@@ -1,6 +1,7 @@
-# Dependency updates. Security fixes are opened as soon as an
-# advisory appears; routine updates come weekly, grouped so one PR carries the minor and patch
-# bumps of an ecosystem. Major versions get their own PRs (reviewed one by one).
+# Dependency updates. Security fixes are opened as soon as an advisory appears; routine updates
+# come weekly, grouped so one PR carries the minor and patch bumps of an ecosystem, and only for
+# releases at least a week old (cooldown): a hijacked release is usually caught and pulled before
+# it reaches us. Major versions get their own PRs (reviewed one by one).
 version: 2
 updates:
   - package-ecosystem: npm
@@ -9,6 +10,8 @@ updates:
       interval: weekly
       day: monday
       timezone: Asia/Seoul
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       npm-minor-patch:
@@ -24,6 +27,8 @@ updates:
       interval: weekly
       day: monday
       timezone: Asia/Seoul
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -35,6 +40,8 @@ updates:
       interval: weekly
       day: monday
       timezone: Asia/Seoul
+    cooldown:
+      default-days: 7
 
   # postgres, redis, nginx and cloudflared in the production stack.
   - package-ecosystem: docker-compose
@@ -43,3 +50,5 @@ updates:
       interval: weekly
       day: monday
       timezone: Asia/Seoul
+    cooldown:
+      default-days: 7

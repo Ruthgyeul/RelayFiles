@@ -29,6 +29,7 @@ jobs:
       - run: npm run check:emoji
       - run: npm run check:cycles
       - run: npm run check:migrations
+      - run: npm run check:ci-images
       - run: npm run test
       - run: npm run build
 
@@ -79,7 +80,7 @@ jobs:
     needs: check
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
         env:
           POSTGRES_DB: relayfiles
           POSTGRES_USER: relayfiles
@@ -108,7 +109,7 @@ jobs:
       - run: npm ci
       - name: Start Redis
         run: |
-          docker run -d --name redis -p 6379:6379 redis:7 redis-server --requirepass "$REDIS_PASSWORD"
+          docker run -d --name redis -p 6379:6379 redis:7@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039 redis-server --requirepass "$REDIS_PASSWORD"
           for _ in $(seq 1 20); do docker exec redis redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG && break; sleep 1; done
       - run: npx prisma migrate deploy
       - run: npm run volume:init
@@ -121,7 +122,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
         env:
           POSTGRES_DB: relayfiles
           POSTGRES_USER: relayfiles
@@ -150,7 +151,7 @@ jobs:
       # Redis runs with a password like in production (service containers cannot pass server flags).
       - name: Start Redis
         run: |
-          docker run -d --name redis -p 6379:6379 redis:7 redis-server --requirepass "$REDIS_PASSWORD"
+          docker run -d --name redis -p 6379:6379 redis:7@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039 redis-server --requirepass "$REDIS_PASSWORD"
           for _ in $(seq 1 20); do docker exec redis redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG && break; sleep 1; done
       - name: Migrations apply cleanly and match the schema
         run: |
