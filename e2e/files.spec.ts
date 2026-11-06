@@ -71,9 +71,9 @@ test("selection, menu and properties", async ({ page }) => {
   await expect(dialog.getByText("Top level of this account")).toBeHidden();
   await expect(dialog.getByText("0 files, 0 folders")).toBeVisible();
   await expect(dialog.getByText("Deleted with account")).toBeVisible();
-  await expect(dialog.getByText(/\/d\/[a-z0-9]{10}$/)).toBeVisible();
+  await expect(dialog.getByText(/\/d\/[a-z0-9]{16}$/)).toBeVisible();
   // The QR code is drawn in the page for the same link.
-  const link = (await dialog.getByText(/\/d\/[a-z0-9]{10}$/).textContent())!;
+  const link = (await dialog.getByText(/\/d\/[a-z0-9]{16}$/).textContent())!;
   await dialog.getByRole("button", { name: "QR code" }).click();
   const qr = dialog.getByRole("img", { name: `QR code for ${link}` });
   await expect(qr).toBeVisible();

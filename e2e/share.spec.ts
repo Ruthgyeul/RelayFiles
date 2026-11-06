@@ -36,12 +36,17 @@ async function saveSettings(page: Page, id: string, changes: Record<string, unkn
   expect(res.status()).toBe(200);
 }
 
-test("the owner previews a private link and makes it public", async ({ page }) => {
-  await tripWithFile(page);
+test("the owner previews a private link and makes it public", async ({ page, browser, baseURL, viewport }) => {
+  const trip = await tripWithFile(page);
+  // To a visitor a private link is a link that does not exist.
+  const visitor = await visitorPage(browser, baseURL, viewport);
+  expect((await visitor.goto(`/d/${trip.linkId}`))?.status()).toBe(404);
+  await visitor.context().close();
+
   await page.getByRole("button", { name: "Folder menu" }).click();
   await page.getByRole("menuitem", { name: "Share", exact: true }).click();
 
-  await expect(page.getByText(/^Visitor preview · .*\/d\/[a-z0-9]{10}$/)).toBeVisible();
+  await expect(page.getByText(/^Visitor preview · .*\/d\/[a-z0-9]{16}$/)).toBeVisible();
   const card = page.getByRole("region", { name: "This link is private" });
   await expect(card.getByText("Only the owner can open it. Ask them to make it public.")).toBeVisible();
   await expect(card.getByText("You're previewing as a visitor.")).toBeVisible();
