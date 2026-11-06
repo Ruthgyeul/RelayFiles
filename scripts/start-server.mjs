@@ -13,6 +13,7 @@ import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import nextEnv from "@next/env";
+import { dropHostOnlyEnv } from "./lib/host-only-env.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const bundle = resolve(ROOT, process.argv[2] ?? ".next/standalone");
@@ -24,6 +25,7 @@ if (!existsSync(server)) {
 }
 
 nextEnv.loadEnvConfig(ROOT, false);
+dropHostOnlyEnv();
 
 const env = process.env;
 env.PORT ??= env.APP_PORT;

@@ -18,25 +18,38 @@ map "$realip_remote_addr|$http_x_forwarded_proto" $relayfiles_proto {
 
 # First line of defense before the app's own Redis limits (and before argon2 checks link
 # passwords): sign-in, sign-up, account switching, link unlocks and new upload batches, per
-# client address. Requests whose key is empty (everything else) are not limited.
+# client address. Requests whose key is empty (everything else) are not limited. Upload-only
+# link unlocks and CSP reports (unauthenticated, written to the logs) count as sign-ins too.
 map "$request_method $uri" $relayfiles_auth_limit {
     "~^POST /api/auth/"                $binary_remote_addr;
     "~^POST /api/share/[^/]+/unlock$"  $binary_remote_addr;
+    "~^POST /api/r/[^/]+/unlock$"      $binary_remote_addr;
+    "POST /api/csp-report"             $binary_remote_addr;
     default "";
 }
 map "$request_method $uri" $relayfiles_upload_limit {
-    "POST /api/uploads" $binary_remote_addr;
+    "POST /api/uploads"              $binary_remote_addr;
+    "~^POST /api/r/[^/]+/uploads$"   $binary_remote_addr;
+    default "";
+}
+# Each new tus upload (one file) per address: generous, as a folder of small files sends many
+# in a row (the browser retries a 429 after a pause). The chunks (PATCH) are not limited.
+map "$request_method $uri" $relayfiles_tus_limit {
+    "~^POST /api/uploads/tus/" $binary_remote_addr;
     default "";
 }
 # Personal API token requests: a token with a known id but a wrong secret costs an argon2 check
 # in the app before its own per-token limit, so Nginx limits them per client address first.
+# Share pages (/d/<id>) share the zone: guessing link ids is limited here before the app.
 map $uri $relayfiles_api_limit {
     "~^/api/v1/" $binary_remote_addr;
     "/metrics"   $binary_remote_addr;
+    "~^/d/"      $binary_remote_addr;
     default "";
 }
 limit_req_zone $relayfiles_auth_limit zone=relayfiles_auth:10m rate=${NGINX_AUTH_RATE_PER_MIN}r/m;
 limit_req_zone $relayfiles_upload_limit zone=relayfiles_uploads:10m rate=${NGINX_UPLOAD_RATE_PER_MIN}r/m;
+limit_req_zone $relayfiles_tus_limit zone=relayfiles_tus:10m rate=${NGINX_TUS_RATE_PER_MIN}r/m;
 limit_req_zone $relayfiles_api_limit zone=relayfiles_api:10m rate=${NGINX_API_RATE_PER_MIN}r/m;
 
 # No client addresses in the access log (same rule as the app's logs).
@@ -81,6 +94,8 @@ server {
     # Resumable uploads stream straight to the app.
     location ^~ /api/uploads/tus {
         if (-f ${APP_DIR}/deploy/maintenance/on) { return 503; }
+        # New uploads (POST) per address; the chunks of a running upload are not counted.
+        limit_req zone=relayfiles_tus burst=${NGINX_TUS_BURST} nodelay;
         proxy_pass http://relayfiles_app;
         proxy_http_version 1.1;
         proxy_request_buffering off;

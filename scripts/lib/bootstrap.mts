@@ -4,10 +4,13 @@
  * is imported (scripts import those dynamically, after it). `runScript` runs the body.
  */
 import nextEnv from "@next/env";
+import { dropHostOnlyEnv } from "./host-only-env.mjs";
 
 // Admin scripts log to tools-*.log (the worker sets "worker" before importing this).
 process.env.LOG_SERVICE ||= "tools";
 nextEnv.loadEnvConfig(process.cwd());
+// Backup and tunnel keys stay with the host scripts (host-only-env.mjs).
+dropHostOnlyEnv();
 
 /**
  * Runs a script body and exits with its result (0 when it returns nothing). A thrown error is

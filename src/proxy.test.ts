@@ -61,7 +61,8 @@ describe("proxy", () => {
     expect(proxy(request("/files", { headers: wan })).status).toBe(200);
   });
 
-  it("adds a fresh CSP nonce to the request and the response, report-only by default", async () => {
+  it("adds a fresh CSP nonce to the request and the response, report-only with CSP_MODE=report-only", async () => {
+    vi.stubEnv("CSP_MODE", "report-only");
     const proxy = await load();
     const first = proxy(request("/files"));
     const second = proxy(request("/files"));
@@ -75,8 +76,8 @@ describe("proxy", () => {
     expect(first.headers.get("x-middleware-request-content-security-policy-report-only")).toBe(policy);
   });
 
-  it("enforces the policy with CSP_MODE=enforce and ignores a policy the client sent", async () => {
-    vi.stubEnv("CSP_MODE", "enforce");
+  it("enforces the policy by default and ignores a policy the client sent", async () => {
+    vi.stubEnv("CSP_MODE", "");
     const proxy = await load();
     const res = proxy(request("/files", { headers: { "content-security-policy": "script-src 'nonce-attacker'" } }));
     const policy = res.headers.get("content-security-policy")!;

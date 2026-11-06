@@ -37,7 +37,7 @@ NGINX_RESOLVER="$(kubectl -n kube-system get service kube-dns -o jsonpath='{.spe
 export NGINX_RESOLVER
 for pair in K3S_APP_REPLICAS:1 APP_PORT:3000 STORAGE_UID:10001 STORAGE_GID:10001 DATA_DIR:/srv/relayfiles LOG_DIR:/var/log/relayfiles \
   APP_MEMORY_MAX:2G APP_CPUS:3 WORKER_MEMORY_MAX:2G WORKER_CPUS:2 NGINX_LISTEN_PORT:80 SERVER_NAME:localhost STORAGE_ACCEL_PREFIX:/_protected/ \
-  NGINX_MAX_BODY_MB:100 NGINX_AUTH_RATE_PER_MIN:20 NGINX_AUTH_BURST:20 NGINX_UPLOAD_RATE_PER_MIN:60 NGINX_UPLOAD_BURST:30 \
+  NGINX_MAX_BODY_MB:100 NGINX_AUTH_RATE_PER_MIN:20 NGINX_AUTH_BURST:20 NGINX_UPLOAD_RATE_PER_MIN:60 NGINX_UPLOAD_BURST:30 NGINX_TUS_RATE_PER_MIN:600 NGINX_TUS_BURST:120 REDIS_MAXMEMORY_MB:256 \
   NGINX_API_RATE_PER_MIN:120 NGINX_API_BURST:60 APP_STOP_GRACE_SEC:30 WORKER_STOP_GRACE_SEC:90 STORAGE_ROOT:; do
   export "${pair%%:*}=$(env_value "${pair%%:*}" "${pair#*:}")"
 done
@@ -46,13 +46,18 @@ done
 export APP_TERMINATION_GRACE_SEC="$((APP_STOP_GRACE_SEC + K3S_PRESTOP_SEC))"
 KEYS=(K3S_NAMESPACE APP_IMAGE TOOLS_IMAGE RELEASE_ID POSTGRES_IMAGE REDIS_IMAGE NGINX_IMAGE NGINX_RESOLVER K3S_APP_REPLICAS APP_PORT STORAGE_UID STORAGE_GID DATA_DIR LOG_DIR
   APP_MEMORY_MAX APP_CPUS WORKER_MEMORY_MAX WORKER_CPUS NGINX_LISTEN_PORT SERVER_NAME STORAGE_ACCEL_PREFIX NGINX_MAX_BODY_MB NGINX_AUTH_RATE_PER_MIN NGINX_AUTH_BURST
-  NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST NGINX_API_RATE_PER_MIN NGINX_API_BURST WORKER_STOP_GRACE_SEC APP_TERMINATION_GRACE_SEC K3S_PRESTOP_SEC STORAGE_ROOT)
+  NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST NGINX_TUS_RATE_PER_MIN NGINX_TUS_BURST NGINX_API_RATE_PER_MIN NGINX_API_BURST WORKER_STOP_GRACE_SEC APP_TERMINATION_GRACE_SEC K3S_PRESTOP_SEC STORAGE_ROOT REDIS_MAXMEMORY_MB)
 render() { node "$ROOT/scripts/render-template.mjs" "$ROOT/deploy/k3s/$1.yaml.template" "${KEYS[@]}"; }
 apply() { kubectl apply -f - > /dev/null; }
 
 log "Release $TAG to namespace $NS"
 kubectl create namespace "$NS" --dry-run=client -o yaml | apply
-kubectl -n "$NS" create secret generic relayfiles-env --from-env-file="$ENV_FILE" --dry-run=client -o yaml | apply
+# The Secret holds what the app reads, not the host-only keys (scripts/lib/host-only-env.mjs):
+# backup and tunnel credentials stay on the host that runs those scripts.
+APP_ENV_FILE="$(mktemp)"
+trap 'rm -f "$APP_ENV_FILE"' EXIT
+grep -vE '^(RESTIC_REPOSITORY|RESTIC_PASSWORD|OFFSITE_ACCESS_KEY_ID|OFFSITE_SECRET_ACCESS_KEY|CLOUDFLARE_TUNNEL_TOKEN)=' "$ENV_FILE" > "$APP_ENV_FILE" || true
+kubectl -n "$NS" create secret generic relayfiles-env --from-env-file="$APP_ENV_FILE" --dry-run=client -o yaml | apply
 for map in relayfiles-nginx-templates:deploy/nginx/templates relayfiles-error-pages:deploy/error-pages relayfiles-nginx-volumes:deploy/nginx/volumes; do
   kubectl -n "$NS" create configmap "${map%%:*}" --from-file="$ROOT/${map#*:}" --dry-run=client -o yaml | apply
 done
