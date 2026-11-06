@@ -58,6 +58,8 @@ deploy/scripts/k3s/deploy.sh            # 지금 체크아웃한 커밋의 sha-<
 deploy/scripts/k3s/deploy.sh v1.4.0     # 버전 태그
 ```
 
+`deploy.sh`는 태그를 먼저 digest로 바꿔(`image@sha256:…`, `docker buildx`·`crane`·`skopeo` 중 설치된 것) 클러스터가 확인한 그 이미지만 돌게 한다(태그는 옮겨질 수 있다). GitHub CLI(`gh`, 로그인 필요)가 있으면 그 digest의 서명된 build provenance(`images.yml`)를 `gh attestation verify`로 확인하고, 맞지 않으면 배포하지 않는다. 도구가 없으면 경고하고 태그로 배포한다.
+
 순서: 네임스페이스 → Secret(`.env`)·ConfigMap → PostgreSQL·Redis(준비될 때까지 대기) → 새 tools 이미지로 마이그레이션 Job(`db:deploy` → `data:migrate` → `storage:migrate`, 실패하면 앱은 그대로 두고 로그를 보여 준 뒤 멈춘다) → app·worker·Nginx 롤링(각각 `K3S_ROLLOUT_TIMEOUT`, 기본 `10m`) → `/api/health`가 `"status":"ok"`인지 확인(2초 간격 `HEALTH_TRIES`=30번).
 
 - **자동 롤백**: 롤아웃이 시간 안에 끝나지 않거나 헬스 체크가 `ok`가 아니면, 이번 실행에서 새 리비전이 된 Deployment만 `kubectl rollout undo --to-revision=<이전>`으로 되돌리고 실패로 끝난다. Secret·ConfigMap은 이번 값 그대로이고, DB 스키마도 마이그레이션된 그대로다(expand라 이전 버전이 동작한다). 원인은 `kubectl -n relayfiles describe pod -l app.kubernetes.io/name=relayfiles-app`(프로브 실패), `kubectl -n relayfiles logs deployment/relayfiles-app`로 본다.
