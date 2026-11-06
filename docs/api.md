@@ -148,8 +148,8 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 | `PUT` | `/api/admin/settings/signup` | `{ mode: open\|invite\|closed }` |
 | `PUT` | `/api/admin/settings/theme` | `{ theme }` 10종 중 하나. 모든 페이지가 이 테마로 렌더링된다(60초 캐시, 실패 시 `DEFAULT_THEME`) |
 | `POST`·`DELETE` | `/api/admin/announcement` | `{ text, level: info\|warn\|maint }` 게시(이전 공지는 내려감) / 내리기. File Manager 상단에 표시, 브라우저별로 닫기 |
-| `POST` | `/api/admin/invites` | 일회용 초대 코드 `XXXX-XXXX` 생성 |
-| `DELETE` | `/api/admin/invites/:code` | 사용 전 코드 취소(사용된 코드는 404) |
+| `POST` | `/api/admin/invites` | 초대 코드 `XXXX-XXXX` 생성 `{ maxUses?, expiresInDays? }`(기본 1개 계정, `INVITE.defaultExpiryDays`(7)일. 최대 `INVITE.maxUses`(100)개, `maxExpiryDays`(90)일, `expiresInDays: null`이면 만료 없음). 재인증 필요, 감사 로그에 한도 기록 |
+| `DELETE` | `/api/admin/invites/:code` | 아직 쓸 수 있는 코드 취소(다 쓴 코드·만료된 코드는 404) |
 | `POST` | `/api/admin/cleanup` | "Run cleanup now": 삭제일이 지난 계정과 만료 항목 삭제 → `{ accounts, items }` |
 | `GET` | `/api/admin/audit` | 감사 로그 최신순 페이지 `{ events: AuditEntry[], nextCursor }`. `?limit=`(기본 `AUTH.auditPageSize` 50, 최대 200) · `?cursor=<이전 페이지 마지막 id>`(없어진 id는 400) · `?group=accounts\|signup\|tokens\|server` · `?account=<계정 id>`(행위자 또는 대상). Server 페이지 "Audit log" 카드가 쓴다(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대 생성·취소, 관리자 토큰 보기·재발급, 공지 게시·내리기, 테마 변경, 장애 등록·수정·삭제, API 토큰 만들기·폐기) |
 | `GET` | `/api/admin/server/stream` | Server 페이지 실측 지표 SSE(1.5초마다 스냅샷, 느린 스냅샷은 겹치지 않고 건너뜀) |

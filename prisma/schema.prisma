@@ -258,8 +258,16 @@ model ServerConfig {
 model Invite {
   code       String    @id
   createdAt  DateTime  @default(now())
+  /// When it was last used, and by whom (the last account created with it).
   usedAt     DateTime?
   usedByName String?
+  /// Accounts it may create; uses counts them.
+  maxUses    Int       @default(1)
+  uses       Int       @default(0)
+  /// Null: no expiry date.
+  expiresAt  DateTime?
+
+  @@index([expiresAt])
 }
 
 enum AnnouncementLevel {

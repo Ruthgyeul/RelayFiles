@@ -67,3 +67,16 @@ export const SETTINGS = {
   /** The theme is read on every page; this long it comes from the cache. */
   themeCacheSec: 60,
 } as const;
+
+/** Invite codes for "Invite only" sign-ups (Server page). */
+export const INVITE = {
+  /** Accounts one code may create at most, and the choices the Server page offers. */
+  maxUses: 100,
+  useChoices: [1, 5, 10, 25],
+  /** Days a code stays valid at most; the choices offered (null: no expiry date). */
+  maxExpiryDays: 90,
+  expiryChoices: [1, 7, 30, null],
+  defaultExpiryDays: 7,
+  /** Expired or used-up codes stay listed this long, then the daily cleanup removes them. */
+  keepFinishedDays: 30,
+} as const;
