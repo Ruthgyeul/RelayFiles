@@ -101,13 +101,14 @@ const isObject = (value: unknown): value is ReportBody => typeof value === "obje
 /**
  * Violations from a report body: the legacy `application/csp-report` object
  * (`{ "csp-report": { … } }`, kebab-case) or the Reporting API's `application/reports+json`
- * array (`[{ type: "csp-violation", body: { … } }]`, camelCase).
+ * array (`[{ type: "csp-violation", body: { … } }]`, camelCase). At most `limit` are read.
  */
-export function parseCspReports(payload: unknown): CspViolation[] {
+export function parseCspReports(payload: unknown, limit: number): CspViolation[] {
   const bodies: ReportBody[] = [];
   if (isObject(payload) && isObject(payload["csp-report"])) bodies.push(payload["csp-report"]);
   if (Array.isArray(payload)) {
     for (const report of payload) {
+      if (bodies.length >= limit) break;
       if (isObject(report) && report.type === "csp-violation" && isObject(report.body)) bodies.push(report.body);
     }
   }

@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac } from "node:crypto";
 import { parseUserAgent } from "@/domain/device";
-import { clientIp, isPrivateIp, maskIp, rateLimitSubject } from "@/domain/network";
+import { clientIp, isPrivateIp, maskIp, rateLimitNetwork, rateLimitSubject } from "@/domain/network";
 import { getEnv } from "@/config/env";
 
 /** What the server records about the device making a request. The raw IP never leaves this module. */
@@ -15,6 +15,8 @@ export interface ClientInfo {
    * lockout by switching to another address in the same network.
    */
   ipKey: string;
+  /** Like {@link ipKey} for the address's network (IPv4 /24, IPv6 /48, `rateLimitNetwork`). */
+  networkKey: string;
   country: string | null;
   city: string | null;
 }
@@ -23,11 +25,14 @@ export interface ClientInfo {
 const UNKNOWN_COUNTRIES = new Set(["XX", "T1"]);
 const IP_KEY_HEX_LENGTH = 32;
 
+const keyOf = (subject: string) => createHmac("sha256", getEnv("secrets").TOKEN_HMAC_KEY).update(subject).digest("hex").slice(0, IP_KEY_HEX_LENGTH);
+
 export function ipKeyOf(ip: string): string {
-  return createHmac("sha256", getEnv("secrets").TOKEN_HMAC_KEY)
-    .update(`ip:${rateLimitSubject(ip) || "unknown"}`)
-    .digest("hex")
-    .slice(0, IP_KEY_HEX_LENGTH);
+  return keyOf(`ip:${rateLimitSubject(ip) || "unknown"}`);
+}
+
+export function networkKeyOf(ip: string): string {
+  return keyOf(`net:${rateLimitNetwork(ip) || "unknown"}`);
 }
 
 function headerText(headers: Headers, name: string): string | null {
@@ -51,6 +56,7 @@ export function clientInfo(headers: Headers): ClientInfo {
     browser,
     ipMasked: ip ? maskIp(ip) : maskIp("unknown"),
     ipKey: ipKeyOf(ip),
+    networkKey: networkKeyOf(ip),
     country: country && !UNKNOWN_COUNTRIES.has(country.toUpperCase()) ? country.toUpperCase() : null,
     city: local ? null : headerText(headers, "cf-ipcity"),
   };

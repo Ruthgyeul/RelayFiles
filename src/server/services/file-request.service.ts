@@ -1,7 +1,7 @@
 import "server-only";
 import { hash, verify } from "@node-rs/argon2";
 import { getAppEnv, getEnv } from "@/config/env";
-import { FILE_REQUEST, MS, SHARE } from "@/config/policy";
+import { FILE_REQUEST, MS } from "@/config/policy";
 import type { CreateFileRequestInput, FileRequestDto, FileRequestView, RequestUploadInput, RequestUploadPlan } from "@/contracts/file-requests";
 import { isExpired } from "@/domain/account";
 import { fileRequestStatus, requestBatchError, requestRoom, type FileRequestStatus } from "@/domain/file-request";
@@ -14,11 +14,12 @@ import { cookieSecrets } from "../auth/keys";
 import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import { countInWindow, redis } from "../redis";
+import { countInWindow } from "../redis";
 import type { AccountRow } from "../repositories/account.repo";
 import { countFileRequests, createFileRequestRow, deleteFileRequest, findFileRequest, listFileRequestRows, type FileRequestRow } from "../repositories/file-request.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { addUnlock, isUnlocked, type Unlocks } from "../share/unlock-cookie";
+import { countUnlockGuess, refundUnlockGuess } from "../share/unlock-limit";
 import { currentUnlocks } from "../share/viewer";
 import { driverFor } from "../storage/registry";
 import { saveBatch } from "../upload/batches";
@@ -119,13 +120,10 @@ export async function unlockRequest(id: string, password: string, unlocks: Unloc
   const { row, unlocked } = await visitRequest(id, unlocks, now);
   const secret = cookieSecrets()[0]!;
   if (unlocked) return addUnlock(unlocks, requestUnlockKey(id), row.passwordHash, secret, now);
-  const key = `unlock:${requestUnlockKey(id)}:${client.ipKey}`;
-  if ((await countInWindow(key, SHARE.unlockWindowSec)) > SHARE.unlockMaxAttempts) {
-    throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(key)) });
-  }
+  const counted = await countUnlockGuess(requestUnlockKey(id), client);
   if (!(await verify(row.passwordHash!, password))) throw new ApiError("FORBIDDEN", "Wrong password");
   // Only this attempt is given back (like share links and sign-in), not earlier wrong guesses.
-  await redis().decr(key);
+  await refundUnlockGuess(counted);
   return addUnlock(unlocks, requestUnlockKey(id), row.passwordHash, secret, now);
 }
 

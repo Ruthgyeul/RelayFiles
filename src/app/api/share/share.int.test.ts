@@ -29,6 +29,7 @@ import { purgeRetiredLinks } from "@/server/repositories/link-tombstone.repo";
 import { cookieSecrets } from "@/server/auth/keys";
 import { decodeUnlocks, UNLOCK_COOKIE, type Unlocks } from "@/server/share/unlock-cookie";
 import { VISITOR_COOKIE } from "@/server/share/visitor-cookie";
+import { redis } from "@/server/redis";
 import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
@@ -158,6 +159,40 @@ describe("share page", () => {
     const blocked = await visit(unlock, `/api/share/${trip.linkId}/unlock`, { linkId: trip.linkId }, { method: "POST", body: { password: "open sesame" }, ip: guesser });
     expect(blocked.status).toBe(429);
     expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+  });
+});
+
+describe("password guess budgets", () => {
+  const guess = (linkId: string, ip: string) => visit(unlock, `/api/share/${linkId}/unlock`, { linkId }, { method: "POST", body: { password: "wrong" }, ip });
+
+  it("shares one budget across the addresses of a network", async () => {
+    const { trip } = await sharedTrip({ passwordHash: await hash("open sesame") });
+    // A fresh /24 per run; each address stays under its own limit.
+    const net = `203.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+    for (let attempt = 0; attempt < SHARE.unlockNetworkMaxAttempts; attempt++) {
+      expect((await guess(trip.linkId, `${net}.${attempt % 250}`)).status).toBe(403);
+    }
+    expect((await guess(trip.linkId, `${net}.251`)).status).toBe(429);
+    // Another network still has its own.
+    expect((await guess(trip.linkId, visitorIp())).status).toBe(403);
+  });
+
+  it("stops all guesses at a password once its budget across every network is spent", async () => {
+    const { trip } = await sharedTrip({ passwordHash: await hash("open sesame") });
+    await redis().set(`unlock:all:${trip.id}`, String(SHARE.unlockSubjectMaxAttempts), "EX", SHARE.unlockSubjectWindowSec);
+    const blocked = await guess(trip.linkId, visitorIp());
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+  });
+});
+
+describe("Download all checks", () => {
+  it("limits the checks one address makes", async () => {
+    const { trip } = await sharedTrip();
+    const ip = visitorIp();
+    const check = () => visit(shareZipCheck, `/api/share/${trip.linkId}/zip?folder=${trip.id}`, { linkId: trip.linkId }, { method: "HEAD", ip });
+    for (let i = 0; i < SHARE.zipChecksPerAddress; i++) expect((await check()).status).toBe(200);
+    expect((await check()).status).toBe(429);
   });
 });
 

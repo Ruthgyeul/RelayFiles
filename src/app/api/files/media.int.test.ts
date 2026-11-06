@@ -23,7 +23,7 @@ import { processMedia, recordDateTaken } from "@/server/media/process";
 import { runningTranscodes } from "@/server/media/transcode";
 import { storeTranscode } from "@/server/media/transcode-cache";
 import { redis } from "@/server/redis";
-import { slotsHeld } from "@/server/redis-semaphore";
+import { acquireSlot, slotsHeld } from "@/server/redis-semaphore";
 
 const { prisma, member, addFile, get, cleanup } = fileFixtures();
 const run = promisify(execFile);
@@ -265,6 +265,23 @@ describe("media processing", () => {
       expect(await exists(assetFile("transcoded", m.id, id))).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("runs at most TRANSCODE.maxPerRequester conversions for one requester", async () => {
+    const m = await member();
+    const id = await addFile(m, m.rootId, [], "held.avi", Buffer.from("not really a video"), "video/vnd.avi", "VIDEO");
+    // The requester's conversions are already running (elsewhere, say another tab or process).
+    const held = await Promise.all(Array.from({ length: TRANSCODE.maxPerRequester }, () => acquireSlot(`transcode:by:account:${m.id}`, TRANSCODE.maxPerRequester, TRANSCODE.slotLeaseMs)));
+    try {
+      const refused = await get(stream, m, id, {}, "?transcode=1");
+      expect(refused.status).toBe(429);
+      expect(((await refused.json()) as { error: string }).error).toBe("Another video is already converting for you. Close it or try again shortly.");
+      // Nothing started, and the shared slots were not touched.
+      expect(runningTranscodes()).toBe(0);
+      expect(await slotsHeld("transcode")).toBe(0);
+    } finally {
+      for (const slot of held) await slot?.release();
     }
   });
 
