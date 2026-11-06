@@ -1,6 +1,6 @@
 import type { ThemeKey } from "@/config/theme";
 import type { SignupMode } from "@/contracts/auth";
-import type { AnnouncementLevel } from "@/contracts/server-settings";
+import type { AnnouncementLevel, CreateInviteInput } from "@/contracts/server-settings";
 import { apiFetch } from "@/shared/lib/api-client";
 
 /** Server page settings calls. */
@@ -9,6 +9,6 @@ export const settingsApi = {
   takeDown: () => apiFetch<{ removed: true }>("/api/admin/announcement", { method: "DELETE" }),
   signupMode: (mode: SignupMode) => apiFetch<{ mode: SignupMode }>("/api/admin/settings/signup", { method: "PUT", json: { mode } }),
   theme: (theme: ThemeKey) => apiFetch<{ theme: ThemeKey }>("/api/admin/settings/theme", { method: "PUT", json: { theme } }),
-  newInvite: () => apiFetch<{ code: string }>("/api/admin/invites", { method: "POST" }),
+  newInvite: (limits: CreateInviteInput) => apiFetch<{ code: string }>("/api/admin/invites", { method: "POST", json: limits }),
   revokeInvite: (code: string) => apiFetch<{ revoked: true }>(`/api/admin/invites/${encodeURIComponent(code)}`, { method: "DELETE" }),
 };

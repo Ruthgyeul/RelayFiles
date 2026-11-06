@@ -104,3 +104,12 @@ export function maskInvite(code: string): string {
   const [first = ""] = code.split("-");
   return `${first}-••••`;
 }
+
+export type InviteStatus = "active" | "used-up" | "expired";
+
+/** Whether an invite code still creates accounts: used up beats expired when both hold. */
+export function inviteStatus(invite: { uses: number; maxUses: number; expiresAt: number | null }, now: number): InviteStatus {
+  if (invite.uses >= invite.maxUses) return "used-up";
+  if (invite.expiresAt !== null && invite.expiresAt <= now) return "expired";
+  return "active";
+}
