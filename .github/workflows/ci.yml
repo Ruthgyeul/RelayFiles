@@ -30,6 +30,7 @@ jobs:
       - run: npm run check:cycles
       - run: npm run check:migrations
       - run: npm run check:ci-images
+      - run: npm run check:openapi
       - run: npm run test
       - run: npm run build
 
