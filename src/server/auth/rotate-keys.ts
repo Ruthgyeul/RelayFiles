@@ -1,6 +1,7 @@
 import "server-only";
 import { MIGRATION } from "@/config/policy";
 import type { DbClient } from "../db/client";
+import { restoreAccountTokenIf } from "../repositories/account.repo";
 import { decryptToken, encryptToken, needsReencryption, tokenLookups, type TokenKeys } from "./token-crypto";
 
 export interface RotationResult {
@@ -37,8 +38,9 @@ export async function rotateAccountKeys(db: DbClient, keys: TokenKeys, onBatch?:
       }
       const lookup = tokenLookups(token, keys)[0]!;
       if (row.tokenLookup !== lookup || needsReencryption(row.tokenEnc, keys)) {
-        await db.account.update({ where: { id: row.id }, data: { tokenLookup: lookup, tokenEnc: new Uint8Array(encryptToken(token, keys)) } });
-        result.updated += 1;
+        // Only while the account still has this token: one replaced meanwhile is already
+        // stored with the current keys and must not be overwritten with the old token.
+        if (await restoreAccountTokenIf(db, row.id, row.tokenLookup, { tokenLookup: lookup, tokenEnc: new Uint8Array(encryptToken(token, keys)) })) result.updated += 1;
       }
     }
     cursor = rows.at(-1)!.id;

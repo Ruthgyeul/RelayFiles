@@ -67,7 +67,7 @@ export function DevicesCard({ devices, onSignOut, onSignOutOthers }: DevicesCard
           )}
         </div>
       ))}
-      <span className="mt-2 text-[12px] text-pretty text-t4">Don&apos;t recognize a device? Sign it out, then generate a new token from your profile so it can&apos;t sign back in.</span>
+      <span className="mt-2 text-[12px] text-pretty text-t4">Don&apos;t recognize a device? Generate a new token from your profile: it signs out every other device and revokes your API tokens, so nothing made with the old token keeps working.</span>
     </section>
   );
 }

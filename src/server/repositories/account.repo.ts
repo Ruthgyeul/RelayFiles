@@ -58,8 +58,18 @@ export async function updateAccountToken(db: DbClient, accountId: string, token:
   await db.account.update({ where: { id: accountId }, data: token });
 }
 
-export async function touchAccountLogin(db: DbClient, accountId: string, at: Date): Promise<void> {
-  await db.account.update({ where: { id: accountId }, data: { lastLoginAt: at } });
+/** Re-stores the same token (new keys) only while the account still has it; false when it was replaced. */
+export async function restoreAccountTokenIf(db: DbClient, accountId: string, expectedLookup: string, token: { tokenLookup: string; tokenEnc: Uint8Array<ArrayBuffer> }): Promise<boolean> {
+  return (await db.account.updateMany({ where: { id: accountId, tokenLookup: expectedLookup }, data: token })).count === 1;
+}
+
+/**
+ * Records a sign-in only while the account still has the token that was checked (its
+ * lookup `expectedLookup`); false when it was replaced meanwhile. The update locks the row
+ * until the transaction ends, so a token replacement waits for (or is seen by) the sign-in.
+ */
+export async function touchAccountLoginIf(db: DbClient, accountId: string, expectedLookup: string, at: Date): Promise<boolean> {
+  return (await db.account.updateMany({ where: { id: accountId, tokenLookup: expectedLookup }, data: { lastLoginAt: at } })).count === 1;
 }
 
 export function findAccountById(db: DbClient, accountId: string) {

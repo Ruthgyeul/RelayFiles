@@ -95,7 +95,7 @@
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| `POST` | `/api/me/token` | 새 토큰 발급. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 기존 토큰은 즉시 무효, 이 기기를 뺀 모든 기기 로그아웃. 새 토큰을 한 번 돌려준다 |
+| `POST` | `/api/me/token` | 새 토큰 발급. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 기존 토큰은 즉시 무효, 이 기기를 뺀 모든 기기 로그아웃, 개인 API 토큰 전부 폐기. 새 토큰을 한 번 돌려준다 |
 | `GET`·`DELETE` | `/api/me/sessions` | 이 계정에 로그인된 기기 목록(이 기기 먼저) / "Sign out all others" |
 | `DELETE` | `/api/me/sessions/:id` | 다른 기기 하나 로그아웃 |
 | `PATCH` | `/api/me/preferences` | `{ stripMetadataOnShare }` 공개 링크 사진의 위치·카메라 정보 제거 |

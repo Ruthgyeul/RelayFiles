@@ -12,7 +12,7 @@ import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { countInWindow } from "../redis";
 import type { AccountRow } from "../repositories/account.repo";
-import { countApiTokens, createApiTokenRow, deleteApiToken, findApiTokenWithAccount, listApiTokenRows, touchApiToken } from "../repositories/api-token.repo";
+import { countApiTokens, lockApiTokensOf, createApiTokenRow, deleteApiToken, findApiTokenWithAccount, listApiTokenRows, touchApiToken } from "../repositories/api-token.repo";
 
 /** Seconds in the rate-limit window (API.requestsPerMinute). */
 const RATE_WINDOW_SEC = MS.minute / MS.second;
@@ -70,19 +70,25 @@ export async function listApiTokens(accountId: string): Promise<ApiTokenDto[]> {
 /** A new token for the account, returned in full once; admin-only scopes need an admin. */
 export async function createApiToken(account: Pick<AccountRow, "id" | "isAdmin">, input: CreateApiTokenInput, now: Date = new Date()): Promise<CreatedApiToken> {
   if (!account.isAdmin && input.scopes.some((scope) => ADMIN_ONLY_SCOPES.includes(scope))) throw new ApiError("FORBIDDEN");
-  if ((await countApiTokens(db(), account.id)) >= API.maxTokensPerAccount) {
-    throw new ApiError("BAD_REQUEST", `An account can hold at most ${API.maxTokensPerAccount} API tokens. Revoke one first.`);
-  }
   return retryOnUniqueViolation(async () => {
     const id = newApiTokenId();
     const token = newApiToken(id);
-    const row = await createApiTokenRow(db(), {
-      id,
-      accountId: account.id,
-      name: input.name,
-      secretHash: await hash(token),
-      scopes: [...new Set(input.scopes)],
-      expiresAt: input.expiresInDays === null ? null : new Date(now.getTime() + input.expiresInDays * MS.day),
+    // Hashed before the transaction: argon2 takes a while and the lock below should not wait on it.
+    const secretHash = await hash(token);
+    const row = await db().$transaction(async (tx) => {
+      // Counted and created under one lock, so tokens created at the same time cannot pass the limit together.
+      await lockApiTokensOf(tx, account.id);
+      if ((await countApiTokens(tx, account.id)) >= API.maxTokensPerAccount) {
+        throw new ApiError("BAD_REQUEST", `An account can hold at most ${API.maxTokensPerAccount} API tokens. Revoke one first.`);
+      }
+      return createApiTokenRow(tx, {
+        id,
+        accountId: account.id,
+        name: input.name,
+        secretHash,
+        scopes: [...new Set(input.scopes)],
+        expiresAt: input.expiresInDays === null ? null : new Date(now.getTime() + input.expiresInDays * MS.day),
+      });
     });
     return { token, item: toDto(row) };
   });
