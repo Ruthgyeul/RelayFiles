@@ -7,6 +7,7 @@ import { clientInfo, requestIp } from "../auth/client-info";
 import { countInWindow, redis } from "../redis";
 import { retiredSharePage, sharePage } from "./share.service";
 import { logLinkEvent } from "./events";
+import { noteLinkOpened } from "./link-notify";
 import { currentShareViewer } from "./viewer";
 
 /**
@@ -33,6 +34,9 @@ export async function sharePageForRequest(linkId: string, folderId: string | nul
   // To anyone but the owner a private link looks like one that does not exist: a "This link is
   // private" card would tell someone guessing ids that they found a real one.
   if (page.status === "private" && !page.owner) return missed();
-  if (page.status === "open" && !page.owner && !folderId) after(() => logLinkEvent(link.root, "OPEN", client));
+  if (page.status === "open" && !page.owner && !folderId) {
+    after(() => logLinkEvent(link.root, "OPEN", client));
+    noteLinkOpened(link.root, client.country);
+  }
   return page;
 }

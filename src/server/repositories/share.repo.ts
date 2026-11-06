@@ -1,4 +1,5 @@
 import "server-only";
+import { ranOutWith } from "@/domain/share-limits";
 import { Prisma, type DbClient, type PrismaClient } from "../db/client";
 import { childStats } from "./node-tree.repo";
 import { NODE_SELECT } from "./node.repo";
@@ -113,28 +114,56 @@ export async function sharedChain(db: DbClient, nodeId: string): Promise<ChainRo
 /** Thrown inside the claim transaction to roll back counts already made. */
 class LimitReached extends Error {}
 
+/** An item a counted download used up (its limit reached, or its one download before deletion). */
+export interface UsedUpItem {
+  id: string;
+  name: string;
+  type: "FILE" | "FOLDER";
+  cause: "limit" | "burn";
+  downloads: number;
+}
+
+interface ClaimedRow {
+  id: string;
+  name: string;
+  type: "FILE" | "FOLDER";
+  downloads: number;
+  downloadLimit: number | null;
+  burn: boolean;
+}
+
+const usedUp = (rows: readonly ClaimedRow[]): UsedUpItem[] =>
+  rows.flatMap((row) => {
+    const cause = ranOutWith(row);
+    return cause ? [{ id: row.id, name: row.name, type: row.type, cause, downloads: row.downloads }] : [];
+  });
+
 /**
  * Counts a public download on every given item (the file, the link it was reached through and
  * each item between with its own limit or delete-after-download), only while every one of them
  * is under its download limit and no used delete-after-download item is among them. Each
  * UPDATE re-checks the limit on the locked row, so concurrent requests at N-1 cannot all pass.
- * Returns false (nothing counted) when a limit is reached.
+ * Returns null (nothing counted) when a limit is reached, else the items this download used up.
  */
-export async function claimDownload(db: PrismaClient, ids: readonly string[]): Promise<boolean> {
+export async function claimDownload(db: PrismaClient, ids: readonly string[]): Promise<{ usedUp: UsedUpItem[] } | null> {
   try {
-    await db.$transaction(async (tx) => {
+    const claimed = await db.$transaction(async (tx) => {
+      const rows: ClaimedRow[] = [];
       for (const id of new Set(ids)) {
-        const counted = await tx.$executeRaw`
+        const [row] = await tx.$queryRaw<ClaimedRow[]>`
           UPDATE "Node" SET downloads = downloads + 1
           WHERE id = ${id}
             AND ("downloadLimit" IS NULL OR "downloadLimit" <= 0 OR downloads < "downloadLimit")
-            AND NOT (burn AND downloads >= 1)`;
-        if (counted === 0) throw new LimitReached();
+            AND NOT (burn AND downloads >= 1)
+          RETURNING id, name, type::text AS type, downloads, "downloadLimit", burn`;
+        if (!row) throw new LimitReached();
+        rows.push(row);
       }
+      return rows;
     });
-    return true;
+    return { usedUp: usedUp(claimed) };
   } catch (error) {
-    if (error instanceof LimitReached) return false;
+    if (error instanceof LimitReached) return null;
     throw error;
   }
 }
@@ -142,15 +171,15 @@ export async function claimDownload(db: PrismaClient, ids: readonly string[]): P
 /**
  * Counts one download on each item still under its limit (and not a used delete-after-download
  * item), in one statement (the files of a "Download all" zip). Returns the ids that were
- * counted; the rest are at their limit.
+ * counted (the rest are at their limit) and the items this used up.
  */
-export async function claimEachDownload(db: DbClient, ids: readonly string[]): Promise<Set<string>> {
-  if (ids.length === 0) return new Set();
-  const rows = await db.$queryRaw<{ id: string }[]>`
+export async function claimEachDownload(db: DbClient, ids: readonly string[]): Promise<{ counted: Set<string>; usedUp: UsedUpItem[] }> {
+  if (ids.length === 0) return { counted: new Set(), usedUp: [] };
+  const rows = await db.$queryRaw<ClaimedRow[]>`
     UPDATE "Node" SET downloads = downloads + 1
     WHERE id = ANY(${[...new Set(ids)]}::text[])
       AND ("downloadLimit" IS NULL OR "downloadLimit" <= 0 OR downloads < "downloadLimit")
       AND NOT (burn AND downloads >= 1)
-    RETURNING id`;
-  return new Set(rows.map((row) => row.id));
+    RETURNING id, name, type::text AS type, downloads, "downloadLimit", burn`;
+  return { counted: new Set(rows.map((row) => row.id)), usedUp: usedUp(rows) };
 }
