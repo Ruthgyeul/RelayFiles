@@ -100,6 +100,17 @@ describe("upload-only links", () => {
     expect(await db().node.count({ where: { accountId: m.id, name: { startsWith: "zero" } } })).toBe(1);
   });
 
+  it("keeps files sent into a public folder private until the owner shares them", async () => {
+    const m = await member();
+    await db().node.update({ where: { id: m.rootId }, data: { visibility: "PUBLIC" } });
+    const request = await requestFor(m);
+    const visitor: Visitor = { ip: randomTestIp() };
+    const plan = (await visit<RequestUploadPlan>(prepare, request.id, visitor, { files: [{ name: "drop.txt", size: 4 }] })).json.data;
+    expect((await send(plan, visitor, 0, "drop.txt", "data")).status).toBe(200);
+    const row = await db().node.findFirstOrThrow({ where: { accountId: m.id, name: "drop.txt" } });
+    expect(row.visibility).toBe("PRIVATE");
+  });
+
   it("asks for the password before showing the form or taking files", async () => {
     const m = await member();
     const request = await requestFor(m, { password: "hunter2" });

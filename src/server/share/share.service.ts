@@ -19,6 +19,7 @@ import { findByLinkId, publicChildren, publicChildStats, publicTree, publicTreeS
 import { busyLevels } from "./busy";
 import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "./unlock-cookie";
 import { countUnlockGuess, refundUnlockGuess } from "./unlock-limit";
+import { limitingIds } from "@/domain/share-limits";
 
 /** Who is looking at a share link. */
 export interface ShareViewer {
@@ -290,9 +291,6 @@ export interface SharedFile {
   busy: Busy;
 }
 
-/** Items that limit downloads themselves: a download limit, or delete after the first download. */
-export const limitingIds = (rows: readonly Pick<SharedRow, "id" | "burn" | "downloadLimit">[]) =>
-  rows.filter((row) => row.burn || (row.downloadLimit !== null && row.downloadLimit > 0)).map((row) => row.id);
 
 /**
  * Checks that a visitor may play or download a file through a link: the link is open, the

@@ -64,7 +64,7 @@ export function NewFileRequestForm({ folderId, busy, onCreate, onCancel }: NewFi
           <TextInput inputMode="numeric" placeholder="No limit" value={maxMb} onChange={(event) => setMaxMb(digits(event.target.value))} />
         </Field>
       </div>
-      <span className="text-[12px] text-pretty text-t4">Uploaders can only add files. They never see what is in this folder. Files count toward your storage.</span>
+      <span className="text-[12px] text-pretty text-t4">Uploaders can only add files. They never see what is in this folder. Files they send stay private until you share them, and count toward your storage.</span>
       <div className="flex justify-end gap-2">
         <Button size={36} onClick={onCancel} className="px-4 text-[14px]">
           Cancel
