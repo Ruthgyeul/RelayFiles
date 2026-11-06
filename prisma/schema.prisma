@@ -64,6 +64,8 @@ model Account {
   /// Storage quota in bytes; null = unlimited.
   quotaBytes           BigInt?
   stripMetadataOnShare Boolean       @default(true)
+  /// Owner notifications (NOTIFY_WEBHOOK_URL) about its share links: first open, downloads used up.
+  notifyLinkEvents     Boolean       @default(false)
   /// True while the account's files are being moved to another volume.
   migrating            Boolean       @default(false)
   volumeId             String

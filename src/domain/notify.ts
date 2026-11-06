@@ -23,7 +23,11 @@ export type NotifyEvent =
   | { kind: "volume-online"; volumeId: string }
   /** An ACTIVE volume refuses writes (e.g. the filesystem was remounted read-only after errors). */
   | { kind: "volume-readonly"; volumeId: string }
-  | { kind: "backup-failed"; dump: string | null; problems: string[] };
+  | { kind: "backup-failed"; dump: string | null; problems: string[] }
+  /** A share link was opened for the first time in a while (owners who turned this on). */
+  | { kind: "link-opened"; owner: string; item: string; folder: boolean; country: string | null }
+  /** A download used up a link item's downloads: its limit was reached, or it is deleted after this first download. */
+  | { kind: "link-used-up"; owner: string; item: string; cause: "limit" | "burn"; downloads: number };
 
 export type NotifyKind = NotifyEvent["kind"];
 
@@ -83,6 +87,16 @@ export function describeEvent(event: NotifyEvent): NotifyText {
         message: `Volume ${event.volumeId} is mounted but refuses writes (read-only filesystem or disk errors). Uploads to it fail; check the disk (docs/runbook.md "SSD가 빠졌을 때").`,
         urgent: true,
       };
+    case "link-opened":
+      return {
+        title: "Share link opened",
+        message: `The link to ${event.folder ? "the folder " : ""}"${clean(event.item)}" of ${clean(event.owner)} was opened${event.country ? ` from ${clean(event.country)}` : ""}.`,
+        urgent: false,
+      };
+    case "link-used-up":
+      return event.cause === "burn"
+        ? { title: "Downloaded once, deleting", message: `"${clean(event.item)}" of ${clean(event.owner)} was downloaded. It is deleted at the next cleanup and its link has expired.`, urgent: false }
+        : { title: "Download limit reached", message: `"${clean(event.item)}" of ${clean(event.owner)} reached its limit of ${plural(event.downloads, "download")}. Its link no longer offers downloads.`, urgent: false };
     case "backup-failed":
       return {
         title: "Backup check failed",
