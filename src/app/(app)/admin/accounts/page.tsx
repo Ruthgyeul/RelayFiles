@@ -12,7 +12,8 @@ export default async function AdminAccountsPage() {
   // The layout shows the loading state until the first account exists, and guards too,
   // but it may render alongside the page.
   if (!device.active) return null;
-  if (!device.active.account.isAdmin) forbidden();
+  // Checked here too (not only in the layout and the proxy): a page renders on its own.
+  if (!device.active.account.isAdmin || !device.adminNetwork) forbidden();
   const data = await listAccounts(
     device.accounts.map((entry) => entry.account.id),
     device.active.account.id,

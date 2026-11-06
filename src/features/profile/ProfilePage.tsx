@@ -100,7 +100,7 @@ export function ProfilePage({ data }: { data: ProfileData }) {
         tone="accent"
         icon="arrows-clockwise"
         title="Generate a new token?"
-        description="The current token stops working on every device immediately."
+        description="The current token stops working on every device immediately, other devices are signed out and every API token is revoked."
         confirmLabel="Generate"
         busy={busy}
         onConfirm={confirmed}

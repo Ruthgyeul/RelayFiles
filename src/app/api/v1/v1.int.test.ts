@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { afterAll, describe, expect, it } from "vitest";
 import { GET as listTokens, POST as createToken } from "@/app/api/me/api-tokens/route";
 import { DELETE as revokeToken } from "@/app/api/me/api-tokens/[id]/route";
+import { POST as newAccountToken } from "@/app/api/me/token/route";
 import { GET as download, HEAD as head } from "@/app/api/v1/files/[id]/route";
 import { POST as upload } from "@/app/api/v1/files/route";
 import { GET as folder } from "@/app/api/v1/folders/[id]/route";
@@ -68,6 +69,23 @@ describe("personal API tokens", () => {
     expect((await v1(me, { token: created.token })).status).toBe(401);
     const audit = await prisma.auditEvent.findMany({ where: { actorId: m.id, action: { startsWith: "apiToken." } }, orderBy: { at: "asc" } });
     expect(audit.map((row) => row.action)).toEqual(["apiToken.create", "apiToken.revoke"]);
+  });
+
+  it("revokes every API token when the account token is replaced", async () => {
+    const m = await member();
+    const { token } = await tokenFor(m, ["files:read", "files:write"]);
+    expect((await v1(me, { token })).status).toBe(200);
+    // A fresh sign-in may replace the token (within the re-authentication window).
+    expect((await callRoute(newAccountToken, { method: "POST", cookie: m.cookie })).status).toBe(200);
+    expect((await v1(me, { token })).status).toBe(401);
+    expect((await callRoute<ApiTokenDto[]>(listTokens, { cookie: m.cookie })).json.data).toEqual([]);
+  });
+
+  it("never lets tokens created at the same time pass the per-account limit", async () => {
+    const m = await member();
+    const results = await Promise.all(Array.from({ length: API.maxTokensPerAccount + 5 }, () => callRoute(createToken, { method: "POST", cookie: m.cookie, body: { name: "burst", scopes: ["files:read"], expiresInDays: null } })));
+    expect(results.filter((res) => res.status === 201)).toHaveLength(API.maxTokensPerAccount);
+    expect(await prisma.apiToken.count({ where: { accountId: m.id } })).toBe(API.maxTokensPerAccount);
   });
 
   it("keeps metrics:read to admins and other accounts' tokens out of reach", async () => {
