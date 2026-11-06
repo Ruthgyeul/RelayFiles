@@ -7,7 +7,12 @@ describe("nameError (design messages)", () => {
     [".", '"." is reserved by the file system.'],
     ["..", '".." is reserved by the file system.'],
     ["a/b", 'Name can\'t contain "/".'],
-    ["a\0b", "Name can't contain null characters."],
+    ["a\0b", "Name can't contain control characters."],
+    ["line\nbreak", "Name can't contain control characters."],
+    ["tab\there", "Name can't contain control characters."],
+    ["c1\u0085", "Name can't contain control characters."],
+    ["invoice\u202Efdp.exe", "Name can't contain text direction marks."],
+    ["isolate\u2066x\u2069", "Name can't contain text direction marks."],
     [" lead", "Name can't start or end with a space."],
     ["trail ", "Name can't start or end with a space."],
   ])("%j → %s", (name, message) => {
@@ -15,7 +20,7 @@ describe("nameError (design messages)", () => {
   });
 
   it("accepts normal names, dotfiles and Hangul", () => {
-    for (const name of ["movie.mp4", ".env", "Upload Oct 5, 3:12 PM", "한글 폴더", "a..b"]) expect(nameError(name)).toBe("");
+    for (const name of ["movie.mp4", ".env", "Upload Oct 5, 3:12 PM", "한글 폴더", "a..b", "مرحبا.txt", "emoji\u200d-free"]) expect(nameError(name)).toBe("");
   });
 
   it("limits names to 255 UTF-8 bytes", () => {

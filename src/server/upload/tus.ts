@@ -12,7 +12,7 @@ import { logger } from "../logger";
 import { layoutOf } from "../storage/layout";
 import { releaseSpace } from "../services/space.service";
 import { checkUploadStart, finalizeUpload } from "../services/upload.service";
-import { forgetUpload, loadBatch, reboundSlot, setUploadOwner, setUploadRequest, uploadOwner, uploadRequest, type UploadBatch, type UploadSlot } from "./batches";
+import { beginPlacing, claimSlot, forgetUpload, loadBatch, reboundSlot, releaseSlot, setUploadOwner, settleSlot, setUploadRequest, uploadOwner, uploadRequest, type UploadBatch, type UploadSlot } from "./batches";
 import { recordRequestUpload, releaseRequestRoom, requestFor, reserveRequestRoom } from "./request-uploads";
 import { noteRequestArrival } from "../jobs/notify-queue";
 import { markActive } from "../metrics/activity";
@@ -63,11 +63,24 @@ async function slotOf(upload: Upload): Promise<UploadSlot> {
 /** Upload locks shared by every app process (one locker for all volumes' servers). */
 const locker = new RedisLocker();
 
+/**
+ * Ends an unfinished upload whose slot a newer upload took (its create answer never reached
+ * the client, which then started again): its reservations and received chunks go.
+ */
+async function discardUpload(datastore: FileStore, uploadId: string, volumeId: string): Promise<void> {
+  const [accountId, requestId] = await Promise.all([uploadOwner(uploadId), uploadRequest(uploadId)]);
+  if (accountId) await releaseSpace(uploadId, accountId, volumeId);
+  if (requestId) await releaseRequestRoom(requestId, uploadId);
+  await forgetUpload(uploadId);
+  await datastore.remove(uploadId).catch(() => undefined);
+}
+
 function createServer(volumeId: string, mountPath: string): Server {
   const maxGb = getEnv("uploads").UPLOAD_MAX_FILE_SIZE_GB;
+  const datastore = new FileStore({ directory: layoutOf(mountPath).uploads });
   return new Server({
     path: `/api/uploads/tus/${volumeId}`,
-    datastore: new FileStore({ directory: layoutOf(mountPath).uploads }),
+    datastore,
     locker,
     maxSize: maxGb ? Math.round(maxGb * BYTES_PER_GB) : undefined,
     relativeLocation: true,
@@ -78,11 +91,22 @@ function createServer(volumeId: string, mountPath: string): Server {
       const { batchId, slot } = createdSlotOf(upload);
       const batch = await loadBatch(batchId);
       const { owner, request } = await senderOf(req, batch, true);
-      if (request) await reserveRequestRoom(request, upload.id, upload.size ?? 0).catch(rethrow);
+      // Checked again with the reservation below; here so a malformed create cannot take the slot.
+      if (batch?.files[slot]?.size !== upload.size) throw tusError("BAD_REQUEST", "The file changed since the upload started.");
+      // One file per slot of the batch (batches.ts). 400, not 409: tus clients retry 409.
+      const claim = await claimSlot({ batchId, slot }, upload.id, { takeOver: true });
+      if (!claim.ok) throw tusError("BAD_REQUEST", "This file was already uploaded.");
+      if (claim.previous) await discardUpload(datastore, claim.previous, volumeId);
       try {
-        await checkUploadStart(owner, batchId, slot, upload.size, volumeId, upload.id).catch(rethrow);
+        if (request) await reserveRequestRoom(request, upload.id, upload.size ?? 0).catch(rethrow);
+        try {
+          await checkUploadStart(owner, batchId, slot, upload.size, volumeId, upload.id).catch(rethrow);
+        } catch (error) {
+          if (request) await releaseRequestRoom(request.id, upload.id);
+          throw error;
+        }
       } catch (error) {
-        if (request) await releaseRequestRoom(request.id, upload.id);
+        await releaseSlot(upload.id);
         throw error;
       }
       await setUploadOwner(upload.id, owner.id);
@@ -103,7 +127,13 @@ function createServer(volumeId: string, mountPath: string): Server {
       if (!batch) throw tusError("NOT_FOUND", "This upload has expired. Start it again.");
       const { owner, request } = await senderOf(req, batch, false);
       const { requestId } = batch;
+      let placed = false;
       try {
+        // A newer upload of the same file took the slot: this one places nothing.
+        if (!(await beginPlacing(upload.id))) {
+          await datastore.remove(upload.id).catch(() => undefined);
+          throw tusError("NOT_FOUND", "This upload has expired. Start it again.");
+        }
         const modifiedAt = clientModifiedAt(upload.metadata?.[UPLOAD_METADATA.lastModified] ?? undefined, new Date());
         const file = await finalizeUpload(owner, batch, slot, upload.id, modifiedAt).catch(rethrow);
         if (requestId) {
@@ -112,11 +142,14 @@ function createServer(volumeId: string, mountPath: string): Server {
           // The owner hears about it from the worker (grouped, never with the visitor's address).
           await noteRequestArrival({ requestId, owner: owner.name, request: request?.title ?? "", file: { name: file.name, size } });
         }
+        placed = true;
         await forgetUpload(upload.id);
         // A visitor learns only that the file arrived, not where it went.
         const data = requestId ? { name: file.name } : { nodeId: file.nodeId, name: file.name, folderId: file.folderId };
         return { status_code: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ success: true, data }) };
       } finally {
+        // A placed file keeps its slot (the batch cannot place it twice); a refused one frees it for a retry.
+        await (placed ? settleSlot(upload.id) : releaseSlot(upload.id)).catch((error: unknown) => logger.warn("upload slot not released", { error }));
         // Placed (its bytes now count as used) or refused (its chunks are removed): either way no longer pending.
         await releaseSpace(upload.id, owner.id, volumeId).catch((error: unknown) => logger.warn("upload reservation not released", { error }));
         if (requestId) await releaseRequestRoom(requestId, upload.id).catch((error: unknown) => logger.warn("upload reservation not released", { error }));
@@ -137,6 +170,7 @@ function releaseOnTerminate(server: Server, volumeId: string): Server {
       const [accountId, requestId] = await Promise.all([uploadOwner(uploadId), uploadRequest(uploadId)]);
       if (accountId) await releaseSpace(uploadId, accountId, volumeId);
       if (requestId) await releaseRequestRoom(requestId, uploadId);
+      await releaseSlot(uploadId);
       await forgetUpload(uploadId);
     })().catch((error: unknown) => logger.warn("upload reservation not released", { error }));
   });

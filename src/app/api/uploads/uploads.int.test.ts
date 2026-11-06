@@ -21,6 +21,7 @@ import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
+import { reservedBytes } from "@/server/upload/reservations";
 import { randomTestIp } from "../../../../test/file-fixtures";
 import { callRoute } from "../../../../test/route-call";
 
@@ -347,4 +348,74 @@ describe("uploads", () => {
     expect((await upload(s, "root", [{ rel: "b.txt", content: "1234" }])).sent[0]!.status).toBe(200);
     expect((await upload(s, "root", [{ rel: "c.txt", content: "1" }])).status).toBe(507);
   });
+
+  it("places one file per batch slot: once it is placed, later uploads for the slot are refused", async () => {
+    const s = await member();
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "empty.txt", size: 0 }] } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+    const meta = `batch ${b64(plan.batchId)},index ${b64("0")},filename ${b64("empty.txt")}`;
+    // A zero-length upload finishes with its POST.
+    const first = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "0", "upload-metadata": meta });
+    expect(first.status).toBe(200);
+    for (let i = 0; i < 3; i += 1) {
+      const again = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "0", "upload-metadata": meta });
+      expect([again.status, await again.text()]).toEqual([400, "This file was already uploaded."]);
+    }
+    expect(await prisma.node.count({ where: { accountId: s.id, name: { startsWith: "empty" } } })).toBe(1);
+  });
+
+  it("frees a slot when its upload is cancelled or refused, so the file can be sent again", async () => {
+    const s = await member();
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "again.txt", size: 5 }] } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+    const meta = `batch ${b64(plan.batchId)},index ${b64("0")},filename ${b64("again.txt")}`;
+    const created = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "5", "upload-metadata": meta });
+    const id = created.headers.get("location")!.split("/").pop()!;
+    expect((await tusCall("DELETE", `${plan.endpoint}/${id}`, s.cookie, {})).status).toBe(204);
+    await expect.poll(async () => (await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "5", "upload-metadata": meta })).status).toBe(201);
+    // A size the batch did not plan is refused before it can take the slot.
+    const other = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "sized.txt", size: 3 }] } });
+    if (other.json.data.kind !== "ready") throw new Error("expected a ready plan");
+    const sized = `batch ${b64(other.json.data.batchId)},index ${b64("0")},filename ${b64("sized.txt")}`;
+    expect((await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "9", "upload-metadata": sized })).status).toBe(400);
+    expect((await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "3", "upload-metadata": sized })).status).toBe(201);
+  });
+
+  it("lets a retried create take over the slot and discards the earlier upload", async () => {
+    const s = await member();
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "retry.txt", size: 5 }] } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+    const meta = `batch ${b64(plan.batchId)},index ${b64("0")},filename ${b64("retry.txt")}`;
+    // The first create's answer is lost (connection dropped); the client creates again.
+    const lost = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "5", "upload-metadata": meta });
+    const lostId = lost.headers.get("location")!.split("/").pop()!;
+    const retried = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "5", "upload-metadata": meta });
+    expect(retried.status).toBe(201);
+    const retriedId = retried.headers.get("location")!.split("/").pop()!;
+    // Only the newer upload's space stays reserved, and the earlier one is gone.
+    expect(await reservedBytes({ kind: "account", id: s.id })).toBe(5n);
+    expect((await tusCall("PATCH", `${plan.endpoint}/${lostId}`, s.cookie, { "upload-offset": "0", "content-type": "application/offset+octet-stream" }, Buffer.from("first"))).status).toBe(404);
+    const done = await tusCall("PATCH", `${plan.endpoint}/${retriedId}`, s.cookie, { "upload-offset": "0", "content-type": "application/offset+octet-stream" }, Buffer.from("hello"));
+    expect(done.status).toBe(200);
+    expect(await prisma.node.count({ where: { accountId: s.id, name: { startsWith: "retry" } } })).toBe(1);
+  });
+
+  it("places nothing for an upload whose slot was taken over meanwhile", async () => {
+    const s = await member();
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "race.txt", size: 4 }] } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+    const meta = `batch ${b64(plan.batchId)},index ${b64("0")},filename ${b64("race.txt")}`;
+    const first = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "4", "upload-metadata": meta });
+    const firstId = first.headers.get("location")!.split("/").pop()!;
+    // Half of the bytes arrive, then a second upload of the file takes the slot.
+    expect((await tusCall("PATCH", `${plan.endpoint}/${firstId}`, s.cookie, { "upload-offset": "0", "content-type": "application/offset+octet-stream" }, Buffer.from("ra"))).status).toBe(204);
+    expect((await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "4", "upload-metadata": meta })).status).toBe(201);
+    expect((await tusCall("PATCH", `${plan.endpoint}/${firstId}`, s.cookie, { "upload-offset": "2", "content-type": "application/offset+octet-stream" }, Buffer.from("ce"))).status).toBe(404);
+    expect(await prisma.node.count({ where: { accountId: s.id, name: { startsWith: "race" } } })).toBe(0);
+  });
 });
+

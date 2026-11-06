@@ -8,12 +8,21 @@ export const MAX_NAME_BYTES = 255;
 
 const utf8Length = (value: string) => new TextEncoder().encode(value).length;
 
+/** C0 and C1 control characters (NUL, line breaks, escape, ...): invisible in lists, unsafe in headers and logs. */
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
+/**
+ * Bidirectional embedding, override and isolate marks: they reorder what is shown, so
+ * "invoice\u202Efdp.exe" would read as "invoiceexe.pdf" and hide the real extension.
+ */
+const BIDI_CONTROLS = /[\u202a-\u202e\u2066-\u2069]/;
+
 /** Returns a user-facing error for an invalid name, or "" when the name is valid. */
 export function nameError(name: string): string {
   if (!name || name.length === 0) return "Name can't be empty.";
   if (name === "." || name === "..") return `"${name}" is reserved by the file system.`;
   if (name.includes("/")) return 'Name can\'t contain "/".';
-  if (name.includes("\0")) return "Name can't contain null characters.";
+  if (CONTROL_CHARACTERS.test(name)) return "Name can't contain control characters.";
+  if (BIDI_CONTROLS.test(name)) return "Name can't contain text direction marks.";
   if (/^\s|\s$/.test(name)) return "Name can't start or end with a space.";
   const bytes = utf8Length(name);
   if (bytes > MAX_NAME_BYTES) return `Name is too long (${bytes} / ${MAX_NAME_BYTES} bytes).`;
