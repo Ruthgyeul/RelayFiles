@@ -16,9 +16,9 @@ import type { NodeRow } from "../repositories/node.repo";
 import { isRetiredLink } from "../repositories/link-tombstone.repo";
 import type { ChildStats } from "../repositories/node-tree.repo";
 import { findByLinkId, publicChildren, publicChildStats, publicTree, publicTreeSize, sharedChain, type ChainRow, type SharedRow } from "../repositories/share.repo";
-import { countInWindow, redis } from "../redis";
 import { busyLevels } from "./busy";
 import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "./unlock-cookie";
+import { countUnlockGuess, refundUnlockGuess } from "./unlock-limit";
 
 /** Who is looking at a share link. */
 export interface ShareViewer {
@@ -394,18 +394,14 @@ export async function unlockShare(linkId: string, password: string, viewer: Shar
 
   // Guesses count against each password still needed (the item holding it, not the link
   // used), so links to different items under the same locked folder share one budget.
-  const keyOf = (row: ChainRow) => `unlock:${row.id}:${client.ipKey}`;
-  const attempts = await Promise.all(locked.map((row) => countInWindow(keyOf(row), SHARE.unlockWindowSec)));
-  const worst = attempts.indexOf(Math.max(...attempts));
-  if (attempts[worst]! > SHARE.unlockMaxAttempts) {
-    throw new ApiError("RATE_LIMITED", "Too many wrong passwords. Try again later.", { retryAfter: Math.max(1, await redis().ttl(keyOf(locked[worst]!))) });
-  }
+  const counted = new Map<string, string[]>();
+  for (const row of locked) counted.set(row.id, await countUnlockGuess(row.id, client));
   const matching: ChainRow[] = [];
   for (const row of locked) if (await verify(row.passwordHash!, password)) matching.push(row);
   if (matching.length === 0) throw new ApiError("FORBIDDEN", "Wrong password");
   // A right password gives back only this attempt, on the items it opened: knowing one
   // password does not reset the guesses made at another (as with sign-in, refundTokenAttempt).
-  await Promise.all(matching.map((row) => redis().decr(keyOf(row))));
+  await Promise.all(matching.map((row) => refundUnlockGuess(counted.get(row.id) ?? [])));
   return unlocksWith(
     viewer.unlocks,
     matching.map((row) => ({ linkId: row.linkId, passwordHash: row.passwordHash })),

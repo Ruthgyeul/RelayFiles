@@ -13,6 +13,7 @@ import { UNLOCK_COOKIE } from "@/server/share/unlock-cookie";
 import { callRoute } from "../../../../test/route-call";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
 import { db } from "@/server/db/client";
+import { SHARE } from "@/config/policy";
 
 const { prisma, member, addFile, cleanup } = fileFixtures();
 
@@ -114,6 +115,17 @@ describe("upload-only links", () => {
     const stranger: Visitor = { ip: randomTestIp() };
     expect((await start(plan, stranger, 0, "a.txt", 1)).created.status).toBe(401);
     expect((await send(plan, visitor, 0, "a.txt", "x")).status).toBe(200);
+  });
+
+  it("shares the password guess budget across the addresses of a network", async () => {
+    const m = await member();
+    const request = await requestFor(m, { password: "letmein" });
+    const net = `203.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+    for (let attempt = 0; attempt < SHARE.unlockNetworkMaxAttempts; attempt++) {
+      expect((await visit(unlock, request.id, { ip: `${net}.${attempt % 250}` }, { password: "wrong" })).status).toBe(403);
+    }
+    expect((await visit(unlock, request.id, { ip: `${net}.251` }, { password: "letmein" })).status).toBe(429);
+    expect((await visit(unlock, request.id, { ip: randomTestIp() }, { password: "letmein" })).status).toBe(200);
   });
 
   it("keeps to its file count even when uploads start together", async () => {

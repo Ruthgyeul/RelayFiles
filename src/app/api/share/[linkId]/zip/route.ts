@@ -12,5 +12,5 @@ export const GET = apiHandler<Response, { linkId: string }>(async ({ req, params
 
 /** Whether the zip would be served (busy, stream-only, …) without counting a download. */
 export const HEAD = apiHandler<Response, { linkId: string }>(async ({ req, params }) =>
-  checkSharedFolder(linkIdSchema.parse(params.linkId), nodeIdSchema.parse(req.nextUrl.searchParams.get("folder")), await shareViewerOf(req, Date.now())),
+  checkSharedFolder(linkIdSchema.parse(params.linkId), nodeIdSchema.parse(req.nextUrl.searchParams.get("folder")), await shareViewerOf(req, Date.now()), clientInfo(req.headers)),
 );

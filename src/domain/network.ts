@@ -91,6 +91,27 @@ export function rateLimitSubject(ip: string): string {
   return `${groups.slice(0, IPV6_SUBJECT_GROUPS).map((group) => group.toString(16)).join(":")}::/64`;
 }
 
+/** Groups in the /48 an IPv6 site is usually given, and IPv4 octets in a /24. */
+const IPV6_NETWORK_GROUPS = 3;
+const IPV4_NETWORK_OCTETS = 3;
+
+/**
+ * The network around an address, for limits that a whole range shares (password guesses on
+ * one link): an IPv4 address counts as its /24, an IPv6 address as its /48, so a visitor
+ * holding many addresses of one provider block still has one budget. Text that is not an
+ * address is returned as it is.
+ */
+export function rateLimitNetwork(ip: string): string {
+  const v4 = IPV4_MAPPED.exec(ip)?.[1] ?? (ip.includes(":") ? null : ip);
+  if (v4 !== null) {
+    if (ipv4ToInt(v4) === null) return v4;
+    return `${v4.split(".").slice(0, IPV4_NETWORK_OCTETS).join(".")}.0/24`;
+  }
+  const groups = ipv6Groups(ip);
+  if (!groups) return ip;
+  return `${groups.slice(0, IPV6_NETWORK_GROUPS).map((group) => group.toString(16)).join(":")}::/48`;
+}
+
 /** Longest address accepted from a header (IPv6 with zone id fits easily). */
 const MAX_IP_LENGTH = 64;
 
