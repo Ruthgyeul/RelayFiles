@@ -70,7 +70,7 @@ spec:
           env:
             - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: relayfiles-env, key: REDIS_PASSWORD } } }
             - { name: REDISCLI_AUTH, valueFrom: { secretKeyRef: { name: relayfiles-env, key: REDIS_PASSWORD } } }
-          args: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)", "--appendonly", "yes", "--appendfsync", "everysec"]
+          args: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory", "${REDIS_MAXMEMORY_MB}mb", "--maxmemory-policy", "noeviction"]
           ports: [{ containerPort: 6379 }]
           readinessProbe:
             exec: { command: ["sh", "-c", "redis-cli ping | grep PONG"] }

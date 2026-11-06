@@ -55,6 +55,10 @@ describe("parseEnvGroup", () => {
     expect(parseEnvGroup("secrets", SECRETS).TOKEN_ENC_KEY).toBe(SECRETS.TOKEN_ENC_KEY);
     expect(() => parseEnvGroup("secrets", { ...SECRETS, TOKEN_ENC_KEY: "short" })).toThrow(/TOKEN_ENC_KEY/);
     expect(() => parseEnvGroup("secrets", { ...SECRETS, COOKIE_SECRET: "x" })).toThrow(/COOKIE_SECRET/);
+    // A previous key equal to the current one is a rotation that did not happen.
+    expect(() => parseEnvGroup("secrets", { ...SECRETS, COOKIE_SECRET_PREVIOUS: SECRETS.COOKIE_SECRET })).toThrow(/COOKIE_SECRET_PREVIOUS: must differ from COOKIE_SECRET/);
+    expect(() => parseEnvGroup("secrets", { ...SECRETS, TOKEN_ENC_KEY_PREVIOUS: SECRETS.TOKEN_ENC_KEY })).toThrow(/TOKEN_ENC_KEY_PREVIOUS/);
+    expect(parseEnvGroup("secrets", { ...SECRETS, TOKEN_HMAC_KEY_PREVIOUS: "p".repeat(32) }).TOKEN_HMAC_KEY_PREVIOUS).toBe("p".repeat(32));
   });
 
   it("parses the lockout ladder", () => {

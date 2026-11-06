@@ -195,12 +195,14 @@ PGPASSWORD='<POSTGRES_PASSWORD>' psql -h 127.0.0.1 -U relayfiles -d relayfiles -
 
 `password authentication failed`가 나면 비밀번호가 `.env`와 다르다(`sudo -u postgres psql -c "ALTER USER relayfiles PASSWORD '…';"`). `Connection refused`면 16 클러스터의 포트를 `pg_lsclusters`로 확인한다.
 
-Redis: `/etc/redis/redis.conf`에서 아래 세 줄을 확인하거나 고친다.
+Redis: `/etc/redis/redis.conf`에서 아래 줄을 확인하거나 고친다.
 
 ```conf
 bind 127.0.0.1 -::1
 requirepass <.env의 REDIS_PASSWORD>
 appendonly yes
+maxmemory 256mb
+maxmemory-policy noeviction
 ```
 
 | 설정 | 이유 |
@@ -208,6 +210,7 @@ appendonly yes
 | `bind 127.0.0.1 -::1` | 루프백에서만 받는다 |
 | `requirepass` | 같은 서버의 다른 프로세스도 비밀번호 없이 못 쓴다 |
 | `appendonly yes` | 재시작해도 작업 큐와 로그인 잠금 카운터가 남는다 |
+| `maxmemory 256mb` + `noeviction` | 메모리 상한(Docker·k3s의 `REDIS_MAXMEMORY_MB`와 같다). 가득 차면 쓰기를 거부해 오류가 드러난다. 다른 정책은 작업 큐·업로드 예약·로그인 잠금을 조용히 지운다 |
 | `maxmemory-policy noeviction` (기본값) | 작업 큐(BullMQ)에 필요하다. 바꾸지 않는다 |
 
 ```bash

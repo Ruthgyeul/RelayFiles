@@ -635,6 +635,12 @@ export const SETTINGS = {
 } as const;
 
 /** Defaults of the Nginx request limits (deploy env NGINX_*; both Nginx templates use them). */
+/** Redis as the deployment files start it (docker compose, k3s). */
+export const REDIS_SERVER = {
+  /** Default for REDIS_MAXMEMORY_MB: queues, limits and reservations take a few MB on this server. */
+  maxMemoryMb: 256,
+} as const;
+
 export const NGINX = {
   /** Largest request body; tus chunks (UPLOAD_CHUNK_SIZE_MB, at most 95) must fit. */
   maxBodyMb: 100,
@@ -644,6 +650,9 @@ export const NGINX = {
   /** Upload preparations per client address per minute, and the burst allowed above it. */
   uploadRatePerMin: 60,
   uploadBurst: 30,
+  /** New tus uploads (one per file) per address: a folder of small files sends many in a row. */
+  tusRatePerMin: 600,
+  tusBurst: 120,
   /**
    * Personal API token requests (/api/v1/, /metrics) per client address per minute, and the burst:
    * one token's own limit (API.requestsPerMinute), enforced before argon2 checks the token.

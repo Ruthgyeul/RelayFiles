@@ -44,8 +44,8 @@ export interface RunnerOptions {
 const RETRY_DELAYS_MS = [0, 1_000, 3_000, 5_000, 10_000];
 const HTTP_CLIENT_ERROR = 400;
 const HTTP_SERVER_ERROR = 500;
-/** Statuses tus treats as temporary (offset conflict, locked). */
-const RETRYABLE_CLIENT_STATUSES = new Set([409, 423]);
+/** Statuses tus treats as temporary (offset conflict, locked), and the proxy's rate limit (Retry-After). */
+const RETRYABLE_CLIENT_STATUSES = new Set([409, 423, 429]);
 
 function statusOf(error: Error): number | null {
   return error instanceof DetailedError ? (error.originalResponse?.getStatus() ?? null) : null;
