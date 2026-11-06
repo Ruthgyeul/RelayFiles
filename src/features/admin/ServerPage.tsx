@@ -70,9 +70,9 @@ export function ServerPage({ settings, snapshot }: { settings: ServerSettings; s
             return null;
           })
         }
-        onGenerate={() =>
+        onGenerate={(limits) =>
           void run(async () => {
-            await settingsApi.newInvite();
+            await settingsApi.newInvite(limits);
             return null;
           })
         }

@@ -1,10 +1,11 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { SETTINGS } from "@/config/policy";
+import { MS, SETTINGS } from "@/config/policy";
+import { inviteStatus } from "@/domain/admin";
 import { getAppEnv } from "@/config/env";
 import { isThemeKey, type ThemeKey } from "@/config/theme";
 import type { SignupMode } from "@/contracts/auth";
-import type { AnnouncementDto, AnnouncementLevel, ServerSettings } from "@/contracts/server-settings";
+import type { AnnouncementDto, AnnouncementLevel, CreateInviteInput, ServerSettings } from "@/contracts/server-settings";
 import { newInviteCode } from "@/domain/ids";
 import { cached, invalidate } from "../cache/cached";
 import { db } from "../db/client";
@@ -38,13 +39,21 @@ export async function currentTheme(): Promise<ThemeKey> {
   }
 }
 
-export async function serverSettings(): Promise<ServerSettings> {
+export async function serverSettings(now: number = Date.now()): Promise<ServerSettings> {
   const [config, announcement, invites] = await Promise.all([getServerConfig(db()), latestAnnouncement(db()), listInvites(db())]);
   return {
     signupMode: config.signupMode.toLowerCase() as SignupMode,
     theme: config.theme && isThemeKey(config.theme) ? config.theme : getAppEnv().DEFAULT_THEME,
     announcement: announcement ? toAnnouncement(announcement) : null,
-    invites: invites.map((invite) => ({ code: invite.code, createdAt: invite.createdAt.toISOString(), usedBy: invite.usedByName })),
+    invites: invites.map((invite) => ({
+      code: invite.code,
+      createdAt: invite.createdAt.toISOString(),
+      usedBy: invite.usedByName,
+      uses: invite.uses,
+      maxUses: invite.maxUses,
+      expiresAt: invite.expiresAt?.toISOString() ?? null,
+      status: inviteStatus({ uses: invite.uses, maxUses: invite.maxUses, expiresAt: invite.expiresAt?.getTime() ?? null }, now),
+    })),
   };
 }
 
@@ -77,16 +86,17 @@ export async function takeDownAnnouncement(): Promise<void> {
   await takeDownAnnouncements(db());
 }
 
-/** A new one-time invite code (XXXX-XXXX). */
-export async function generateInvite(): Promise<string> {
+/** A new invite code (XXXX-XXXX) for `maxUses` accounts, valid for `expiresInDays` (null: no expiry). */
+export async function generateInvite(limits: CreateInviteInput, now: Date = new Date()): Promise<string> {
+  const expiresAt = limits.expiresInDays === null ? null : new Date(now.getTime() + limits.expiresInDays * MS.day);
   // A code that is already taken is drawn again.
   return retryOnUniqueViolation(async () => {
     const code = newInviteCode();
-    await createInvite(db(), code);
+    await createInvite(db(), code, { maxUses: limits.maxUses, expiresAt });
     return code;
   });
 }
 
 export async function revokeInviteCode(code: string): Promise<void> {
-  if (!(await revokeInvite(db(), code))) throw new ApiError("NOT_FOUND");
+  if (!(await revokeInvite(db(), code, new Date()))) throw new ApiError("NOT_FOUND");
 }
