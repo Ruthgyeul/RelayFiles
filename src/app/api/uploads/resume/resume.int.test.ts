@@ -146,4 +146,25 @@ describe("resuming an upload after a reload", () => {
     expect((await claim(s, changed.batchId, 0, "f".repeat(32))).status).toBe(404);
     expect((await claim(s, changed.batchId, 0, "not-an-upload")).status).toBe(400);
   });
+
+  it("gives the new batch's slot to the resumed upload, and never resumes into a slot another upload holds", async () => {
+    const s = await member();
+    const first = await plan(s, "root", [{ rel: "movie.bin", size: content.length }]);
+    const uploadId = await startFile(s, first, 0, "movie.bin", content, 6);
+    const again = await plan(s, "root", [{ rel: "movie.bin", size: content.length }]);
+    expect((await claim(s, again.batchId, 0, uploadId)).status).toBe(200);
+    // A fresh upload of the file in that batch replaces the resumed one (the client started over).
+    const fresh = await tusCall("POST", again.endpoint, s.cookie, {
+      "upload-length": String(content.length),
+      "upload-metadata": `batch ${b64(again.batchId)},index ${b64("0")},filename ${b64("movie.bin")}`,
+    });
+    expect(fresh.status).toBe(201);
+    expect((await tusCall("HEAD", `${again.endpoint}/${uploadId}`, s.cookie, {})).status).toBe(404);
+    // And a slot a fresh upload holds cannot be resumed into.
+    const third = await plan(s, "root", [{ rel: "movie.bin", size: content.length }]);
+    await startFile(s, third, 0, "movie.bin", content, 2);
+    const fourth = await plan(s, "root", [{ rel: "movie.bin", size: content.length }]);
+    const unfinished = await startFile(s, fourth, 0, "movie.bin", content, 2);
+    expect((await claim(s, third.batchId, 0, unfinished)).status).toBe(404);
+  });
 });

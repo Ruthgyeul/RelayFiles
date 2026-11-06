@@ -207,6 +207,9 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
   const sha256 = await sha256Of(createReadStream(tempPath));
   const existing = await findChildByName(db(), folder.id, fileName);
   const replace = batch.dup === "replace" && existing?.type === "FILE" ? existing : null;
+  // Checked when the batch was prepared too; again here, as files of other batches may have
+  // arrived since (a replacement adds no item).
+  if (!replace) await assertItemRoom(owner, 1);
   const name = existing && !replace ? uniqName(await listSiblingNames(db(), folder.id), fileName, true) : fileName;
   const location = { accountId: owner.id, segments: [...folder.segments, name] };
   // The same bytes already in the account: link to them instead of keeping a second copy.

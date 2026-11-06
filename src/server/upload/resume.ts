@@ -6,7 +6,7 @@ import { findVolume } from "../repositories/volume.repo";
 import { reserveSpace, type SpaceOwner } from "../services/space.service";
 import { assertAccountWritable } from "../services/volume.service";
 import { driverFor } from "../storage/registry";
-import { loadBatch, reboundSlot, rebindUpload, setUploadOwner, uploadOwner, uploadRequest } from "./batches";
+import { claimSlot, loadBatch, reboundSlot, rebindUpload, releaseSlot, setUploadOwner, uploadOwner, uploadRequest } from "./batches";
 import { liveReservations } from "./reservations";
 import { storedUpload } from "./tus";
 
@@ -37,7 +37,14 @@ export async function resumeUpload(owner: SpaceOwner, input: ResumeUploadInput):
   const stored = await storedUpload(volume, uploadId);
   if (!stored || stored.size !== entry.size || stored.offset >= stored.size || stored.fileName !== fileNameOf(entry.rel)) throw new ApiError("NOT_FOUND");
 
-  await reserveSpace(owner, uploadId, entry.size, { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
+  // The new batch's slot goes to this upload; a fresh upload for the same file is then refused.
+  if (!(await claimSlot({ batchId, slot }, uploadId, { takeOver: false })).ok) throw new ApiError("NOT_FOUND");
+  try {
+    await reserveSpace(owner, uploadId, entry.size, { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
+  } catch (error) {
+    await releaseSlot(uploadId);
+    throw error;
+  }
   await setUploadOwner(uploadId, owner.id);
   await rebindUpload(uploadId, { batchId, slot });
   return { offset: stored.offset };
