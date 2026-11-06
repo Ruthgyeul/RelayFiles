@@ -238,7 +238,9 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       size: BigInt(entry.size),
       sha256,
       modifiedAt,
-      ...(replace ? carriedSettingsOf(replace) : { linkId: newLinkId() }),
+      // Files a visitor sent through an upload-only link stay private until the owner shares
+      // them: in a public folder they would otherwise be published at once, from the owner's site.
+      ...(replace ? carriedSettingsOf(replace) : { linkId: newLinkId(), ...(batch.requestId ? { visibility: "PRIVATE" as const } : {}) }),
     });
     if (replace) {
       await moveLinkEvents(tx, replace.id, placed.id);

@@ -22,7 +22,7 @@ test("uploads from Home into a new folder and shows its link", async ({ page }) 
   await expect(panel.getByText("COMPLETE")).toBeVisible();
   await expect(panel.getByText(/1 file · 11 B · in 0:0\d · uploaded/)).toBeVisible();
   await expect(page.getByText("holiday is ready")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Last upload" }).getByText(/\/d\/[a-z0-9]{10}$/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Last upload" }).getByText(/\/d\/[a-z0-9]{16}$/)).toBeVisible();
 
   await panel.getByRole("button", { name: "Close transfers" }).click();
   await expect(page.getByRole("button", { name: "Transfers · 1" })).toBeVisible();
