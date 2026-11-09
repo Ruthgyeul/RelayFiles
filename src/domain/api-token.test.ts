@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { apiTokenIdOf, bearerToken, hasScope, tokenExpired } from "./api-token";
+import { API, MS } from "@/config/policy";
+import { apiTokenIdOf, bearerToken, hasScope, tokenExpired, tokenHealth, tokenHealthText } from "./api-token";
 import { newAccountToken, newApiToken, newApiTokenId } from "./ids";
 
 describe("personal API tokens", () => {
@@ -24,5 +25,40 @@ describe("personal API tokens", () => {
     expect(tokenExpired(null, 5)).toBe(false);
     expect(tokenExpired(10, 5)).toBe(false);
     expect(tokenExpired(5, 5)).toBe(true);
+  });
+});
+
+describe("tokenHealth", () => {
+  const now = 1_000 * MS.day;
+  const days = (n: number) => n * MS.day;
+
+  it("flags tokens that expire within the warning window, or already expired", () => {
+    const base = { createdAt: now - days(1), lastUsedAt: now };
+    expect(tokenHealth({ ...base, expiresAt: now + days(API.expiringWarnDays) }, now)).toBe("expiring");
+    expect(tokenHealth({ ...base, expiresAt: now - 1 }, now)).toBe("expiring");
+    expect(tokenHealth({ ...base, expiresAt: now + days(API.expiringWarnDays) + 1 }, now)).toBe("ok");
+    expect(tokenHealth({ ...base, expiresAt: null }, now)).toBe("ok");
+  });
+
+  it("flags tokens not used for staleAfterDays", () => {
+    const base = { createdAt: now - days(400), expiresAt: null };
+    expect(tokenHealth({ ...base, lastUsedAt: now - days(API.staleAfterDays) }, now)).toBe("stale");
+    expect(tokenHealth({ ...base, lastUsedAt: now - days(API.staleAfterDays) + 1 }, now)).toBe("ok");
+  });
+
+  it("flags tokens never used unusedAfterDays after creation", () => {
+    expect(tokenHealth({ createdAt: now - days(API.unusedAfterDays), lastUsedAt: null, expiresAt: null }, now)).toBe("unused");
+    expect(tokenHealth({ createdAt: now - days(API.unusedAfterDays) + 1, lastUsedAt: null, expiresAt: null }, now)).toBe("ok");
+  });
+
+  it("puts expiry before the other warnings", () => {
+    expect(tokenHealth({ createdAt: now - days(400), lastUsedAt: null, expiresAt: now + 1 }, now)).toBe("expiring");
+  });
+
+  it("describes each warning", () => {
+    expect(tokenHealthText("ok")).toBeNull();
+    expect(tokenHealthText("expiring")).toBe("Expires soon");
+    expect(tokenHealthText("stale")).toBe(`Not used for ${API.staleAfterDays} days`);
+    expect(tokenHealthText("unused")).toBe("Never used");
   });
 });
