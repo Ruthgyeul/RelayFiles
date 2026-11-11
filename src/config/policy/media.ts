@@ -21,6 +21,10 @@ export const MEDIA = {
   videoFrameSeconds: 1,
   /** Images larger than this get no metadata-stripped copy (held in memory while stripping). */
   maxStripBytes: 200_000_000,
+  /** Largest video the worker copies without its metadata for share links (the copy takes as much disk again). */
+  maxVideoStripBytes: 20_000_000_000,
+  /** Time allowed per GB of video for that copy (streams are copied, not re-encoded), on top of ffmpegTimeoutSec. */
+  videoStripSecPerGb: 60,
   /** Largest image (in pixels) the thumbnailer decodes; stops decompression bombs. */
   maxInputPixels: 268_402_689,
   /** ffmpeg gives up after this long. */

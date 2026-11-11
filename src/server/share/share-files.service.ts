@@ -21,6 +21,7 @@ import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
 import { canStripType } from "../media/process";
+import { copySatisfies, shareStripMode } from "../media/strip-mode";
 import { transcodeResponse } from "../media/transcode";
 import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
 import { findAccountById, type AccountRow } from "../repositories/account.repo";
@@ -55,13 +56,16 @@ async function ownerOf(link: LoadedLink): Promise<AccountRow> {
   return owner;
 }
 
-const stripsImage = (owner: AccountRow, row: Pick<SharedRow, "kind">) => owner.stripMetadataOnShare && row.kind === "IMAGE";
+/** Whether visitors get this photo or video as the worker's copy without metadata (SHARE_METADATA_STRIP and the owner's setting). */
+const stripsMedia = (owner: AccountRow, row: Pick<SharedRow, "kind">) => owner.stripMetadataOnShare && shareStripMode() !== "none" && (row.kind === "IMAGE" || row.kind === "VIDEO");
 
-/** Why a photo that must be sent without metadata cannot be sent now, or null when its clean copy exists. */
-function publicImageBlock(row: Pick<SharedRow, "hasDerived" | "stripFailed" | "mime" | "name">): "location" | "not-ready" | null {
-  if (row.hasDerived) return null;
+/** Why a photo or video that must be sent without metadata cannot be sent now, or null when its clean copy exists. */
+function publicImageBlock(row: Pick<SharedRow, "kind" | "hasDerived" | "stripFailed" | "derivedMode" | "mime" | "name">): "location" | "not-ready" | null {
+  const mode = shareStripMode();
+  // A copy made in a mode that kept more than is now wanted waits for a new one (503, queued again).
+  if (row.hasDerived && mode !== "none" && copySatisfies(row.derivedMode, mode)) return null;
   // A type the worker cannot clean, or a file it failed on (undecodable, too large): never sent as is.
-  if (row.stripFailed || !canStripType(row.mime ?? mimeFromName(row.name))) return "location";
+  if (row.stripFailed || !canStripType(row.mime ?? mimeFromName(row.name), row.kind === "VIDEO" ? "VIDEO" : "IMAGE")) return "location";
   return "not-ready";
 }
 
@@ -132,7 +136,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   const owner = await ownerOf(link);
   const driver = await driverForAccount(owner);
   const location = { accountId: owner.id, segments: file.segments };
-  const body = stripsImage(owner, row) ? await publicImage(driver, location, row) : undefined;
+  const body = stripsMedia(owner, row) ? await publicImage(driver, location, row) : undefined;
   const size = body ? body.size : Number(row.size);
   const etag = row.sha256 ? `${row.sha256}${body ? "-public" : ""}` : null;
   // What this response will cover, as sendFile and Nginx (X-Accel) decide it: Range, unless a
@@ -249,8 +253,8 @@ const SKIP_REASONS: Record<ZipSkip, string> = {
   "stream-only": "Stream only",
   limit: "Download limit reached",
   paused: "Downloads paused",
-  location: "Photo type that can't be shared without its location data",
-  "not-ready": "Photo still being prepared for sharing, try again in a moment",
+  location: "Photo or video that can't be shared without its location data",
+  "not-ready": "Photo or video still being prepared for sharing, try again in a moment",
 };
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
@@ -265,7 +269,7 @@ function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolde
       folders.push(name);
       continue;
     }
-    const imageBlock = stripsImage(owner, row) ? publicImageBlock(row) : null;
+    const imageBlock = stripsMedia(owner, row) ? publicImageBlock(row) : null;
     // A folder inside with its own download limit counts for the files below it, as when they
     // are downloaded one by one: once it has none left, its files stay out.
     const innerBlock = (inner.get(row.id) ?? []).some(downloadsUsedUp) ? "limit" : null;
@@ -334,7 +338,7 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
     const row = file.row;
     entries.push({
       name: file.name,
-      open: stripsImage(owner, row) ? async () => (await publicImage(driver, location, row)).open() : () => driver.createReadStream(location),
+      open: stripsMedia(owner, row) ? async () => (await publicImage(driver, location, row)).open() : () => driver.createReadStream(location),
     });
   }
   if (skipped.length > 0) entries.push({ name: `${folder.name}/Not included.txt`, open: async () => Readable.from([Buffer.from(skippedNote(skipped))]) });

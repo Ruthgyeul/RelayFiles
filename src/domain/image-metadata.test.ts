@@ -1,5 +1,8 @@
+import { crc32 as zlibCrc32 } from "node:zlib";
 import { describe, expect, it } from "vitest";
+import { exifPhoto } from "../../test/exif-fixture";
 import { exifOrientation, stripImageMetadata } from "./image-metadata";
+import { exifDateTaken } from "./media-date";
 
 const text = (value: string) => [...value].map((char) => char.charCodeAt(0));
 const has = (bytes: Uint8Array, value: string) => Buffer.from(bytes).includes(Buffer.from(value));
@@ -121,5 +124,75 @@ describe("stripImageMetadata · WebP", () => {
 
   it("returns null for other types", () => {
     expect(stripImageMetadata(Uint8Array.from([1, 2, 3]), "image/gif")).toBeNull();
+  });
+});
+
+/** The TIFF block inside the first APP1 Exif segment of a JPEG, or null. */
+function jpegExif(bytes: Uint8Array): Uint8Array | null {
+  let at = 2;
+  while (at + 4 < bytes.length && bytes[at] === 0xff) {
+    const marker = bytes[at + 1]!;
+    const length = (bytes[at + 2]! << 8) | bytes[at + 3]!;
+    if (marker === 0xe1 && has(bytes.subarray(at + 4, at + 10), "Exif")) return bytes.subarray(at + 10, at + 2 + length);
+    if (marker === 0xda) return null;
+    at += 2 + length;
+  }
+  return null;
+}
+
+describe("stripImageMetadata · sensitive mode", () => {
+  const camera = [...exifPhoto(true)];
+
+  it("JPEG: keeps the capture time and camera, drops location, names and other segments", () => {
+    const source = jpeg();
+    // Replace the fixture's minimal Exif with a camera's full one.
+    const full = Uint8Array.from([0xff, 0xd8, ...segment(0xe1, [...text("Exif\0\0"), ...camera]), ...source.subarray(2)]);
+    const out = stripImageMetadata(full, "image/jpeg", "sensitive")!;
+    expect(exifDateTaken(jpegExif(out)!)).toEqual({ local: "2024-05-01T13:22:10", offset: "+09:00" });
+    for (const dropped of ["37.5665", "Jaeah", "SERIAL", "Seoul", "IPTC city", "Photographer"]) expect(has(out, dropped)).toBe(false);
+    expect(has(out, "iPhone 17 Pro")).toBe(true);
+    // "all" keeps no date.
+    expect(exifDateTaken(jpegExif(stripImageMetadata(full, "image/jpeg", "all")!) ?? new Uint8Array())).toBeNull();
+  });
+
+  it("PNG: rewrites eXIf with its CRC and drops text chunks", () => {
+    const png = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ...pngChunk("IHDR", Array.from({ length: 13 }, () => 0)),
+      ...pngChunk("tEXt", text("Author\0Photographer")),
+      ...pngChunk("eXIf", camera),
+      ...pngChunk("IDAT", [1, 2, 3]),
+      ...pngChunk("IEND", []),
+    ]);
+    const out = stripImageMetadata(png, "image/png", "sensitive")!;
+    const at = Buffer.from(out).indexOf("eXIf");
+    const length = new DataView(out.buffer, out.byteOffset).getUint32(at - 4);
+    const data = out.subarray(at + 4, at + 4 + length);
+    expect(exifDateTaken(data)).toEqual({ local: "2024-05-01T13:22:10", offset: "+09:00" });
+    expect(has(out, "37.5665")).toBe(false);
+    expect(has(out, "Photographer")).toBe(false);
+    const crc = new DataView(out.buffer, out.byteOffset).getUint32(at + 4 + length);
+    // A real CRC over type and data (the fixture's own chunks carry a dummy one).
+    expect(crc).toBe(zlibCrc32(out.subarray(at, at + 4 + length)));
+  });
+
+  it("WebP: keeps a filtered EXIF chunk at the end and sets its VP8X flag", () => {
+    const body = [
+      ...text("WEBP"),
+      ...riffChunk("VP8X", [0x0c, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+      ...riffChunk("VP8 ", [9, 9, 9]),
+      ...riffChunk("EXIF", [...text("Exif\0\0"), ...camera]),
+      ...riffChunk("XMP ", text("<xmp>Seoul</xmp>")),
+    ];
+    const webp = Uint8Array.from([...text("RIFF"), body.length & 0xff, body.length >> 8, 0, 0, ...body]);
+    const out = stripImageMetadata(webp, "image/webp", "sensitive")!;
+    expect(has(out, "Seoul")).toBe(false);
+    expect(has(out, "37.5665")).toBe(false);
+    expect(out[20]! & 0x08).toBe(0x08);
+    expect(out[20]! & 0x04).toBe(0);
+    const at = Buffer.from(out).indexOf("EXIF");
+    const size = new DataView(out.buffer, out.byteOffset).getUint32(at + 4, true);
+    expect(exifDateTaken(out.subarray(at + 8, at + 8 + size))).toEqual({ local: "2024-05-01T13:22:10", offset: "+09:00" });
+    expect(new DataView(out.buffer, out.byteOffset).getUint32(4, true)).toBe(out.length - 8);
   });
 });

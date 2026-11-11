@@ -16,6 +16,7 @@ import { getEnv } from "@/config/env";
 import { DOCUMENT_PREVIEW, IMMUTABLE_CACHE, MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER } from "@/contracts/api";
 import { newLinkId, newNodeId } from "@/domain/ids";
+import { exifDateTaken } from "@/domain/media-date";
 import { hash } from "@node-rs/argon2";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
@@ -61,11 +62,17 @@ async function folder(m: FixtureMember, parentId: string, name: string, data: Re
   return { id, linkId };
 }
 
+/** A photo with the owner's name ("RelayCam", removed in every mode) and when it was taken (kept in the default mode). */
 const cameraJpeg = () =>
   sharp({ create: { width: 8, height: 8, channels: 3, background: "#f5b400" } })
     .jpeg()
-    .withExif({ IFD0: { Make: "RelayCam", Model: "Pocket 9" } })
+    .withExif({ IFD0: { Make: "Pocket", Model: "Pocket 9", Artist: "RelayCam" }, IFD2: { DateTimeOriginal: "2024:05:01 13:22:10" } })
     .toBuffer();
+
+/** SHARE_METADATA_STRIP for this test process (the parsed env is cached). */
+function stripMode(mode: "sensitive" | "all" | "none") {
+  (getEnv("jobs") as { SHARE_METADATA_STRIP: string }).SHARE_METADATA_STRIP = mode;
+}
 
 /** Trip (public, with a note) → a.txt, photo.jpg, Day1/b.txt, Hidden (private)/secret.txt. */
 async function sharedTrip(data: Record<string, unknown> = {}) {
@@ -476,6 +483,53 @@ describe("share downloads", () => {
     await prisma.account.update({ where: { id: m.id }, data: { stripMetadataOnShare: false } });
     const original = Buffer.from(await (await visit(shareStream, path(trip.linkId, photo, "stream"), fileParams(trip.linkId, photo))).arrayBuffer());
     expect(original.includes(Buffer.from("RelayCam"))).toBe(true);
+  });
+
+  it("follows SHARE_METADATA_STRIP: keeps the date taken by default, never sends a copy that kept more than wanted", async () => {
+    const { trip, photo } = await sharedTrip();
+    const download = async () => visit(shareDownload, path(trip.linkId, photo, "download"), fileParams(trip.linkId, photo));
+    await processMedia(photo);
+    const dated = Buffer.from(await (await download()).arrayBuffer());
+    expect(dated.includes(Buffer.from("RelayCam"))).toBe(false);
+    expect(exifDateTaken((await sharp(dated).metadata()).exif!)).toEqual({ local: "2024-05-01T13:22:10", offset: null });
+
+    stripMode("all");
+    try {
+      // The copy kept the date, which is no longer wanted: visitors wait for a new one.
+      const waiting = await download();
+      expect([waiting.status, waiting.headers.get("retry-after")]).toEqual([503, String(MEDIA.stripPendingRetrySec)]);
+      await processMedia(photo);
+      const bare = Buffer.from(await (await download()).arrayBuffer());
+      expect((await sharp(bare).metadata()).exif?.includes(Buffer.from("2024:05:01"))).not.toBe(true);
+      // A copy that removed everything is fine for the default mode too.
+      stripMode("sensitive");
+      expect((await download()).status).toBe(200);
+      stripMode("none");
+      expect(Buffer.from(await (await download()).arrayBuffer()).includes(Buffer.from("RelayCam"))).toBe(true);
+    } finally {
+      stripMode("sensitive");
+    }
+  });
+
+  it("sends videos as their copy without location tags", async () => {
+    const { m, trip } = await sharedTrip();
+    const dir = await mkdtemp(join(tmpdir(), "relay-share-"));
+    try {
+      const clip = join(dir, "clip.mp4");
+      await promisify(execFile)(getEnv("jobs").FFMPEG_PATH, [
+        ...["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x36:rate=5", "-c:v", "mpeg4"],
+        ...["-metadata", "location=+37.5665+126.9780/", "-metadata", "creation_time=2024-05-01T04:22:10Z", clip],
+      ]);
+      const video = await addFile(m, trip.id, ["Trip"], "clip.mp4", await readFile(clip), "video/mp4", "VIDEO");
+      const early = await visit(shareStream, path(trip.linkId, video, "stream"), fileParams(trip.linkId, video), { headers: { range: "bytes=0-" } });
+      expect(early.status).toBe(503);
+      await processMedia(video);
+      const played = Buffer.from(await (await visit(shareStream, path(trip.linkId, video, "stream"), fileParams(trip.linkId, video), { headers: { range: "bytes=0-" } })).arrayBuffer());
+      expect(played.includes(Buffer.from("37.5665"))).toBe(false);
+      expect(played.length).toBeGreaterThan(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("answers 415 for a photo the worker could not clean, without trying again per request", async () => {

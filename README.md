@@ -9,7 +9,7 @@ Fast and easy file sharing system. A private file drop for sharing and streaming
 - Resumable uploads (tus) that continue after a page reload, and upload-only links (file requests)
 - Share links per file or folder: password, download limit, stream only; admins can also set expiry and delete after the first download
 - Link activity per item: opens, views, plays and downloads with 7- and 30-day counts, exportable as CSV
-- Media viewer for pictures (with a slideshow), video (on-the-fly conversion, `.vtt`/`.srt` subtitles from the same folder), audio and documents (text, code, Markdown, tables, PDF, Word, Excel), with thumbnails and metadata-stripped copies for public links
+- Media viewer for pictures (with a slideshow), video (on-the-fly conversion, `.vtt`/`.srt` subtitles from the same folder), audio and documents (text, code, Markdown, tables, PDF, Word, Excel), with thumbnails and copies for public links without location and personal metadata (photos and videos; how much goes is `SHARE_METADATA_STRIP`, the date taken stays by default)
 - Recently deleted: deleted items can be restored for 24 hours with their share links and settings
 - Admin pages: accounts, live server metrics, sign-up mode, theme, announcements and an audit log of admin actions
 - Several storage volumes with volume moves, layout migrations and `storage:fsck`; a public Status page

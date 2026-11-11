@@ -80,10 +80,11 @@ export function ProfilePage({ data }: { data: ProfileData }) {
       <PreferencesCard
         busy={busy}
         stripMetadata={data.account.stripMetadataOnShare}
+        stripMode={data.shareStripMode}
         onStripMetadata={(on) =>
           void run(async () => {
             await profileApi.savePreferences({ stripMetadataOnShare: on });
-            return on ? "Metadata is removed from public photos" : "Public photos keep their metadata";
+            return on ? "Metadata is removed from public photos and videos" : "Public photos and videos keep their metadata";
           })
         }
         notifyLinks={data.notifyAvailable ? data.account.notifyLinkEvents : null}

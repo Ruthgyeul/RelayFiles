@@ -146,6 +146,12 @@ enum Visibility {
   PUBLIC
 }
 
+/// Metadata removed from a shared copy: SENSITIVE keeps capture time and camera, ALL keeps only orientation and colour.
+enum StripMode {
+  SENSITIVE
+  ALL
+}
+
 enum Access {
   BOTH
   STREAM
@@ -171,6 +177,9 @@ model Node {
   hasDerived    Boolean     @default(false)
   /// The worker could not make the metadata-stripped copy (undecodable or too large): visitors get 415, not a retry.
   stripFailed   Boolean     @default(false)
+  /// How much metadata the stripped copy lost (SHARE_METADATA_STRIP when it was made); null: none yet, or one
+  /// made before this column (those removed everything, like ALL).
+  derivedMode   StripMode?
   /// Set by the reconcile job when the file is missing on disk.
   missing       Boolean     @default(false)
   /// Public link id (/d/<linkId>). Never changes during migrations; regenerated only on request.

@@ -20,6 +20,8 @@ export interface SharedRow {
   hasDerived: boolean;
   /** The worker could not make the metadata-stripped copy. */
   stripFailed: boolean;
+  /** The mode that copy was made in (null: none, or one from before modes, which removed everything). */
+  derivedMode: "SENSITIVE" | "ALL" | null;
   hasThumb: boolean;
   downloads: number;
   downloadLimit: number | null;
@@ -31,7 +33,7 @@ export interface SharedRow {
 }
 
 /** Columns of a SharedRow, read from "Node" n. */
-const SHARED_COLUMNS = Prisma.sql`n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."hasThumb", n.downloads,
+const SHARED_COLUMNS = Prisma.sql`n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."derivedMode"::text AS "derivedMode", n."hasThumb", n.downloads,
            n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt"`;
 
 /**

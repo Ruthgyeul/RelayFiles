@@ -107,8 +107,8 @@ function isoTime(value: string | undefined): MediaTime | null {
   return { local: `${year}-${month}-${day}T${hour}:${minute}:${second}`, offset: zone === "Z" ? "+00:00" : normalizeOffset(zone) };
 }
 
-/** Global tags of `ffmpeg -f ffmetadata` output (before the first [STREAM] or [CHAPTER] section). */
-function globalTags(ffmetadata: string): Map<string, string> {
+/** Global tags of `ffmpeg -f ffmetadata` output (before the first [STREAM] or [CHAPTER] section), keys lowercased. */
+export function globalTags(ffmetadata: string): Map<string, string> {
   const tags = new Map<string, string>();
   for (const line of ffmetadata.split("\n")) {
     if (line.startsWith("[")) break;

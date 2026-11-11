@@ -358,6 +358,7 @@ $C run --rm tools npm run storage:migrate
 ```bash
 $C run --rm tools npm run media:backfill               # 썸네일이 없는 이미지·영상 (워커·Redis 장애 뒤)
 $C run --rm tools npm run media:backfill -- --previews # 뷰어 미리보기 도입 전에 올린 큰 이미지 (한 번)
+$C run --rm tools npm run media:backfill -- --derived  # 공유 제거본이 SHARE_METADATA_STRIP와 다른 사진·영상 (업그레이드 뒤, 모드를 바꾼 뒤)
 ```
 
 큐에 넣기만 하고, 워커(`$C ps worker`)가 처리한다.

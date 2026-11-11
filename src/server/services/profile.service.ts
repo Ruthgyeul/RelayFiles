@@ -1,4 +1,5 @@
 import "server-only";
+import { shareStripMode } from "../media/strip-mode";
 import { getEnv } from "@/config/env";
 import { ACCOUNT, MS } from "@/config/policy";
 import type { DeviceDto, Preferences, ProfileData } from "@/contracts/profile";
@@ -65,6 +66,7 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
       notifyLinkEvents: notifyLinkEvents ?? false,
     },
     notifyAvailable: notifyEnabled(),
+    shareStripMode: shareStripMode(),
     maskedToken: maskToken(token),
     usage: { usedBytes: usage.usedBytes.toString(), ...counts },
     traffic: { total: days.reduce((sum, bytes) => sum + bytes, 0n).toString(), days: days.map(String) },
