@@ -7,9 +7,13 @@ async function uploadText(page: Page, name: string, content: string) {
   await page.getByRole("button", { name: "Upload", exact: true }).click();
   await (await chooser).setFiles([{ name, mimeType: "text/plain", buffer: Buffer.from(content) }]);
   await expect(page.locator(`[data-item="${name}"]`)).toBeVisible();
+  // The Transfers panel would cover item menus on small screens.
+  await page.getByRole("button", { name: "Close transfers" }).click();
 }
 
 test("collects favorites where they are and organizes them in folders", async ({ page }) => {
+  // One walk through the whole feature: many page loads.
+  test.slow();
   await openFiles(page);
   await newFolder(page, "Docs");
   await uploadText(page, "notes.txt", "remember");

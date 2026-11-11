@@ -112,7 +112,7 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
       <PathBar path={crumbs} rootIcon="star" hrefOf={(index) => favoritesHref(index === 0 ? null : crumbs[index]!.id)} onCopyPath={(text) => copyText(text, "Path copied")} />
       <div className="flex flex-wrap items-center gap-2.5 px-0.5">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h1 className="m-0 truncate text-[22px] font-bold">{title}</h1>
+          <span className="truncate text-[22px] font-bold">{title}</span>
           <span className="text-[13px] text-t4">{view.folder ? itemCount(count) : `${itemCount(count)} · they stay where they are; opening, sharing or renaming here changes the item itself`}</span>
         </div>
         {selected.length > 0 ? (
