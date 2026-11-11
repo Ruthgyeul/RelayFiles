@@ -60,7 +60,7 @@
 | `POST` | `/api/auth/switch` | `{ accountId }` → `SessionState`. 이 기기에 로그인한 다른 계정을 활성화 |
 | `POST` | `/api/auth/signout` | `{ accountId? }`(기본: 활성 계정) → `SessionState`. 세션을 DB에서 폐기 |
 | `GET` | `/api/me/token?accountId=` | 이 기기에 로그인한 계정(기본: 활성 계정)의 전체 토큰(`cache-control: no-store`). 다른 기기의 계정은 404. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 관리자 계정 토큰 보기는 감사 로그에 남는다 |
-| `GET` | `/api/folders/:id` | `id` = `root` 또는 폴더 id. `FolderView { folder, isRoot, path, effectiveVisibility, children }`. 폴더 항목은 하위 전체 크기(`size`)와 직계 항목 수(`itemCount`)를 담는다. 각 항목의 `busy`는 공유 링크 다운로드 혼잡도 배지(`Busy`/`Server busy`/`Downloads paused`, 없으면 null). 다른 계정 폴더는 404 |
+| `GET` | `/api/folders/:id` | `id` = `root` 또는 폴더 id. `FolderView { folder, isRoot, path, effectiveVisibility, children, favoriteCount? }`. 폴더 항목은 하위 전체 크기(`size`)와 직계 항목 수(`itemCount`)를 담는다. 각 항목의 `busy`는 공유 링크 다운로드 혼잡도 배지(`Busy`/`Server busy`/`Downloads paused`, 없으면 null), 즐겨찾기에 있으면 `favorite: true`. 루트만 `favoriteCount`(Favorites 항목 수)를 담는다. 다른 계정 폴더는 404 |
 | `POST` | `/api/folders` | `{ parentId, name }` → 201 `{ folder, requestedName, renamed }`. DB와 볼륨에 함께 만든다. 이름이 겹치면 `Name (2)`로 만들고 `renamed: true` |
 | `GET` | `/api/nodes/:id` | Properties 대화상자 정보: 항목, 위치(루트→부모 이름), 실제 공개 범위, 폴더면 하위 파일·폴더 수 |
 | `GET` | `/api/folders/tree` | 계정의 모든 폴더 `{ id, name, parentId }`(이동·복사 대상 선택) |
@@ -83,6 +83,14 @@
 | `POST` | `/api/uploads` | 업로드 준비 `{ target: home\|root\|폴더id, files: [{ rel, size }], dup?, fallbackName? }` → `{ kind: duplicates, names }` / `{ kind: nothing }` / `{ kind: ready, batchId, endpoint, folder, files }`. 이름 검증, 용량·볼륨 여유 공간(507), Home 업로드 폴더 생성. `dup`: `replace`(새 내용은 새 node id, 공유 링크·설정·태그·링크 기록은 유지) · `keep`("name (2)") · `skip` |
 | `POST` | `/api/uploads/resume` | 새로고침으로 끊긴 업로드 이어 올리기 `{ batchId, slot, uploadId }` → `{ offset }`. 이 계정의 끝나지 않은 업로드이고 길이·파일 이름이 배치의 `slot` 항목과 같으면 그 칸으로 넘겨받는다(이후 같은 업로드 URL로 tus HEAD/PATCH, 완료되면 새 배치의 폴더에 놓인다). 그 밖에는 404 → 처음부터 보낸다 |
 | tus | `/api/uploads/tus/:volumeId[/:uploadId]` | 재개 가능한 업로드(tus 1.0, 청크 `UPLOAD_CHUNK_SIZE_MB`). 메타데이터 `batch`, `index`, `filename`, `lastModified`(선택, 파일의 `File.lastModified` ms. 없거나 미래 값이면 업로드 시각을 `modifiedAt`으로 저장). 업로드한 기기의 계정만 이어 올리거나 조회할 수 있다. 완료되면 `{ success, data: { nodeId, name, folderId } }`. `proxy.ts`를 거치지 않는다(본문 버퍼링 방지) |
+| `GET` | `/api/favorites?folder=` | 즐겨찾기 한 단계 `FavoritesView { folder, path, folders, items, tree }`. `folder` 없음 = 맨 위. `items`는 항목이 실제로 있는 곳(`parentPath`, `parentId`)과 함께, 최근 추가 순. `folders`는 그 단계의 정리용 폴더(`itemCount` = 바로 안의 즐겨찾기·폴더 수), `tree`는 모든 정리용 폴더(이동 대상 선택). 없는 정리용 폴더는 404 |
+| `POST` | `/api/favorites` | `{ nodeIds, folderId? }` → 201 `{ added }`. 항목을 그 자리에 둔 채 Favorites(정리용 폴더 `folderId`, 없으면 맨 위)에 넣는다. 복사하지 않으므로 이름·공유·다운로드 수는 원본 그대로다. 이미 있는 항목은 옮기지 않는다. 계정 루트는 400, 다른 계정 항목은 404, `FILES.maxFavorites`(500)를 넘으면 400 |
+| `POST` | `/api/favorites/remove` | `{ nodeIds }` → `{ removed }`. 즐겨찾기에서만 뺀다(항목은 그대로) |
+| `POST` | `/api/favorites/move` | `{ nodeIds?, folderIds?, to }` → `{ moved }`. Favorites 안에서 즐겨찾기·정리용 폴더를 다른 정리용 폴더(`to`, null = 맨 위)로 옮긴다. 자기 자신·하위로는 400, 깊이 `FILES.favoriteFolderMaxDepth`(8) 초과 400, 같은 이름 폴더 409 |
+| `POST` | `/api/favorites/folders` | `{ parentId, name }` → 201 `FavoriteFolderDto`. Favorites 안에만 있는 정리용 폴더(디스크에는 아무것도 없다). 이름 규칙은 파일 이름과 같고, 같은 이름은 409, 계정당 `FILES.maxFavoriteFolders`(200)개 |
+| `GET` | `/api/favorites/folders/:id` | `{ favorites }`: 그 폴더와 하위 폴더 안의 즐겨찾기 수(삭제 대화상자) |
+| `PATCH` | `/api/favorites/folders/:id` | `{ name }` 이름 변경(같은 이름 409) |
+| `DELETE` | `/api/favorites/folders/:id?mode=remove\|lift` | 정리용 폴더 삭제 → `{ removedFavorites, movedUp }`. `remove`: 안의 즐겨찾기(하위 폴더 포함)를 함께 해제, `lift`: 즐겨찾기와 하위 폴더를 한 단계 위로 옮긴다(겹치는 폴더 이름은 "Name (2)"). 어느 쪽이든 항목 자체는 지우지 않는다 |
 | `GET` | `/api/search?q=…` | 전역 검색(Ctrl/⌘ K): 빈 값이면 최근 파일 8개, `#태그`로 시작하면 모든 태그를 가진 항목, 그 밖에는 이름 검색(후보 200개를 순위로 정렬해 최대 30개). 결과마다 폴더 경로. `q`는 200자까지 |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
 | `GET`·`HEAD` | `/api/files/:id/download` | 원본 그대로 첨부 파일로 받기. SHA-256 ETag(304), Range(206/416), RFC 6266 파일명(한글). `STORAGE_ACCEL_ENABLED`면 Nginx `X-Accel-Redirect`로 넘긴다. 받은 바이트는 `TrafficDaily`에 기록 |
@@ -123,7 +131,8 @@
 | `POST` | `/api/v1/files?folder=root\|id&name=` | `files:write` | 요청 본문 전체가 파일 하나(`Content-Length` 필수). 이름이 겹치면 "name (2)". 용량·항목 수·크기 한도는 tus 업로드와 같다. 201 `{ nodeId, name, folderId, linkId, url }` — `url`은 공유 링크(공개 여부는 폴더 설정을 따른다). 본문은 Nginx `client_max_body_size`(`NGINX_MAX_BODY_MB`)까지, 더 큰 파일은 웹 앱(tus)으로 |
 | `GET`·`HEAD` | `/api/v1/files/:id` | `files:read` | 원본 다운로드(Range·ETag는 웹 앱과 같다). `HEAD`는 같은 헤더(`Content-Length`·`ETag`)에 본문 없음, 트래픽으로 세지 않는다 |
 | `GET` | `/api/v1/search?q=` | `files:read` | 웹 앱 `/api/search`와 같다: 빈 값이면 최근 파일, `#태그`(URL에서는 `%23`)는 모든 태그를 가진 항목, 그 밖에는 이름. `?tags=a,b`도 받는다. 결과마다 폴더 경로(`TaggedItem[]`) |
-| `PATCH` | `/api/v1/nodes/:id` | `files:write` | `{ name?, parentId?: "root"\|id }`(하나 이상) 이름 변경·이동(디스크도 함께) → `NodeItem`. 이동이 먼저라 새 이름은 대상 폴더에서 검사한다. 끝나는 곳에 같은 이름이 있으면 409와 `Suggested:` 문구(웹 앱 이동과 달리 "Name (2)"로 바꾸지 않는다). 자기 자신·하위·루트 이동은 400 |
+| `GET` | `/api/v1/favorites?folder=` | `files:read` | 웹 앱 `/api/favorites`와 같은 `FavoritesView`. 정리용 폴더 관리(만들기·이름 변경·이동·삭제)는 웹 앱에서만 한다 |
+| `PATCH` | `/api/v1/nodes/:id` | `files:write` | `{ name?, parentId?: "root"\|id, favorite?: boolean }`(하나 이상) 이름 변경·이동(디스크도 함께)·즐겨찾기(`true` = Favorites 맨 위에 추가, 이미 있으면 그대로, `false` = 빼기) → `NodeItem`. 이동이 먼저라 새 이름은 대상 폴더에서 검사한다. 끝나는 곳에 같은 이름이 있으면 409와 `Suggested:` 문구(웹 앱 이동과 달리 "Name (2)"로 바꾸지 않는다). 자기 자신·하위·루트 이동은 400 |
 | `DELETE` | `/api/v1/nodes/:id` | `files:write` | 파일이나 폴더(안의 모든 것 포함) 삭제, 볼륨 휴지통으로 → `{ deleted }` |
 | `GET` | `/api/v1/nodes/:id/share` | `files:read` | 공유 링크와 설정 `ApiV1Share { id, name, type, linkId, url, visibility: inherit\|private\|public, effectiveVisibility, access: both\|stream, downloadLimit, downloads, note, hasPassword, expiry, expAt, burn }` |
 | `PATCH` | `/api/v1/nodes/:id/share` | `files:write` | 보낸 필드만 바꾼다 `{ visibility?, access?, downloadLimit?(null=없음), note?, password?(문자열=설정, null·""=해제), applyDown?, expiry?, burn? }` → `ApiV1Share`. 모르는 필드는 400. `expiry`·`burn`은 관리자만(그 밖에는 403) |

@@ -49,6 +49,7 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPr
         <div onClick={onPrimary} className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5">
           <span className="flex items-center gap-[5px] text-[14px] font-bold">
             <span className="truncate">{item.name}</span>
+            {item.favorite && <Icon name="star" weight="fill" size={12} label="In Favorites" className="shrink-0 text-warn-strong" />}
             {item.settings.hasPassword && <Icon name="lock-simple" size={12} label="Password protected" className="text-t4" />}
             {item.busy && <BusyPill busy={item.busy} />}
           </span>

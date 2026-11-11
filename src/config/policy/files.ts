@@ -22,6 +22,8 @@ export const FILES = {
   maxFavoriteFolders: 200,
   /** Levels of organizing folders inside Favorites (1: directly inside it). */
   favoriteFolderMaxDepth: 8,
+  /** Folders a Favorites URL may open below a favorite folder (/files/favorites/<favorite>/<sub>/…). */
+  maxFavoriteChain: 64,
 } as const;
 
 /** "Renumber files": renames the files of one folder to 01, 02, 03, … (docs/architecture.md "순번 정리"). */

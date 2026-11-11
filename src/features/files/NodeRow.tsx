@@ -98,6 +98,7 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
         <div onClick={onPrimary} className="flex min-w-0 flex-1 cursor-pointer flex-col gap-[3px]">
           <span className="flex items-center gap-1.5 truncate text-[15px] font-bold">
             <span className="truncate">{item.name}</span>
+            {item.favorite && <Icon name="star" weight="fill" size={13} label="In Favorites" className="shrink-0 text-warn-strong" />}
             {item.settings.hasPassword && <Icon name="lock-simple" size={13} label="Password protected" className="text-t4" />}
             {item.busy && <BusyPill busy={item.busy} />}
           </span>

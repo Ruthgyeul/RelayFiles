@@ -9,3 +9,13 @@ export function folderHref(folderId: string, isRoot = false): Route {
 export function sharePageHref(linkId: string): Route {
   return `/d/${linkId}` as Route;
 }
+
+/** Favorites, or one of its organizing folders. */
+export function favoritesHref(folderId?: string | null): Route {
+  return (folderId ? `/files/favorites?folder=${encodeURIComponent(folderId)}` : "/files/favorites") as Route;
+}
+
+/** A real folder opened from Favorites: the favorite folder, then each folder opened below it. */
+export function favoriteFolderHref(chain: readonly string[]): Route {
+  return `/files/favorites/${chain.map(encodeURIComponent).join("/")}` as Route;
+}

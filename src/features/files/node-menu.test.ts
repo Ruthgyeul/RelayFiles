@@ -5,11 +5,11 @@ import { buildNodeMenu, type NodeActions } from "./node-menu";
 const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
 const noop = () => undefined;
 const all: Required<NodeActions> = Object.fromEntries(
-  ["open", "preview", "download", "downloadZip", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rename", "copy", "move", "delete", "renumber", "duplicates", "properties"].map((key) => [key, noop]),
+  ["open", "preview", "download", "downloadZip", "toggleFavorite", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rename", "copy", "move", "delete", "renumber", "duplicates", "properties"].map((key) => [key, noop]),
 ) as Required<NodeActions>;
 
-const folder: Pick<NodeItem, "type" | "kind" | "settings"> = { type: "folder", kind: null, settings };
-const video: Pick<NodeItem, "type" | "kind" | "settings"> = { type: "file", kind: "video", settings };
+const folder: Pick<NodeItem, "type" | "kind" | "settings" | "favorite"> = { type: "folder", kind: null, settings };
+const video: Pick<NodeItem, "type" | "kind" | "settings" | "favorite"> = { type: "file", kind: "video", settings };
 
 const labels = (entries: ReturnType<typeof buildNodeMenu>) => entries.map((entry) => `${entry.separator ? "| " : ""}${entry.label}`);
 
@@ -18,6 +18,7 @@ describe("buildNodeMenu (design nodeMenu)", () => {
     expect(labels(buildNodeMenu(folder, false, false, all))).toEqual([
       "Open",
       "Download",
+      "Add to favorites",
       "| Share",
       "Upload links",
       "Tags",
@@ -42,6 +43,12 @@ describe("buildNodeMenu (design nodeMenu)", () => {
     expect(labels(entries)).toContain("Resume downloads");
     expect(entries.find((entry) => entry.label === "Delete")?.danger).toBe(true);
     expect(labels(entries)).not.toContain("Renumber files");
+  });
+
+  it("offers adding to or removing from Favorites, never for the root", () => {
+    expect(labels(buildNodeMenu(video, false, false, all))).toContain("Add to favorites");
+    expect(labels(buildNodeMenu({ ...video, favorite: true }, false, false, all))).toContain("Remove from favorites");
+    expect(labels(buildNodeMenu(folder, true, false, all))).not.toContain("Add to favorites");
   });
 
   it("hides root-only exclusions, other-file preview and missing actions", () => {
