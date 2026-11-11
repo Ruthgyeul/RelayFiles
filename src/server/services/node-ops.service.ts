@@ -12,6 +12,7 @@ import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
 import { createDeletedItems, nodeRowsByIds, toSnapshot } from "../repositories/deleted-item.repo";
+import { favoriteFoldersOf } from "../repositories/favorite.repo";
 import { deleteNodes, findNode, findNodes, findRootFolder, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
 import { ancestorChains, lockSubtrees, type AncestorRow } from "../repositories/node-tree.repo";
 import { addTrashedBytesEach, recordTrashed } from "../repositories/trash.repo";
@@ -118,6 +119,8 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
     if (!rows) throw new ApiError("CONFLICT", "These items are changing. Try again.");
     // Every column of the locked rows, read before they go, so a restore can put them back.
     const full = recoverable ? await nodeRowsByIds(tx, rows.map((row) => row.id)) : [];
+    // Favorites go with the rows (FK cascade); the snapshot remembers them for a restore.
+    const favorites = recoverable ? await favoriteFoldersOf(tx, rows.map((row) => row.id)) : new Map<string, string | null>();
     await deleteNodes(tx, itemIds);
     const trashed: string[] = [];
     for (const location of locations) {
@@ -127,7 +130,7 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
     }
     const deleted = rows.filter((row) => row.type === "FILE");
     // The bytes stay on disk until the daily job empties the trash, and count until then.
-    if (recoverable) await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full });
+    if (recoverable) await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites });
     else
       await recordTrashed(
         tx,
@@ -149,6 +152,8 @@ interface DeletedTrees {
   rows: readonly { id: string }[];
   /** Every column of those rows. */
   full: Node[];
+  /** Where each row was listed in Favorites. */
+  favorites: ReadonlyMap<string, string | null>;
 }
 
 /**
@@ -188,7 +193,7 @@ async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: str
       originalParentId: row.parentId,
       originalPath: chain.slice(0, -1).map((ancestor) => ancestor.name),
       deletedAt: at,
-      nodes: toSnapshot(deleted[index]!.tree),
+      nodes: toSnapshot(deleted[index]!.tree, trees.favorites),
     })),
   );
 }

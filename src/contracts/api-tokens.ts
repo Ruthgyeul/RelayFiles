@@ -68,10 +68,14 @@ export interface ApiV1UploadedFile extends UploadedFile {
   url: string;
 }
 
-/** PATCH /api/v1/nodes/:id: rename, move into another folder ("root" or an id), or both. */
+/** PATCH /api/v1/nodes/:id: rename, move into another folder ("root" or an id), add to or take out of Favorites. */
 export const apiV1NodePatchSchema = z
-  .object({ name: renameSchema.shape.name.optional(), parentId: folderRefSchema.optional() })
-  .refine((input) => input.name !== undefined || input.parentId !== undefined, "Send a name, a parentId or both.");
+  .object({
+    name: renameSchema.shape.name.optional(),
+    parentId: folderRefSchema.optional(),
+    favorite: z.boolean().optional().describe("true: add to the top of Favorites (an item already there stays where it is); false: take it out"),
+  })
+  .refine((input) => input.name !== undefined || input.parentId !== undefined || input.favorite !== undefined, "Send a name, a parentId or favorite.");
 
 export type ApiV1NodePatch = z.infer<typeof apiV1NodePatchSchema>;
 

@@ -8,6 +8,8 @@ import { accountUsage, findNode, listSiblingNames } from "../repositories/node.r
 import { shareUrl } from "../share/share.service";
 import type { ApiCaller } from "./api-token.service";
 import { uploadWholeFile } from "./direct-upload.service";
+import { favoriteFoldersOf } from "../repositories/favorite.repo";
+import { addFavorites, removeFavorites } from "./favorites.service";
 import { renameNode, requireFolder, requireNode } from "./node-ops.service";
 import { regenerateLink, updateSettings } from "./node-settings.service";
 import { getProperties, toNodeItem } from "./node.service";
@@ -36,9 +38,9 @@ export async function uploadFromApi(caller: ApiCaller, folder: string, name: str
 }
 
 /**
- * Renames and/or moves an item. A name already taken where the item ends up is a 409 with a
- * suggestion, like renaming in the web app (no silent "Name (2)"). Moving goes first, so a
- * new name is checked in the target folder.
+ * Renames, moves and/or (un)favorites an item. A name already taken where the item ends up is
+ * a 409 with a suggestion, like renaming in the web app (no silent "Name (2)"). Moving goes
+ * first, so a new name is checked in the target folder.
  */
 export async function updateNodeFromApi(caller: ApiCaller, nodeId: string, input: ApiV1NodePatch): Promise<NodeItem> {
   const owner = caller.account;
@@ -58,8 +60,11 @@ export async function updateNodeFromApi(caller: ApiCaller, nodeId: string, input
       await moveNodes(owner, [row.id], target.id);
     }
   }
-  if (input.name !== undefined) return renameNode(owner, row.id, name);
-  return toNodeItem(await requireNode(owner.id, row.id));
+  const item = input.name !== undefined ? await renameNode(owner, row.id, name) : toNodeItem(await requireNode(owner.id, row.id));
+  if (input.favorite === true) await addFavorites(owner, [row.id], null);
+  if (input.favorite === false) await removeFavorites(owner, [row.id]);
+  const { favorite: _was, ...rest } = item;
+  return (await favoriteFoldersOf(db(), [row.id])).has(row.id) ? { ...rest, favorite: true } : rest;
 }
 
 /** An item's share link and settings. */

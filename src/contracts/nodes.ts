@@ -43,6 +43,8 @@ export interface NodeItem {
   settings: NodeSettingsDto;
   /** Share-link download congestion: "Busy", "Server busy" or paused. */
   busy: BusyBadge | null;
+  /** Listed in Favorites (absent otherwise). */
+  favorite?: true;
 }
 
 export interface FolderCrumb {
@@ -61,6 +63,8 @@ export interface FolderView {
   /** Visibility this folder would inherit (its parent's; private for the root). */
   parentVisibility: "private" | "public";
   children: NodeItem[];
+  /** The root only: items in Favorites, for its entry at the top of the list. */
+  favoriteCount?: number;
 }
 
 /** GET /api/nodes/:id — details for the Properties dialog. */

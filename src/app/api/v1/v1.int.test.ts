@@ -13,9 +13,11 @@ import { GET as me } from "@/app/api/v1/me/route";
 import { POST as newLink } from "@/app/api/v1/nodes/[id]/link/route";
 import { DELETE as deleteNode, PATCH as patchNode } from "@/app/api/v1/nodes/[id]/route";
 import { GET as getShare, PATCH as patchShare } from "@/app/api/v1/nodes/[id]/share/route";
+import { GET as favorites } from "@/app/api/v1/favorites/route";
 import { GET as search } from "@/app/api/v1/search/route";
 import { API } from "@/config/policy";
 import type { ApiScope, ApiTokenDto, ApiV1Account, ApiV1Share, ApiV1UploadedFile, CreatedApiToken } from "@/contracts/api-tokens";
+import type { FavoritesView } from "@/contracts/favorites";
 import type { CreatedFolder, FolderView, NodeItem, TaggedItem } from "@/contracts/nodes";
 import { runCleanup } from "@/server/services/admin.service";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
@@ -224,6 +226,27 @@ describe("API v1 items", () => {
     const theirs = await addFile(other, other.rootId, [], "theirs.txt", "x", "text/plain");
     expect((await v1(patchNode, { method: "PATCH", token, params: { id: theirs }, body: json({ name: "mine.txt" }) })).status).toBe(404);
     expect((await v1(patchNode, { method: "PATCH", token, params: { id: z.nodeId }, body: json({ parentId: other.rootId }) })).status).toBe(404);
+  });
+
+  it("adds items to Favorites and lists them", async () => {
+    const m = await member();
+    const { token } = await tokenFor(m, ["files:read", "files:write"]);
+    const reader = (await tokenFor(m, ["files:read"])).token;
+    const a = await folderOf(token, "root", "A");
+    const x = await put(token, a.id, "x.txt", "x");
+
+    const added = await v1(patchNode, { method: "PATCH", token, params: { id: x.nodeId }, body: json({ favorite: true }) });
+    expect(added.status).toBe(200);
+    expect((await data<NodeItem>(added)).favorite).toBe(true);
+    const listed = await data<FavoritesView>(await v1(favorites, { token: reader }));
+    expect(listed.items.map((item) => [item.id, item.parentId])).toEqual([[x.nodeId, a.id]]);
+    // Renaming keeps the item in Favorites; the item is the same.
+    expect((await data<NodeItem>(await v1(patchNode, { method: "PATCH", token, params: { id: x.nodeId }, body: json({ name: "y.txt" }) }))).favorite).toBe(true);
+
+    expect((await v1(patchNode, { method: "PATCH", token: reader, params: { id: x.nodeId }, body: json({ favorite: false }) })).status).toBe(403);
+    const removed = await v1(patchNode, { method: "PATCH", token, params: { id: x.nodeId }, body: json({ favorite: false }) });
+    expect((await data<NodeItem>(removed)).favorite).toBeUndefined();
+    expect((await data<FavoritesView>(await v1(favorites, { token }))).items).toEqual([]);
   });
 
   it("searches names and #tags in the token's account only", async () => {
