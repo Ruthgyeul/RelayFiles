@@ -113,11 +113,19 @@ export function createAdminAccount(): Promise<ProvisionedAccount> {
 }
 
 /**
- * Counts a token entry from this address before the token is looked at, and refuses it while
- * the address is locked out (login-limiter `beginTokenAttempt`).
+ * Who a token entry is counted against (login-limiter): sign-in by client address; re-entering
+ * the token on a signed-in session by its account, so others behind the same address (CGNAT, a
+ * shared network) cannot lock the owner out of admin actions with wrong sign-ins.
  */
-async function startTokenEntry(client: ClientInfo): Promise<Extract<TokenAttempt, { failures: number }>> {
-  const attempt = await beginTokenAttempt(client.ipKey);
+const signInSubject = (client: ClientInfo) => client.ipKey;
+const reauthSubject = (accountId: string) => `reauth:${accountId}`;
+
+/**
+ * Counts a token entry for `subject` before the token is looked at, and refuses it while the
+ * subject is locked out (login-limiter `beginTokenAttempt`).
+ */
+async function startTokenEntry(subject: string): Promise<Extract<TokenAttempt, { failures: number }>> {
+  const attempt = await beginTokenAttempt(subject);
   if ("locked" in attempt) throw new ApiError("RATE_LIMITED", `Too many failed attempts. Try again in ${attempt.locked} s.`, { retryAfter: attempt.locked });
   return attempt;
 }
@@ -135,14 +143,14 @@ function failedTokenEntry(token: string, attempt: Extract<TokenAttempt, { failur
  * the same address.
  */
 export async function signInWithToken(token: string, client: ClientInfo, signedInAccountIds: readonly string[]): Promise<SignedIn> {
-  const attempt = await startTokenEntry(client);
+  const attempt = await startTokenEntry(signInSubject(client));
   const keys = tokenKeys();
   const found = token.length === ID_LENGTH.token ? await findAccountByLookups(db(), tokenLookups(token, keys)) : null;
   const ttlDays = getEnv("policy").ACCOUNT_TTL_DAYS;
   const now = new Date();
 
   if (!found || isExpired(found, ttlDays, now)) throw failedTokenEntry(token, attempt);
-  await refundTokenAttempt(client.ipKey, attempt);
+  await refundTokenAttempt(signInSubject(client), attempt);
   if (signedInAccountIds.includes(found.id)) throw new ApiError("ALREADY_SIGNED_IN");
 
   const sessionId = newSessionId();
@@ -163,18 +171,18 @@ export async function signInWithToken(token: string, client: ClientInfo, signedI
 
 /**
  * Admin re-authentication: the signed-in account's own token, entered again on this session,
- * unlocks admin actions for AUTH.reauthWindowMin. Wrong tokens count toward the same lockout
- * as sign-in.
+ * unlocks admin actions for AUTH.reauthWindowMin. Wrong tokens count on the same ladder as
+ * sign-in, but per account rather than per address (see `reauthSubject`).
  */
 export async function reauthenticate(sessionId: string, accountId: string, token: string, client: ClientInfo): Promise<void> {
-  const attempt = await startTokenEntry(client);
+  const attempt = await startTokenEntry(reauthSubject(accountId));
   const found = token.length === ID_LENGTH.token ? await findAccountByLookups(db(), tokenLookups(token, tokenKeys())) : null;
   if (found?.id !== accountId) {
     // The signed-in account is known here (unlike at sign-in), so its owner gets to see this.
     await logAccountEvent(accountId, client, "reauth.failed");
     throw failedTokenEntry(token, attempt);
   }
-  await refundTokenAttempt(client.ipKey, attempt);
+  await refundTokenAttempt(reauthSubject(accountId), attempt);
   await markReauthenticated(db(), sessionId, new Date());
   await logAccountEvent(accountId, client, "reauth");
 }

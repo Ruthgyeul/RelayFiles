@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exportFileName, favoriteFolderPaths } from "./account-export";
+import { compareExportPaths, exportFileName, favoriteFolderPaths } from "./account-export";
 
 describe("exportFileName", () => {
   it("keeps safe characters of the account name and the UTC date", () => {
@@ -30,5 +30,16 @@ describe("favoriteFolderPaths", () => {
       { id: "z", parentId: "gone", name: "Z" },
     ]);
     expect(paths.size).toBe(0);
+  });
+});
+
+describe("compareExportPaths", () => {
+  it("puts a folder before what is inside and orders names by code unit", () => {
+    const paths = [["b.txt"], ["Docs", "a.txt"], ["Docs"], ["Docs", "Inner", "z"], ["Docs", "B"]];
+    expect([...paths].sort(compareExportPaths)).toEqual([["Docs"], ["Docs", "B"], ["Docs", "Inner", "z"], ["Docs", "a.txt"], ["b.txt"]]);
+  });
+
+  it("is 0 for the same path", () => {
+    expect(compareExportPaths(["a", "b"], ["a", "b"])).toBe(0);
   });
 });

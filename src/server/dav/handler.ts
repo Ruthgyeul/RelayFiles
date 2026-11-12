@@ -2,7 +2,8 @@ import "server-only";
 import { DAV } from "@/config/policy";
 import type { ApiScope } from "@/contracts/api-tokens";
 import { davSegments } from "@/domain/dav";
-import { ApiError } from "../http/api-error";
+import { ApiError, DISK_IN_THE_WAY_MESSAGE } from "../http/api-error";
+import { StorageTargetExistsError } from "../storage/driver";
 import { logger } from "../logger";
 import { requireApiCaller, type ApiCaller } from "../services/api-token.service";
 import { serveOwnFile } from "../services/file.service";
@@ -91,6 +92,7 @@ export async function davHandler(req: Request): Promise<Response> {
       if (error.options.retryAfter) headers["Retry-After"] = String(error.options.retryAfter);
       return davText(error.status, error.message, headers);
     }
+    if (error instanceof StorageTargetExistsError) return davText(409, DISK_IN_THE_WAY_MESSAGE);
     logger.error("dav request failed", { method: req.method, error });
     return davText(500, "Something went wrong.");
   }

@@ -9,7 +9,8 @@
 | 경로 조작 | 경로는 클라이언트에서 받지 않고 노드 이름으로 서버가 만든다. 각 이름은 `domain/names.ts`의 `nameError`(빈 값, `.`/`..`, `/`, C0·C1 제어 문자(NUL·줄바꿈 포함), 텍스트 방향 제어 문자(U+202A–202E, U+2066–2069: "invoice\u202Efdp.exe"처럼 확장자를 숨긴다), 앞뒤 공백, 255바이트 초과 거부)를 통과해야 한다. 결과 경로가 `users/<accountId>` 아래인지 `path.resolve` 뒤 다시 확인한다(`storage/safe-path.ts`) |
 | 계정 id 위조 | 계정 id는 12자 base32 형식(`domain/ids.ts`)만 허용한다 |
 | 심볼릭 링크 | 계정 루트부터 대상까지 모든 구성요소를 `lstat`으로 확인해 링크가 있으면 거부한다. 파일은 `O_NOFOLLOW`로 연다 |
-| 업로드 경로 | 완료된 업로드는 볼륨의 `system/tmp/uploads` 아래에서만 `rename`으로 옮긴다 |
+| 업로드 경로 | 완료된 업로드와 복사본은 볼륨의 `system/tmp/uploads` 아래에서만 옮긴다 |
+| 덮어쓰기 | 디스크의 이름 변경·이동·제자리 옮기기(업로드, 복사, 파일 위로 옮기기)는 모두 `renameNoReplace`(`link()` 뒤 `unlink()`, 하드 링크가 안 되면 확인 후 `rename`)로 한다. DB와 디스크가 어긋나 디스크에만 있는 항목이 그 이름에 있으면 아무것도 덮어쓰지 않고 409 "Something on the server's disk is in the way…"로 끝난다(`StorageTargetExistsError`, `apiHandler`·tus·WebDAV가 같은 답을 준다). `storage:fsck`로 무엇인지 확인한다 |
 | 중복 제거 | 하드 링크는 같은 계정의 파일 사이에만 만들고, 원본 경로도 같은 경로 검사(`pathOf`)를 거친다. 폴더 복사는 일반 파일과 폴더만 따라가고 그 밖의 항목(심볼릭 링크 등)이 있으면 거부한다. 재업로드는 DB의 SHA-256과 디스크의 크기가 모두 같을 때만 링크한다 |
 | 권한 | 디렉터리 `0700`, 마커 파일 `0600`. 운영에서는 전용 계정(uid 10001)이 소유한다 |
 | SSD 미마운트 | `.relayfiles-volume` 마커가 없으면 볼륨을 offline으로 판단하고 쓰지 않는다. 마커가 다른 볼륨이거나 레이아웃 버전이 다르면 사용하지 않는다 |
@@ -49,7 +50,7 @@
 - **기기 쿠키** `rf_s`: 이 기기에 로그인한 세션 id 목록(최대 10)과 활성 세션만 담고 HMAC으로 서명한다(`COOKIE_SECRET`, 교체 시 `COOKIE_SECRET_PREVIOUS`). `HttpOnly`, `SameSite=Lax`, `PUBLIC_URL`이 https면 `Secure`. 토큰은 쿠키에 넣지 않는다.
 - **세션 폐기**: 요청마다 DB에서 `Session.revokedAt`과 계정 만료를 확인하므로 다른 기기에서 로그아웃하거나 만료되면 즉시 무효가 된다. 무효 세션은 쿠키에서 지운다.
 - **세션 절대 수명**(`domain/session.ts`): 로그인(`Session.createdAt`)부터 관리자 `AUTH.adminSessionDays`(7일), 일반 `AUTH.memberSessionDays`(14일)가 지나면 세션이 끝난다. 계정이 만료되지 않는 관리자라도 기기 세션은 영구적이지 않다.
-- **재인증**: 토큰 보기·재발급, 자기 계정 삭제(마지막 관리자는 지울 수 없다)와 관리자의 계정 관리(역할·삭제일·용량)·삭제, 가입 모드 변경은 세션이 최근 `AUTH.reauthWindowMin`(10분) 안에 로그인했거나 토큰을 다시 입력했을 때만 허용한다(`requireRecentAuth`, 아니면 403 `REAUTH_REQUIRED`). 일반 계정도 같다. 토큰은 만료되지 않고 어디서나 로그인할 수 있어서, 두고 간 기기나 페이지에 주입된 스크립트가 읽으면 계정이 영구히 넘어가기 때문이다. 새 계정은 가입 직후(창 안)에 토큰을 볼 수 있다. 입력은 `POST /api/auth/reauth`이고 로그인과 같은 잠금 단계를 쓴다.
+- **재인증**: 토큰 보기·재발급, 자기 계정 삭제(마지막 관리자는 지울 수 없다)와 관리자의 계정 관리(역할·삭제일·용량)·삭제, 가입 모드 변경은 세션이 최근 `AUTH.reauthWindowMin`(10분) 안에 로그인했거나 토큰을 다시 입력했을 때만 허용한다(`requireRecentAuth`, 아니면 403 `REAUTH_REQUIRED`). 일반 계정도 같다. 토큰은 만료되지 않고 어디서나 로그인할 수 있어서, 두고 간 기기나 페이지에 주입된 스크립트가 읽으면 계정이 영구히 넘어가기 때문이다. 새 계정은 가입 직후(창 안)에 토큰을 볼 수 있다. 입력은 `POST /api/auth/reauth`이고 로그인과 같은 잠금 단계를 쓰지만, 세는 단위는 주소가 아니라 **계정**이다(`reauth:<accountId>`). 같은 주소(CGNAT, 공용 네트워크)의 다른 사람이 로그인을 틀려도 관리자의 재인증은 막히지 않고, 재인증 추측은 주소를 바꿔도 그 계정의 잠금으로 모인다.
 - **감사 로그**(`AuditEvent`): 관리자 작업(위 작업 + 정리 실행, 초대 생성·취소)을 행위자 id·이름, 대상, 짧은 설명, 마스킹한 주소와 함께 남긴다. 초대 코드는 앞 4자만 적는다. `AUTH.auditRetentionDays`(365일)가 지나면 매일 정리 작업이 지운다. 조회: Server 페이지 "Audit log" 카드(`GET /api/admin/audit`).
 - **사용량 리포트**(Accounts 페이지 "Usage report", `GET /api/admin/usage`): 관리자에게 계정별 용량·항목 수·휴지통·공유 트래픽·API 토큰 수·마지막 로그인을 보여 준다. 숫자로 된 집계만 담고 파일 이름·링크·IP는 넣지 않는다. CSV 받기는 감사 로그 `report.export`에 남는다. 계정 이름은 수식으로 시작해도 `domain/csv.ts`가 앞에 작은따옴표를 붙여 글자로 남긴다.
 - **개인 보안 로그**(`AccountEvent`): 계정마다 자기 기록을 Profile "Security log" 카드(`GET /api/me/security-log`)에서 본다. 기록하는 것: 계정 생성, 토큰 로그인, 로그아웃, 다른 기기 로그아웃(기기 이름)·모두 로그아웃(대수), 새 토큰 발급(함께 폐기된 API 토큰 수), 재인증 성공·실패, API 토큰 만들기·폐기(이름), 거부된 API 토큰(토큰 이름과 이유: `wrong secret`·`expired`). 각 행에는 OS·브라우저·국가와 마스킹한 주소만 남고 실제 IP는 저장하지 않는다.

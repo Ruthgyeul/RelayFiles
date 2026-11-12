@@ -93,8 +93,8 @@ export async function moveOverFile(owner: Owner, source: NodeRow, target: NodeRo
     // One place in Favorites per file: the replaced file's place wins.
     if ((await favoriteFoldersOf(tx, [target.id])).has(target.id)) await removeFavorites(tx, owner.id, [source.id]);
     await updateNode(tx, source.id, { parent: { connect: { id: parentId } }, name: target.name, ...carriedSettingsOf(target) });
-    await driver.rename(from, to);
-    undo.push("undo move", () => driver.rename(to, from));
+    await driver.renameNoReplace(from, to);
+    undo.push("undo move", () => driver.renameNoReplace(to, from));
     await aside.recordFor(tx, source.id);
     await handOver(tx, target, source.id);
   });

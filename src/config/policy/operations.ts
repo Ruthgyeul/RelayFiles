@@ -31,6 +31,8 @@ export const METRICS = {
 export const STATUS = {
   /** /api/health gives up on PostgreSQL, Redis or the volume after this long and reports it down. */
   healthCheckTimeoutMs: 2_000,
+  /** Requests to /api/health within this long share one check (it costs a DB, Redis and disk round trip). */
+  healthCacheMs: 1_000,
   /** The browser checks the server this often while the page is open (design: 2.5 s). */
   pingIntervalMs: 2_500,
   /** Browser checks kept for the averages (design: last 40). */

@@ -7,7 +7,7 @@ import { uniqName } from "@/domain/names";
 import { trashExpiresAt } from "@/domain/trash";
 import { db, type DbClient } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
-import { ApiError } from "../http/api-error";
+import { ApiError, DISK_IN_THE_WAY_MESSAGE } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
 import { favoritesOfSnapshot, findDeletedItem, fromSnapshot, listDeletedItems, takeDeletedItem, takenLinkIds } from "../repositories/deleted-item.repo";
@@ -24,7 +24,6 @@ import { trashRetentionHours } from "../storage/trash-retention";
 
 const MOVED_MESSAGE = "This item was deleted before your files moved to new storage, so it can't be restored. It is removed for good with the rest of the old storage's trash.";
 const NAME_TAKEN_MESSAGE = "Something with the same name was just added there. Try again.";
-const IN_THE_WAY_MESSAGE = "Something on the server's disk is in the way. Ask the admin to run a storage check, then try again.";
 const GONE_MESSAGE = "This item was already removed for good.";
 const INFECTED_MESSAGE = "This file was removed because the virus scan found malware in it, so it can't be restored.";
 
@@ -127,7 +126,7 @@ export async function restoreDeletedItem(owner: NodeOwner, id: string): Promise<
     return restored;
   } catch (caught) {
     if (isUniqueViolation(caught)) throw new ApiError("CONFLICT", NAME_TAKEN_MESSAGE);
-    if (caught instanceof StorageTargetExistsError) throw new ApiError("CONFLICT", IN_THE_WAY_MESSAGE);
+    if (caught instanceof StorageTargetExistsError) throw new ApiError("CONFLICT", DISK_IN_THE_WAY_MESSAGE);
     // The daily job emptied the trash after the list was read; the row goes with the next run.
     if (caught instanceof StorageEntryMissingError) throw new ApiError("GONE", GONE_MESSAGE);
     throw caught;

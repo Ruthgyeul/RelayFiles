@@ -6,7 +6,8 @@ export type ComponentStatus = z.infer<typeof componentStatus>;
 /** GET /api/health response data. */
 export const healthSchema = z.object({
   status: componentStatus,
-  version: z.string(),
+  /** No longer sent (the probe answers without logging in); kept optional for older readers. */
+  version: z.string().optional(),
   time: z.string(),
   components: z.object({
     database: componentStatus,

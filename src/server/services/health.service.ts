@@ -1,6 +1,5 @@
 import "server-only";
 import { STATUS } from "@/config/policy";
-import { APP_VERSION } from "@/config/version";
 import type { ComponentStatus, Health } from "@/contracts/health";
 import { db } from "../db/client";
 import { logger } from "../logger";
@@ -30,7 +29,7 @@ export function overallStatus(components: Health["components"]): ComponentStatus
   return Object.values(components).every((status) => status === "ok") ? "ok" : "degraded";
 }
 
-/** Checks PostgreSQL, Redis and the storage volume marker. */
+/** Checks PostgreSQL, Redis and the storage volume marker (the app version is not part of it: anyone may ask). */
 export async function checkHealth(now: Date = new Date()): Promise<Health> {
   const [database, cache, storage, scanner] = await Promise.all([
     probe("database", async () => {
@@ -42,5 +41,17 @@ export async function checkHealth(now: Date = new Date()): Promise<Health> {
     scanningEnabled() ? probe("scanner", () => pingClamd(STATUS.healthCheckTimeoutMs)) : Promise.resolve(null),
   ]);
   const components = { database, redis: cache, storage, ...(scanner ? { scanner } : {}) };
-  return { status: overallStatus(components), version: APP_VERSION, time: now.toISOString(), components };
+  return { status: overallStatus(components), time: now.toISOString(), components };
+}
+
+let shared: { at: number; result: Promise<Health> } | null = null;
+
+/**
+ * /api/health: requests within STATUS.healthCacheMs share one check (the first one's, even
+ * while it runs), so polling the public endpoint cannot multiply the database, Redis and disk
+ * round trips.
+ */
+export function sharedHealth(now: number = Date.now()): Promise<Health> {
+  if (!shared || now - shared.at >= STATUS.healthCacheMs) shared = { at: now, result: checkHealth(new Date(now)) };
+  return shared.result;
 }

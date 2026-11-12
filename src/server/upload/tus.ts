@@ -8,7 +8,8 @@ import { API } from "@/config/policy";
 import { ERRORS } from "@/contracts/errors";
 import { UPLOAD_METADATA } from "@/contracts/uploads";
 import { deviceOfRequest } from "../auth/current";
-import { ApiError } from "../http/api-error";
+import { ApiError, DISK_IN_THE_WAY_MESSAGE } from "../http/api-error";
+import { StorageTargetExistsError } from "../storage/driver";
 import { logger } from "../logger";
 import { layoutOf } from "../storage/layout";
 import { requireApiCaller } from "../services/api-token.service";
@@ -27,6 +28,7 @@ function tusError(code: keyof typeof ERRORS, message: string = ERRORS[code].mess
 
 function rethrow(error: unknown): never {
   if (error instanceof ApiError) throw tusError(error.code, error.message);
+  if (error instanceof StorageTargetExistsError) throw tusError("CONFLICT", DISK_IN_THE_WAY_MESSAGE);
   throw error;
 }
 
