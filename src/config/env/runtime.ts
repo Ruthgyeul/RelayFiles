@@ -28,6 +28,12 @@ export const jobsEnv = z.object({
   FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   /** Video conversions for unplayable containers running at once in the app (0 = off). */
   VIDEO_TRANSCODE_MAX: z.coerce.number().int().min(0).max(16).default(TRANSCODE.maxConcurrent),
+  /**
+   * Metadata removed from photos and videos sent through share links (originals are never
+   * changed): sensitive = location, serial numbers, names and comments (capture time and camera
+   * stay), all = everything but orientation and colour, none = shared as uploaded.
+   */
+  SHARE_METADATA_STRIP: z.enum(["sensitive", "all", "none"]).default("sensitive"),
 });
 
 export const observabilityEnv = z.object({

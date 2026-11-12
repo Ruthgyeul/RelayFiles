@@ -1,20 +1,31 @@
+import { filterExif } from "./exif-filter";
+
+/**
+ * How much metadata a shared copy loses (SHARE_METADATA_STRIP):
+ * - `sensitive`: location, serial numbers, names, comments, XMP/IPTC and maker notes go; when and
+ *   how the photo was taken (capture time, orientation, camera, exposure) stays (domain/exif-filter.ts).
+ * - `all`: everything goes except orientation and the colour profile.
+ */
+export type StripMode = "sensitive" | "all";
+export const STRIP_MODES: readonly StripMode[] = ["sensitive", "all"];
+
 /**
  * Lossless removal of location and camera metadata from images sent through public share
  * links (docs/security.md "공유 링크·다운로드"). Pixels are never re-encoded: only metadata segments are
- * dropped. Originals stay untouched; callers write the result as a separate copy.
+ * dropped or rewritten. Originals stay untouched; callers write the result as a separate copy.
  *
  * Returns null when the bytes are not a well-formed JPEG, PNG or WebP file.
  */
-export function stripImageMetadata(bytes: Uint8Array, mime: string): Uint8Array | null {
+export function stripImageMetadata(bytes: Uint8Array, mime: string, mode: StripMode = "all"): Uint8Array | null {
   try {
     switch (mime) {
       case "image/jpeg":
-        return stripJpeg(bytes);
+        return stripJpeg(bytes, mode);
       case "image/png":
       case "image/apng":
-        return stripPng(bytes);
+        return stripPng(bytes, mode);
       case "image/webp":
-        return stripWebp(bytes);
+        return stripWebp(bytes, mode);
       default:
         return null;
     }
@@ -108,18 +119,37 @@ function orientationSegment(orientation: number): Uint8Array {
   return Uint8Array.from([JPEG.marker, JPEG.app1, length >> 8, length & 0xff, ...payload]);
 }
 
-function stripJpeg(bytes: Uint8Array): Uint8Array | null {
+const EXIF_HEADER = "Exif\0\0";
+const EXIF_HEADER_BYTES = 6;
+const JPEG_SEGMENT_MAX = 0xffff;
+
+/** An APP1 Exif segment around a TIFF block, or null when it would not fit in one segment. */
+function exifSegment(tiff: Uint8Array): Uint8Array | null {
+  const length = 2 + EXIF_HEADER_BYTES + tiff.length;
+  if (length > JPEG_SEGMENT_MAX) return null;
+  const out = new Uint8Array(2 + length);
+  out.set([JPEG.marker, JPEG.app1, length >> 8, length & 0xff]);
+  out.set([...EXIF_HEADER].map((char) => char.charCodeAt(0)), 4);
+  out.set(tiff, 4 + EXIF_HEADER_BYTES);
+  return out;
+}
+
+function stripJpeg(bytes: Uint8Array, mode: StripMode): Uint8Array | null {
   if (bytes[0] !== JPEG.marker || bytes[1] !== JPEG.soi) return null;
   const out = new Writer();
   out.push(bytes.subarray(0, 2));
   let orientation: number | null = null;
+  /** `sensitive`: the first Exif block with only its kept tags. */
+  let kept: Uint8Array | null = null;
+  let exifSeen = false;
   let orientationWritten = false;
   let at = 2;
 
   const writeOrientation = () => {
     if (orientationWritten) return;
     orientationWritten = true;
-    if (orientation !== null && orientation !== ORIENTATION_UPRIGHT) out.push(orientationSegment(orientation));
+    if (kept) out.push(kept);
+    else if (orientation !== null && orientation !== ORIENTATION_UPRIGHT) out.push(orientationSegment(orientation));
   };
 
   while (at < bytes.length) {
@@ -145,7 +175,14 @@ function stripJpeg(bytes: Uint8Array): Uint8Array | null {
     const end = at + 2 + length;
     need(bytes, end);
     const isApp = marker >= JPEG.app0 && marker <= JPEG.appLast;
-    if (marker === JPEG.app1 && orientation === null) orientation = exifOrientation(bytes, at + 4, end);
+    if (marker === JPEG.app1 && !exifSeen && ascii(bytes, at + 4, EXIF_HEADER)) {
+      exifSeen = true;
+      orientation = exifOrientation(bytes, at + 4, end);
+      if (mode === "sensitive") {
+        const tiff = filterExif(bytes.subarray(at + 4 + EXIF_HEADER_BYTES, end));
+        kept = tiff ? exifSegment(tiff) : null;
+      }
+    }
     // Metadata segments come before the frame: the orientation goes after the kept APPn ones.
     if (!isApp && marker !== JPEG.com) writeOrientation();
     if (keepJpegSegment(marker, bytes, at + 4)) out.push(bytes.subarray(at, end));
@@ -180,7 +217,30 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const PNG_KEEP = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "iCCP", "sBIT", "sRGB", "cICP", "mDCV", "cLLI", "bKGD", "pHYs", "acTL", "fcTL", "fdAT"]);
 const PNG_CHUNK_OVERHEAD = 12;
 
-function stripPng(bytes: Uint8Array): Uint8Array | null {
+/** CRC-32 (IEEE) of PNG chunks. */
+const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of data) crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Uint8Array): Uint8Array {
+  const out = new Uint8Array(PNG_CHUNK_OVERHEAD + data.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, data.length);
+  out.set([...type].map((char) => char.charCodeAt(0)), 4);
+  out.set(data, 8);
+  view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+  return out;
+}
+
+function stripPng(bytes: Uint8Array, mode: StripMode): Uint8Array | null {
   if (!PNG_SIGNATURE.every((value, index) => bytes[index] === value)) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const out = new Writer();
@@ -193,6 +253,10 @@ function stripPng(bytes: Uint8Array): Uint8Array | null {
     const end = at + PNG_CHUNK_OVERHEAD + length;
     need(bytes, end);
     if (PNG_KEEP.has(type)) out.push(bytes.subarray(at, end));
+    else if (type === "eXIf" && mode === "sensitive") {
+      const tiff = filterExif(bytes.subarray(at + 8, end - 4));
+      if (tiff) out.push(pngChunk("eXIf", tiff));
+    }
     at = end;
     if (type === "IEND") return out.bytes();
   }
@@ -208,11 +272,20 @@ const VP8X_XMP_FLAG = 0x04;
 /** Chunks kept: image data, alpha, animation and colour profile; EXIF, XMP, C2PA and any other chunk are dropped. */
 const WEBP_KEEP = new Set(["VP8 ", "VP8L", "VP8X", "ALPH", "ANIM", "ANMF", "ICCP"]);
 
-function stripWebp(bytes: Uint8Array): Uint8Array | null {
+function webpChunk(type: string, data: Uint8Array): Uint8Array {
+  const out = new Uint8Array(CHUNK_HEADER + data.length + (data.length % 2));
+  out.set([...type].map((char) => char.charCodeAt(0)), 0);
+  new DataView(out.buffer).setUint32(4, data.length, true);
+  out.set(data, CHUNK_HEADER);
+  return out;
+}
+
+function stripWebp(bytes: Uint8Array, mode: StripMode): Uint8Array | null {
   if (!ascii(bytes, 0, "RIFF") || !ascii(bytes, 8, "WEBP")) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const riffEnd = Math.min(bytes.length, CHUNK_HEADER + view.getUint32(4, true));
   const chunks: Uint8Array[] = [];
+  let exif: Uint8Array | null = null;
   let at = RIFF_HEADER;
   while (at + CHUNK_HEADER <= riffEnd) {
     const type = String.fromCharCode(...bytes.subarray(at, at + 4));
@@ -223,8 +296,19 @@ function stripWebp(bytes: Uint8Array): Uint8Array | null {
       const chunk = bytes.slice(at, Math.min(end, riffEnd));
       if (type === "VP8X") chunk[CHUNK_HEADER] = chunk[CHUNK_HEADER]! & ~(VP8X_EXIF_FLAG | VP8X_XMP_FLAG);
       chunks.push(chunk);
+    } else if (type === "EXIF" && mode === "sensitive" && exif === null) {
+      // Some writers put the JPEG-style "Exif\0\0" header before the TIFF block.
+      const data = bytes.subarray(at + CHUNK_HEADER, Math.min(at + CHUNK_HEADER + size, riffEnd));
+      const tiff = filterExif(ascii(data, 0, EXIF_HEADER) ? data.subarray(EXIF_HEADER_BYTES) : data);
+      if (tiff) exif = webpChunk("EXIF", tiff);
     }
     at = end;
+  }
+  // The extended format (VP8X) is the only one that may carry EXIF; it goes last, flagged in VP8X.
+  const extended = chunks.find((chunk) => ascii(chunk, 0, "VP8X"));
+  if (exif && extended) {
+    extended[CHUNK_HEADER] = extended[CHUNK_HEADER]! | VP8X_EXIF_FLAG;
+    chunks.push(exif);
   }
   const bodyLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const out = new Writer();

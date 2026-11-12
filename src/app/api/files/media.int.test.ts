@@ -12,6 +12,7 @@ import { POST as removeNodes } from "@/app/api/nodes/delete/route";
 import { getEnv } from "@/config/env";
 import { IMMUTABLE_CACHE, MEDIA, PROCESS, TRANSCODE } from "@/config/policy";
 import { exifOrientation } from "@/domain/image-metadata";
+import { exifDateTaken } from "@/domain/media-date";
 import { Queue } from "bullmq";
 import { startMediaWorker, stopMediaWorker } from "@/server/jobs/media-worker";
 import { closeQueues, enqueueMedia, enqueueTranscode, MEDIA_QUEUE, queueConnection } from "@/server/jobs/queue";
@@ -35,13 +36,22 @@ afterAll(async () => {
   await cleanup();
 });
 
-/** A camera-like JPEG: rotated 90° (orientation 6), with GPS and device data. */
+/** A camera-like JPEG: rotated 90° (orientation 6), with GPS, owner, serial, device data and the date taken. */
 function cameraJpeg() {
   return sharp({ create: { width: 64, height: 32, channels: 3, background: "#3fc1a5" } })
     .jpeg()
-    .withExif({ IFD0: { Make: "RelayCam", Model: "Test Model X" }, IFD3: { GPSLatitudeRef: "N", GPSLatitude: "37/1 33/1 0/1" } })
+    .withExif({
+      IFD0: { Make: "RelayCam", Model: "Test Model X", Artist: "Jaeah Lee" },
+      IFD2: { DateTimeOriginal: "2024:05:01 13:22:10", OffsetTimeOriginal: "+09:00", BodySerialNumber: "SN-998877" },
+      IFD3: { GPSLatitudeRef: "N", GPSLatitude: "37/1 33/1 0/1" },
+    })
     .withMetadata({ orientation: 6 })
     .toBuffer();
+}
+
+/** SHARE_METADATA_STRIP for the worker and share routes in this test process (the parsed env is cached). */
+function stripMode(mode: "sensitive" | "all" | "none") {
+  (getEnv("jobs") as { SHARE_METADATA_STRIP: string }).SHARE_METADATA_STRIP = mode;
 }
 
 /** Little-endian tag id of the EXIF pointer to the GPS block. */
@@ -52,22 +62,38 @@ const ORIENTATION_ONLY_EXIF_BYTES = 32;
 const SHUTDOWN_SLACK_MS = 3_000;
 
 describe("media processing", () => {
-  it("makes a thumbnail and a copy without location or camera data, keeping the original", async () => {
+  it("makes a thumbnail and a copy without location or identifying data, keeping the original", async () => {
     const m = await member();
     const original = await cameraJpeg();
     expect(original.includes(Buffer.from("RelayCam"))).toBe(true);
     expect((await sharp(original).metadata()).exif!.includes(GPS_POINTER)).toBe(true);
     const id = await addFile(m, m.rootId, [], "photo.jpg", original, "image/jpeg", "IMAGE");
 
+    // Default (sensitive): location, owner and serial go; the date taken and camera stay.
     expect(await processMedia(id)).toEqual({ thumb: true, derived: true, preview: false });
-    expect(await prisma.node.findUniqueOrThrow({ where: { id } })).toMatchObject({ hasThumb: true, hasDerived: true });
+    expect(await prisma.node.findUniqueOrThrow({ where: { id } })).toMatchObject({ hasThumb: true, hasDerived: true, derivedMode: "SENSITIVE" });
     expect(await readFile(join(m.dir, "photo.jpg"))).toEqual(original);
+    let derived = await readFile(assetFile("derived", m.id, id));
+    for (const secret of ["Jaeah Lee", "SN-998877"]) expect(derived.includes(Buffer.from(secret)), secret).toBe(false);
+    expect(derived.includes(Buffer.from("RelayCam"))).toBe(true);
+    let meta = await sharp(derived).metadata();
+    expect(meta.exif!.includes(GPS_POINTER)).toBe(false);
+    expect(exifDateTaken(meta.exif!)).toEqual({ local: "2024-05-01T13:22:10", offset: "+09:00" });
+    expect([meta.width, meta.orientation]).toEqual([64, 6]);
 
-    const derived = await readFile(assetFile("derived", m.id, id));
-    for (const secret of ["RelayCam", "Test Model X"]) expect(derived.includes(Buffer.from(secret)), secret).toBe(false);
+    // all: only the orientation is left.
+    stripMode("all");
+    try {
+      await processMedia(id);
+    } finally {
+      stripMode("sensitive");
+    }
+    expect((await prisma.node.findUniqueOrThrow({ where: { id } })).derivedMode).toBe("ALL");
+    derived = await readFile(assetFile("derived", m.id, id));
+    for (const secret of ["RelayCam", "Test Model X", "Jaeah Lee"]) expect(derived.includes(Buffer.from(secret)), secret).toBe(false);
     const at = derived.indexOf(Buffer.from("Exif\0\0"));
     expect(exifOrientation(derived, at, derived.length)).toBe(6);
-    const meta = await sharp(derived).metadata();
+    meta = await sharp(derived).metadata();
     expect([meta.width, meta.orientation, meta.exif?.length]).toEqual([64, 6, ORIENTATION_ONLY_EXIF_BYTES]);
 
     // The thumbnail is upright (rotated by its orientation) and carries no metadata.
@@ -108,6 +134,58 @@ describe("media processing", () => {
     }
   });
 
+  it("copies videos without location tags, keeping when they were taken, and only as allowed types", async () => {
+    const m = await member();
+    const dir = await mkdtemp(join(tmpdir(), "relay-media-"));
+    try {
+      const clip = join(dir, "clip.mov");
+      await run(getEnv("jobs").FFMPEG_PATH, [
+        ...["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x36:rate=5", "-c:v", "mpeg4"],
+        ...["-metadata", "creation_time=2024-05-01T04:22:10Z", "-metadata", "com.apple.quicktime.location.ISO6709=+37.5665+126.9780+010.000/"],
+        ...["-metadata", "location=+37.5665+126.9780/", "-metadata", "com.apple.quicktime.make=Apple", "-movflags", "+use_metadata_tags", clip],
+      ]);
+      const original = await readFile(clip);
+      expect(original.includes(Buffer.from("37.5665"))).toBe(true);
+      const id = await addFile(m, m.rootId, [], "clip.mov", original, "video/quicktime", "VIDEO");
+      expect(await processMedia(id)).toMatchObject({ thumb: true, derived: true });
+      expect(await prisma.node.findUniqueOrThrow({ where: { id } })).toMatchObject({ hasDerived: true, derivedMode: "SENSITIVE", stripFailed: false });
+      const copy = await readFile(assetFile("derived", m.id, id));
+      expect(copy.includes(Buffer.from("37.5665"))).toBe(false);
+      expect(copy.includes(Buffer.from("Apple"))).toBe(true);
+      // Streams are copied, not re-encoded: about the same size.
+      expect(Math.abs(copy.length - original.length)).toBeLessThan(original.length / 10);
+      const { stdout } = await run(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-i", assetFile("derived", m.id, id), "-map_metadata", "0", "-f", "ffmetadata", "-"]);
+      expect(stdout).toContain("creation_time=2024-05-01T04:22:10");
+
+      stripMode("all");
+      try {
+        await processMedia(id);
+      } finally {
+        stripMode("sensitive");
+      }
+      const bare = await run(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-i", assetFile("derived", m.id, id), "-map_metadata", "0", "-f", "ffmetadata", "-"]);
+      expect(bare.stdout).not.toContain("2024-05-01");
+      expect(bare.stdout).not.toContain("Apple");
+
+      // A container ffmpeg may not copy into: no copy, so it is never shared as is.
+      const odd = await addFile(m, m.rootId, [], "clip.wmv", original, "video/x-unknown", "VIDEO");
+      await processMedia(odd);
+      expect(await prisma.node.findUniqueOrThrow({ where: { id: odd } })).toMatchObject({ hasDerived: false, stripFailed: true });
+
+      // none: no copies at all.
+      stripMode("none");
+      try {
+        const plain = await addFile(m, m.rootId, [], "plain.mov", original, "video/quicktime", "VIDEO");
+        await processMedia(plain);
+        expect(await prisma.node.findUniqueOrThrow({ where: { id: plain } })).toMatchObject({ hasDerived: false, derivedMode: null, stripFailed: false });
+      } finally {
+        stripMode("sensitive");
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("takes a video frame for the thumbnail", async () => {
     const dir = await mkdtemp(join(tmpdir(), "relay-media-"));
     try {
@@ -115,7 +193,8 @@ describe("media processing", () => {
       await run(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x180:rate=10", "-c:v", "libvpx-vp9", clip]);
       const m = await member();
       const id = await addFile(m, m.rootId, [], "clip.webm", await readFile(clip), "video/webm", "VIDEO");
-      expect(await processMedia(id)).toEqual({ thumb: true, derived: false, preview: false });
+      // A WebM gets a shared copy without metadata too (streams copied as they are).
+      expect(await processMedia(id)).toEqual({ thumb: true, derived: true, preview: false });
       const info = await sharp(await readFile(assetFile("thumbs", m.id, id))).metadata();
       expect([info.format, info.width, info.height]).toEqual(["webp", 320, 180]);
     } finally {

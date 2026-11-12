@@ -9,6 +9,8 @@ const box = "flex flex-wrap items-center gap-3 rounded-xl border border-ctrl bg-
 
 interface PreferencesCardProps {
   stripMetadata: boolean;
+  /** SHARE_METADATA_STRIP: what the setting removes, or "none" when the server turned it off. */
+  stripMode: "sensitive" | "all" | "none";
   onStripMetadata: (on: boolean) => void;
   /** Null when the server sends no notifications (the option is hidden). */
   notifyLinks: boolean | null;
@@ -18,7 +20,13 @@ interface PreferencesCardProps {
 }
 
 /** Preferences of this account: expired items cleanup and photo metadata on public links. */
-export function PreferencesCard({ stripMetadata, onStripMetadata, notifyLinks, onNotifyLinks, onPurge, busy }: PreferencesCardProps) {
+const STRIP_TEXT = {
+  sensitive: "Photos and videos sent through public links lose their location, serial numbers and personal fields; the date taken and camera stay. Your original files are never changed.",
+  all: "Photos and videos sent through public links lose their location, camera details and the date taken. Your original files are never changed.",
+  none: "This server shares files exactly as uploaded (SHARE_METADATA_STRIP=none), so nothing is removed.",
+} as const;
+
+export function PreferencesCard({ stripMetadata, stripMode, onStripMetadata, notifyLinks, onNotifyLinks, onPurge, busy }: PreferencesCardProps) {
   return (
     <section aria-label="Preferences" className="flex flex-col gap-4 rounded-2xl border border-card-line bg-card p-5">
       <SectionTitle
@@ -43,10 +51,10 @@ export function PreferencesCard({ stripMetadata, onStripMetadata, notifyLinks, o
       </div>
       <div className={box}>
         <CheckRow
-          checked={stripMetadata}
-          disabled={busy}
+          checked={stripMetadata && stripMode !== "none"}
+          disabled={busy || stripMode === "none"}
           onCheckedChange={onStripMetadata}
-          description="Photos sent through public links lose their location and camera details. Your original files are never changed."
+          description={STRIP_TEXT[stripMode]}
           className="flex-1"
         >
           Strip metadata on public links

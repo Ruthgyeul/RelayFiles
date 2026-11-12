@@ -33,6 +33,8 @@ export interface ProfileData {
   };
   /** The server sends owner notifications (NOTIFY_WEBHOOK_URL is set). */
   notifyAvailable: boolean;
+  /** What shared photos and videos lose on this server (SHARE_METADATA_STRIP); "none" turns the account setting off. */
+  shareStripMode: "sensitive" | "all" | "none";
   /** First 4 + 28 dots + last 4 characters; the full token is fetched on demand. */
   maskedToken: string;
   usage: { usedBytes: string; files: number; folders: number };

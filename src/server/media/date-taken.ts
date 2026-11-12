@@ -6,12 +6,17 @@ import { exifDateTaken, toInstant, videoDateTaken, type MediaTime } from "@/doma
 import { runCommand } from "../process/run-command";
 import { ffmpegInput } from "./ffmpeg-input";
 
-/** The capture time recorded in a video container (ffmpeg's metadata listing). */
-async function videoTime(path: string): Promise<MediaTime | null> {
+/** A video container's global metadata as `ffmpeg -f ffmetadata` lists it. */
+export async function videoMetadata(path: string): Promise<string> {
   // -map_metadata 0: ffmpeg otherwise leaves creation_time out of its output. Nothing is decoded (-c copy -t 0).
   const args = ["-nostdin", "-hide_banner", "-loglevel", "error", ...ffmpegInput(path), "-map_metadata", "0", "-c", "copy", "-t", "0", "-f", "ffmetadata", "pipe:1"];
   const { stdout } = await runCommand(getEnv("jobs").FFMPEG_PATH, args, { timeoutMs: MEDIA.ffmpegTimeoutSec * MS.second, maxStdoutBytes: MEDIA.maxMetadataBytes });
-  return videoDateTaken(stdout.toString("utf8"));
+  return stdout.toString("utf8");
+}
+
+/** The capture time recorded in a video container (ffmpeg's metadata listing). */
+async function videoTime(path: string): Promise<MediaTime | null> {
+  return videoDateTaken(await videoMetadata(path));
 }
 
 /** The capture time in an image's EXIF block (sharp reads only the header). */

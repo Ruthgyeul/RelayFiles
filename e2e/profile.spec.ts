@@ -87,7 +87,7 @@ test("saves preferences and purges expired items", async ({ page }) => {
   const strip = preferences.getByRole("checkbox", { name: /Strip metadata on public links/ });
   await expect(strip).toHaveAttribute("aria-checked", "true");
   await strip.click();
-  await expect(page.getByText("Public photos keep their metadata")).toBeVisible();
+  await expect(page.getByText("Public photos and videos keep their metadata")).toBeVisible();
   await expect(strip).toHaveAttribute("aria-checked", "false");
 
   await preferences.getByRole("button", { name: "Purge now" }).click();
