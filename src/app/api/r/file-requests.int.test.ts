@@ -12,6 +12,7 @@ import type { FileRequestDto, FileRequestView, RequestUploadPlan } from "@/contr
 import { UNLOCK_COOKIE } from "@/server/share/unlock-cookie";
 import { callRoute } from "../../../../test/route-call";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
+import { db } from "@/server/db/client";
 
 const { prisma, member, addFile, cleanup } = fileFixtures();
 
@@ -85,6 +86,17 @@ describe("upload-only links", () => {
 
     const [listed] = (await callRoute<FileRequestDto[]>(listRequests, { cookie: m.cookie, query: "?folder=root" })).json.data;
     expect(listed).toMatchObject({ id: request.id, filesReceived: 2, bytesReceived: "7", status: "open" });
+  });
+
+  it("takes one file per prepared slot, so a visitor cannot add files past the batch", async () => {
+    const m = await member();
+    const request = await requestFor(m);
+    const visitor: Visitor = { ip: randomTestIp() };
+    const plan = (await visit<RequestUploadPlan>(prepare, request.id, visitor, { files: [{ name: "zero.txt", size: 0 }] })).json.data;
+    const first = await start(plan, visitor, 0, "zero.txt", 0);
+    expect(first.created.status).toBe(200);
+    for (let i = 0; i < 3; i += 1) expect((await start(plan, visitor, 0, "zero.txt", 0)).created.status).toBe(400);
+    expect(await db().node.count({ where: { accountId: m.id, name: { startsWith: "zero" } } })).toBe(1);
   });
 
   it("asks for the password before showing the form or taking files", async () => {
