@@ -129,6 +129,15 @@ export const moveSchema = z.object({ ids: nodeIds, targetId: folderRefSchema, mo
 
 export const deleteSchema = z.object({ ids: nodeIds });
 
+/** POST /api/nodes/rename-batch: new names for items of one folder (different ids, at most FILES.maxBatchItems). */
+export const renameBatchSchema = z.object({
+  items: z
+    .array(z.object({ id: nodeIdSchema, name: z.string().max(1024) }))
+    .min(1)
+    .max(FILES.maxBatchItems)
+    .refine((items) => new Set(items.map((item) => item.id)).size === items.length, "Each item can be renamed once."),
+});
+
 export const tagsSchema = z.object({
   ids: nodeIds,
   add: z.array(z.string().max(64)).max(50).default([]),

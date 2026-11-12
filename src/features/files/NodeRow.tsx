@@ -85,7 +85,7 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
           role="checkbox"
           aria-checked={selected}
           aria-label={`Select ${item.name}`}
-          onClick={onToggle}
+          onClick={(event) => onToggle(event.shiftKey)}
           className="flex size-10 shrink-0 items-center justify-center border-0 bg-transparent p-0 sm:size-[30px]"
         >
           <Icon name={selected ? "check-square" : "square"} weight={selected ? "fill" : "regular"} size={22} className={selected ? "text-accent-hi" : "text-t5"} />

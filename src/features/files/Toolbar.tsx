@@ -12,7 +12,7 @@ interface ToolbarProps {
   allSelected: boolean;
   selectedCount: number;
   onToggleAll: () => void;
-  /** Buttons shown while items are selected (Download, Zip, Tags, Copy, Move, Delete). */
+  /** Buttons shown while items are selected (Download, Zip, Tags, Favorite, Copy, Move, Rename, Delete). */
   selectionActions: ReactNode;
   /** Buttons shown otherwise (Upload, Upload folder, New folder). */
   folderActions: ReactNode;

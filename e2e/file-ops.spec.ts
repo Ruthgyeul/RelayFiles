@@ -47,6 +47,35 @@ test("moves, copies and deletes through the dialogs", async ({ page }) => {
   await expect(page.getByText("This folder is empty")).toBeVisible();
 });
 
+test("selects a range with Shift and renames it at once", async ({ page }) => {
+  await openFiles(page);
+  for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) await newFolder(page, name);
+  await expect.poll(() => names(page)).toEqual(["Alpha", "Beta", "Delta", "Gamma"]);
+
+  await page.getByRole("checkbox", { name: "Select Alpha" }).click();
+  await page.getByRole("checkbox", { name: "Select Delta" }).click({ modifiers: ["Shift"] });
+  await expect(page.getByRole("checkbox", { name: "Select Beta" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("checkbox", { name: "Select Gamma" })).toHaveAttribute("aria-checked", "false");
+
+  await page.getByRole("toolbar", { name: "Files" }).getByRole("button", { name: "Rename" }).click();
+  const dialog = page.getByRole("dialog", { name: "Rename items" });
+  await dialog.getByRole("textbox", { name: "Add before" }).fill("{n} ");
+  const preview = dialog.getByRole("list", { name: "New names" });
+  await expect(preview.getByRole("listitem").nth(2)).toContainText("03 Delta");
+  // A name that one selected item already has is refused before anything changes.
+  await dialog.getByRole("textbox", { name: "Add before" }).fill("");
+  await dialog.getByRole("textbox", { name: "Find" }).fill("Beta");
+  await dialog.getByRole("textbox", { name: "Replace with" }).fill("Alpha");
+  // Both items that would end up as "Alpha" are marked.
+  await expect(dialog.getByText("Another selected item gets this name.")).toHaveCount(2);
+  await expect(dialog.getByRole("button", { name: "Rename 1 item" })).toBeDisabled();
+  await dialog.getByRole("textbox", { name: "Find" }).fill("");
+  await dialog.getByRole("textbox", { name: "Add before" }).fill("{n} ");
+  await dialog.getByRole("button", { name: "Rename 3 items" }).click();
+  await expect(page.getByText("Renamed 3 items")).toBeVisible();
+  await expect.poll(() => names(page)).toEqual(["01 Alpha", "02 Beta", "03 Delta", "Gamma"]);
+});
+
 test("tags items and finds them by tag", async ({ page }) => {
   await openFiles(page);
   await newFolder(page, "Trip");

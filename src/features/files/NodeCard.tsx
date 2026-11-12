@@ -41,7 +41,7 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPr
         role="checkbox"
         aria-checked={selected}
         aria-label={`Select ${item.name}`}
-        onClick={onToggle}
+        onClick={(event) => onToggle(event.shiftKey)}
         className="absolute top-1.5 left-1.5 flex size-[30px] items-center justify-center rounded-lg border-0 bg-grid-check p-0"
       >
         <Icon name={selected ? "check-square" : "square"} weight={selected ? "fill" : "regular"} size={18} className={selected ? "text-accent-hi" : "text-t5"} />
