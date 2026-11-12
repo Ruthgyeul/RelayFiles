@@ -205,6 +205,13 @@ export const SHARE = {
    */
   zipChecksPerAddress: 30,
   zipCheckWindowSec: 60,
+  /**
+   * Share page lookups of links that do not exist (or are private) per address and window.
+   * Past it, every link answers "not found" to that address until the window ends, so ids
+   * cannot be guessed at speed; nobody mistypes this many links in an hour.
+   */
+  linkMissesPerAddress: 30,
+  linkMissWindowSec: 3_600,
 } as const;
 
 export const MEDIA = {

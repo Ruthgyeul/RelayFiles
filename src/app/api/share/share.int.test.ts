@@ -696,4 +696,31 @@ describe("share downloads", () => {
     const counts = await prisma.node.findMany({ where: { id: { in: [a, b, once] } }, select: { id: true, downloads: true } });
     expect(Object.fromEntries(counts.map((row) => [row.id, row.downloads]))).toEqual({ [a]: 1, [b]: 1, [once]: 1 });
   });
+
+  it("applies the download limit of a folder inside the zipped one, like single downloads", async () => {
+    const { trip, day, b } = await sharedTrip();
+    await prisma.node.update({ where: { id: day.id }, data: { downloadLimit: 1 } });
+    const zip = async () => Buffer.from(await (await visit(shareZip, `/api/share/${trip.linkId}/zip?folder=${trip.id}`, { linkId: trip.linkId })).arrayBuffer());
+
+    const first = await zip();
+    expect(first.includes(Buffer.from("bravo"))).toBe(true);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: day.id } })).downloads).toBe(1);
+
+    // Day1 has no downloads left: its file stays out of later zips and is not counted again.
+    const second = await zip();
+    expect(second.includes(Buffer.from("bravo"))).toBe(false);
+    expect(second.includes(Buffer.from("Trip/Day1/b.txt  (Download limit reached)"))).toBe(true);
+    expect(second.includes(Buffer.from("alpha"))).toBe(true);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: b } })).downloads).toBe(1);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: day.id } })).downloads).toBe(1);
+  });
+
+  it("downloads a delete-after-download folder inside a zipped one only once", async () => {
+    const { trip, day } = await sharedTrip();
+    await prisma.node.update({ where: { id: day.id }, data: { burn: true } });
+    const zip = async () => Buffer.from(await (await visit(shareZip, `/api/share/${trip.linkId}/zip?folder=${trip.id}`, { linkId: trip.linkId })).arrayBuffer());
+    expect((await zip()).includes(Buffer.from("bravo"))).toBe(true);
+    expect((await zip()).includes(Buffer.from("bravo"))).toBe(false);
+  });
 });
+

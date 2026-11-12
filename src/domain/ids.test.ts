@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ID_ALPHABET,
+  ID_LENGTH,
   ID_PATTERN,
   isAccountId,
   newAccountId,
@@ -21,6 +22,7 @@ describe("id generators", () => {
       expect(newAccountId()).toMatch(ID_PATTERN.account);
       expect(newNodeId()).toMatch(ID_PATTERN.node);
       expect(newLinkId()).toMatch(ID_PATTERN.link);
+      expect(newLinkId()).toHaveLength(ID_LENGTH.link);
       expect(newAccountToken()).toMatch(ID_PATTERN.token);
       expect(newAnonName()).toMatch(ID_PATTERN.anonName);
       expect(newInviteCode()).toMatch(ID_PATTERN.invite);
@@ -50,6 +52,8 @@ describe("id generators", () => {
     expect(isAccountId("abcdefghjkm1")).toBe(false);
     expect(isAccountId("../etc/passwd")).toBe(false);
     expect("abcdefghjk").toMatch(ID_PATTERN.link);
+    expect("abcdefghjkmnpqrs").toMatch(ID_PATTERN.link);
+    for (const other of ["abcdefghjkm", "abcdefghjkmnpqr", "abcdefghjkmnpqrst", "ABCDEFGHJK"]) expect(other).not.toMatch(ID_PATTERN.link);
   });
 });
 

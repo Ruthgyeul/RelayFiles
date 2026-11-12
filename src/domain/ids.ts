@@ -11,7 +11,7 @@ export const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 /** Upper-case invite code alphabet. */
 export const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-export const ID_LENGTH = { account: 12, node: 12, link: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12, fileRequest: 12, deletedItem: 12 } as const;
+export const ID_LENGTH = { account: 12, node: 12, link: 16, legacyLink: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12, fileRequest: 12, deletedItem: 12 } as const;
 
 /**
  * Personal API tokens are `rfp_<token id>_<43 random characters>`: the prefix tells them apart
@@ -41,7 +41,12 @@ const pattern = (length: number, alphabet: string) => new RegExp(`^[${alphabet}]
 export const ID_PATTERN = {
   account: pattern(ID_LENGTH.account, ID_ALPHABET),
   node: pattern(ID_LENGTH.node, ID_ALPHABET),
-  link: pattern(ID_LENGTH.link, ID_ALPHABET),
+  /**
+   * Share links: 16 characters (about 79 bits) since links of every item could be guessed at
+   * scale with 10 (about 50 bits). Links made before keep their 10 characters and keep
+   * working: a link id never changes (docs/architecture.md).
+   */
+  link: new RegExp(`^(?:[${ID_ALPHABET}]{${ID_LENGTH.link}}|[${ID_ALPHABET}]{${ID_LENGTH.legacyLink}})$`),
   token: pattern(ID_LENGTH.token, TOKEN_ALPHABET),
   session: pattern(ID_LENGTH.session, ID_ALPHABET),
   apiToken: new RegExp(`^${API_TOKEN_PREFIX}([${ID_ALPHABET}]{${ID_LENGTH.apiTokenId}})_[${TOKEN_ALPHABET}]{${ID_LENGTH.apiToken}}$`),

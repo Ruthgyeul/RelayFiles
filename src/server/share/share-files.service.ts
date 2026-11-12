@@ -10,6 +10,7 @@ import type { NodeKind } from "@/domain/tree";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { countInWindow } from "../redis";
+import { downloadsUsedUp, limitingFoldersBelow, type LimitFacts } from "@/domain/share-limits";
 import { db } from "../db/client";
 import type { Busy } from "@/domain/share";
 import { segmentsBelowRoot } from "@/domain/tree";
@@ -250,7 +251,7 @@ const SKIP_REASONS: Record<ZipSkip, string> = {
 };
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
-function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolderTree, owner: AccountRow, busy: Map<string, Busy>) {
+function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolderTree, owner: AccountRow, busy: Map<string, Busy>, inner: ReadonlyMap<string, readonly LimitFacts[]>) {
   const files: { row: SharedRow; name: string; segments: string[]; skip: ZipSkip | null }[] = [];
   const folders: string[] = [];
   for (const { row, segments } of subtreePaths(rows, folder.id)) {
@@ -262,7 +263,10 @@ function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolde
       continue;
     }
     const imageBlock = stripsImage(owner, row) ? publicImageBlock(row) : null;
-    const skip = link.isOwner ? imageBlock : (downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? imageBlock);
+    // A folder inside with its own download limit counts for the files below it, as when they
+    // are downloaded one by one: once it has none left, its files stay out.
+    const innerBlock = (inner.get(row.id) ?? []).some(downloadsUsedUp) ? "limit" : null;
+    const skip = link.isOwner ? imageBlock : (downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? innerBlock ?? imageBlock);
     files.push({ row, name, segments, skip });
   }
   return { files, folders };
@@ -293,11 +297,18 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
     allFiles.map((row) => ({ id: row.id, dlPaused: pausedOn(row, tree.wayAbove(row)) })),
     now,
   );
-  const plan = zipPlan(shared, tree, owner, busy);
+  // Folders inside the zipped one that limit downloads, per file (the zipped folder and those
+  // above it are in shared.counted).
+  const inner = limitingFoldersBelow(tree.rows, folder.id);
+  const plan = zipPlan(shared, tree, owner, busy, inner);
 
   if (!link.isOwner) {
     const claimed = await claimDownload(db(), shared.counted);
     if (!claimed) throw new ApiError("FORBIDDEN", "Download limit reached");
+    // Each limiting folder inside counts once for the zip; one at its limit by now leaves its files out.
+    const innerOf = (file: (typeof plan.files)[number]) => (inner.get(file.row.id) ?? []).map((row) => row.id);
+    const insideCounted = await claimEachDownload(db(), [...new Set(plan.files.filter((file) => file.skip === null).flatMap(innerOf))]);
+    for (const file of plan.files) if (file.skip === null && innerOf(file).some((id) => !insideCounted.has(id))) file.skip = "limit";
     // A file at its limit by now (a download finished meanwhile) is left out like one already used up.
     const included = plan.files.filter((file) => file.skip === null);
     const counted = await claimEachDownload(db(), included.map((file) => file.row.id));
