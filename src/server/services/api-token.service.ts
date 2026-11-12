@@ -109,7 +109,15 @@ export async function revokeApiToken(accountId: string, id: string): Promise<{ n
  * live account, holding `scope` when one is named (403), under its per-minute request limit (429). Cookies are
  * never read here, so these routes cannot be driven by another site through a browser.
  */
-export async function requireApiCaller(headers: Headers, scope: ApiScope | null, now: Date = new Date()): Promise<ApiCaller> {
+/** A per-minute request budget of a token: API v1 (API.requestsPerMinute) or another client such as WebDAV. */
+export interface RequestBudget {
+  key: string;
+  perMinute: number;
+}
+
+const API_BUDGET: RequestBudget = { key: "api", perMinute: API.requestsPerMinute };
+
+export async function requireApiCaller(headers: Headers, scope: ApiScope | null, now: Date = new Date(), budget: RequestBudget = API_BUDGET): Promise<ApiCaller> {
   const token = bearerToken(headers.get("authorization"));
   const id = token ? apiTokenIdOf(token) : null;
   const row = id ? await findApiTokenWithAccount(db(), id) : null;
@@ -123,7 +131,7 @@ export async function requireApiCaller(headers: Headers, scope: ApiScope | null,
   }
   if (isExpired(row.account, getEnv("policy").ACCOUNT_TTL_DAYS, now)) throw refused();
   if (scope !== null && !hasScope(row.scopes, scope)) throw new ApiError("FORBIDDEN", `This token lacks the ${scope} scope.`);
-  if ((await countInWindow(`api:rate:${row.id}`, RATE_WINDOW_SEC)) > API.requestsPerMinute) {
+  if ((await countInWindow(`${budget.key}:rate:${row.id}`, RATE_WINDOW_SEC)) > budget.perMinute) {
     throw new ApiError("RATE_LIMITED", "Too many requests with this token. Try again in a minute.", { retryAfter: RATE_WINDOW_SEC });
   }
   await touchApiToken(db(), row.id, now, new Date(now.getTime() - API.touchIntervalSec * MS.second));

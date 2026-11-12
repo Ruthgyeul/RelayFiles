@@ -381,6 +381,16 @@ touch deploy/maintenance/on    # 점검 모드 (/api/health를 뺀 모든 요청
 
 다음 날 `ls -l /srv/relayfiles/backups`로 새 덤프가 생겼는지 확인한다. 사용자 파일(SSD)은 따로 다른 디스크에 `rsync`하고, `.env`·SSD 키는 서버 밖에도 보관한다([deploy-ubuntu.md §10](deploy-ubuntu.md#10-백업-자동화), [runbook.md "백업"](runbook.md#백업)). systemd 배포에서 DB 복구는 §9의 `pg_restore` 명령을 쓴다.
 
+### WebDAV (선택)
+
+`install.sh`가 `relayfiles-dav` 유닛과 Nginx `/dav/` 위치를 만들어 두지만 켜지는 않는다. 서비스가 없으면 `/dav/`는 502를 준다.
+
+```bash
+sudo systemctl enable --now relayfiles-dav
+```
+
+`DAV_PORT`(기본 3002)와 `DAV_MEMORY_MAX`(512M)는 `.env`에서 바꾼다. 연결은 `https://<도메인>/dav/`, 비밀번호는 `files:read` API 토큰이다(https에서만 쓴다).
+
 ## 9. 업데이트와 롤백
 
 ```bash

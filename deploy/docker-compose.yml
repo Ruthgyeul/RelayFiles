@@ -39,6 +39,8 @@ x-app-env: &app-env
     HEALTH_PROBE_URL: http://app:${APP_PORT:-3000}
     PORT: ${APP_PORT:-3000}
     HOSTNAME: 0.0.0.0
+    # The optional dav service listens on the compose network (Nginx forwards /dav/ to it).
+    DAV_HOST: 0.0.0.0
     # The offsite backup runs on the host (deploy/scripts/offsite-backup.sh): its keys stay out of the containers.
     RESTIC_REPOSITORY: ""
     RESTIC_PASSWORD: ""
@@ -191,6 +193,25 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  dav:
+    # WebDAV (optional): docker compose --profile dav up -d dav. Read-only network drive for
+    # personal API tokens (files:read); Nginx forwards /dav/ to it (docs/deploy-ubuntu.md).
+    <<: [*app-env, *hardening]
+    image: relayfiles-tools:${RELEASE_TAG:-latest}
+    profiles: [dav]
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: ${DAV_MEMORY_MAX:-512M}
+    stop_grace_period: ${APP_STOP_GRACE_SEC:-30}s
+    user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
+    command: ["node", "--import", "tsx", "--conditions=react-server", "scripts/dav-server.mts"]
+    volumes: *storage
+    # relay: Nginx reaches it; data: PostgreSQL and Redis.
+    networks: [relay, data]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
   nginx:
     # 1.30 is the maintained stable branch (1.29 mainline no longer gets updates).
     image: nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
@@ -209,6 +230,7 @@ services:
     stop_grace_period: ${APP_STOP_GRACE_SEC:-30}s
     environment:
       APP_UPSTREAM: app:${APP_PORT:-3000}
+      DAV_UPSTREAM: dav:${DAV_PORT:-3002}
       NGINX_RESOLVER: 127.0.0.11
       SERVER_NAME: ${SERVER_NAME:-localhost}
       STORAGE_ROOT: ${STORAGE_ROOT}

@@ -48,6 +48,7 @@ npm run check:emoji  # 이모지 사용 검사
 npm run check:cycles # 기능(src/features/*) 사이 순환 import 검사
 npm run check        # typecheck · lint · emoji · cycles · migrations · test · build 전체
 npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
+npm run dav          # WebDAV 서버(읽기 전용, /dav/, API 토큰 Basic 인증). Next가 PROPFIND를 못 받아 별도 프로세스
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기 (-- --previews: 큰 이미지의 뷰어 미리보기)
 npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 다시 생성
 npm run data:migrate     # 데이터 마이그레이션(src/server/migrations) 실행, 중단 지점부터 재개

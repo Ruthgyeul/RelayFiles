@@ -543,6 +543,16 @@ $C --profile tunnel up -d cloudflared     # 터널을 쓰면
 
 PostgreSQL 메이저 버전(16 → 17)은 데이터 디렉터리를 그대로 열 수 없다. 덤프 → 새 버전에 복원 순서로 따로 진행한다.
 
+### WebDAV (선택)
+
+네트워크 드라이브(Finder, Windows 탐색기, rclone)로 파일을 읽으려면 dav 서비스를 켠다. Nginx는 `/dav/`를 이미 넘기고 있고, 서비스가 없으면 502를 준다.
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml --profile dav up -d dav
+```
+
+My Profile에서 `files:read` 범위의 API 토큰을 만들고, `https://<도메인>/dav/`에 사용자 이름 아무거나 + 토큰(비밀번호)으로 연결한다. **https에서만 쓴다**(Basic 인증은 토큰을 매 요청 보낸다). 읽기 전용이다.
+
 ## 8. 확인 목록 (실서버)
 
 | 항목 | 확인 방법 |

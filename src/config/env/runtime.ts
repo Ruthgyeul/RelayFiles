@@ -51,7 +51,7 @@ export const observabilityEnv = z.object({
    * <name>-combined.log, so the app, the worker and admin scripts never rotate each other's
    * files. The worker and scripts set it themselves (scripts/worker.mts, scripts/lib/bootstrap.mts).
    */
-  LOG_SERVICE: z.enum(["app", "worker", "tools"]).default("app"),
+  LOG_SERVICE: z.enum(["app", "worker", "tools", "dav"]).default("app"),
   DISK_DEVICE: z.string().default("/dev/sda"),
   TLS_CERT_PATH: z.string().optional(),
 });

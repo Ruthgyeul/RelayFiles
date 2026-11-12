@@ -99,3 +99,11 @@ export const SECURITY_LOG = {
   /** A rejected API token is logged at most once per token in this window. */
   rejectedTokenRepeatSec: 600,
 } as const;
+
+/** WebDAV (npm run dav): the files of an account as a network drive, signed in with a personal API token. */
+export const DAV = {
+  /** Requests one token may make per minute (file managers list folders often). */
+  requestsPerMinute: 600,
+  /** Path prefix the server answers below (Nginx forwards it unchanged). */
+  prefix: "/dav",
+} as const;
