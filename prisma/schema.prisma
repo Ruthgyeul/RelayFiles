@@ -81,6 +81,7 @@ model Account {
   deletedItems         DeletedItem[]
   favorites            Favorite[]
   favoriteFolders      FavoriteFolder[]
+  events               AccountEvent[]
 
   @@index([volumeId])
 }
@@ -518,6 +519,26 @@ model ApiToken {
   lastUsedAt DateTime?
 
   @@index([accountId])
+}
+
+/// The account's own security log (profile "Security log"): sign-ins, sign-outs, token and
+/// device changes. Kinds are src/domain/security-log.ts SECURITY_EVENTS; the real IP is never stored.
+model AccountEvent {
+  id        String   @id
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind      String
+  /// Short client-safe detail, e.g. the API token name.
+  detail    String?
+  os        String
+  browser   String
+  /// IP with the last two octets masked.
+  ipMasked  String
+  country   String?
+  at        DateTime @default(now())
+
+  @@index([accountId, at])
+  @@index([at])
 }
 
 /// Upload-only link ("file request", /r/<id>): visitors add files to one folder of the account

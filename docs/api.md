@@ -109,6 +109,7 @@
 | `POST` | `/api/me/token` | 새 토큰 발급. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 기존 토큰은 즉시 무효, 이 기기를 뺀 모든 기기 로그아웃, 개인 API 토큰 전부 폐기. 새 토큰을 한 번 돌려준다 |
 | `GET`·`DELETE` | `/api/me/sessions` | 이 계정에 로그인된 기기 목록(이 기기 먼저) / "Sign out all others" |
 | `DELETE` | `/api/me/sessions/:id` | 다른 기기 하나 로그아웃 |
+| `GET` | `/api/me/security-log` | 이 계정의 보안 로그, 최신순 `?cursor=&limit=`(기본 `SECURITY_LOG.pageSize` 20, 최대 100) → `{ events: [{ id, kind, detail, os, browser, ipMasked, country, at }], nextCursor }`. 다른 계정이나 정리된 항목의 cursor는 400. 종류는 `src/domain/security-log.ts` |
 | `PATCH` | `/api/me/preferences` | `{ stripMetadataOnShare }` 공개 링크 사진의 위치·카메라 정보 제거 |
 | `POST` | `/api/me/purge` | "Purge now": 만료된 항목(만료 시각이 지났거나 1회 다운로드 후 삭제가 사용됨)을 바로 삭제 → `{ deleted }` |
 | `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 관리자 계정 삭제는 감사 로그에 남으며, 마지막 관리자는 400 `Keep at least one admin` |

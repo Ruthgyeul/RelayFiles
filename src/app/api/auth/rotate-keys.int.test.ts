@@ -49,7 +49,7 @@ describe("key rotation", () => {
     accounts.push(account.id);
     const stale = tokenLookups(token, keys)[0]!;
     // "Generate a new token" lands between a rotation (or sign-in) reading the row and writing it.
-    const replacement = await regenerateToken(account.id, "no-session");
+    const { token: replacement } = await regenerateToken(account.id, "no-session");
     expect(await restoreAccountTokenIf(db(), account.id, stale, { tokenLookup: stale, tokenEnc: new Uint8Array(encryptToken(token, keys)) })).toBe(false);
     expect(await touchAccountLoginIf(db(), account.id, stale, new Date())).toBe(false);
     const row = await db().account.findUniqueOrThrow({ where: { id: account.id } });

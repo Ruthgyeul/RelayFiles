@@ -75,8 +75,11 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
   };
 }
 
-export async function signOutDevice(accountId: string, sessionId: string): Promise<void> {
-  if (!(await revokeAccountSession(db(), accountId, sessionId, new Date()))) throw new ApiError("NOT_FOUND");
+/** Signs one other device out; returns which device it was (for the security log). */
+export async function signOutDevice(accountId: string, sessionId: string): Promise<{ os: string; browser: string }> {
+  const device = await revokeAccountSession(db(), accountId, sessionId, new Date());
+  if (!device) throw new ApiError("NOT_FOUND");
+  return device;
 }
 
 export async function signOutOtherDevices(accountId: string, currentSessionId: string): Promise<{ signedOut: number }> {

@@ -14,19 +14,28 @@ import { profileApi } from "./api";
 import { DevicesCard } from "./DevicesCard";
 import { DeleteAccountCard, PreferencesCard } from "./PreferencesCard";
 import { ProfileCard } from "./ProfileCard";
+import { SecurityLogCard } from "./SecurityLogCard";
 import { UsageCards } from "./UsageCards";
 
 type Confirm = { kind: "token" } | { kind: "others" } | { kind: "delete" } | null;
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
-/** My Profile (`/settings`): profile, usage, access, API tokens, devices, preferences and account deletion. */
+/** My Profile (`/settings`): profile, usage, access, API tokens, devices, security log, preferences and account deletion. */
 export function ProfilePage({ data }: { data: ProfileData }) {
   usePageTitle("My Profile");
   const router = useRouter();
   const { notify, showNewToken, applySession } = useShell();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [busy, setBusy] = useState(false);
+  // Bumped after every change, so the security log reloads and lists it.
+  const [changes, setChanges] = useState(0);
+
+  /** Fresh server data and a reloaded security log after a change. */
+  const refresh = () => {
+    router.refresh();
+    setChanges((count) => count + 1);
+  };
 
   /** Runs a change, shows its message and re-renders the page with fresh server data. */
   const run = async (action: () => Promise<string | null>) => {
@@ -34,7 +43,7 @@ export function ProfilePage({ data }: { data: ProfileData }) {
     try {
       const message = await action();
       if (message) notify(message);
-      router.refresh();
+      refresh();
     } catch (caught) {
       notify(errorText(caught));
     } finally {
@@ -75,8 +84,9 @@ export function ProfilePage({ data }: { data: ProfileData }) {
       <ProfileCard account={data.account} />
       <UsageCards data={data} />
       <AccessCard key={data.maskedToken} accountId={data.account.id} maskedToken={data.maskedToken} notify={notify} onRegenerate={() => setConfirm({ kind: "token" })} />
-      <ApiTokensCard tokens={data.apiTokens} isAdmin={data.account.isAdmin} notify={notify} refresh={() => router.refresh()} />
+      <ApiTokensCard tokens={data.apiTokens} isAdmin={data.account.isAdmin} notify={notify} refresh={refresh} />
       <DevicesCard devices={data.devices} onSignOut={signOutDevice} onSignOutOthers={() => setConfirm({ kind: "others" })} />
+      <SecurityLogCard changes={changes} />
       <PreferencesCard
         busy={busy}
         stripMetadata={data.account.stripMetadataOnShare}

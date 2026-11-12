@@ -19,6 +19,7 @@ import { createRootFolder } from "../repositories/node.repo";
 import { consumeInvite, getServerConfig } from "../repositories/server-config.repo";
 import { createSession, markReauthenticated, revokeOtherSessions, revokeSession } from "../repositories/session.repo";
 import { withStorageTransaction } from "../storage/storage-transaction";
+import { logAccountEvent } from "./security-log.service";
 import { volumeForNewAccount } from "./volume.service";
 
 export interface SignedIn {
@@ -102,6 +103,7 @@ export async function createAnonymousAccount(input: { inviteCode?: string }, cli
   if (!(await allowSignup(client.ipKey))) throw new ApiError("RATE_LIMITED", "Too many new accounts from this network. Try again later.");
   const created = await provisionAccount({ isAdmin: false, inviteCode: mode === "invite" ? input.inviteCode : undefined, client });
   if (!created.sessionId) throw new ApiError("INTERNAL");
+  await logAccountEvent(created.account.id, client, "account.created");
   return { ...created, sessionId: created.sessionId };
 }
 
@@ -154,6 +156,7 @@ export async function signInWithToken(token: string, client: ClientInfo, signedI
     }
     await createSession(tx, { id: sessionId, accountId: found.id, ...sessionFields(client) });
   });
+  await logAccountEvent(found.id, client, "signin");
   const { tokenEnc: _enc, tokenLookup: _lookup, ...account } = found;
   return { account, sessionId };
 }
@@ -166,9 +169,14 @@ export async function signInWithToken(token: string, client: ClientInfo, signedI
 export async function reauthenticate(sessionId: string, accountId: string, token: string, client: ClientInfo): Promise<void> {
   const attempt = await startTokenEntry(client);
   const found = token.length === ID_LENGTH.token ? await findAccountByLookups(db(), tokenLookups(token, tokenKeys())) : null;
-  if (found?.id !== accountId) throw failedTokenEntry(token, attempt);
+  if (found?.id !== accountId) {
+    // The signed-in account is known here (unlike at sign-in), so its owner gets to see this.
+    await logAccountEvent(accountId, client, "reauth.failed");
+    throw failedTokenEntry(token, attempt);
+  }
   await refundTokenAttempt(client.ipKey, attempt);
   await markReauthenticated(db(), sessionId, new Date());
+  await logAccountEvent(accountId, client, "reauth");
 }
 
 /** Ends one device session; the database flag makes it invalid everywhere immediately. */
@@ -192,17 +200,18 @@ export async function revealToken(accountId: string): Promise<string> {
  * Replaces the account token: the old one stops working at once, every other device is
  * signed out and every personal API token is revoked (design "Generate a new token"). A
  * leaked account token is replaced to lock someone out, and an API token they made with it
- * would otherwise keep working. Returns the new token to show once.
+ * would otherwise keep working. Returns the new token to show once and how many API tokens
+ * went with the old one.
  */
-export async function regenerateToken(accountId: string, keepSessionId: string): Promise<string> {
+export async function regenerateToken(accountId: string, keepSessionId: string): Promise<{ token: string; revokedApiTokens: number }> {
   const keys = tokenKeys();
   return retryOnUniqueViolation(async () => {
     const token = newAccountToken();
-    await db().$transaction(async (tx) => {
+    const revokedApiTokens = await db().$transaction(async (tx) => {
       await updateAccountToken(tx, accountId, { tokenLookup: tokenLookups(token, keys)[0]!, tokenEnc: bytes(encryptToken(token, keys)) });
       await revokeOtherSessions(tx, accountId, keepSessionId, new Date());
-      await deleteApiTokensOf(tx, accountId);
+      return deleteApiTokensOf(tx, accountId);
     });
-    return token;
+    return { token, revokedApiTokens };
   });
 }

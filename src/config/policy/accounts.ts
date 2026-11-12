@@ -88,3 +88,14 @@ export const INVITE = {
   /** Expired or used-up codes stay listed this long, then the daily cleanup removes them. */
   keepFinishedDays: 30,
 } as const;
+
+/** The account's own security log (profile "Security log"). */
+export const SECURITY_LOG = {
+  /** Entries are kept this long; the daily cleanup removes older ones. */
+  retentionDays: 90,
+  /** Entries the profile loads per page, and the most one request may ask for. */
+  pageSize: 20,
+  listLimit: 100,
+  /** A rejected API token is logged at most once per token in this window. */
+  rejectedTokenRepeatSec: 600,
+} as const;

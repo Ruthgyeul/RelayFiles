@@ -31,8 +31,12 @@ export function countApiTokens(db: DbClient, accountId: string): Promise<number>
 }
 
 /** Deletes one of the account's tokens; false when it has no such token. */
-export async function deleteApiToken(db: DbClient, accountId: string, id: string): Promise<boolean> {
-  return (await db.apiToken.deleteMany({ where: { id, accountId } })).count === 1;
+/** Deletes one token of the account; returns its name, or null when there was none. */
+export async function deleteApiToken(db: DbClient, accountId: string, id: string): Promise<string | null> {
+  const row = await db.apiToken.findFirst({ where: { id, accountId }, select: { name: true } });
+  if (!row) return null;
+  // Gone already (revoked at the same time elsewhere): reported like a token that never was.
+  return (await db.apiToken.deleteMany({ where: { id, accountId } })).count === 1 ? row.name : null;
 }
 
 /** Deletes every token of the account (its account token was replaced); returns how many. */
