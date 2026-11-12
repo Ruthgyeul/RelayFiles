@@ -1,6 +1,6 @@
 import type { ApiTokenDto, CreateApiTokenInput, CreatedApiToken } from "@/contracts/api-tokens";
 import type { SessionState } from "@/contracts/auth";
-import type { DeviceDto, Preferences } from "@/contracts/profile";
+import type { DeviceDto, Preferences, SecurityLogPage } from "@/contracts/profile";
 import { apiFetch } from "@/shared/lib/api-client";
 
 /** My Profile calls (the page itself is rendered on the server and refreshed after changes). */
@@ -15,4 +15,5 @@ export const profileApi = {
   createApiToken: (input: CreateApiTokenInput) => apiFetch<CreatedApiToken>("/api/me/api-tokens", { method: "POST", json: input }),
   revokeApiToken: (id: string) => apiFetch<{ revoked: true }>(`/api/me/api-tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
   deleteAccount: () => apiFetch<SessionState>("/api/me", { method: "DELETE" }),
+  securityLog: (cursor?: string) => apiFetch<SecurityLogPage>(cursor ? `/api/me/security-log?cursor=${encodeURIComponent(cursor)}` : "/api/me/security-log"),
 };

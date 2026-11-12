@@ -13,6 +13,7 @@ import { diskRates } from "../metrics/disks";
 import { networkRates } from "../metrics/system";
 import { runCleanup } from "../services/admin.service";
 import { purgeOldAuditEvents } from "../services/audit.service";
+import { purgeOldAccountEvents } from "../services/security-log.service";
 import { driverFor } from "../storage/registry";
 import { queueConnection } from "./queue";
 import { watchVolumes } from "./volume-watch";
@@ -43,7 +44,8 @@ export interface RunningQueue {
 /**
  * The daily job: expired accounts and items, then trash entries older than the retention
  * and unfinished uploads older than UPLOAD_TMP_TTL_HOURS on every ACTIVE or DRAINING volume,
- * and admin audit entries older than AUTH.auditRetentionDays.
+ * admin audit entries older than AUTH.auditRetentionDays and security log entries older than
+ * SECURITY_LOG.retentionDays.
  */
 export async function runMaintenance(now: Date) {
   const cleanup = await runCleanup(now);
@@ -66,6 +68,7 @@ export async function runMaintenance(now: Date) {
   // Their files went with the trash: they leave "Recently deleted" by the same rule.
   await forgetDeletedBefore(db(), trashBefore, emptied).catch((error: unknown) => logger.warn("deleted items not purged", { error }));
   await purgeOldAuditEvents(now).catch((error: unknown) => logger.warn("audit log not purged", { error }));
+  await purgeOldAccountEvents(now).catch((error: unknown) => logger.warn("security log not purged", { error }));
   return { ...cleanup, trash, uploads };
 }
 

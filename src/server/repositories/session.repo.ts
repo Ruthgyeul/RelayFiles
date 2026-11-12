@@ -62,10 +62,10 @@ export function listAccountSessions(db: DbClient, accountId: string) {
   });
 }
 
-/** Revokes one session of an account; false when it is not one of its live sessions. */
-export async function revokeAccountSession(db: DbClient, accountId: string, sessionId: string, at: Date): Promise<boolean> {
-  const { count } = await db.session.updateMany({ where: { id: sessionId, accountId, revokedAt: null }, data: { revokedAt: at } });
-  return count > 0;
+/** Revokes one live session of the account; returns its device, or null when there was none. */
+export async function revokeAccountSession(db: DbClient, accountId: string, sessionId: string, at: Date): Promise<{ os: string; browser: string } | null> {
+  const rows = await db.session.updateManyAndReturn({ where: { id: sessionId, accountId, revokedAt: null }, data: { revokedAt: at }, select: { os: true, browser: true } });
+  return rows[0] ?? null;
 }
 
 /** Revokes every live session of an account except `keepId`. Returns how many were revoked. */

@@ -1,4 +1,5 @@
 import { tokenQuerySchema } from "@/contracts/auth";
+import { revokedTokensDetail } from "@/domain/security-log";
 import { deviceOf } from "@/server/auth/current";
 import { clientInfo } from "@/server/auth/client-info";
 import { requireActive, requireRecentAuth } from "@/server/auth/device-session";
@@ -6,6 +7,7 @@ import { ApiError } from "@/server/http/api-error";
 import { apiHandler, ok } from "@/server/http/api-handler";
 import { audit } from "@/server/services/audit.service";
 import { regenerateToken, revealToken } from "@/server/services/auth.service";
+import { logAccountEvent } from "@/server/services/security-log.service";
 
 /**
  * Full token of an account signed in on this device (default: the active one), for
@@ -27,7 +29,9 @@ export const GET = apiHandler(async ({ req }) => {
 export const POST = apiHandler({ auth: "active" }, async ({ req, active }) => {
   requireRecentAuth(active);
   const { account, sessionId } = active;
-  const token = await regenerateToken(account.id, sessionId);
-  if (account.isAdmin) await audit(active, clientInfo(req.headers), "token.regenerate", { id: account.id });
+  const { token, revokedApiTokens } = await regenerateToken(account.id, sessionId);
+  const client = clientInfo(req.headers);
+  await logAccountEvent(account.id, client, "token.regenerated", revokedTokensDetail(revokedApiTokens));
+  if (account.isAdmin) await audit(active, client, "token.regenerate", { id: account.id });
   return ok({ token, account: { id: account.id, name: account.name } }, { headers: { "cache-control": "no-store" } });
 });

@@ -7,12 +7,14 @@ import { ADMIN_ONLY_SCOPES, API_SCOPES, type ApiScope, type ApiTokenDto, type Cr
 import { isExpired } from "@/domain/account";
 import { apiTokenIdOf, bearerToken, hasScope, tokenExpired } from "@/domain/api-token";
 import { newApiToken, newApiTokenId } from "@/domain/ids";
+import { clientInfo } from "../auth/client-info";
 import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { countInWindow } from "../redis";
 import type { AccountRow } from "../repositories/account.repo";
 import { countApiTokens, lockApiTokensOf, createApiTokenRow, deleteApiToken, findApiTokenWithAccount, listApiTokenRows, touchApiToken } from "../repositories/api-token.repo";
+import { logRejectedApiToken } from "./security-log.service";
 
 /** Seconds in the rate-limit window (API.requestsPerMinute). */
 const RATE_WINDOW_SEC = MS.minute / MS.second;
@@ -94,9 +96,12 @@ export async function createApiToken(account: Pick<AccountRow, "id" | "isAdmin">
   });
 }
 
-export async function revokeApiToken(accountId: string, id: string): Promise<void> {
-  if (!(await deleteApiToken(db(), accountId, id))) throw new ApiError("NOT_FOUND");
+/** Revokes a token of the account; returns its name (for the security log). */
+export async function revokeApiToken(accountId: string, id: string): Promise<{ name: string }> {
+  const name = await deleteApiToken(db(), accountId, id);
+  if (name === null) throw new ApiError("NOT_FOUND");
   verified.delete(id);
+  return { name };
 }
 
 /**
@@ -108,9 +113,15 @@ export async function requireApiCaller(headers: Headers, scope: ApiScope | null,
   const token = bearerToken(headers.get("authorization"));
   const id = token ? apiTokenIdOf(token) : null;
   const row = id ? await findApiTokenWithAccount(db(), id) : null;
-  if (!token || !row || !(await tokenMatches(row.id, token, row.secretHash, now.getTime())) || tokenExpired(row.expiresAt?.getTime() ?? null, now.getTime()) || isExpired(row.account, getEnv("policy").ACCOUNT_TTL_DAYS, now)) {
-    throw new ApiError("UNAUTHORIZED", "Missing, unknown or expired API token.");
+  const refused = () => new ApiError("UNAUTHORIZED", "Missing, unknown or expired API token.");
+  if (!token || !row) throw refused();
+  // The token id names an existing token, so its owner sees the refusal in their security log.
+  const problem = !(await tokenMatches(row.id, token, row.secretHash, now.getTime())) ? "wrong secret" : tokenExpired(row.expiresAt?.getTime() ?? null, now.getTime()) ? "expired" : null;
+  if (problem) {
+    await logRejectedApiToken(row.account.id, row.id, clientInfo(headers), `${row.name}: ${problem}`);
+    throw refused();
   }
+  if (isExpired(row.account, getEnv("policy").ACCOUNT_TTL_DAYS, now)) throw refused();
   if (scope !== null && !hasScope(row.scopes, scope)) throw new ApiError("FORBIDDEN", `This token lacks the ${scope} scope.`);
   if ((await countInWindow(`api:rate:${row.id}`, RATE_WINDOW_SEC)) > API.requestsPerMinute) {
     throw new ApiError("RATE_LIMITED", "Too many requests with this token. Try again in a minute.", { retryAfter: RATE_WINDOW_SEC });

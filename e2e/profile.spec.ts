@@ -48,6 +48,11 @@ test("shows, copies and replaces the token", async ({ page }) => {
   await expect(save).toBeHidden();
   await access.getByRole("button", { name: "Show token" }).click();
   await expect(token).not.toHaveText(first!);
+
+  // The new token is in the security log, above the sign-up.
+  const entries = page.getByRole("region", { name: "Security log" }).getByRole("list", { name: "Security log entries" }).getByRole("listitem");
+  await expect(entries.first()).toContainText("Generated a new token");
+  await expect(entries.last()).toContainText("Account created");
 });
 
 test("creates an API token, shows it once, uses it and revokes it", async ({ page }) => {
