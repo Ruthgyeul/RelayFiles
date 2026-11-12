@@ -1,6 +1,7 @@
 import "server-only";
 import { getEnv } from "@/config/env";
-import { clientIp, ipInCidrs } from "@/domain/network";
+import { ipInCidrs } from "@/domain/network";
+import { requestIp } from "./client-info";
 
 /**
  * Whether a request comes from where admin pages and APIs may be used (ADMIN_ALLOWED_CIDRS;
@@ -9,5 +10,5 @@ import { clientIp, ipInCidrs } from "@/domain/network";
  */
 export function fromAdminNetwork(headers: Pick<Headers, "get">): boolean {
   const allowed = getEnv("app").ADMIN_ALLOWED_CIDRS;
-  return allowed.length === 0 || ipInCidrs(clientIp(headers), allowed);
+  return allowed.length === 0 || ipInCidrs(requestIp(headers), allowed);
 }

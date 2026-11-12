@@ -130,6 +130,8 @@
   - 개인 API 토큰 요청 `/api/v1/*`·`/metrics`와 공유 페이지 `/d/*`: 분당 120회(버스트 60, `NGINX_API_RATE_PER_MIN`·`NGINX_API_BURST`). 있는 토큰 id에 틀린 비밀값을 보내면 앱의 토큰별 제한 전에 argon2가 돌고, `/d/*`는 링크 id 추측을 앱보다 먼저 막는다.
   - 공통: 한도를 넘으면 API 형식 JSON 429와 `Retry-After: 60`. 요청 본문은 `NGINX_MAX_BODY_MB`(100)까지.
 - 호스트 이름(DNS 리바인딩): Nginx는 `SERVER_NAME`(공백으로 여러 개)과 `127.0.0.1`(릴리스 스크립트의 헬스 체크)로 온 요청만 앱에 넘기고, 다른 `Host`는 응답 없이 연결을 끊는다(444). Docker·k3s 템플릿은 `default_server`가 이 일을 하고(`SERVER_NAME=_`이면 모든 이름을 받는다), systemd는 `install.sh`가 다른 기본 사이트가 없을 때 `relayfiles-catchall.conf`를 넣는다.
+- **프록시 공유 비밀**(`PROXY_SHARED_SECRET`, `domain/network.ts` `clientIp`): Nginx(세 배포 모두)는 모든 요청에 `X-Relay-Proxy: <비밀>`을 붙이고, 앱은 이 값이 맞는(길이에만 시간이 달린 비교) 요청의 `CF-Connecting-IP`·`X-Real-IP`만 방문자 주소로 쓴다. 아니면 주소를 모르는 요청이 된다(관리자 대역 밖, 잠금은 "unknown" 한 칸). 앱 포트에 Nginx를 거치지 않고 닿는 프로세스(같은 Compose 네트워크의 cloudflared, systemd 호스트의 다른 사용자)가 주소를 꾸며 관리자 대역과 로그인·잠금 해제 제한을 피하지 못한다. 비어 있으면 예전처럼 헤더를 믿고 운영에서 `env:check`가 경고한다.
+- Compose: PostgreSQL·Redis는 `internal` 네트워크(`data`)에만 있어 Nginx·cloudflared가 닿지 못하고 밖으로도 나가지 못한다.
 - k3s: 앱 Pod는 NetworkPolicy로 Nginx Pod와 워커(Status 페이지 프로브)의 연결만 받는다. 앱은 `X-Real-IP`·`CF-Connecting-IP`로 방문자 주소를 정하므로(관리자 대역, 로그인·잠금 해제 제한), 클러스터의 다른 Pod가 앱에 직접 붙어 이 헤더를 꾸미지 못하게 한다. k3s 내장 정책 컨트롤러(kube-router)가 적용한다(`--disable-network-policy`로 띄운 서버에서는 적용되지 않는다).
 
 ## 설치 앱 · 공유 대상 · 서비스 워커

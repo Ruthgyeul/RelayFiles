@@ -32,6 +32,11 @@ if (isProduction && !process.env.ADMIN_ALLOWED_CIDRS?.trim()) {
 if (isProduction && process.env.CSP_MODE?.trim() === "report-only") {
   console.warn('\nWarning: CSP_MODE is report-only, so the Content-Security-Policy blocks nothing. Once the logs show no "csp violation" from your own pages, set CSP_MODE=enforce (docs/runbook.md "CSP 강제 적용").');
 }
+// Without it, a process that reaches the app port directly (another container on its network, a
+// local user on a systemd host) can name any visitor address.
+if (isProduction && !process.env.PROXY_SHARED_SECRET?.trim()) {
+  console.warn("\nWarning: PROXY_SHARED_SECRET is empty, so the app believes X-Real-IP from anything that reaches its port. Set it (npm run env:secrets) and re-create Nginx.");
+}
 // Sign-in tokens and share passwords travel in requests: over plain http anyone on the way reads them.
 const publicUrl = process.env.PUBLIC_URL?.trim() ?? "";
 if (isProduction && /^http:\/\//.test(publicUrl) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/.test(publicUrl)) {
