@@ -110,3 +110,14 @@ test("deletes the account after confirming", async ({ page }) => {
   await expect(page.getByText(/^You're signed in as anon-/)).toBeVisible();
   await expect(page.getByText(`You're signed in as ${name}`)).toHaveCount(0);
 });
+
+test("downloads the whole account as a tar", async ({ page }) => {
+  await openProfile(page);
+  const card = page.getByRole("region", { name: "Export account" });
+  await expect(card).toContainText("download everything before then");
+  const download = page.waitForEvent("download");
+  await card.getByRole("button", { name: "Download everything" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^relayfiles-anon-[a-z0-9]{6}-\d{8}\.tar$/);
+  await card.getByRole("button", { name: "Download everything" }).click();
+  await expect(page.getByText("An export was started a few minutes ago. Try again later.")).toBeVisible();
+});

@@ -12,6 +12,7 @@ import { AccessCard } from "./AccessCard";
 import { ApiTokensCard } from "./ApiTokensCard";
 import { profileApi } from "./api";
 import { DevicesCard } from "./DevicesCard";
+import { ExportCard } from "./ExportCard";
 import { DeleteAccountCard, PreferencesCard } from "./PreferencesCard";
 import { ProfileCard } from "./ProfileCard";
 import { SecurityLogCard } from "./SecurityLogCard";
@@ -111,6 +112,7 @@ export function ProfilePage({ data }: { data: ProfileData }) {
           })
         }
       />
+      <ExportCard deletesAt={data.account.deletesAt} notify={notify} />
       <DeleteAccountCard onDelete={() => setConfirm({ kind: "delete" })} />
 
       <ConfirmDialog

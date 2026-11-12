@@ -130,6 +130,13 @@
 - `PUT`은 파일 하나를 한 요청으로 받으므로 Nginx `/dav/`는 `client_max_body_size 0`이다. 크기 상한은 앱이 `UPLOAD_MAX_FILE_SIZE_GB`와 용량 예약으로 검사하고, 약속한 크기보다 긴 본문은 중간에 끊는다. Cloudflare Tunnel을 거치면 Cloudflare의 요청 크기 제한(무료 요금제 100MB)이 먼저 걸린다.
 - `LOCK`은 권고용이다(한 사람의 파일이라 잠금을 저장하지 않는다). 두 기기에서 같은 파일을 동시에 고치면 나중에 저장한 쪽이 이기고, 앞의 내용은 버전으로 남는다.
 
+## 계정 내보내기
+
+- `GET /api/me/export`는 계정의 모든 파일을 한 번에 내보내므로 **최근 로그인**(`AUTH.reauthWindowMin`)이 필요하다(토큰 보기와 같은 기준). 다른 기기에 남은 오래된 세션으로는 받을 수 없다.
+- 계정당 동시에 하나(Redis 세마포어), 시작은 `EXPORT.repeatAfterMinutes`(10분)에 한 번이다. 디스크 읽기를 반복해 서버를 붙잡는 것을 막는다.
+- manifest에는 링크 id, 링크 비밀번호 해시, 토큰을 넣지 않는다. 다시 가져올 때(`storage:import -- --with-metadata`) 태그·메모·즐겨찾기만 적용하고 공개 설정은 적용하지 않는다(가져온 항목은 소유자가 다시 공유할 때까지 비공개).
+- 내보낼 때마다 보안 로그에 "Downloaded the whole account"가 남는다.
+
 ## 공유 링크·다운로드
 
 - 다운로드는 `nosniff`, 미디어 재생 외에는 `attachment`. HTML·SVG는 `application/octet-stream`으로 보낸다.

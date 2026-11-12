@@ -12,6 +12,11 @@ export async function lockFavoritesOf(tx: DbClient, accountId: string): Promise<
 }
 
 /** Every organizing folder of an account (at most FILES.maxFavoriteFolders), to build paths in memory. */
+/** Every favorite of an account with the organizing folder it is in (account export). */
+export function listFavoritesOf(db: DbClient, accountId: string) {
+  return db.favorite.findMany({ where: { accountId }, select: { nodeId: true, folderId: true } });
+}
+
 export function listFavoriteFolders(db: DbClient, accountId: string) {
   return db.favoriteFolder.findMany({ where: { accountId }, select: { id: true, parentId: true, name: true }, orderBy: { name: "asc" } });
 }

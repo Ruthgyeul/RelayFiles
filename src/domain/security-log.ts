@@ -16,6 +16,7 @@ export const SECURITY_EVENTS = [
   "apiToken.created",
   "apiToken.revoked",
   "apiToken.rejected",
+  "account.exported",
 ] as const;
 export type SecurityEvent = (typeof SECURITY_EVENTS)[number];
 
@@ -33,6 +34,7 @@ const LABEL: Record<SecurityEvent, string> = {
   "apiToken.created": "Created API token",
   "apiToken.revoked": "Revoked API token",
   "apiToken.rejected": "API token refused",
+  "account.exported": "Downloaded the whole account",
 };
 
 /** Events the profile marks as a warning: someone may be trying a token that isn't theirs. */
