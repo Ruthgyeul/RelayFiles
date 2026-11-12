@@ -344,3 +344,22 @@ export function mediaWithoutDateTaken(db: DbClient, take: number, afterId: strin
     take,
   });
 }
+
+/** The account's largest files (Storage page), largest first. */
+export function largestFiles(db: DbClient, accountId: string, limit: number) {
+  return db.node.findMany({ where: { accountId, type: "FILE", size: { gt: 0n } }, orderBy: [{ size: "desc" }, { id: "asc" }], select: NODE_SELECT, take: limit });
+}
+
+/**
+ * Files added before `before` that nobody opened, played or downloaded through a share link
+ * since (Storage page "Not opened lately"), largest first. The owner's own downloads are not
+ * recorded, so this is about share links only.
+ */
+export function staleFiles(db: DbClient, accountId: string, before: Date, limit: number) {
+  return db.node.findMany({
+    where: { accountId, type: "FILE", createdAt: { lt: before }, events: { none: { kind: { in: ["OPEN", "VIEW", "PLAY", "DOWNLOAD"] }, at: { gte: before } } } },
+    orderBy: [{ size: "desc" }, { id: "asc" }],
+    select: NODE_SELECT,
+    take: limit,
+  });
+}

@@ -81,3 +81,14 @@ export const OFFSITE = {
   /** Shortest repository password accepted (it encrypts every offsite copy). */
   passwordMinLength: 16,
 } as const;
+
+/** "Storage" page (where the account's space goes). */
+export const STORAGE_VIEW = {
+  /** Bars for the items at the top of the root; the rest are added up as "Other". */
+  maxBars: 8,
+  /** Largest files listed. */
+  largestFiles: 50,
+  /** Files older than this with no share-link activity since are listed as "Not opened lately". */
+  staleAfterDays: 180,
+  staleFiles: 200,
+} as const;

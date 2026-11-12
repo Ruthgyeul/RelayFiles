@@ -230,6 +230,8 @@ model Node {
   @@index([accountId, sha256])
   @@index([expAt])
   @@index([tags], type: Gin)
+  /// Largest files of an account (Storage page).
+  @@index([accountId, size])
 }
 
 /// A folder inside the virtual "Favorites" folder, made only to organize favorites. It holds no
