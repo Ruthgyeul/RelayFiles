@@ -1,0 +1,33 @@
+{
+  "name": "relayfiles-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command-line client for a RelayFiles server (API v1)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bin": {
+    "relayfiles": "dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../docs/openapi.json -o src/openapi.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/main.js"
+  },
+  "overrides": {
+    "openapi-typescript": {
+      "typescript": "$typescript"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "~6.0.3"
+  }
+}

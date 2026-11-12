@@ -68,6 +68,19 @@ export const sharedViewSchema = z.object({
   truncated: z.boolean().describe("More items have share settings than the list reads"),
 });
 
+/** A batch planned for tus: send each file to `endpoint` with metadata batch, index and filename. */
+export const preparedUploadSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("duplicates"), names: z.array(z.string()).describe("Names already taken; ask again with dup") }),
+  z.object({ kind: z.literal("nothing") }),
+  z.object({
+    kind: z.literal("ready"),
+    batchId: z.string(),
+    endpoint: z.string().describe("tus endpoint (relative to the server)"),
+    folder: z.object({ id: z.string(), name: z.string() }),
+    files: z.array(z.object({ index: z.number().int(), rel: z.string(), size: z.number().int() })).describe("Files to send, by index into the request's list"),
+  }),
+]);
+
 export const apiV1AccountSchema = z.object({
   id: z.string(),
   name: z.string(),

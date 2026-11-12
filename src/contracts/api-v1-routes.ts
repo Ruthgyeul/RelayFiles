@@ -2,8 +2,9 @@ import { z } from "zod";
 import { SEARCH } from "@/config/policy";
 import { MAX_NAME_BYTES } from "@/domain/names";
 import { apiV1NodePatchSchema, apiV1SharePatchSchema, type ApiScope } from "./api-tokens";
-import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, fileVersionSchema, folderViewSchema, nodeItemSchema, sharedViewSchema, taggedItemSchema } from "./api-v1";
+import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, fileVersionSchema, folderViewSchema, nodeItemSchema, preparedUploadSchema, sharedViewSchema, taggedItemSchema } from "./api-v1";
 import { createFolderSchema } from "./nodes";
+import { apiV1PrepareUploadSchema } from "./uploads";
 
 export type ApiV1Method = "GET" | "HEAD" | "POST" | "PATCH" | "DELETE";
 
@@ -46,6 +47,17 @@ export const API_V1_ROUTES: readonly ApiV1Route[] = [
     body: "binary",
     response: apiV1UploadedFileSchema,
     status: 201,
+  },
+  {
+    method: "POST",
+    path: "/api/v1/uploads",
+    scope: "files:write",
+    summary: "Plan a resumable upload (tus)",
+    description:
+      "For large files and resuming: plan a batch, then send each file to `endpoint` with tus 1.0 (`Authorization: Bearer` with the same token, metadata `batch`, `index` and `filename`). Only the token that planned the batch can send, continue or cancel its files. Without `dup`, names already taken answer `duplicates`; `replace` keeps the replaced file as a version.",
+    body: apiV1PrepareUploadSchema,
+    response: preparedUploadSchema,
+    status: 200,
   },
   { method: "GET", path: "/api/v1/files/{id}", scope: "files:read", summary: "Download a file (Range and ETag supported)", params: { id: nodeId }, response: "file", status: 200 },
   { method: "HEAD", path: "/api/v1/files/{id}", scope: "files:read", summary: "A download's headers without the bytes", params: { id: nodeId }, response: "file", status: 200 },

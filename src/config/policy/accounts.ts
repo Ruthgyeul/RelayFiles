@@ -54,6 +54,8 @@ export const API = {
   expiryDays: [7, 30, 90, 365],
   /** Requests one token may make per minute before 429. */
   requestsPerMinute: 120,
+  /** tus requests (one per chunk) one token may make per minute while it uploads files (API v1). */
+  uploadRequestsPerMinute: 600,
   /** "Last used" is written at most this often. */
   touchIntervalSec: 5 * 60,
   /** A token checked against its argon2 hash is trusted this long by the same process (the row is still read). */

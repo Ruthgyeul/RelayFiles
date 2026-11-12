@@ -130,6 +130,12 @@
 - `PUT`은 파일 하나를 한 요청으로 받으므로 Nginx `/dav/`는 `client_max_body_size 0`이다. 크기 상한은 앱이 `UPLOAD_MAX_FILE_SIZE_GB`와 용량 예약으로 검사하고, 약속한 크기보다 긴 본문은 중간에 끊는다. Cloudflare Tunnel을 거치면 Cloudflare의 요청 크기 제한(무료 요금제 100MB)이 먼저 걸린다.
 - `LOCK`은 권고용이다(한 사람의 파일이라 잠금을 저장하지 않는다). 두 기기에서 같은 파일을 동시에 고치면 나중에 저장한 쪽이 이기고, 앞의 내용은 버전으로 남는다.
 
+## API 토큰으로 올리는 tus 업로드
+
+- `POST /api/v1/uploads`가 만든 배치에는 만든 토큰의 id(`apiTokenId`)가 들어가고, tus 서버는 그 배치의 파일을 같은 토큰(Bearer, `files:write`)으로만 받는다. 만든 업로드에도 토큰 id를 기록해(`upload:token:<uploadId>`) 이어 보내기(`PATCH`)·확인(`HEAD`)·취소도 같은 토큰만 할 수 있다. 세션 쿠키로는 열 수 없고, 같은 계정의 다른 토큰도 404다.
+- 토큰을 폐기하거나 재발급하면 진행 중인 업로드도 바로 401이 된다(매 요청 `requireApiCaller`). tus 요청은 청크마다 오므로 API v1과 따로 `API.uploadRequestsPerMinute`(600/분)로 센다.
+- tus 경로는 proxy.ts의 교차 출처 검사에서 빠져 있다(본문 스트리밍). 쿠키 세션 업로드는 tus 서버의 `allowedOrigins`, 토큰 업로드는 Bearer라 교차 출처 위조 대상이 아니다.
+
 ## 계정 내보내기
 
 - `GET /api/me/export`는 계정의 모든 파일을 한 번에 내보내므로 **최근 로그인**(`AUTH.reauthWindowMin`)이 필요하다(토큰 보기와 같은 기준). 다른 기기에 남은 오래된 세션으로는 받을 수 없다.

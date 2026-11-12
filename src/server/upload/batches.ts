@@ -18,6 +18,8 @@ const batchSchema = z.object({
   files: z.array(z.object({ rel: z.string(), size: z.number() })),
   /** Set for a visitor upload through an upload-only link (the account is the link's owner). */
   requestId: z.string().optional(),
+  /** Set when a personal API token prepared the batch (API v1): its files are sent with that token, not a session. */
+  apiTokenId: z.string().optional(),
 });
 
 export type UploadBatch = z.infer<typeof batchSchema>;
@@ -28,6 +30,7 @@ const batchKey = (batchId: string) => `upload:batch:${batchId}`;
 const ownerKey = (uploadId: string) => `upload:owner:${uploadId}`;
 const requestKey = (uploadId: string) => `upload:request:${uploadId}`;
 const slotKey = (uploadId: string) => `upload:slot:${uploadId}`;
+const tokenKey = (uploadId: string) => `upload:token:${uploadId}`;
 const claimKey = (slot: UploadSlot) => `upload:claim:${slotName(slot)}`;
 const claimOfKey = (uploadId: string) => `upload:claimof:${uploadId}`;
 const slotSchema = z.object({ batchId: z.string(), slot: z.number().int().nonnegative() });
@@ -64,6 +67,15 @@ export async function uploadRequest(uploadId: string): Promise<string | null> {
   return redis().get(requestKey(uploadId));
 }
 
+/** Records the API token an upload was started with: only that token may continue it. */
+export async function setUploadToken(uploadId: string, apiTokenId: string): Promise<void> {
+  await redis().set(tokenKey(uploadId), apiTokenId, "EX", ttl());
+}
+
+export async function uploadToken(uploadId: string): Promise<string | null> {
+  return redis().get(tokenKey(uploadId));
+}
+
 /**
  * Hands an unfinished upload to a newer batch (resuming after a reload): its tus metadata
  * still names the batch it was created for, so the finishing step reads this first.
@@ -81,7 +93,7 @@ export async function reboundSlot(uploadId: string): Promise<UploadSlot | null> 
 }
 
 export async function forgetUpload(uploadId: string): Promise<void> {
-  await redis().del(ownerKey(uploadId), requestKey(uploadId), slotKey(uploadId));
+  await redis().del(ownerKey(uploadId), requestKey(uploadId), slotKey(uploadId), tokenKey(uploadId));
 }
 
 /** Value of a slot claim once its file is being placed: no later upload may take the slot. */

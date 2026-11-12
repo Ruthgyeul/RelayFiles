@@ -109,7 +109,7 @@ const eslintConfig = defineConfig([
     files: ["scripts/**/*.{mjs,mts,ts}", "*.config.{mjs,mts,ts}"],
     rules: { "no-console": "off" },
   },
-  globalIgnores(["src/server/db/generated/**", ".next/**", ".app/**", "out/**", "build/**", "coverage/**", "playwright-report/**", "test-results/**", "next-env.d.ts"]),
+  globalIgnores(["cli/**", "src/server/db/generated/**", ".next/**", ".app/**", "out/**", "build/**", "coverage/**", "playwright-report/**", "test-results/**", "next-env.d.ts"]),
 ]);
 
 export default eslintConfig;

@@ -4,15 +4,17 @@ import { clientModifiedAt } from "@/domain/upload";
 import { FileStore } from "@tus/file-store";
 import { EVENTS, Server, type Upload } from "@tus/server";
 import { getEnv } from "@/config/env";
+import { API } from "@/config/policy";
 import { ERRORS } from "@/contracts/errors";
 import { UPLOAD_METADATA } from "@/contracts/uploads";
 import { deviceOfRequest } from "../auth/current";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { layoutOf } from "../storage/layout";
+import { requireApiCaller } from "../services/api-token.service";
 import { releaseSpace } from "../services/space.service";
 import { checkUploadStart, finalizeUpload } from "../services/upload.service";
-import { beginPlacing, claimSlot, forgetUpload, loadBatch, reboundSlot, releaseSlot, setUploadOwner, settleSlot, setUploadRequest, uploadOwner, uploadRequest, type UploadBatch, type UploadSlot } from "./batches";
+import { beginPlacing, claimSlot, forgetUpload, loadBatch, reboundSlot, releaseSlot, setUploadOwner, settleSlot, setUploadRequest, setUploadToken, uploadOwner, uploadRequest, uploadToken, type UploadBatch, type UploadSlot } from "./batches";
 import { recordRequestUpload, releaseRequestRoom, requestFor, reserveRequestRoom } from "./request-uploads";
 import { noteRequestArrival } from "../jobs/notify-queue";
 import { markActive } from "../metrics/activity";
@@ -37,10 +39,22 @@ async function ownerOn(req: Request, accountId: string | null) {
 }
 
 /**
- * Who sends a batch's files: the signed-in owner on this device, or for a batch of an
- * upload-only link, any visitor the link still accepts (the files go to the link's owner).
+ * The account of the personal API token a batch was prepared with (API v1), when this request
+ * carries that same token (Bearer, files:write); otherwise a 404.
+ */
+async function tokenOwner(req: Request, apiTokenId: string, accountId: string | null) {
+  const caller = await requireApiCaller(req.headers, "files:write", new Date(), { key: "upload", perMinute: API.uploadRequestsPerMinute }).catch(rethrow);
+  if (caller.tokenId !== apiTokenId || caller.account.id !== accountId) throw tusError("NOT_FOUND");
+  return caller.account;
+}
+
+/**
+ * Who sends a batch's files: the signed-in owner on this device, the API token that prepared
+ * it, or for a batch of an upload-only link, any visitor the link still accepts (the files go
+ * to the link's owner).
  */
 async function senderOf(req: Request, batch: UploadBatch | null, starting: boolean) {
+  if (batch?.apiTokenId) return { owner: await tokenOwner(req, batch.apiTokenId, batch.accountId), request: null };
   if (!batch?.requestId) return { owner: await ownerOn(req, batch?.accountId ?? null), request: null };
   const request = await requestFor(req, batch.requestId, starting).catch(rethrow);
   if (request.accountId !== batch.accountId) throw tusError("NOT_FOUND");
@@ -111,13 +125,15 @@ function createServer(volumeId: string, mountPath: string): Server {
       }
       await setUploadOwner(upload.id, owner.id);
       if (request) await setUploadRequest(upload.id, request.id);
+      if (batch?.apiTokenId) await setUploadToken(upload.id, batch.apiTokenId);
       return {};
     },
     async onIncomingRequest(req, uploadId) {
       // Only the uploader may continue, query or cancel an upload.
       if (req.method === "POST" || req.method === "OPTIONS") return;
-      const requestId = await uploadRequest(uploadId);
+      const [requestId, apiTokenId] = await Promise.all([uploadRequest(uploadId), uploadToken(uploadId)]);
       if (requestId) await requestFor(req, requestId, false).catch(rethrow);
+      else if (apiTokenId) await tokenOwner(req, apiTokenId, await uploadOwner(uploadId));
       else await ownerOn(req, await uploadOwner(uploadId));
       if (req.method === "PATCH") void markActive("upload", uploadId);
     },
