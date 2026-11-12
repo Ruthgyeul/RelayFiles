@@ -106,4 +106,8 @@ export const DAV = {
   requestsPerMinute: 600,
   /** Path prefix the server answers below (Nginx forwards it unchanged). */
   prefix: "/dav",
+  /** Longest lock a client gets (seconds); clients refresh before it ends. Locks are advisory. */
+  lockTimeoutSeconds: 3600,
+  /** macOS "._name" and ".DS_Store" files are accepted and dropped instead of stored. */
+  skipMacMetadata: true,
 } as const;

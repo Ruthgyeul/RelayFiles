@@ -150,17 +150,29 @@
 
 ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Method `POST`, Body `Binary`, Header `Authorization: Bearer rfp_…`, URL `{json:data.url}`. curl: `curl -H "Authorization: Bearer $TOKEN" --data-binary @a.png "https://<도메인>/api/v1/files?name=a.png"`.
 
-### WebDAV (읽기 전용, `npm run dav`)
+### WebDAV (`npm run dav`)
 
 별도 프로세스(`scripts/dav-server.mts`)가 `DAV.prefix`(`/dav`) 아래에서 답한다(Next.js route handler는 PROPFIND를 받을 수 없다). Nginx가 `/dav/`를 `DAV_HOST:DAV_PORT`로 넘긴다.
 
-- **인증**: 개인 API 토큰(`files:read`)을 Basic 인증의 비밀번호로 보낸다(사용자 이름은 무시). Bearer도 된다. 없거나 틀리면 401 + `WWW-Authenticate: Basic`, 범위가 없으면 403.
+- **인증**: 개인 API 토큰을 Basic 인증의 비밀번호로 보낸다(사용자 이름은 무시). Bearer도 된다. 읽기(`PROPFIND`, `GET`, `HEAD`)는 `files:read`, 변경은 `files:write` 범위가 필요하다. 없거나 틀리면 401 + `WWW-Authenticate: Basic`, 범위가 없으면 403.
 - **요청 한도**: 토큰마다 분당 `DAV.requestsPerMinute`(600)회. API v1과 따로 센다. 넘으면 429 + `Retry-After`.
 - **경로**: 토큰 계정의 루트에서 시작한다(`/dav/Photos/a.jpg`). 다른 계정의 항목은 없는 것과 같다(404).
-- `OPTIONS`: `DAV: 1`, `Allow: OPTIONS, PROPFIND, GET, HEAD`. 인증이 필요 없다.
+- `OPTIONS`: `DAV: 1, 2`, `Allow`에 아래 메서드를 모두 적는다. 인증이 필요 없다. 그 밖의 메서드는 405다.
 - `PROPFIND`: `Depth: 0`은 그 항목만, `Depth: 1`은 폴더와 바로 아래 항목을 207 multistatus로 준다. 속성은 `displayname`, `creationdate`, `getlastmodified`, `resourcetype`, `getcontentlength`, `getcontenttype`, `getetag`(SHA-256)이다. `Depth`가 없거나 `infinity`면 403 `propfind-finite-depth`다.
 - `GET`·`HEAD`: 파일 다운로드(첨부, Range·ETag 지원). 폴더는 405.
-- 쓰기(`PUT`, `MKCOL`, `MOVE`, `COPY`, `DELETE`, `LOCK`)는 405다.
+- `PUT`: 파일 하나를 통째로 받는다(`direct-upload.service` `uploadWholeFile`, 웹 업로드와 같은 이름 검증·항목 한도·용량 예약·해시·미디어 큐).
+  - 크기는 `Content-Length`로, 없으면 Finder가 chunked 본문과 함께 보내는 `X-Expected-Entity-Length`로 받는다. 둘 다 없으면 411.
+  - 같은 이름의 파일이 있으면 **Replace**로 처리한다: 옛 내용은 버전(`FILE_VERSIONS_DAYS`)으로 남고 공유 링크·설정·태그는 그대로다. 새 파일 201, 교체 204.
+  - 폴더가 없으면 409, 그 이름이 폴더면 405.
+  - macOS의 `._이름`·`.DS_Store`는 받고 버린다(`DAV.skipMacMetadata`). 없는 이 파일의 `DELETE`도 204다.
+- `MKCOL`: 새 폴더 201. 이름이 이미 있으면 405, 상위 폴더가 없으면 409, 본문이 있으면 415.
+- `DELETE`: "Recently deleted"로 보낸다(204). 루트는 403.
+- `MOVE`·`COPY`: `Destination`(절대 URL 또는 경로, `/dav` 아래)으로 옮기거나 복사한다. 새 이름이면 201, 있던 항목을 바꾸면 204.
+  - 대상 폴더가 없으면 409. 자기 자신이나 루트로는 403, 폴더를 자기 안으로(또는 자기 상위 위로) 보내면 409.
+  - 대상에 항목이 있으면 `Overwrite: F`일 때 412, 아니면 바꾼다. **파일을 파일 위로 옮기면**(편집기가 임시 파일로 저장한 뒤 원본 이름으로 바꾸는 방식) Replace와 같다: 옛 내용은 버전으로 남고 공유 링크·설정·즐겨찾기·버전 기록이 옮긴 파일로 넘어간다. 그 밖의 경우는 대상을 "Recently deleted"로 보낸 뒤 옮긴다.
+  - `COPY`의 `Depth: 0`은 폴더만(내용 없이) 만든다.
+- `LOCK`·`UNLOCK`: Finder와 Windows는 잠금이 없으면 읽기 전용으로 연결한다. 잠금은 **권고용**이다(토큰을 주고 갱신하지만 다른 요청을 막지 않는다). 시간은 `Timeout`의 `Second-N`, 최대 `DAV.lockTimeoutSeconds`(3600). 없는 이름을 잠그면 빈 파일을 만든다(201).
+- `PROPPATCH`: 207로 성공을 답하지만 사용자 속성은 저장하지 않는다(Windows가 파일 시각을 쓰려고 보낸다).
 
 ### Prometheus 지표
 

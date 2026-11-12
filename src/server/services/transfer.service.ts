@@ -29,11 +29,16 @@ function isInside(chainIds: string[], nodeId: string): boolean {
   return chainIds.includes(nodeId);
 }
 
+/** Options of a move or copy: the name an item should get in the target (WebDAV MOVE/COPY to a new name). */
+export interface TransferOptions {
+  names?: ReadonlyMap<string, string>;
+}
+
 /**
  * Moves items into a folder: items already there, the target itself and
  * anything that would land inside itself are skipped; clashing names get "Name (2)".
  */
-export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: string): Promise<TransferResult> {
+export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: string, { names }: TransferOptions = {}): Promise<TransferResult> {
   const target = await requireFolder(owner.id, targetRef);
   const targetChain = await ancestorChain(db(), target.id);
   const targetIds = targetChain.map((row) => row.id);
@@ -44,11 +49,11 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
   const targetSegments = segmentsBelowRoot(targetChain);
   const taken = await listSiblingNames(db(), target.id);
   const plan = items.map((item) => {
-    const name = uniqName(taken, item.row.name, item.row.type === "FILE");
+    const name = uniqName(taken, names?.get(item.row.id) ?? item.row.name, item.row.type === "FILE");
     taken.push(name);
     return { id: item.row.id, name, from: topLocation(owner.id, item), to: { accountId: owner.id, segments: [...targetSegments, name] } };
   });
-  const renamed = plan.filter((move, index) => move.name !== items[index]!.row.name).length;
+  const renamed = plan.filter((move, index) => move.name !== (names?.get(items[index]!.row.id) ?? items[index]!.row.name)).length;
   try {
     await withStorageTransaction(db(), async (tx, undo) => {
       await lockAccountForWrite(tx, owner.id, driver.volumeId);
@@ -91,7 +96,7 @@ function copyEntries(tree: readonly (TreeRow & { type: "FILE" | "FOLDER"; missin
  * disk later), so the new rows and the staged files always match; a file renamed or deleted
  * meanwhile stops the copy with 409 and nothing is left behind.
  */
-export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: string): Promise<TransferResult> {
+export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: string, { names }: TransferOptions = {}): Promise<TransferResult> {
   const target = await requireFolder(owner.id, targetRef);
   const targetChain = await ancestorChain(db(), target.id);
   const items = (await topLevel(owner.id, ids)).filter(({ row }) => !isInside(targetChain.map((ancestor) => ancestor.id), row.id));
@@ -126,9 +131,10 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
       // Staging can take long: the account may have started moving to another volume meanwhile.
       await lockAccountForWrite(tx, owner.id, driver.volumeId);
       const placed = copies.map(({ row }, index) => {
-        const name = uniqName(taken, row.name, row.type === "FILE");
+        const wanted = names?.get(row.id) ?? row.name;
+        const name = uniqName(taken, wanted, row.type === "FILE");
         taken.push(name);
-        if (name !== row.name) renamed++;
+        if (name !== wanted) renamed++;
         const newIds = new Map<string, string>();
         const rows = trees[index]!.map((source) => {
           const id = newNodeId();

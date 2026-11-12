@@ -389,7 +389,7 @@ touch deploy/maintenance/on    # 점검 모드 (/api/health를 뺀 모든 요청
 sudo systemctl enable --now relayfiles-dav
 ```
 
-`DAV_PORT`(기본 3002)와 `DAV_MEMORY_MAX`(512M)는 `.env`에서 바꾼다. 연결은 `https://<도메인>/dav/`, 비밀번호는 `files:read` API 토큰이다(https에서만 쓴다).
+`DAV_PORT`(기본 3002)와 `DAV_MEMORY_MAX`(512M)는 `.env`에서 바꾼다. 연결은 `https://<도메인>/dav/`, 비밀번호는 API 토큰이다(읽기 `files:read`, 쓰기 `files:write`, https에서만 쓴다).
 
 ## 9. 업데이트와 롤백
 

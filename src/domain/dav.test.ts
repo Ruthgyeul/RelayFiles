@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { davDepth, davHref, davMultistatus, davSegments } from "./dav";
+import { davDepth, davDestination, davHref, davLockDiscovery, davLockTimeout, davLockTokenOf, davMultistatus, davOverwrite, davProppatchResult, davSegments, davWithin, isMacMetadata } from "./dav";
 
 describe("davSegments", () => {
   it("decodes the names below the prefix", () => {
@@ -45,5 +45,81 @@ describe("davMultistatus", () => {
   it("ends folder hrefs with a slash", () => {
     expect(davHref("/dav", ["a b", "c"], true)).toBe("/dav/a%20b/c/");
     expect(davHref("/dav", ["a b", "c"], false)).toBe("/dav/a%20b/c");
+  });
+});
+
+describe("davWithin", () => {
+  it("is true for the same path and paths below it", () => {
+    expect(davWithin(["a"], ["a"])).toBe(true);
+    expect(davWithin(["a"], ["a", "b"])).toBe(true);
+    expect(davWithin([], ["a"])).toBe(true);
+  });
+
+  it("is false for siblings and parents", () => {
+    expect(davWithin(["a", "b"], ["a"])).toBe(false);
+    expect(davWithin(["a"], ["ab"])).toBe(false);
+  });
+});
+
+describe("davDestination", () => {
+  it("reads absolute URLs and paths below the prefix", () => {
+    expect(davDestination("https://files.example/dav/New%20name.txt", "/dav")).toEqual(["New name.txt"]);
+    expect(davDestination("/dav/a/b/", "/dav")).toEqual(["a", "b"]);
+  });
+
+  it("refuses missing headers and paths outside the prefix", () => {
+    expect(davDestination(null, "/dav")).toBeNull();
+    expect(davDestination("https://files.example/api/me", "/dav")).toBeNull();
+    expect(davDestination("/dav/a%00b", "/dav")).toBeNull();
+  });
+});
+
+describe("davOverwrite", () => {
+  it("only refuses on F", () => {
+    expect(davOverwrite(null)).toBe(true);
+    expect(davOverwrite("T")).toBe(true);
+    expect(davOverwrite("f")).toBe(false);
+  });
+});
+
+describe("isMacMetadata", () => {
+  it("matches AppleDouble files and .DS_Store only", () => {
+    expect(isMacMetadata("._photo.jpg")).toBe(true);
+    expect(isMacMetadata(".DS_Store")).toBe(true);
+    expect(isMacMetadata("_photo.jpg")).toBe(false);
+    expect(isMacMetadata(".hidden")).toBe(false);
+  });
+});
+
+describe("davLockTimeout", () => {
+  it("takes the first Second-N, capped", () => {
+    expect(davLockTimeout("Second-600", 3600)).toBe(600);
+    expect(davLockTimeout("Infinite, Second-4100000000", 3600)).toBe(3600);
+    expect(davLockTimeout("Second-0", 3600)).toBe(1);
+  });
+
+  it("uses the maximum without a usable value", () => {
+    expect(davLockTimeout(null, 3600)).toBe(3600);
+    expect(davLockTimeout("Infinite", 3600)).toBe(3600);
+  });
+});
+
+describe("davLockTokenOf", () => {
+  it("finds the token in If and Lock-Token headers", () => {
+    const token = "opaquelocktoken:0f8fad5b-d9cb-469f-a165-70867728950e";
+    expect(davLockTokenOf(`(<${token}>)`)).toBe(token);
+    expect(davLockTokenOf(`<${token}>`)).toBe(token);
+    expect(davLockTokenOf("<urn:other>")).toBeNull();
+    expect(davLockTokenOf(null)).toBeNull();
+  });
+});
+
+describe("lock and proppatch bodies", () => {
+  it("escape the href and carry the token and timeout", () => {
+    const body = davLockDiscovery("/dav/a&b.txt", "opaquelocktoken:1", 600, "0");
+    expect(body).toContain("<D:href>/dav/a&amp;b.txt</D:href>");
+    expect(body).toContain("<D:href>opaquelocktoken:1</D:href>");
+    expect(body).toContain("<D:timeout>Second-600</D:timeout>");
+    expect(davProppatchResult("/dav/a&b.txt")).toContain("<D:href>/dav/a&amp;b.txt</D:href>");
   });
 });
