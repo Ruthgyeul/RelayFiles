@@ -21,6 +21,7 @@ export const AUDIT_ACTIONS = [
   "incident.delete",
   "apiToken.create",
   "apiToken.revoke",
+  "report.export",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -28,7 +29,7 @@ export const isAuditAction = (value: string): value is AuditAction => (AUDIT_ACT
 
 /** Filter groups of the audit log screen ("Accounts", "Sign-up", ...). */
 export const AUDIT_GROUPS = [
-  { key: "accounts", label: "Accounts", actions: ["account.manage", "account.delete", "cleanup.run"] },
+  { key: "accounts", label: "Accounts", actions: ["account.manage", "account.delete", "cleanup.run", "report.export"] },
   { key: "signup", label: "Sign-up", actions: ["signup.mode", "invite.create", "invite.revoke"] },
   { key: "tokens", label: "Tokens", actions: ["token.reveal", "token.regenerate", "apiToken.create", "apiToken.revoke"] },
   { key: "server", label: "Server", actions: ["announcement.publish", "announcement.remove", "theme.set", "incident.post", "incident.edit", "incident.delete"] },
@@ -58,6 +59,7 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   "incident.delete": "Deleted incident",
   "apiToken.create": "Created API token",
   "apiToken.revoke": "Revoked API token",
+  "report.export": "Downloaded usage report",
 };
 
 /** What an entry did, as the audit log screen shows it. */

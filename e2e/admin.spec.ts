@@ -69,6 +69,24 @@ test("admins manage and delete accounts", async ({ page, browser, baseURL, viewp
   await expect(page.getByText(/^(Nothing to clean up|\d+ account\(s\).*deleted)$/)).toBeVisible();
 });
 
+test("shows the usage report and downloads it as CSV", async ({ page }) => {
+  await signInAsAdmin(page);
+  await page.goto("/admin/accounts");
+  const report = page.getByRole("region", { name: "Usage report" });
+  await expect(report.getByRole("list", { name: "Accounts by usage" }).getByRole("listitem").first()).toContainText("Storage");
+  await expect(report.getByRole("list", { name: "Share traffic per month" }).getByRole("listitem")).not.toHaveCount(0);
+
+  await report.getByRole("button", { name: "12 months" }).click();
+  await expect(report.getByRole("button", { name: "12 months" })).toHaveAttribute("aria-pressed", "true");
+  await expect(report.getByRole("list", { name: "Share traffic per month" }).getByRole("listitem")).toHaveCount(13);
+  await report.getByRole("button", { name: "Name" }).click();
+  await expect(report.getByRole("button", { name: "Name" })).toHaveAttribute("aria-pressed", "true");
+
+  const download = page.waitForEvent("download");
+  await report.getByRole("link", { name: "Download CSV" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^relayfiles-usage-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv$/);
+});
+
 test("lists admin actions in the audit log and filters them", async ({ page }) => {
   await signInAsAdmin(page);
   const session = (await (await page.request.get("/api/auth/session")).json()) as { data: { activeAccountId: string } };

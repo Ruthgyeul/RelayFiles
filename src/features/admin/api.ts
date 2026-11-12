@@ -1,4 +1,4 @@
-import type { AuditPage, CleanupResult, ManageInput } from "@/contracts/admin";
+import type { AuditPage, CleanupResult, ManageInput, UsageReport } from "@/contracts/admin";
 import type { AuditGroup } from "@/domain/audit";
 import { apiFetch } from "@/shared/lib/api-client";
 
@@ -19,9 +19,13 @@ const auditUrl = ({ cursor, group, account: accountId }: AuditRequest) => {
   return text ? `/api/admin/audit?${text}` : "/api/admin/audit";
 };
 
+/** `/api/admin/usage` or its CSV download for a range of UTC days. */
+export const usageUrl = (range: { from: string; to: string }, csv = false) => `/api/admin/usage${csv ? "/csv" : ""}?${new URLSearchParams(range).toString()}`;
+
 export const adminApi = {
   manage: (id: string, input: ManageInput) => apiFetch<{ updated: true }>(account(id), { method: "PATCH", json: input }),
   deleteAccount: (id: string) => apiFetch<{ deleted: true }>(account(id), { method: "DELETE" }),
   cleanup: () => apiFetch<CleanupResult>("/api/admin/cleanup", { method: "POST" }),
   audit: (request: AuditRequest) => apiFetch<AuditPage>(auditUrl(request)),
+  usage: (range: { from: string; to: string }) => apiFetch<UsageReport>(usageUrl(range)),
 };
