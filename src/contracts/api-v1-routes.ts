@@ -2,7 +2,7 @@ import { z } from "zod";
 import { SEARCH } from "@/config/policy";
 import { MAX_NAME_BYTES } from "@/domain/names";
 import { apiV1NodePatchSchema, apiV1SharePatchSchema, type ApiScope } from "./api-tokens";
-import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, fileVersionSchema, folderViewSchema, nodeItemSchema, taggedItemSchema } from "./api-v1";
+import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, fileVersionSchema, folderViewSchema, nodeItemSchema, sharedViewSchema, taggedItemSchema } from "./api-v1";
 import { createFolderSchema } from "./nodes";
 
 export type ApiV1Method = "GET" | "HEAD" | "POST" | "PATCH" | "DELETE";
@@ -92,6 +92,16 @@ export const API_V1_ROUTES: readonly ApiV1Route[] = [
     description: "Favorites list items where they are (no copies). Without `folder`, the top; organizing folders are made in the web app.",
     query: z.object({ folder: z.string().optional().describe("Organizing folder id") }),
     response: favoritesViewSchema,
+    status: 200,
+  },
+  {
+    method: "GET",
+    path: "/api/v1/shares",
+    scope: "files:read",
+    summary: "Everything shared from the account",
+    description:
+      "Items that can be opened from outside, newest first: the top of each public part of the tree, and public items with a password, download limit, expiry, first-download delete or paused downloads of their own. Items public only through a folder above are not listed on their own.",
+    response: sharedViewSchema,
     status: 200,
   },
   {

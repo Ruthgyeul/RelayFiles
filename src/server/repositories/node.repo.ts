@@ -110,6 +110,30 @@ export function findByTags(db: DbClient, accountId: string, tags: string[], limi
   return db.node.findMany({ where: { accountId, parentId: { not: null }, tags: { hasEvery: tags } }, select: NODE_SELECT, take: limit });
 }
 
+/**
+ * Items that may be open from outside: public, or with a password, download limit, expiry,
+ * first-download delete or paused downloads of their own ("Shared by me" decides which count).
+ * Newest first; a replaced file's row stepping aside (a name with "/") is left out.
+ */
+export function sharedCandidates(db: DbClient, accountId: string, limit: number) {
+  return db.node.findMany({
+    where: {
+      accountId,
+      NOT: { name: { contains: "/" } },
+      OR: [{ visibility: "PUBLIC" }, { passwordHash: { not: null } }, { downloadLimit: { not: null } }, { expAt: { not: null } }, { burn: true }, { dlPaused: true }],
+    },
+    select: NODE_SELECT,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    take: limit,
+  });
+}
+
+/** Makes items of one account private; returns how many it changed (fewer: some are not the account's). */
+export async function makeNodesPrivate(db: DbClient, accountId: string, ids: readonly string[]): Promise<number> {
+  const { count } = await db.node.updateMany({ where: { accountId, id: { in: [...ids] } }, data: { visibility: "PRIVATE" } });
+  return count;
+}
+
 /** Items whose name contains `text` (any case), outside the account root. */
 export function findByName(db: DbClient, accountId: string, text: string, limit: number) {
   return db.node.findMany({ where: { accountId, parentId: { not: null }, name: { contains: text, mode: "insensitive" } }, select: NODE_SELECT, take: limit });

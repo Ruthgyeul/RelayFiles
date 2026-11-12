@@ -1,6 +1,8 @@
 /** Share links. Part of the product policy (src/config/policy.ts). */
 
 export const SHARE = {
+  /** Items "Shared by me" reads at most (newest first); the page says when there are more. */
+  sharedListMax: 1000,
   /** "Daily traffic limit" choices of the sharing settings, in GB (null: none). */
   dailyCapChoicesGb: [null, 1, 5, 10, 50],
   /** Largest daily traffic limit an item may have, in GB. */

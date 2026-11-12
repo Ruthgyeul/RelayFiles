@@ -1,6 +1,13 @@
 import "server-only";
 import type { DbClient, Prisma } from "../db/client";
 
+/** When each item's share link was last used (items without events are absent). */
+export async function lastLinkEventAt(db: DbClient, nodeIds: readonly string[]): Promise<Map<string, Date>> {
+  if (nodeIds.length === 0) return new Map();
+  const rows = await db.linkEvent.groupBy({ by: ["nodeId"], where: { nodeId: { in: [...nodeIds] } }, _max: { at: true } });
+  return new Map(rows.flatMap((row) => (row._max.at ? [[row.nodeId, row._max.at] as const] : [])));
+}
+
 /** Newest link events of nodes (a folder's log includes everything inside it). */
 export function listLinkEvents(db: DbClient, nodeIds: string[], limit: number) {
   return db.linkEvent.findMany({ where: { nodeId: { in: nodeIds } }, orderBy: { at: "desc" }, take: limit, select: { kind: true, fileName: true, device: true, ipMasked: true, country: true, at: true } });

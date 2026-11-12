@@ -62,6 +62,12 @@ export const createdFolderSchema = z.object({ folder: nodeItemSchema, requestedN
 
 export const taggedItemSchema = nodeItemSchema.extend({ parentPath: z.string(), parentId: z.string(), parentIsRoot: z.boolean() });
 
+/** "Shared by me": items that can be opened from outside. */
+export const sharedViewSchema = z.object({
+  items: z.array(taggedItemSchema.extend({ lastActivityAt: z.string().nullable().describe("Last open, play or download through the share link") })),
+  truncated: z.boolean().describe("More items have share settings than the list reads"),
+});
+
 export const apiV1AccountSchema = z.object({
   id: z.string(),
   name: z.string(),

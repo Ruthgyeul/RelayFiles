@@ -20,7 +20,7 @@ import { assertItemRoom } from "./item-limit.service";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
 
-const VISIBILITY: Record<NodeRow["visibility"], Visibility> = { INHERIT: "inherit", PRIVATE: "private", PUBLIC: "public" };
+export const VISIBILITY: Record<NodeRow["visibility"], Visibility> = { INHERIT: "inherit", PRIVATE: "private", PUBLIC: "public" };
 
 export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: number; fileCount?: number } = {}): NodeItem {
   return {
