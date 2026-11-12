@@ -1,14 +1,16 @@
 "use client";
 
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { FolderView, NodeItem } from "@/contracts/nodes";
+import type { FolderCrumb, FolderView, NodeItem } from "@/contracts/nodes";
 import { emptyTitle, itemCount } from "@/domain/tree";
 import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useTransfers } from "@/features/transfers/transfers-context";
 import { useNow } from "@/shared/hooks/useNow";
 import { ActionMenu } from "./ActionMenu";
+import { FavoritesEntry } from "./FavoritesEntry";
 import { FilterBar } from "./FilterBar";
 import { FolderHeader } from "./FolderHeader";
 import { buildNodeMenu } from "./node-menu";
@@ -37,8 +39,19 @@ import { usePrefs } from "./usePrefs";
 /** Re-render interval for relative times ("Expires in 3h 12m"), as in the design. */
 const CLOCK_TICK_MS = 30_000;
 
+/** A folder reached another way than from the root (a favorite folder opened from Favorites). */
+export interface FolderNav {
+  /** Crumbs shown instead of the folder's real path. */
+  path: FolderCrumb[];
+  hrefOf: (index: number) => Route;
+  rootIcon: "star";
+  /** Where a subfolder opens. */
+  folderHref: (id: string) => Route;
+}
+
 interface FileManagerProps {
   view: FolderView;
+  nav?: FolderNav;
   isAdmin: boolean;
   publicUrl: string;
   /** A file of this folder to open in the viewer right away (global search `?view=`). */
@@ -46,7 +59,7 @@ interface FileManagerProps {
 }
 
 /** The File Manager page for one folder: path, header, toolbar, filters, search, items and dialogs. */
-export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManagerProps) {
+export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: FileManagerProps) {
   const router = useRouter();
   const { notify, activeAccount } = useShell();
   const [prefs, setPrefs] = usePrefs();
@@ -72,16 +85,18 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
   const { drag, dropFiles } = useFolderDrop(folder, uploadTarget, items, selection.ids, clearSelection);
 
   const { copyText, copyLink } = useCopyLink();
-  const actionsFor = useNodeActions({ view, isAdmin, dialogs: open, folderTools: folderTools.open, media, linkOf, copyLink, onProperties: setPropertiesFor });
-  const openItem = (item: NodeItem) => (item.type === "folder" ? router.push(folderHref(item.id)) : media.preview(item));
+  const subfolderHref = nav?.folderHref ?? ((id: string) => folderHref(id));
+  const actionsFor = useNodeActions({ view, isAdmin, dialogs: open, folderTools: folderTools.open, media, linkOf, copyLink, onProperties: setPropertiesFor, folderHref: subfolderHref });
+  const openItem = (item: NodeItem) => (item.type === "folder" ? router.push(subfolderHref(item.id)) : media.preview(item));
   const parentOfCurrent = path.at(-2);
+  const parentHref = nav ? (nav.path.length > 1 ? nav.hrefOf(nav.path.length - 2) : null) : parentOfCurrent ? folderHref(parentOfCurrent.id, path.length === 2) : null;
 
   useFileShortcuts({
     upload: () => transfers.pickFiles(uploadTarget),
     selectAll: selection.selectAll,
     search: search.openSearch,
     toggleView: () => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" }),
-    parent: () => parentOfCurrent && router.push(folderHref(parentOfCurrent.id, path.length === 2)),
+    parent: () => parentHref && router.push(parentHref),
   });
 
   const selectedItems = selection.items;
@@ -115,6 +130,7 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
     download: () => (media.downloadEach(selectedItems), clearSelection()),
     zip: () => (media.zip(selectedItems), clearSelection()),
     tags: () => open.tags(selectedItems),
+    favorite: () => void open.toggleFavorite(selectedItems, true),
     copy: () => open.move(selectedItems, "copy", folder.id),
     move: () => open.move(selectedItems, "move", folder.id),
     remove: () => open.remove(selectedItems),
@@ -122,7 +138,14 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
 
   return (
     <>
-      <PathBar path={path} onCopyPath={(text) => copyText(text, "Path copied")} dropFor={drag.dropProps} over={drag.over} />
+      <PathBar
+        path={nav?.path ?? path}
+        hrefOf={nav?.hrefOf}
+        rootIcon={nav?.rootIcon}
+        onCopyPath={(text) => copyText(text, "Path copied")}
+        dropFor={nav ? undefined : drag.dropProps}
+        over={drag.over}
+      />
       <FolderHeader
         view={view}
         now={now}
@@ -167,6 +190,7 @@ export function FileManager({ view, isAdmin, publicUrl, initialView }: FileManag
         onOpen={openItem}
         onDownload={media.download}
         onDropFiles={dropFiles}
+        leading={isRoot && !nav && !tagMode && !q ? <FavoritesEntry count={view.favoriteCount ?? 0} /> : undefined}
       />
       {menu.menu && menuItem && (
         <ActionMenu

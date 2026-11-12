@@ -7,6 +7,8 @@ export interface NodeActions {
   preview?: () => void;
   download?: () => void;
   downloadZip?: () => void;
+  /** Adds the item to Favorites, or takes it out (the item stays where it is). */
+  toggleFavorite?: () => void;
   share?: () => void;
   uploadLinks?: () => void;
   tags?: () => void;
@@ -33,7 +35,7 @@ type Candidate = [label: string, icon: MenuEntry["icon"], action: (() => void) |
  * plus folder tools (renumber, duplicates) before properties. Groups are separated by a line;
  * empty groups disappear.
  */
-export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings">, isRoot: boolean, isAdmin: boolean, actions: NodeActions): MenuEntry[] {
+export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings" | "favorite">, isRoot: boolean, isAdmin: boolean, actions: NodeActions): MenuEntry[] {
   const folder = item.type === "folder";
   const paused = item.settings.dlPaused;
   const groups: Candidate[][] = [
@@ -41,6 +43,7 @@ export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings">
       folder ? (isRoot ? null : ["Open", "folder-open", actions.open]) : item.kind !== "other" ? ["Preview", "eye", actions.preview] : null,
       ["Download", "download-simple", actions.download],
       folder ? null : ["Download as zip", "file-zip", actions.downloadZip],
+      isRoot ? null : [item.favorite ? "Remove from favorites" : "Add to favorites", "star", actions.toggleFavorite],
     ],
     [
       folder ? ["Share", "share-network", actions.share] : null,

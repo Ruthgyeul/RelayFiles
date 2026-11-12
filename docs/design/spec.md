@@ -63,7 +63,7 @@
 
 ## 3. 아이콘
 
-`src/shared/ui/icon/registry.ts`에 146개. 아이콘 이름은 `IconName` 타입으로 검사한다. 굵기: `ph` → `regular`, `ph-bold` → `bold`, `ph-fill` → `fill`. 이모지는 쓰지 않는다(`npm run check:emoji`).
+`src/shared/ui/icon/registry.ts`에 147개. 아이콘 이름은 `IconName` 타입으로 검사한다. 굵기: `ph` → `regular`, `ph-bold` → `bold`, `ph-fill` → `fill`. 이모지는 쓰지 않는다(`npm run check:emoji`).
 
 | 묶음 | 개수 | 아이콘 |
 |---|---|---|
@@ -74,6 +74,7 @@
 | QR 코드 | 1 | `qr-code` (링크 QR 코드 버튼, `features/files/LinkField.tsx`) |
 | 업로드 링크 | 1 | `tray-arrow-down` (폴더 메뉴 "Upload links") |
 | 순번 정리·중복 찾기 | 3 | `list-numbers`("Renumber files"), `files`("Find duplicates"), `arrow-right`(새 이름 미리보기) |
+| 즐겨찾기 | 1 | `star` (루트의 Favorites 행·정리용 폴더 표시는 `fill` + `--color-warn-strong`, 메뉴 "Add to favorites"/"Remove from favorites", 항목 이름 옆 표시) |
 
 시안에 없는 아이콘을 추가하면 이 표에 줄을 더하고 위 합계를 고친다.
 

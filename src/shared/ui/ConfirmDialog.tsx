@@ -16,6 +16,8 @@ export interface ConfirmDialogProps {
   tone?: "danger" | "accent";
   icon?: IconName;
   busy?: boolean;
+  /** A second way to go on, shown between Cancel and the confirm button (e.g. "Remove from favorites"). */
+  alternative?: { label: string; onSelect: () => void };
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -33,6 +35,7 @@ export function ConfirmDialog({
   tone = "danger",
   icon = tone === "danger" ? "trash" : "info",
   busy = false,
+  alternative,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -44,10 +47,15 @@ export function ConfirmDialog({
       </span>
       <h2 className="m-0 text-[17px] font-bold [overflow-wrap:anywhere]">{title}</h2>
       {description && <p className="m-0 text-[14px] leading-[1.5] text-pretty text-t3">{description}</p>}
-      <div className="mt-1.5 flex justify-end gap-2">
+      <div className="mt-1.5 flex flex-wrap justify-end gap-2">
         <Button size={38} className="px-4" onClick={onCancel} disabled={busy}>
           {cancelLabel}
         </Button>
+        {alternative && (
+          <Button size={38} className="px-4" onClick={alternative.onSelect} disabled={busy}>
+            {alternative.label}
+          </Button>
+        )}
         <Button size={38} className="px-4" variant={tone === "danger" ? "danger-solid" : "primary"} onClick={onConfirm} disabled={busy}>
           {confirmLabel}
         </Button>

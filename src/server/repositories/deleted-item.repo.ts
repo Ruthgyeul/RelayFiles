@@ -39,14 +39,16 @@ const snapshotRowSchema = z.object({
   createdAt: z.iso.datetime(),
   modifiedAt: z.iso.datetime().nullable(),
   takenAt: z.iso.datetime().nullable(),
+  /** Where the item was listed in Favorites (organizing folder, null: the top); absent: not a favorite. */
+  favorite: z.object({ folderId: z.string().nullable() }).optional(),
 });
 type SnapshotRow = z.infer<typeof snapshotRowSchema>;
 const snapshotSchema = z.array(snapshotRowSchema).min(1);
 
 const iso = (date: Date | null) => (date ? date.toISOString() : null);
 
-/** The rows of a deleted tree as stored in DeletedItem.nodes (parents before children). */
-export function toSnapshot(rows: readonly Node[]): Prisma.InputJsonValue {
+/** The rows of a deleted tree as stored in DeletedItem.nodes (parents before children), with their favorites. */
+export function toSnapshot(rows: readonly Node[], favorites: ReadonlyMap<string, string | null> = new Map()): Prisma.InputJsonValue {
   return rows.map(
     (row): SnapshotRow => ({
       id: row.id,
@@ -73,6 +75,7 @@ export function toSnapshot(rows: readonly Node[]): Prisma.InputJsonValue {
       createdAt: row.createdAt.toISOString(),
       modifiedAt: iso(row.modifiedAt),
       takenAt: iso(row.takenAt),
+      ...(favorites.has(row.id) ? { favorite: { folderId: favorites.get(row.id) ?? null } } : {}),
     }),
   );
 }
@@ -81,7 +84,7 @@ const date = (value: string | null) => (value === null ? null : new Date(value))
 
 /** The Node rows to insert for a restore of `accountId`'s item, generated-file flags cleared. */
 export function fromSnapshot(nodes: Prisma.JsonValue, accountId: string, now: Date): Prisma.NodeCreateManyInput[] {
-  return snapshotSchema.parse(nodes).map((row) => ({
+  return snapshotSchema.parse(nodes).map(({ favorite: _favorite, ...row }) => ({
     ...row,
     accountId,
     size: BigInt(row.size),
@@ -94,6 +97,11 @@ export function fromSnapshot(nodes: Prisma.JsonValue, accountId: string, now: Da
     stripFailed: false,
     updatedAt: now,
   }));
+}
+
+/** The favorites a deleted tree had, to list them again on restore (snapshots before favorites have none). */
+export function favoritesOfSnapshot(nodes: Prisma.JsonValue): { nodeId: string; folderId: string | null }[] {
+  return snapshotSchema.parse(nodes).flatMap((row) => (row.favorite ? [{ nodeId: row.id, folderId: row.favorite.folderId }] : []));
 }
 
 /** Full rows of these nodes (every column, for a snapshot), in no particular order. */

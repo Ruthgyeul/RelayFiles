@@ -12,6 +12,7 @@ import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { carriedSettingsOf, createFileNode, createFolderNode, deleteNodes, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
+import { moveFavoriteToNode } from "../repositories/favorite.repo";
 import { moveLinkEvents } from "../repositories/link-event.repo";
 import { ancestorChain, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
@@ -244,6 +245,7 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
     });
     if (replace) {
       await moveLinkEvents(tx, replace.id, placed.id);
+      await moveFavoriteToNode(tx, replace.id, placed.id);
       await deleteNodes(tx, [replace.id]);
     }
     // The twin's path is read with it and its folders locked, so a rename or move meanwhile

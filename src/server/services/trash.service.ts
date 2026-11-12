@@ -10,11 +10,12 @@ import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
-import { findDeletedItem, fromSnapshot, listDeletedItems, takeDeletedItem, takenLinkIds } from "../repositories/deleted-item.repo";
+import { favoritesOfSnapshot, findDeletedItem, fromSnapshot, listDeletedItems, takeDeletedItem, takenLinkIds } from "../repositories/deleted-item.repo";
 import { findNode, findRootFolder, insertNodes, listSiblingNames } from "../repositories/node.repo";
 import { removeTrashedBytes } from "../repositories/trash.repo";
 import { StorageEntryMissingError, StorageTargetExistsError } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
+import { relistFavorites } from "./favorites.service";
 import { assertItemRoom } from "./item-limit.service";
 import { lockedLocationOf } from "./node-location";
 import type { NodeOwner } from "./node-ops.service";
@@ -110,6 +111,7 @@ export async function restoreDeletedItem(owner: NodeOwner, id: string): Promise<
           linkId: taken.has(row.linkId) ? newLinkId() : row.linkId,
         })),
       );
+      await relistFavorites(tx, owner.id, favoritesOfSnapshot(item.nodes));
       if (item.trashedBytesId) await removeTrashedBytes(tx, owner.id, item.trashedBytesId);
       const to = { accountId: owner.id, segments: [...target.segments, name] };
       await driver.restoreFromTrash(item.trashPath, to);

@@ -16,6 +16,14 @@ export const FILES = {
   maxItemsPerAccount: 100_000,
   /** Tags one item can carry. */
   maxTagsPerItem: 20,
+  /** Items one account can keep in Favorites (each item is listed there once). */
+  maxFavorites: 500,
+  /** Organizing folders one account can make inside Favorites. */
+  maxFavoriteFolders: 200,
+  /** Levels of organizing folders inside Favorites (1: directly inside it). */
+  favoriteFolderMaxDepth: 8,
+  /** Folders a Favorites URL may open below a favorite folder (/files/favorites/<favorite>/<sub>/…). */
+  maxFavoriteChain: 64,
 } as const;
 
 /** "Renumber files": renames the files of one folder to 01, 02, 03, … (docs/architecture.md "순번 정리"). */

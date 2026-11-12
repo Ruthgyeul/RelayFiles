@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import type { FolderView, NodeItem } from "@/contracts/nodes";
 import { folderHref, sharePageHref } from "@/shared/lib/routes";
@@ -17,13 +18,15 @@ interface Options {
   linkOf: (linkId: string) => string;
   copyLink: (url: string, visibility: "private" | "public") => void;
   onProperties: (id: string) => void;
+  /** Where a subfolder opens (default: the File Manager; Favorites keep their own path). */
+  folderHref?: (id: string) => Route;
 }
 
 /**
  * What each entry of an item's action menu does. The current folder (its header menu) is
  * handled like its own item: it moves within its parent and shares with the parent's visibility.
  */
-export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, linkOf, copyLink, onProperties }: Options): (item: NodeItem) => NodeActions {
+export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, linkOf, copyLink, onProperties, folderHref: hrefOf = (id) => folderHref(id) }: Options): (item: NodeItem) => NodeActions {
   const router = useRouter();
   const { folder, path, isRoot } = view;
   const parentOfCurrent = path.at(-2);
@@ -34,10 +37,11 @@ export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, lin
     const parentId = current ? (parentOfCurrent?.id ?? folder.id) : folder.id;
     const parentVisibility = current ? view.parentVisibility : view.effectiveVisibility;
     return {
-      open: item.type === "folder" && !current ? () => router.push(folderHref(item.id)) : undefined,
+      open: item.type === "folder" && !current ? () => router.push(hrefOf(item.id)) : undefined,
       preview: item.type === "file" ? () => media.preview(item) : undefined,
       download: () => media.download(item),
       downloadZip: item.type === "file" ? () => media.zip([item]) : undefined,
+      toggleFavorite: () => void dialogs.toggleFavorite([item], !item.favorite),
       share: item.type === "folder" ? () => router.push(sharePageHref(item.linkId)) : undefined,
       uploadLinks: item.type === "folder" ? () => dialogs.uploadLinks(item) : undefined,
       tags: () => dialogs.tags([item]),

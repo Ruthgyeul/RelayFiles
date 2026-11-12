@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { ActivityDialog, type ActivityRequest } from "./ActivityDialog";
 import { FileRequestsDialog, type FileRequestsRequest } from "./FileRequestsDialog";
+import { favoritesApi } from "@/shared/lib/favorites-api";
 import { filesApi } from "@/shared/lib/files-api";
 import { kindOf } from "@/shared/ui/node-kind";
 import { MoveDialog, type MoveRequest } from "./MoveDialog";
@@ -80,6 +81,16 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
     activity: (item: NodeItem) => setActivity({ id: item.id, name: item.name, url: linkOf(item.linkId) }),
     newLink: (item: NodeItem) => setRelink(item),
     uploadLinks: (item: NodeItem) => setUploadLinks({ folderId: item.id, name: item.name }),
+    /** Adds items to the top of Favorites (`add`) or takes them out; nothing moves on disk. */
+    toggleFavorite: async (items: NodeItem[], add: boolean) => {
+      try {
+        const ids = items.map((item) => item.id);
+        await (add ? favoritesApi.add(ids) : favoritesApi.remove(ids));
+        changed(add ? "Added to favorites" : "Removed from favorites");
+      } catch (caught) {
+        notify(errorText(caught));
+      }
+    },
     togglePause: async (item: NodeItem) => {
       try {
         await filesApi.setPaused(item.id, !item.settings.dlPaused);

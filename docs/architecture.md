@@ -173,6 +173,21 @@ File Manager 툴바의 시계 아이콘(`/files/deleted`)이 지운 항목을 �
 - **영구 삭제**(`DELETE /api/trash/:id`): 같은 잠금 아래 `DeletedItem`과 그 `TrashedBytes`를 지우고, 커밋 뒤 `removeFromTrash`로 디스크에서 지운다(실패하면 매일 정리가 지운다).
 - **정리**: 매일 정리가 `forgetTrashedBefore`와 같은 기준 시각·같은 규칙(실제로 비운 `ACTIVE`·`DRAINING` 볼륨만)으로 `forgetDeletedBefore`를 부른다. `deletedAt`은 휴지통으로 옮긴 뒤의 시각이라 기록이 지워지는 항목은 파일도 이미 지워졌다. 그 반대(파일만 먼저 지워진 짧은 틈)는 복원이 410으로 답한다. 계정을 지우면 `DeletedItem`도 cascade로 지워진다. 휴지통 경로는 항목 이름만 보므로(`trashEntry`) 볼륨 마운트 경로가 바뀌어도 찾는다.
 
+### 즐겨찾기 (Favorites)
+
+루트 목록 맨 위의 "Favorites"(`/files/favorites`)는 가상 폴더다(`features/favorites`, `services/favorites.service.ts`, `repositories/favorite.repo.ts`, `domain/favorites.ts`).
+
+- **모델**: `Favorite { nodeId @unique, folderId? }`는 "이 항목을 Favorites의 이 위치에 보여 준다"는 표시일 뿐 복사본이 아니다. 그래서 Favorites에서 열기·공유·이름 변경·태그를 하면 원본 항목이 바뀐다. 한 항목은 한 곳에만 있다(`nodeId` unique).
+- **정리용 폴더**: `FavoriteFolder { parentId? }`는 Favorites 안에서만 있는 폴더다. 디스크와 공유 링크에는 아무것도 없고, 중첩할 수 있다(`FILES.favoriteFolderMaxDepth`).
+  - 형제 이름 중복은 서비스가 막는다. `parentId`가 null인 맨 위까지 막으려면 `NULLS NOT DISTINCT` 인덱스가 필요한데, Prisma가 표현하지 못해 `migrate dev`가 drift로 보기 때문이다.
+  - 모든 변경은 계정별 advisory lock(`lockFavoritesOf`) 아래에서 정리용 폴더 전체(최대 200개)를 읽고, `domain/favorites.ts`로 경로·깊이·순환을 계산한다. 그래서 개수 한도, 이름, 순환 검사가 동시 요청에도 맞는다.
+- **즐겨찾기한 실제 폴더**: `/files/favorites/<즐겨찾기 폴더>/<하위>/…`에서 연다. 서버(`favoriteFolderPage`)는 첫 id가 즐겨찾기이고 다음 id가 각각 앞 폴더의 직속 하위인지 확인한 뒤 평소의 `getFolderView`를 돌려준다. 화면은 같은 `FileManager`이고, 경로 막대와 하위 폴더 링크만 Favorites 경로를 따른다(`FolderNav`).
+- **항목 수명주기**
+  - replace 업로드로 node id가 바뀌면 즐겨찾기가 새 행으로 옮겨 간다(`moveFavoriteToNode`).
+  - 삭제하면 FK cascade로 즐겨찾기가 사라진다. 그 전에 위치를 휴지통 스냅샷(`favorite.folderId`)에 남겨, 복원할 때 다시 넣는다(`relistFavorites`). 정리용 폴더가 사라졌으면 맨 위에 넣고, 한도 안에서만 넣는다.
+  - 복사본은 새 노드라 즐겨찾기가 아니다.
+- **목록 표시**: 폴더 뷰와 검색 결과는 행마다 한 번의 `favoriteFoldersOf` 조회로 `favorite: true`를 붙인다. 루트는 `favoriteCount`도 함께 보낸다(Favorites 행의 항목 수).
+
 ### 순번 정리 (Renumber files)
 
 폴더 메뉴의 "Renumber files"는 `scripts/sortNumbered.sh`처럼 폴더 바로 아래 파일 이름을 `01, 02, 03…`(확장자 유지)으로 바꾼다(`domain/renumber.ts` 계획, `services/renumber.service.ts` 실행).

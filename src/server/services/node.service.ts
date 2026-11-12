@@ -10,6 +10,7 @@ import type { AccountRow } from "../repositories/account.repo";
 import { db } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
+import { countFavorites, favoriteFoldersOf } from "../repositories/favorite.repo";
 import { childCounts, createFolderNode, findByName, findByTags, findNode, findRootFolder, listChildren, listFolders, listSiblingNames, recentFiles, tagUsage, type NodeRow } from "../repositories/node.repo";
 import { ancestorChain, childStats, descendantCounts, folderSizes, type ChildStats } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
@@ -50,21 +51,33 @@ export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: num
   };
 }
 
-/** A listed row with its folder stats (bytes, files and items inside) and busy badge. */
-function listedItem(row: NodeRow, stats: ChildStats | undefined, busy: ReadonlyMap<string, Busy>, now: number): NodeItem {
+/** What a list needs besides the rows: busy levels and which rows are in Favorites. */
+interface ListContext {
+  busy: ReadonlyMap<string, Busy>;
+  favorites: ReadonlyMap<string, string | null>;
+  now: number;
+}
+
+async function listContext(rows: NodeRow[]): Promise<ListContext> {
+  const now = Date.now();
+  const [busy, favorites] = await Promise.all([busyLevels(rows, now), favoriteFoldersOf(db(), rows.map((row) => row.id))]);
+  return { busy, favorites, now };
+}
+
+/** A listed row with its folder stats (bytes, files and items inside), busy badge and favorite mark. */
+function listedItem(row: NodeRow, stats: ChildStats | undefined, { busy, favorites, now }: ListContext): NodeItem {
   const item = row.type === "FOLDER" ? toNodeItem(row, { size: stats?.size ?? 0n, fileCount: stats?.files ?? 0, itemCount: stats?.items ?? 0 }) : toNodeItem(row);
   const level = busy.get(row.id);
-  return level ? { ...item, busy: busyBadge(level, now, "app") } : item;
+  return { ...item, ...(level ? { busy: busyBadge(level, now, "app") } : {}), ...(favorites.has(row.id) ? { favorite: true as const } : {}) };
 }
 
 /** Adds folder sizes and child counts to rows from anywhere in the account (search hits, one item). */
 async function withFolderStats(rows: NodeRow[]): Promise<NodeItem[]> {
   const folderIds = rows.filter((row) => row.type === "FOLDER").map((row) => row.id);
-  const now = Date.now();
-  const [counts, sizes, busy] = await Promise.all([childCounts(db(), folderIds), folderSizes(db(), folderIds), busyLevels(rows, now)]);
+  const [counts, sizes, context] = await Promise.all([childCounts(db(), folderIds), folderSizes(db(), folderIds), listContext(rows)]);
   return rows.map((row) => {
     const size = sizes.get(row.id);
-    return listedItem(row, { size: size?.size ?? 0n, files: size?.files ?? 0, items: counts.get(row.id) ?? 0 }, busy, now);
+    return listedItem(row, { size: size?.size ?? 0n, files: size?.files ?? 0, items: counts.get(row.id) ?? 0 }, context);
   });
 }
 
@@ -82,18 +95,24 @@ async function resolveFolder(accountId: string, ref: string): Promise<NodeRow> {
  */
 export async function getFolderView(accountId: string, ref: string): Promise<FolderView> {
   const folder = await resolveFolder(accountId, ref);
-  const now = Date.now();
-  const [chain, children, stats] = await Promise.all([ancestorChain(db(), folder.id), listChildren(db(), folder.id), childStats(db(), folder.id)]);
-  const busy = await busyLevels([folder, ...children], now);
+  const isRoot = folder.parentId === null;
+  const [chain, children, stats, favoriteCount] = await Promise.all([
+    ancestorChain(db(), folder.id),
+    listChildren(db(), folder.id),
+    childStats(db(), folder.id),
+    isRoot ? countFavorites(db(), accountId) : Promise.resolve(null),
+  ]);
+  const context = await listContext([folder, ...children]);
   const inside = [...stats.values()];
   const total: ChildStats = { size: inside.reduce((sum, child) => sum + child.size, 0n), files: inside.reduce((sum, child) => sum + child.files, 0), items: children.length };
   return {
-    folder: listedItem(folder, total, busy, now),
-    isRoot: folder.parentId === null,
+    folder: listedItem(folder, total, context),
+    isRoot,
     path: chain.map(({ id, name }) => ({ id, name })),
     effectiveVisibility: effectiveVisibility(chain.map((row) => VISIBILITY[row.visibility]).reverse()),
     parentVisibility: effectiveVisibility(chain.slice(0, -1).map((row) => VISIBILITY[row.visibility]).reverse()),
-    children: children.map((row) => listedItem(row, stats.get(row.id), busy, now)),
+    children: children.map((row) => listedItem(row, stats.get(row.id), context)),
+    ...(favoriteCount !== null ? { favoriteCount } : {}),
   };
 }
 
@@ -113,7 +132,7 @@ export async function getProperties(accountId: string, nodeId: string): Promise<
 }
 
 /** Adds the folder path ("Videos / 2024") to each hit, keeping the order. */
-async function withPaths(accountId: string, rows: NodeRow[]): Promise<TaggedItem[]> {
+export async function withPaths(accountId: string, rows: NodeRow[]): Promise<TaggedItem[]> {
   const [folders, items] = await Promise.all([listFolders(db(), accountId), withFolderStats(rows)]);
   const byId = new Map(folders.map((folder) => [folder.id, folder]));
   const pathOf = (parentId: string | null): string => {

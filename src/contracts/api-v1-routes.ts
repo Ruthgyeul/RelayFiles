@@ -2,7 +2,7 @@ import { z } from "zod";
 import { SEARCH } from "@/config/policy";
 import { MAX_NAME_BYTES } from "@/domain/names";
 import { apiV1NodePatchSchema, apiV1SharePatchSchema, type ApiScope } from "./api-tokens";
-import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, folderViewSchema, nodeItemSchema, taggedItemSchema } from "./api-v1";
+import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, folderViewSchema, nodeItemSchema, taggedItemSchema } from "./api-v1";
 import { createFolderSchema } from "./nodes";
 
 export type ApiV1Method = "GET" | "HEAD" | "POST" | "PATCH" | "DELETE";
@@ -49,7 +49,17 @@ export const API_V1_ROUTES: readonly ApiV1Route[] = [
   },
   { method: "GET", path: "/api/v1/files/{id}", scope: "files:read", summary: "Download a file (Range and ETag supported)", params: { id: nodeId }, response: "file", status: 200 },
   { method: "HEAD", path: "/api/v1/files/{id}", scope: "files:read", summary: "A download's headers without the bytes", params: { id: nodeId }, response: "file", status: 200 },
-  { method: "PATCH", path: "/api/v1/nodes/{id}", scope: "files:write", summary: "Rename and/or move a file or folder", description: "A name taken where it ends up answers 409.", params: { id: nodeId }, body: apiV1NodePatchSchema, response: nodeItemSchema, status: 200 },
+  {
+    method: "PATCH",
+    path: "/api/v1/nodes/{id}",
+    scope: "files:write",
+    summary: "Rename, move and/or favorite a file or folder",
+    description: "A name taken where it ends up answers 409. `favorite: true` lists the item at the top of Favorites (more than FILES.maxFavorites answers 400).",
+    params: { id: nodeId },
+    body: apiV1NodePatchSchema,
+    response: nodeItemSchema,
+    status: 200,
+  },
   { method: "DELETE", path: "/api/v1/nodes/{id}", scope: "files:write", summary: "Delete a file or a folder with everything inside", params: { id: nodeId }, response: deletedCountSchema, status: 200 },
   { method: "GET", path: "/api/v1/nodes/{id}/share", scope: "files:read", summary: "An item's share link and settings", params: { id: nodeId }, response: apiV1ShareSchema, status: 200 },
   {
@@ -64,6 +74,16 @@ export const API_V1_ROUTES: readonly ApiV1Route[] = [
     status: 200,
   },
   { method: "POST", path: "/api/v1/nodes/{id}/link", scope: "files:write", summary: "Replace an item's share link (the old one stops working at once)", params: { id: nodeId }, response: apiV1ShareSchema, status: 200 },
+  {
+    method: "GET",
+    path: "/api/v1/favorites",
+    scope: "files:read",
+    summary: "One level of Favorites",
+    description: "Favorites list items where they are (no copies). Without `folder`, the top; organizing folders are made in the web app.",
+    query: z.object({ folder: z.string().optional().describe("Organizing folder id") }),
+    response: favoritesViewSchema,
+    status: 200,
+  },
   {
     method: "GET",
     path: "/api/v1/search",

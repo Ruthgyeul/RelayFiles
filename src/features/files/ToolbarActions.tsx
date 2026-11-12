@@ -7,6 +7,7 @@ export interface ToolbarHandlers {
   download: () => void;
   zip: () => void;
   tags: () => void;
+  favorite: () => void;
   copy: () => void;
   move: () => void;
   remove: () => void;
@@ -37,6 +38,7 @@ export function toolbarActions(on: ToolbarHandlers) {
         <ToolButton icon="download-simple" label="Download" onClick={on.download} />
         <ToolButton icon="file-zip" label="Zip" title="Download as zip" onClick={on.zip} />
         <ToolButton icon="tag" label="Tags" onClick={on.tags} />
+        <ToolButton icon="star" label="Favorite" title="Add to favorites" onClick={on.favorite} />
         <ToolButton icon="copy" label="Copy" onClick={on.copy} />
         <ToolButton icon="arrow-bend-up-right" label="Move" onClick={on.move} />
         <ToolButton icon="trash" label="Delete" danger onClick={on.remove} />

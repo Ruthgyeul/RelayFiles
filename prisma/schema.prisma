@@ -79,6 +79,8 @@ model Account {
   apiTokens            ApiToken[]
   fileRequests         FileRequest[]
   deletedItems         DeletedItem[]
+  favorites            Favorite[]
+  favoriteFolders      FavoriteFolder[]
 
   @@index([volumeId])
 }
@@ -192,6 +194,7 @@ model Node {
   takenAt       DateTime?
   events        LinkEvent[]
   fileRequests  FileRequest[]
+  favorite      Favorite?
 
   @@unique([parentId, name])
   @@index([accountId, parentId])
@@ -200,6 +203,40 @@ model Node {
   @@index([accountId, sha256])
   @@index([expAt])
   @@index([tags], type: Gin)
+}
+
+/// A folder inside the virtual "Favorites" folder, made only to organize favorites. It holds no
+/// bytes and maps to nothing on the volume; deleting it never touches the items it lists.
+/// Sibling names are unique; favorites.service checks this under the account's favorites lock
+/// (a unique index cannot cover parentId = null without NULLS NOT DISTINCT, which Prisma cannot express).
+model FavoriteFolder {
+  id        String           @id
+  accountId String
+  account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// null: directly inside Favorites.
+  parentId  String?
+  parent    FavoriteFolder?  @relation("FavoriteTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  FavoriteFolder[] @relation("FavoriteTree")
+  name      String
+  favorites Favorite[]
+  createdAt DateTime         @default(now())
+
+  @@index([accountId, parentId])
+}
+
+/// An item (file or folder) the owner marked as a favorite. Each item is in Favorites at most
+/// once (nodeId is unique); folderId says which organizing folder lists it (null: the top).
+model Favorite {
+  id        String          @id
+  accountId String
+  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  nodeId    String          @unique
+  node      Node            @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  folderId  String?
+  folder    FavoriteFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdAt DateTime        @default(now())
+
+  @@index([accountId, folderId])
 }
 
 enum LinkEventKind {

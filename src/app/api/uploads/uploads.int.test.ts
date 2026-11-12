@@ -227,6 +227,7 @@ describe("uploads", () => {
     const before = await prisma.node.findFirstOrThrow({ where: { accountId: s.id, name: "doc.txt" } });
     await prisma.node.update({ where: { id: before.id }, data: { tags: ["work"], visibility: "PUBLIC", note: "keep me", downloadLimit: 5, downloads: 2, hasThumb: true } });
     await prisma.linkEvent.create({ data: { nodeId: before.id, kind: "DOWNLOAD", fileName: "doc.txt" } });
+    await prisma.favorite.create({ data: { id: before.id, accountId: s.id, nodeId: before.id } });
     const { sent } = await upload(s, "root", [{ rel: "doc.txt", content: "second version" }], "replace");
     // New content, new id: cached bytes are keyed by the id.
     const nodeId = sent[0]!.file!.nodeId;
@@ -244,6 +245,8 @@ describe("uploads", () => {
     expect(after.sha256).toBe(createHash("sha256").update("second version").digest("hex"));
     expect(after.hasThumb).toBe(false);
     expect(await prisma.linkEvent.count({ where: { nodeId } })).toBe(1);
+    // Still in Favorites: the favorite follows the new row.
+    expect(await prisma.favorite.count({ where: { nodeId } })).toBe(1);
     expect(await prisma.node.count({ where: { id: before.id } })).toBe(0);
     expect(await readFile(join(s.root, "doc.txt"), "utf8")).toBe("second version");
     expect(await prisma.node.count({ where: { accountId: s.id, name: "doc.txt" } })).toBe(1);

@@ -43,6 +43,7 @@ export const nodeItemSchema = z.object({
   hasThumb: z.boolean(),
   settings: nodeSettingsSchema,
   busy: busyBadgeSchema.nullable(),
+  favorite: z.literal(true).optional().describe("Listed in Favorites"),
 });
 
 export const folderViewSchema = z.object({
@@ -52,6 +53,7 @@ export const folderViewSchema = z.object({
   effectiveVisibility,
   parentVisibility: effectiveVisibility,
   children: z.array(nodeItemSchema),
+  favoriteCount: z.number().int().optional().describe("The root only: items in Favorites"),
 });
 
 export const createdFolderSchema = z.object({ folder: nodeItemSchema, requestedName: z.string(), renamed: z.boolean() });
@@ -88,3 +90,13 @@ export const apiV1ShareSchema = z.object({
 });
 
 export const deletedCountSchema = z.object({ deleted: z.number().int() });
+
+const favoriteFolderSchema = z.object({ id: z.string(), name: z.string(), parentId: z.string().nullable(), itemCount: z.number().int().describe("Favorites and folders directly inside") });
+
+export const favoritesViewSchema = z.object({
+  folder: favoriteFolderSchema.nullable().describe("The organizing folder shown; null for the top of Favorites"),
+  path: z.array(z.object({ id: z.string(), name: z.string() })).describe("Organizing folders from the top of Favorites down to this one"),
+  folders: z.array(favoriteFolderSchema),
+  items: z.array(taggedItemSchema).describe("Items listed here, newest favorite first; parentPath is where they really are"),
+  tree: z.array(z.object({ id: z.string(), name: z.string(), parentId: z.string().nullable() })).describe("Every organizing folder"),
+});
