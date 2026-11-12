@@ -15,6 +15,18 @@ export function exportFileName(accountName: string, at: Date): string {
   return `relayfiles-${name}-${day}.tar`;
 }
 
+/**
+ * Order of two paths in an export (segment by segment, by code unit): the same tree always
+ * gives the same tar, and a folder comes before everything inside it.
+ */
+export function compareExportPaths(a: readonly string[], b: readonly string[]): number {
+  for (let index = 0; index < Math.min(a.length, b.length); index++) {
+    const [left, right] = [a[index]!, b[index]!];
+    if (left !== right) return left < right ? -1 : 1;
+  }
+  return a.length - b.length;
+}
+
 export interface FolderLink {
   id: string;
   parentId: string | null;

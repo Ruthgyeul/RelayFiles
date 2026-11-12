@@ -3,7 +3,7 @@ import { Readable } from "node:stream";
 import { pack as tarPack, type Pack } from "tar-stream";
 import { EXPORT } from "@/config/policy";
 import { EXPORT_FORMAT, type ExportItem, type ExportManifest } from "@/contracts/account-export";
-import { EXPORT_MANIFEST_PATH, exportFileName, favoriteFolderPaths } from "@/domain/account-export";
+import { compareExportPaths, EXPORT_MANIFEST_PATH, exportFileName, favoriteFolderPaths } from "@/domain/account-export";
 import { contentDisposition } from "@/domain/serving";
 import { subtreePaths } from "@/domain/subtree";
 import { db } from "../db/client";
@@ -64,7 +64,9 @@ async function planExport(owner: Owner, now: Date): Promise<ExportPlan> {
   // A replaced file's row stepping aside has a "/" in its name: never exported.
   const rows = subtreePaths(tree, root.id)
     .filter(({ row }) => row.id !== root.id && !row.name.includes("/"))
-    .map(({ row, segments }) => ({ row, segments, path: segments.join("/") }));
+    .map(({ row, segments }) => ({ row, segments, path: segments.join("/") }))
+    // The database returns siblings in no set order: sort so every export of a tree is the same.
+    .sort((a, b) => compareExportPaths(a.segments, b.segments));
   const pathOf = new Map(rows.map(({ row, path }) => [row.id, path]));
   const [folders, favorites] = await Promise.all([listFavoriteFolders(db(), owner.id), listFavoritesOf(db(), owner.id)]);
   const folderPaths = favoriteFolderPaths(folders);
