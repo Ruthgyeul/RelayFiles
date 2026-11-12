@@ -21,6 +21,11 @@ export function listApiTokenRows(db: DbClient, accountId: string) {
   return db.apiToken.findMany({ where: { accountId }, orderBy: { createdAt: "desc" }, select: TOKEN_SELECT });
 }
 
+/** Serializes token creation for one account until the transaction ends (count, then create). */
+export async function lockApiTokensOf(tx: DbClient, accountId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`api-tokens:${accountId}`}))`;
+}
+
 export function countApiTokens(db: DbClient, accountId: string): Promise<number> {
   return db.apiToken.count({ where: { accountId } });
 }
@@ -28,6 +33,11 @@ export function countApiTokens(db: DbClient, accountId: string): Promise<number>
 /** Deletes one of the account's tokens; false when it has no such token. */
 export async function deleteApiToken(db: DbClient, accountId: string, id: string): Promise<boolean> {
   return (await db.apiToken.deleteMany({ where: { id, accountId } })).count === 1;
+}
+
+/** Deletes every token of the account (its account token was replaced); returns how many. */
+export async function deleteApiTokensOf(db: DbClient, accountId: string): Promise<number> {
+  return (await db.apiToken.deleteMany({ where: { accountId } })).count;
 }
 
 /** A token by its id, with its hash and its account. */

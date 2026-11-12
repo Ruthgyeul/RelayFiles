@@ -6,7 +6,8 @@ import { tokenKeys } from "@/server/auth/keys";
 import { rotateAccountKeys } from "@/server/auth/rotate-keys";
 import { encryptToken, tokenLookups, type TokenKeys } from "@/server/auth/token-crypto";
 import { db } from "@/server/db/client";
-import { createAdminAccount } from "@/server/services/auth.service";
+import { restoreAccountTokenIf, touchAccountLoginIf } from "@/server/repositories/account.repo";
+import { createAdminAccount, regenerateToken } from "@/server/services/auth.service";
 import { callRoute } from "../../../../test/route-call";
 import { randomTestIp } from "../../../../test/file-fixtures";
 
@@ -41,4 +42,19 @@ describe("key rotation", () => {
     await db().account.update({ where: { id: account.id }, data: { tokenEnc: new Uint8Array(encryptToken(token, old)) } });
     expect((await rotateAccountKeys(db(), current)).unreadable).toContain(account.id);
   });
+
+  it("never writes back or signs in with a token that was replaced after it was read", async () => {
+    const keys = tokenKeys();
+    const { account, token } = await createAdminAccount();
+    accounts.push(account.id);
+    const stale = tokenLookups(token, keys)[0]!;
+    // "Generate a new token" lands between a rotation (or sign-in) reading the row and writing it.
+    const replacement = await regenerateToken(account.id, "no-session");
+    expect(await restoreAccountTokenIf(db(), account.id, stale, { tokenLookup: stale, tokenEnc: new Uint8Array(encryptToken(token, keys)) })).toBe(false);
+    expect(await touchAccountLoginIf(db(), account.id, stale, new Date())).toBe(false);
+    const row = await db().account.findUniqueOrThrow({ where: { id: account.id } });
+    expect(row.tokenLookup).toBe(tokenLookups(replacement, keys)[0]);
+    expect((await callRoute(tokenSignIn, { method: "POST", body: { token }, ip: randomTestIp() })).status).toBe(401);
+  });
 });
+
