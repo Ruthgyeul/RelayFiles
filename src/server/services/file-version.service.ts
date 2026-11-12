@@ -10,7 +10,7 @@ import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
-import { moveFavoriteToNode } from "../repositories/favorite.repo";
+import { favoriteFoldersOf, moveFavoriteToNode, removeFavorites } from "../repositories/favorite.repo";
 import { createFileVersion, deleteFileVersion, deleteFileVersions, expiredFileVersions, findFileVersion, listFileVersions, moveVersionsToNode } from "../repositories/file-version.repo";
 import { moveLinkEvents } from "../repositories/link-event.repo";
 import { carriedSettingsOf, createFileNode, deleteNodes, findNode, updateNode, type NodeRow } from "../repositories/node.repo";
@@ -73,6 +73,32 @@ export async function handOver(tx: DbClient, from: NodeRow, toNodeId: string): P
   await moveFavoriteToNode(tx, from.id, toNodeId);
   await moveVersionsToNode(tx, from.id, toNodeId);
   await deleteNodes(tx, [from.id]);
+}
+
+/**
+ * A file moved over another file (WebDAV MOVE with Overwrite, the way editors save: write a
+ * temporary file, then rename it over the original). The moved file takes the other's place
+ * like an upload with "Replace": the replaced bytes become an earlier version (or go to the
+ * trash), and the moved row takes over the share link, its settings, tags, history, place in
+ * Favorites and versions. Both must be files of `owner`.
+ */
+export async function moveOverFile(owner: Owner, source: NodeRow, target: NodeRow): Promise<void> {
+  const parentId = target.parentId;
+  if (source.type !== "FILE" || target.type !== "FILE" || !parentId) throw new ApiError("CONFLICT", "Only a file can replace a file.");
+  const driver = await driverForAccount(owner, "write");
+  const [from, to] = await Promise.all([locationOf(owner.id, source.id), locationOf(owner.id, target.id)]);
+  await withStorageTransaction(db(), async (tx, undo) => {
+    await lockAccountForWrite(tx, owner.id, driver.volumeId);
+    const aside = await setAside(tx, driver, undo, owner.id, target, to);
+    // One place in Favorites per file: the replaced file's place wins.
+    if ((await favoriteFoldersOf(tx, [target.id])).has(target.id)) await removeFavorites(tx, owner.id, [source.id]);
+    await updateNode(tx, source.id, { parent: { connect: { id: parentId } }, name: target.name, ...carriedSettingsOf(target) });
+    await driver.rename(from, to);
+    undo.push("undo move", () => driver.rename(to, from));
+    await aside.recordFor(tx, source.id);
+    await handOver(tx, target, source.id);
+  });
+  await driver.removeAssets(owner.id, [target.id]).catch((error: unknown) => logger.warn("old media assets not removed", { error }));
 }
 
 async function requireFile(accountId: string, nodeId: string): Promise<NodeRow> {

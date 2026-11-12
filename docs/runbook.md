@@ -366,6 +366,19 @@ $C run --rm tools npm run storage:migrate
   - EICAR 테스트 문자열을 업로드 링크로 보내면 Recently deleted에 "Malware found"로 들어가고 알림이 와야 한다.
 - **clamd가 내려갔을 때**: 받은 파일은 `PENDING`(방문자 503)으로 남는다. 워커가 약 5분 동안 다시 시도한 뒤 `FAILED`로 둔다. clamd를 되살린 뒤 파일 메뉴의 "Scan again"으로 다시 검사한다.
 
+## WebDAV 점검 (litmus)
+
+dav 서비스를 바꾼 뒤에는 [litmus](https://github.com/notroj/litmus)로 RFC 4918 동작을 한 번 확인한다. 테스트 전용 계정과 `files:read` + `files:write` 토큰을 쓴다. litmus는 그 계정에 `litmus/` 폴더를 만들고 지운다.
+
+```bash
+sudo apt install litmus
+litmus https://<도메인>/dav/ relayfiles rfp_...
+```
+
+- `basic`, `copymove`는 모두 통과해야 한다.
+- `props`의 사용자 속성 저장, `locks`의 잠금 충돌 검사는 실패로 나온다. PROPPATCH는 속성을 저장하지 않고, LOCK은 권고용이기 때문이다(docs/security.md "WebDAV").
+- Finder(이동 > 서버에 연결)와 Windows 탐색기(네트워크 위치 추가)에서 폴더 만들기, 파일 복사, 이름 바꾸기, 삭제를 한 번씩 해 본다. 같은 파일을 다시 저장하면 웹의 "Version history"에 이전 내용이 남아야 한다.
+
 ## 썸네일·미리보기 다시 만들기
 
 ```bash

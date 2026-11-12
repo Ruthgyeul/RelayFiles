@@ -1,6 +1,7 @@
 /**
  * WebDAV server (separate from the web app, which cannot answer PROPFIND): npm run dav
- * Serves the account of a personal API token (files:read) read-only under DAV.prefix (/dav).
+ * Serves the account of a personal API token under DAV.prefix (/dav): reads with files:read,
+ * changes with files:write.
  * Nginx forwards /dav/ here (DAV_HOST:DAV_PORT); it is never exposed on its own.
  * Stops on SIGINT/SIGTERM after the requests in progress.
  */

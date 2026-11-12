@@ -123,9 +123,12 @@
 ## WebDAV
 
 - 개인 API 토큰을 Basic 인증의 비밀번호로 받는다. Basic은 매 요청 토큰을 그대로 보내므로 **반드시 TLS(https) 뒤에서만** 쓴다. Nginx 앞단이 Cloudflare Tunnel이나 certbot으로 https를 끝내는 구성이 전제다.
-- 토큰 확인은 API v1과 같다(`requireApiCaller`: argon2 해시, 폐기·만료 즉시 반영, `files:read` 범위, 거부는 보안 로그). 요청 한도만 `DAV.requestsPerMinute`(600/분)로 따로 센다.
+- 토큰 확인은 API v1과 같다(`requireApiCaller`: argon2 해시, 폐기·만료 즉시 반영, 거부는 보안 로그). 읽기는 `files:read`, 변경은 `files:write` 범위가 필요하다. 요청 한도만 `DAV.requestsPerMinute`(600/분)로 따로 센다.
 - 경로는 토큰 계정의 루트 아래로만 해석한다(`domain/dav.ts` `davSegments`: 퍼센트 디코딩 뒤 `nameError`로 `..`·`/`·제어 문자를 거부). 다른 계정의 항목은 404다.
-- 읽기 전용이다(`OPTIONS`, `PROPFIND` Depth 0·1, `GET`, `HEAD`). `Depth: infinity`는 계정 전체를 한 번에 훑게 되므로 거부한다.
+- `PROPFIND`의 `Depth: infinity`는 계정 전체를 한 번에 훑게 되므로 거부한다.
+- 변경은 웹 앱과 같은 서비스를 탄다: 용량·항목 한도, 이름 검증, 볼륨 쓰기 잠금, 덮어쓴 파일의 버전 기록, 삭제는 "Recently deleted". `MOVE`·`COPY`의 `Destination`도 같은 계정의 `/dav` 아래 경로로만 해석한다(다른 호스트를 적어도 경로만 본다).
+- `PUT`은 파일 하나를 한 요청으로 받으므로 Nginx `/dav/`는 `client_max_body_size 0`이다. 크기 상한은 앱이 `UPLOAD_MAX_FILE_SIZE_GB`와 용량 예약으로 검사하고, 약속한 크기보다 긴 본문은 중간에 끊는다. Cloudflare Tunnel을 거치면 Cloudflare의 요청 크기 제한(무료 요금제 100MB)이 먼저 걸린다.
+- `LOCK`은 권고용이다(한 사람의 파일이라 잠금을 저장하지 않는다). 두 기기에서 같은 파일을 동시에 고치면 나중에 저장한 쪽이 이기고, 앞의 내용은 버전으로 남는다.
 
 ## 공유 링크·다운로드
 
