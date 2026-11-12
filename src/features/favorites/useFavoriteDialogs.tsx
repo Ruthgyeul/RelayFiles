@@ -29,7 +29,7 @@ interface Options {
  */
 export function useFavoriteDialogs({ view, onChanged }: Options) {
   const router = useRouter();
-  const { notify } = useShell();
+  const { notify, config } = useShell();
   const [creating, setCreating] = useState<{ error?: string } | null>(null);
   const [renaming, setRenaming] = useState<{ folder: FavoriteFolderDto; error?: string } | null>(null);
   const [moving, setMoving] = useState<MoveInFavoritesRequest | null>(null);
@@ -67,7 +67,7 @@ export function useFavoriteDialogs({ view, onChanged }: Options) {
     },
   };
 
-  const removal = removing ? deleteText(removing) : null;
+  const removal = removing ? deleteText(removing, config.trashRetentionHours) : null;
   const parentName = view.path.at(-2)?.name ?? "Favorites";
   const dialogs: ReactNode = (
     <>

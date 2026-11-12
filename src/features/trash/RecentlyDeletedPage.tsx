@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { STORAGE } from "@/config/policy";
 import type { DeletedItemDto, RestoredItem } from "@/contracts/trash";
 import { retentionText } from "@/domain/trash";
 import { useShell } from "@/features/shell/ShellProvider";
@@ -20,7 +19,6 @@ import { DeletedItemRow } from "./DeletedItemRow";
 
 /** Re-render interval for "Deletes in N hours". */
 const CLOCK_TICK_MS = 60_000;
-const RETENTION = retentionText(STORAGE.trashRetentionHours);
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
@@ -33,7 +31,8 @@ function restoredText(result: RestoredItem): string {
 /** "Recently deleted": deleted items of the active account that can still be restored. */
 export function RecentlyDeletedPage({ initial }: { initial: DeletedItemDto[] }) {
   const router = useRouter();
-  const { notify } = useShell();
+  const { notify, config } = useShell();
+  const RETENTION = retentionText(config.trashRetentionHours);
   const [items, setItems] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [forever, setForever] = useState<DeletedItemDto | null>(null);

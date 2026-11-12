@@ -52,7 +52,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 
 | 큐 | 작업 | 넣는 곳 |
 |---|---|---|
-| `maintenance` | 매일 `CLEANUP_CRON`(`JOBS_TIMEZONE`): 삭제일이 지난 계정과 만료 항목 삭제, 볼륨 휴지통에서 24시간 지난 항목과 `UPLOAD_TMP_TTL_HOURS`가 지난 미완료 업로드 영구 삭제(`ACTIVE`·`DRAINING` 볼륨), 비운 볼륨의 휴지통 바이트 기록과 "Recently deleted" 항목 정리. 이 작업만 있는 큐다(동시 1개) | 워커 시작 시 스케줄 등록, 관리자 "Run cleanup now"는 계정·항목 정리만 즉시 실행 |
+| `maintenance` | 매일 `CLEANUP_CRON`(`JOBS_TIMEZONE`): 삭제일이 지난 계정과 만료 항목 삭제, 볼륨 휴지통에서 `TRASH_RETENTION_HOURS`(기본 24시간, 1–720)가 지난 항목과 `UPLOAD_TMP_TTL_HOURS`가 지난 미완료 업로드 영구 삭제(`ACTIVE`·`DRAINING` 볼륨), 비운 볼륨의 휴지통 바이트 기록과 "Recently deleted" 항목 정리. 이 작업만 있는 큐다(동시 1개) | 워커 시작 시 스케줄 등록, 관리자 "Run cleanup now"는 계정·항목 정리만 즉시 실행 |
 | `probes` | `METRICS_SAMPLE_INTERVAL_SEC`마다 대역폭·디스크 표본(워커 heartbeat 겸), `HEALTH_PROBE_INTERVAL_SEC`마다 Status 페이지 프로브, `VOLUME_WATCH_INTERVAL_SEC`마다 볼륨 확인. 별도 큐·워커(`JOBS.probeConcurrency` = 종류마다 1개)라 매일 정리가 오래 걸려도 SSD 분리를 제때 알아챈다 | 워커 시작 시 스케줄 등록(예전 릴리스가 `maintenance` 큐에 둔 스케줄은 지운다) |
 | `notify` | 소유자 알림(`NOTIFY_WEBHOOK_URL`, [runbook.md "알림 설정"](runbook.md#알림-설정)): 업로드 링크로 들어온 파일(링크마다 `NOTIFY.fileRequestGroupSec` 동안 Redis에 모았다가 지연 작업 하나로), 예비 공간 아래로 내려간·쓰기를 거부하는·`OFFLINE`이 되거나 돌아온 볼륨, 실패한 백업 검증. 형식(`domain/notify.ts`: json, ntfy, Discord, Telegram)으로 바꿔 `server/http/webhook.ts`가 POST한다(`NOTIFY.requestTimeoutMs`, 리디렉트 따라가지 않음, 응답 본문 읽지 않음). 동시 1개, `NOTIFY.jobAttempts`번 지수 backoff, 4xx(408·429 제외)·3xx는 `UnrecoverableError`로 끝낸다. 반복 경보는 `notify:throttle:<종류>:<볼륨>` 키(`SET NX PX`)로 기간마다 한 번만 큐에 넣고, 작업 id(`<종류>-<대상>-<시각>`, 업로드 링크는 `file-request-<요청 id>-<시각>`, 백업은 `backup-failed-<시각>`)로 같은 알림을 두 번 넣지 않는다. 모은 업로드는 첫 시도에서 작업 데이터에 옮겨 적어 재시도가 같은 내용을 보낸다 | tus 업로드 완료(업로드 링크), 볼륨 확인(`probes` 큐), `backup:verify` 스크립트. 알림이 꺼져 있으면 아무것도 넣지 않는다 |
 | `media` | 썸네일(이미지: sharp, 영상: ffmpeg 1초 프레임 → WebP 576px), 공개 링크용 메타데이터 제거본(JPEG·PNG·WebP는 픽셀을 다시 인코딩하지 않고 메타데이터 구간만 제거, 방향 정보는 유지. GIF·AVIF·TIFF는 같은 형식으로 다시 쓰기), 뷰어 미리보기(512KB 이상 JPEG·PNG·WebP·AVIF·TIFF → 2560px WebP q92, 원본보다 작을 때만 저장), 자주 재생되는 영상의 저장된 변환본(`task: "transcode"`, 아래 "미리보기 전송"), 촬영일(`takenAt`, 아래 "순번 정리". 처리할 때마다 함께 읽고, `task: "taken"`은 촬영일만) | 업로드 완료, 복사, 실시간 변환 재생 횟수, 릴리스 데이터 마이그레이션(`taken`) |
@@ -165,6 +165,11 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 ### 휴지통 (Recently deleted)
 
 File Manager 툴바의 시계 아이콘(`/files/deleted`)이 지운 항목을 보여 준다(`features/trash`, `services/trash.service.ts`, `repositories/deleted-item.repo.ts`).
+
+- **보관 기간**: `TRASH_RETENTION_HOURS`(기본 24, 1–720)이다.
+  - 서버는 `storage/trash-retention.ts`로 읽는다. 매일 정리 기준 시각과 `expiresAt`이 이 값을 쓴다.
+  - 클라이언트 문구는 shell의 `ClientConfig.trashRetentionHours`로 받는다. 삭제 대화상자, 중복 정리, Recently deleted 페이지가 이 값을 쓴다.
+  - 휴지통 바이트는 그동안 계정 용량에 포함되므로, 길게 잡으면 그만큼 용량을 더 쓴다.
 
 - **삭제**(`deleteItems`): 지금처럼 한 스토리지 트랜잭션에서 트리를 `lockSubtrees`로 잠그고 행을 지운 뒤 맨 위 항목마다 `moveToTrash`한다. 같은 트랜잭션에서 잠근 행의 모든 컬럼을 읽어(`nodeRowsByIds`) 맨 위 항목별로 나누고(`domain/trash.ts` `groupByTop`), 항목마다 `TrashedBytes` 행 하나(그 항목의 파일 바이트, `addTrashedBytes`가 id를 돌려준다)와 `DeletedItem`(볼륨, `moveToTrash`가 돌려준 휴지통 경로, 그 `TrashedBytes` id, 이름·종류·크기·항목 수, 원래 부모 id와 당시 폴더 이름, `nodes` = 행 스냅샷 JSON)을 쓴다. 항목별 바이트의 합은 예전의 한 행과 같아서 쿼터 계산은 바뀌지 않는다.
 - **스냅샷**: 다시 넣는 데 필요한 Node 컬럼 전부(id, parentId, 이름, 종류, 크기, sha256, `missing`, `linkId`, 공유 설정, 다운로드 수, 태그, 생성·수정·촬영 시각). 계정은 `DeletedItem`의 것을 쓰고, 생성 파일 표시(`hasThumb`·`hasDerived`·`stripFailed`)는 복원할 때 false(생성 파일은 삭제 때 지워진다), `updatedAt`은 복원 시각. 나중에 Node에 컬럼을 더하면 옛 스냅샷에는 없으므로 기본값을 가져야 한다(zod 스키마가 모르는 키는 버린다).

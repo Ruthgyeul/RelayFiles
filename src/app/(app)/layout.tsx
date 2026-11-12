@@ -19,7 +19,11 @@ import { currentAnnouncement } from "@/server/services/server-settings.service";
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const device = await currentDevice();
   const [session, announcement] = await Promise.all([signupMode().then((mode) => toSessionState(device, mode)), currentAnnouncement()]);
-  const config = { publicUrl: getAppEnv().PUBLIC_URL.replace(/\/$/, ""), uploadChunkBytes: getEnv("uploads").UPLOAD_CHUNK_SIZE_MB * BYTES_PER_MB };
+  const config = {
+    publicUrl: getAppEnv().PUBLIC_URL.replace(/\/$/, ""),
+    uploadChunkBytes: getEnv("uploads").UPLOAD_CHUNK_SIZE_MB * BYTES_PER_MB,
+    trashRetentionHours: getEnv("storage").TRASH_RETENTION_HOURS,
+  };
   return (
     <ShellProvider initialSession={session} config={config}>
       <TransfersProvider>

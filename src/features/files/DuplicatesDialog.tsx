@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FILES, STORAGE } from "@/config/policy";
+import { FILES } from "@/config/policy";
 import type { DuplicateFile, DuplicatesResult } from "@/contracts/nodes";
 import { defaultDuplicateSelection, fullySelectedGroups } from "@/domain/duplicates";
 import { formatCount, formatSize } from "@/domain/format";
@@ -14,6 +14,7 @@ import { EmptyState } from "@/shared/ui/Display";
 import { Modal, ModalHeader } from "@/shared/ui/Modal";
 import { CheckRow } from "@/shared/ui/Option";
 import { DuplicateGroupCard } from "./DuplicateGroupCard";
+import { useShell } from "@/features/shell/ShellProvider";
 
 export interface DuplicatesRequest {
   folderId: string;
@@ -39,6 +40,7 @@ function scanText(result: DuplicatesResult): string {
  * its subfolders. Every copy but the oldest starts selected; deleting uses the normal delete.
  */
 export function DuplicatesDialog({ request, onClose, onDone, onReveal }: { request: DuplicatesRequest | null; onClose: () => void; onDone: (message: string) => void; onReveal: (file: DuplicateFile) => void }) {
+  const { config } = useShell();
   const [recursive, setRecursive] = useState(false);
   const [loaded, setLoaded] = useState<{ key: string; result: DuplicatesResult } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -129,7 +131,7 @@ export function DuplicatesDialog({ request, onClose, onDone, onReveal }: { reque
         tone="danger"
         icon="trash"
         title={`Delete ${files(selected.size)}?`}
-        description={`${formatSize(freed)} of copies will be moved to Recently deleted and can be restored for ${retentionText(STORAGE.trashRetentionHours)}; one copy of each file stays. Share links to the deleted copies stop working. Copies that share their bytes on disk free quota, not always disk space.`}
+        description={`${formatSize(freed)} of copies will be moved to Recently deleted and can be restored for ${retentionText(config.trashRetentionHours)}; one copy of each file stays. Share links to the deleted copies stop working. Copies that share their bytes on disk free quota, not always disk space.`}
         confirmLabel="Delete"
         busy={busy}
         onCancel={() => setConfirming(false)}

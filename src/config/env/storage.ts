@@ -13,6 +13,8 @@ export const storageEnv = z.object({
   VOLUME_WATCH_INTERVAL_SEC: positiveInt.default(STORAGE.volumeWatchIntervalSec),
   /** Copies and re-uploads of the same content share their bytes (hard links on the volume). */
   STORAGE_DEDUPE: bool.default(true),
+  /** Hours deleted items can be restored from "Recently deleted" before the daily cleanup removes them (1–720). */
+  TRASH_RETENTION_HOURS: positiveInt.max(STORAGE.trashRetentionMaxHours).default(STORAGE.trashRetentionHours),
 });
 
 export const uploadsEnv = z.object({

@@ -13,7 +13,7 @@ import { endMaintenanceHold, startMaintenanceHold } from "./volume.service";
  * Storage transactions roll back the disk when the database fails, but an undo that itself
  * fails leaves something behind (docs/security.md); this finds it. Without `fix` nothing is
  * changed. With `fix`, files and folders only on disk go to the volume's trash (removed for
- * good after STORAGE.trashRetentionHours, so they can still be restored), files missing on
+ * good after TRASH_RETENTION_HOURS, so they can still be restored), files missing on
  * disk are flagged `missing` (and unflagged when they are back). Database rows are never deleted.
  * `fix` holds each volume READONLY while it runs (see assertFixable).
  */
