@@ -23,6 +23,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     publicUrl: getAppEnv().PUBLIC_URL.replace(/\/$/, ""),
     uploadChunkBytes: getEnv("uploads").UPLOAD_CHUNK_SIZE_MB * BYTES_PER_MB,
     trashRetentionHours: getEnv("storage").TRASH_RETENTION_HOURS,
+    fileVersionsDays: getEnv("storage").FILE_VERSIONS_DAYS,
   };
   return (
     <ShellProvider initialSession={session} config={config}>

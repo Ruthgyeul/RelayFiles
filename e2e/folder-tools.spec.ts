@@ -63,3 +63,40 @@ test("finds files with the same content and deletes the extra copy", async ({ pa
   await folderTool(page, "Find duplicates");
   await expect(page.getByRole("dialog", { name: "Find duplicates" }).getByText("No duplicates found")).toBeVisible();
 });
+
+test("keeps the replaced file as a version and restores it", async ({ page }) => {
+  await openFiles(page);
+  await upload(page, [file("notes.txt", "first draft")]);
+
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([file("notes.txt", "second draft")]);
+  const duplicate = page.getByRole("dialog", { name: "1 file already exists in root" });
+  await expect(duplicate.getByText(/the current ones are kept as versions for \d+ days?/)).toBeVisible();
+  await duplicate.getByRole("button", { name: /^Replace/ }).click();
+  await expect(page.getByRole("region", { name: "Transfers" }).getByText("COMPLETE")).toBeVisible();
+  await page.getByRole("button", { name: "Close transfers" }).click();
+
+  // The replacement has a new id: wait for the refreshed row before opening its menu.
+  await expect(page.locator('[data-item="notes.txt"]')).toContainText("12 B");
+  await page.getByRole("button", { name: "Actions for notes.txt" }).click();
+  await page.getByRole("menuitem", { name: "Version history" }).click();
+  const dialog = page.getByRole("dialog", { name: "Version history" });
+  const versions = dialog.getByRole("list", { name: "Earlier versions" }).getByRole("listitem");
+  await expect(versions).toHaveCount(1);
+  await expect(versions.first()).toContainText("11 B");
+  await versions.first().getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByText("Restored an earlier version of notes.txt")).toBeVisible();
+  await expect(dialog).toBeHidden();
+
+  // The draft that was current is now the earlier version (and the file has a new id again).
+  await expect(page.locator('[data-item="notes.txt"]')).toContainText("11 B");
+  await page.getByRole("button", { name: "Actions for notes.txt" }).click();
+  await page.getByRole("menuitem", { name: "Version history" }).click();
+  await expect(versions).toHaveCount(1);
+  await expect(versions.first()).toContainText("12 B");
+  await versions.first().getByRole("button", { name: "Delete this version" }).click();
+  await versions.first().getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(dialog.getByText("No earlier versions.")).toBeVisible();
+  expect(await names(page)).toEqual(["notes.txt"]);
+});

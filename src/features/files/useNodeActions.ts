@@ -57,6 +57,7 @@ export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, lin
       delete: () => dialogs.remove([item]),
       renumber: item.type === "folder" ? () => folderTools.renumber(item) : undefined,
       duplicates: item.type === "folder" ? () => folderTools.duplicates(item) : undefined,
+      versions: item.type === "file" ? () => folderTools.versions(item) : undefined,
       properties: () => onProperties(item.id),
     };
   };

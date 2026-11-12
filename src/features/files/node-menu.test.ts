@@ -5,7 +5,7 @@ import { buildNodeMenu, type NodeActions } from "./node-menu";
 const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
 const noop = () => undefined;
 const all: Required<NodeActions> = Object.fromEntries(
-  ["open", "preview", "download", "downloadZip", "toggleFavorite", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rescan", "rename", "copy", "move", "delete", "renumber", "duplicates", "properties"].map((key) => [key, noop]),
+  ["open", "preview", "download", "downloadZip", "toggleFavorite", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rescan", "rename", "copy", "move", "delete", "renumber", "duplicates", "versions", "properties"].map((key) => [key, noop]),
 ) as Required<NodeActions>;
 
 const folder: Pick<NodeItem, "type" | "kind" | "settings" | "favorite" | "scan"> = { type: "folder", kind: null, settings };
@@ -43,6 +43,12 @@ describe("buildNodeMenu (design nodeMenu)", () => {
     expect(labels(entries)).toContain("Resume downloads");
     expect(entries.find((entry) => entry.label === "Delete")?.danger).toBe(true);
     expect(labels(entries)).not.toContain("Renumber files");
+  });
+
+  it("offers the version history for files only", () => {
+    const entries = labels(buildNodeMenu(video, false, false, all));
+    expect(entries.slice(entries.indexOf("| Version history"), entries.indexOf("| Version history") + 2)).toEqual(["| Version history", "| Properties"]);
+    expect(labels(buildNodeMenu(folder, false, false, all))).not.toContain("Version history");
   });
 
   it("offers a new virus scan only for files whose scan failed", () => {
