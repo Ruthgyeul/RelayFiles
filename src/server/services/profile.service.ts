@@ -67,6 +67,7 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
     },
     notifyAvailable: notifyEnabled(),
     shareStripMode: shareStripMode(),
+    shareDailyCapGb: getEnv("policy").SHARE_DAILY_BYTES_CAP_GB ?? null,
     maskedToken: maskToken(token),
     usage: { usedBytes: usage.usedBytes.toString(), ...counts },
     traffic: { total: days.reduce((sum, bytes) => sum + bytes, 0n).toString(), days: days.map(String) },

@@ -19,6 +19,7 @@ export const nodeSettingsSchema = z.object({
   expAt: isoTime.nullable(),
   burn: z.boolean().describe("Deleted after its first download (admins only)"),
   downloadLimit: z.number().int().nullable(),
+  dailyCapGb: z.number().nullable().describe("GB a share link may send per UTC day (null: no limit of its own)"),
   hasPassword: z.boolean(),
   access: z.enum(["both", "stream"]),
   note: z.string(),

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MAX_DOWNLOAD_LIMIT, MAX_SHARE_NOTE_LENGTH, type BusyBadge } from "@/domain/share";
-import { FILES, SEARCH } from "@/config/policy";
+import { FILES, SEARCH, SHARE } from "@/config/policy";
 import { RENUMBER_ORDERS, RENUMBER_SORTS, type RenumberEntry, type RenumberSkipReason } from "@/domain/renumber";
 
 export type NodeKind = "video" | "audio" | "image" | "other";
@@ -15,6 +15,8 @@ export interface NodeSettingsDto {
   expAt: string | null;
   burn: boolean;
   downloadLimit: number | null;
+  /** GB a share link to the item may send per UTC day (null: no limit of its own). */
+  dailyCapGb: number | null;
   hasPassword: boolean;
   access: "both" | "stream";
   note: string;
@@ -150,6 +152,8 @@ export const settingsSchema = z.object({
   expiry: z.string().max(16),
   burn: z.boolean(),
   downloadLimit: z.number().int().positive().max(MAX_DOWNLOAD_LIMIT).nullable(),
+  /** GB a share link may send per UTC day; null = no limit, undefined = keep. */
+  dailyCapGb: z.number().positive().max(SHARE.dailyCapMaxGb).nullable().optional(),
   /** undefined = keep, "" = remove, otherwise the new password. */
   password: z.string().max(128).optional(),
   access: z.enum(["both", "stream"]),

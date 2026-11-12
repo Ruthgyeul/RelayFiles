@@ -57,6 +57,11 @@ export function UsageCards({ data }: { data: ProfileData }) {
           label="Bytes downloaded per day, last 30 days"
           points={days.map((bytes) => ({ value: peak > 0 ? (bytes / peak) * PERCENT : null, title: formatSize(bytes) }))}
         />
+        {data.shareDailyCapGb !== null && (
+          <span className="text-[12px] text-t4">
+            Today {formatSize(days.at(-1) ?? 0)} of the {data.shareDailyCapGb} GB daily sharing limit
+          </span>
+        )}
       </section>
       <section aria-label="Content" className={card}>
         <CardTitle icon="copy" box="bg-cyan-bg" color="text-cyan">

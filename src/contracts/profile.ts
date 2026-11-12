@@ -37,6 +37,8 @@ export interface ProfileData {
   notifyAvailable: boolean;
   /** What shared photos and videos lose on this server (SHARE_METADATA_STRIP); "none" turns the account setting off. */
   shareStripMode: "sensitive" | "all" | "none";
+  /** GB the account's share links may send per UTC day together (SHARE_DAILY_BYTES_CAP_GB), or null. */
+  shareDailyCapGb: number | null;
   /** First 4 + 28 dots + last 4 characters; the full token is fetched on demand. */
   maskedToken: string;
   usage: { usedBytes: string; files: number; folders: number };

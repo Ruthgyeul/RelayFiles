@@ -1,6 +1,10 @@
 /** Share links. Part of the product policy (src/config/policy.ts). */
 
 export const SHARE = {
+  /** "Daily traffic limit" choices of the sharing settings, in GB (null: none). */
+  dailyCapChoicesGb: [null, 1, 5, 10, 50],
+  /** Largest daily traffic limit an item may have, in GB. */
+  dailyCapMaxGb: 1_000,
   /** Downloads counted for the busy level (design: 10 minutes). */
   busyWindowMs: 600_000,
   /** Downloads in the window from which a file is "Busy" (throttled) and "Server busy" (paused). */

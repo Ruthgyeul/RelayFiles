@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SHARE } from "@/config/policy";
 import { formatLongDate } from "@/domain/format";
 import type { NodeItem, SettingsInput, Visibility } from "@/contracts/nodes";
 import { EXPIRY_OPTIONS, isExpiryOption } from "@/domain/share";
@@ -34,6 +35,9 @@ const VISIBILITY_OPTIONS: { key: Visibility; label: string; icon: IconName; desc
   { key: "public", label: "Public", icon: "globe-simple", description: () => "Anyone with the link" },
 ];
 
+/** The limit choices, with the item's own value when it was set to something else (API v1). */
+const capChoices = (current: number | null): (number | null)[] => (SHARE.dailyCapChoicesGb.some((gb) => gb === current) ? [...SHARE.dailyCapChoicesGb] : [...SHARE.dailyCapChoicesGb, current]);
+
 /** The dialog is remounted per item (key), so the draft starts from the item's settings. */
 function initialDraft(item: NodeItem, isRoot: boolean) {
   const s = item.settings;
@@ -45,6 +49,7 @@ function initialDraft(item: NodeItem, isRoot: boolean) {
     password: "",
     clearPassword: false,
     access: s.access,
+    dailyCapGb: s.dailyCapGb,
     note: s.note,
     applyDown: false,
   };
@@ -70,6 +75,7 @@ export function SettingsDialog({ request, isAdmin, accountDeletesAt, onClose, on
       downloadLimit: draft.limit ? Number(draft.limit) : null,
       password: draft.password ? draft.password : draft.clearPassword ? "" : undefined,
       access: draft.access,
+      dailyCapGb: draft.dailyCapGb,
       note: draft.note,
       applyDown: folder && draft.applyDown,
     };
@@ -157,6 +163,15 @@ export function SettingsDialog({ request, isAdmin, accountDeletesAt, onClose, on
             <OptionChip selected={draft.access === "stream"} onClick={() => set({ access: "stream" })}>
               Stream only
             </OptionChip>
+          </div>
+        </FieldGroup>
+        <FieldGroup label="Daily traffic limit">
+          <div className="flex flex-wrap gap-1.5">
+            {capChoices(item.settings.dailyCapGb).map((gb) => (
+              <OptionChip key={gb ?? "none"} selected={draft.dailyCapGb === gb} onClick={() => set({ dailyCapGb: gb })}>
+                {gb === null ? "No limit" : `${gb} GB / day`}
+              </OptionChip>
+            ))}
           </div>
         </FieldGroup>
         <Field label="Note (shown on the share page)">

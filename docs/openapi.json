@@ -366,6 +366,13 @@
                                     }
                                   ]
                                 },
+                                "dailyCapGb": {
+                                  "description": "GB a share link may send per UTC day (null: no limit of its own)",
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
                                 "hasPassword": {
                                   "type": "boolean"
                                 },
@@ -389,6 +396,7 @@
                                 "expAt",
                                 "burn",
                                 "downloadLimit",
+                                "dailyCapGb",
                                 "hasPassword",
                                 "access",
                                 "note",
@@ -619,6 +627,13 @@
                                       }
                                     ]
                                   },
+                                  "dailyCapGb": {
+                                    "description": "GB a share link may send per UTC day (null: no limit of its own)",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ]
+                                  },
                                   "hasPassword": {
                                     "type": "boolean"
                                   },
@@ -642,6 +657,7 @@
                                   "expAt",
                                   "burn",
                                   "downloadLimit",
+                                  "dailyCapGb",
                                   "hasPassword",
                                   "access",
                                   "note",
@@ -971,6 +987,13 @@
                                     }
                                   ]
                                 },
+                                "dailyCapGb": {
+                                  "description": "GB a share link may send per UTC day (null: no limit of its own)",
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
                                 "hasPassword": {
                                   "type": "boolean"
                                 },
@@ -994,6 +1017,7 @@
                                 "expAt",
                                 "burn",
                                 "downloadLimit",
+                                "dailyCapGb",
                                 "hasPassword",
                                 "access",
                                 "note",
@@ -1778,6 +1802,13 @@
                                 }
                               ]
                             },
+                            "dailyCapGb": {
+                              "description": "GB a share link may send per UTC day (null: no limit of its own)",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
                             "hasPassword": {
                               "type": "boolean"
                             },
@@ -1801,6 +1832,7 @@
                             "expAt",
                             "burn",
                             "downloadLimit",
+                            "dailyCapGb",
                             "hasPassword",
                             "access",
                             "note",
@@ -2953,6 +2985,13 @@
                                       }
                                     ]
                                   },
+                                  "dailyCapGb": {
+                                    "description": "GB a share link may send per UTC day (null: no limit of its own)",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ]
+                                  },
                                   "hasPassword": {
                                     "type": "boolean"
                                   },
@@ -2976,6 +3015,7 @@
                                   "expAt",
                                   "burn",
                                   "downloadLimit",
+                                  "dailyCapGb",
                                   "hasPassword",
                                   "access",
                                   "note",
@@ -3326,6 +3366,13 @@
                                   }
                                 ]
                               },
+                              "dailyCapGb": {
+                                "description": "GB a share link may send per UTC day (null: no limit of its own)",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
                               "hasPassword": {
                                 "type": "boolean"
                               },
@@ -3349,6 +3396,7 @@
                               "expAt",
                               "burn",
                               "downloadLimit",
+                              "dailyCapGb",
                               "hasPassword",
                               "access",
                               "note",

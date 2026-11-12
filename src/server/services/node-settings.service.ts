@@ -6,6 +6,7 @@ import { newLinkId } from "@/domain/ids";
 import { activityCsv, activityCsvName } from "@/domain/link-activity";
 import { isExpiryOption, nextExpiry } from "@/domain/share";
 import { normalizeTag } from "@/domain/tags";
+import { gbToBytes } from "@/domain/traffic";
 import { db, type Prisma } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { addLinkEvent, listLinkEvents } from "../repositories/link-event.repo";
@@ -42,6 +43,7 @@ export async function updateSettings(owner: NodeOwner, nodeId: string, input: Se
   const data: Prisma.NodeUpdateInput = {
     visibility: VISIBILITY[isRoot && input.visibility === "inherit" ? "private" : input.visibility],
     downloadLimit: input.downloadLimit,
+    ...(input.dailyCapGb !== undefined ? { dailyBytesCap: input.dailyCapGb === null ? null : gbToBytes(input.dailyCapGb) } : {}),
     access: input.access === "stream" ? "STREAM" : "BOTH",
     note: input.note.trim(),
   };
