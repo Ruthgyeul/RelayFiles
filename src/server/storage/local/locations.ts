@@ -48,6 +48,11 @@ export async function renameLocation(layout: VolumeLayout, from: StorageLocation
 
 export async function renameNoReplace(layout: VolumeLayout, from: StorageLocation, to: StorageLocation): Promise<void> {
   const [source, target] = await Promise.all([pathOf(layout, from), pathOf(layout, to)]);
+  await renameNoReplacePath(source, target);
+}
+
+/** Renames `source` to `target` on the same volume, or throws StorageTargetExistsError when `target` exists. */
+export async function renameNoReplacePath(source: string, target: string): Promise<void> {
   try {
     // link() fails with EEXIST instead of replacing: the check and the rename are one step.
     await link(source, target);

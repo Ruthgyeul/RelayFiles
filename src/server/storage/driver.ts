@@ -24,6 +24,12 @@ export interface AssetRef {
   nodeId: string;
 }
 
+/** An earlier version of a file on the account's volume (`system/versions/<accountId>/<versionId>`). */
+export interface VersionRef {
+  accountId: string;
+  versionId: string;
+}
+
 /** Bytes served from something other than the stored file: its size, and a reader for a range of it. */
 export interface ByteSource {
   size: number;
@@ -120,6 +126,12 @@ export interface StorageDriver {
   readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null>;
   /** A generated file as a ranged source (nothing stays open until it is read), or null when missing. */
   assetSource(asset: AssetRef): Promise<ByteSource | null>;
+  /** Moves the file at `location` aside as an earlier version (a rename on the volume). */
+  moveToVersion(location: StorageLocation, ref: VersionRef): Promise<void>;
+  /** Puts an earlier version back at `location`; StorageTargetExistsError when something is there. */
+  restoreVersion(ref: VersionRef, location: StorageLocation): Promise<void>;
+  /** Removes an earlier version for good (missing is fine). */
+  removeVersion(ref: VersionRef): Promise<void>;
   /** Removes the generated files of these nodes (missing ones are ignored). */
   removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void>;
   /**

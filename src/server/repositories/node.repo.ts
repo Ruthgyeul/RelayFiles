@@ -221,7 +221,8 @@ export interface NewFile extends Partial<CarriedSettings> {
   kind: "VIDEO" | "AUDIO" | "IMAGE" | "OTHER";
   mime: string;
   size: bigint;
-  sha256: string;
+  /** Null only for content restored from a version kept before hashes were recorded. */
+  sha256: string | null;
   linkId: string;
   /** The file's own modification time (the uploader's File.lastModified, or the upload time). */
   modifiedAt: Date;

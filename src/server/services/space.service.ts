@@ -6,6 +6,7 @@ import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import type { AccountRow } from "../repositories/account.repo";
 import { accountUsage, anonUsage } from "../repositories/node.repo";
+import { accountVersionBytes } from "../repositories/file-version.repo";
 import { accountTrashedBytes, anonTrashedBytes } from "../repositories/trash.repo";
 import type { StorageDriver } from "../storage/driver";
 import { availableAboveReserve } from "../storage/registry";
@@ -35,10 +36,10 @@ export interface SpaceOptions {
 const scopesOf = (accountId: string, volumeId: string): ReservationScope[] => [{ kind: "account", id: accountId }, { kind: "volume", id: volumeId }, { kind: "anon" }];
 const scopeKey = (scope: ReservationScope) => (scope.kind === "anon" ? scope.kind : `${scope.kind}:${scope.id}`);
 
-/** Bytes an account holds on disk: its files plus deleted files still in the trash. */
+/** Bytes an account holds on disk: its files, deleted files still in the trash and kept earlier versions. */
 async function heldBytes(accountId: string): Promise<bigint> {
-  const [{ usedBytes }, trashed] = await Promise.all([accountUsage(db(), accountId), accountTrashedBytes(db(), accountId)]);
-  return usedBytes + trashed;
+  const [{ usedBytes }, trashed, versions] = await Promise.all([accountUsage(db(), accountId), accountTrashedBytes(db(), accountId), accountVersionBytes(db(), accountId)]);
+  return usedBytes + trashed + versions;
 }
 
 /**

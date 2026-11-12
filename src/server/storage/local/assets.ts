@@ -13,7 +13,7 @@ import type { AssetKind, AssetRef, ByteSource } from "../driver";
 export const ASSET_ID = /^[a-z0-9]{6,32}$/;
 
 /** `system/<thumbs|derived|previews|transcoded>/<accountId>/<nodeId>`; ids are generated, never user input. */
-function assetPath(layout: VolumeLayout, kind: AssetKind, accountId: string, nodeId: string): string {
+export function assetPath(layout: VolumeLayout, kind: AssetKind, accountId: string, nodeId: string): string {
   if (!ASSET_ID.test(accountId) || !ASSET_ID.test(nodeId)) throw new Error("Invalid asset id.");
   return join(layout[ASSET_DIRS[kind]], accountId, nodeId);
 }
@@ -73,7 +73,8 @@ export async function readAsset(layout: VolumeLayout, { kind, accountId, nodeId 
 }
 
 export async function removeAssets(layout: VolumeLayout, accountId: string, nodeIds: readonly string[]): Promise<void> {
-  const kinds = Object.keys(ASSET_DIRS) as AssetKind[];
+  // Earlier versions are not generated from a node: they go only with their own expiry or the account.
+  const kinds = (Object.keys(ASSET_DIRS) as AssetKind[]).filter((kind) => kind !== "version");
   await Promise.all(nodeIds.flatMap((nodeId) => kinds.map((kind) => rm(assetPath(layout, kind, accountId, nodeId), { force: true }))));
 }
 

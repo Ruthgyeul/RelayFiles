@@ -11,9 +11,7 @@ import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import { carriedSettingsOf, createFileNode, createFolderNode, deleteNodes, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
-import { moveFavoriteToNode } from "../repositories/favorite.repo";
-import { moveLinkEvents } from "../repositories/link-event.repo";
+import { carriedSettingsOf, createFileNode, createFolderNode, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, type NodeRow } from "../repositories/node.repo";
 import { ancestorChain, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { sha256Of } from "../storage/hash";
@@ -22,7 +20,7 @@ import { driverFor } from "../storage/registry";
 import type { StorageDriver } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { loadBatch, saveBatch, type UploadBatch } from "../upload/batches";
-import { recordTrashed } from "../repositories/trash.repo";
+import { handOver, setAside } from "./file-version.service";
 import { assertItemRoom } from "./item-limit.service";
 import { createFolder } from "./node.service";
 import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
@@ -37,8 +35,6 @@ import { scanningEnabled } from "../scan/clamd";
 type Owner = SpaceOwner;
 
 const BATCH_ID_LENGTH = 24;
-/** A name no upload can have (names are validated), held by a replaced row until it is deleted. */
-const replacedName = (nodeId: string) => `replaced/${nodeId}`;
 /** Folder depth of the folder a Home upload creates: the account root, then the upload folder. */
 const HOME_UPLOAD_DEPTH = 2;
 
@@ -222,13 +218,9 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
 
   const row = await withStorageTransaction(db(), async (tx, undo) => {
     await lockAccountForWrite(tx, owner.id, driver.volumeId);
-    if (replace) {
-      const trashed = await driver.moveToTrash(location);
-      undo.push("restore replaced file", () => driver.restoreFromTrash(trashed, location));
-      await recordTrashed(tx, owner.id, replace.size);
-      // The old row steps aside (its name and link are taken by the replacement below).
-      await updateNode(tx, replace.id, { name: replacedName(replace.id), linkId: newLinkId() });
-    }
+    // The replaced bytes become an earlier version (FILE_VERSIONS_DAYS) or go to the trash, and
+    // the old row steps aside (its name and link are taken by the replacement below).
+    const aside = replace ? await setAside(tx, driver, undo, owner.id, replace, location) : null;
     // New content gets a new id (cached bytes are keyed by it, docs/architecture.md), but a
     // replaced file hands over its share link, the link's settings, tags and history, so
     // links already sent keep working.
@@ -247,10 +239,9 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       ...(replace ? carriedSettingsOf(replace) : { linkId: newLinkId(), ...(batch.requestId ? { visibility: "PRIVATE" as const } : {}) }),
       ...(scanned ? { scanState: "PENDING" as const } : {}),
     });
-    if (replace) {
-      await moveLinkEvents(tx, replace.id, placed.id);
-      await moveFavoriteToNode(tx, replace.id, placed.id);
-      await deleteNodes(tx, [replace.id]);
+    if (replace && aside) {
+      await aside.recordFor(tx, placed.id);
+      await handOver(tx, replace, placed.id);
     }
     // The twin's path is read with it and its folders locked, so a rename or move meanwhile
     // cannot leave the link pointing at another file of the same size.

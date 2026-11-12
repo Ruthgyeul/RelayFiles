@@ -2,7 +2,7 @@ import { z } from "zod";
 import { SEARCH } from "@/config/policy";
 import { MAX_NAME_BYTES } from "@/domain/names";
 import { apiV1NodePatchSchema, apiV1SharePatchSchema, type ApiScope } from "./api-tokens";
-import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, folderViewSchema, nodeItemSchema, taggedItemSchema } from "./api-v1";
+import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, fileVersionSchema, folderViewSchema, nodeItemSchema, taggedItemSchema } from "./api-v1";
 import { createFolderSchema } from "./nodes";
 
 export type ApiV1Method = "GET" | "HEAD" | "POST" | "PATCH" | "DELETE";
@@ -49,6 +49,16 @@ export const API_V1_ROUTES: readonly ApiV1Route[] = [
   },
   { method: "GET", path: "/api/v1/files/{id}", scope: "files:read", summary: "Download a file (Range and ETag supported)", params: { id: nodeId }, response: "file", status: 200 },
   { method: "HEAD", path: "/api/v1/files/{id}", scope: "files:read", summary: "A download's headers without the bytes", params: { id: nodeId }, response: "file", status: 200 },
+  {
+    method: "GET",
+    path: "/api/v1/files/{id}/versions",
+    scope: "files:read",
+    summary: "Earlier versions of a file",
+    description: "Versions kept when an upload replaced the file, newest first. They are removed FILE_VERSIONS_DAYS after they were replaced.",
+    params: { id: nodeId },
+    response: z.array(fileVersionSchema),
+    status: 200,
+  },
   {
     method: "PATCH",
     path: "/api/v1/nodes/{id}",

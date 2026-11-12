@@ -101,3 +101,13 @@ export const favoritesViewSchema = z.object({
   items: z.array(taggedItemSchema).describe("Items listed here, newest favorite first; parentPath is where they really are"),
   tree: z.array(z.object({ id: z.string(), name: z.string(), parentId: z.string().nullable() })).describe("Every organizing folder"),
 });
+
+/** An earlier version of a file (FILE_VERSIONS_DAYS). */
+export const fileVersionSchema = z.object({
+  id: z.string(),
+  size: z.string().describe("Bytes, as a decimal string"),
+  mime: z.string().nullable(),
+  modifiedAt: z.string().nullable(),
+  replacedAt: z.string(),
+  expiresAt: z.string(),
+});
