@@ -21,6 +21,13 @@ export const STORAGE = {
   trashRetentionHours: 24,
   /** Longest TRASH_RETENTION_HOURS (30 days): deleted bytes keep counting toward the quota meanwhile. */
   trashRetentionMaxHours: 720,
+  /**
+   * Days an earlier version of a replaced file is kept (the default of FILE_VERSIONS_DAYS, read it
+   * through fileVersionsDays()); 0 keeps none. Kept versions count toward the account's storage.
+   */
+  fileVersionsDays: 7,
+  /** Longest FILE_VERSIONS_DAYS. */
+  fileVersionsMaxDays: 365,
   /** Most items "Recently deleted" lists (newest first). */
   recentlyDeletedListMax: 1_000,
   /** Filesystem limits (ext4; the name limit is domain/names MAX_NAME_BYTES). */

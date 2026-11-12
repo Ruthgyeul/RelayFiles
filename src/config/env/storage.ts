@@ -15,6 +15,8 @@ export const storageEnv = z.object({
   STORAGE_DEDUPE: bool.default(true),
   /** Hours deleted items can be restored from "Recently deleted" before the daily cleanup removes them (1–720). */
   TRASH_RETENTION_HOURS: positiveInt.max(STORAGE.trashRetentionMaxHours).default(STORAGE.trashRetentionHours),
+  /** Days an earlier version of a replaced file is kept (0: none, up to 365). Kept versions count toward the account's storage. */
+  FILE_VERSIONS_DAYS: z.coerce.number().int().min(0).max(STORAGE.fileVersionsMaxDays).default(STORAGE.fileVersionsDays),
 });
 
 export const uploadsEnv = z.object({

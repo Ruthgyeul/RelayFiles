@@ -82,6 +82,7 @@ model Account {
   favorites            Favorite[]
   favoriteFolders      FavoriteFolder[]
   events               AccountEvent[]
+  versions             FileVersion[]
 
   @@index([volumeId])
 }
@@ -521,6 +522,29 @@ model ApiToken {
   lastUsedAt DateTime?
 
   @@index([accountId])
+}
+
+/// An earlier version of a file, kept when an upload replaced it (FILE_VERSIONS_DAYS). Its bytes
+/// are at system/versions/<accountId>/<id> on the account's volume and count toward the quota.
+/// `nodeId` is not a foreign key: versions of a deleted file stay until they expire, and come
+/// back with the file when it is restored (same id).
+model FileVersion {
+  /// 16 characters, so it never matches a 12-character node id in the shared asset folders.
+  id         String    @id
+  nodeId     String
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  size       BigInt
+  sha256     String?
+  mime       String?
+  /// When the content was last modified (the file's own time when it was uploaded).
+  modifiedAt DateTime?
+  /// When it stopped being the current version.
+  createdAt  DateTime  @default(now())
+
+  @@index([nodeId, createdAt])
+  @@index([accountId])
+  @@index([createdAt])
 }
 
 /// The account's own security log (profile "Security log"): sign-ins, sign-outs, token and

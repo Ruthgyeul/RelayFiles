@@ -258,3 +258,18 @@ export interface LinkEventDto {
   country: string;
   at: string;
 }
+
+/** An earlier version of a file (Version history; GET /api/nodes/:id/versions). */
+export interface FileVersionDto {
+  id: string;
+  size: string;
+  mime: string | null;
+  /** When that content was last modified. */
+  modifiedAt: string | null;
+  /** When it was replaced (stopped being the current file). */
+  replacedAt: string;
+  /** When the daily cleanup removes it (FILE_VERSIONS_DAYS after it was replaced). */
+  expiresAt: string;
+}
+
+export const fileVersionIdSchema = z.string().regex(/^[a-z0-9]{16}$/);

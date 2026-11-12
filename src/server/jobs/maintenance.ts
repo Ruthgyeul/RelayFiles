@@ -13,6 +13,7 @@ import { diskRates } from "../metrics/disks";
 import { networkRates } from "../metrics/system";
 import { runCleanup } from "../services/admin.service";
 import { purgeOldAuditEvents } from "../services/audit.service";
+import { purgeExpiredVersions } from "../services/file-version.service";
 import { purgeOldAccountEvents } from "../services/security-log.service";
 import { driverFor } from "../storage/registry";
 import { queueConnection } from "./queue";
@@ -45,7 +46,7 @@ export interface RunningQueue {
  * The daily job: expired accounts and items, then trash entries older than the retention
  * and unfinished uploads older than UPLOAD_TMP_TTL_HOURS on every ACTIVE or DRAINING volume,
  * admin audit entries older than AUTH.auditRetentionDays and security log entries older than
- * SECURITY_LOG.retentionDays.
+ * SECURITY_LOG.retentionDays, and earlier file versions older than FILE_VERSIONS_DAYS.
  */
 export async function runMaintenance(now: Date) {
   const cleanup = await runCleanup(now);
@@ -69,6 +70,7 @@ export async function runMaintenance(now: Date) {
   await forgetDeletedBefore(db(), trashBefore, emptied).catch((error: unknown) => logger.warn("deleted items not purged", { error }));
   await purgeOldAuditEvents(now).catch((error: unknown) => logger.warn("audit log not purged", { error }));
   await purgeOldAccountEvents(now).catch((error: unknown) => logger.warn("security log not purged", { error }));
+  await purgeExpiredVersions(now).catch((error: unknown) => logger.warn("expired file versions not purged", { error }));
   return { ...cleanup, trash, uploads };
 }
 

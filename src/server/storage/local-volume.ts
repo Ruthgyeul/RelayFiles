@@ -2,13 +2,14 @@ import "server-only";
 import type { Readable } from "node:stream";
 import type { DiskEntry } from "@/domain/fsck";
 import { layoutOf, type VolumeLayout } from "./layout";
-import type { AssetRef, ByteSource, CopyEntry, SpaceInfo, StorageDriver, StorageLocation, StorageStat } from "./driver";
+import type { AssetRef, ByteSource, CopyEntry, SpaceInfo, StorageDriver, StorageLocation, StorageStat, VersionRef } from "./driver";
 import * as assets from "./local/assets";
 import * as listing from "./local/listing";
 import * as locations from "./local/locations";
 import * as maintenance from "./local/maintenance";
 import * as staging from "./local/staging";
 import * as trash from "./local/trash";
+import * as versions from "./local/versions";
 
 /**
  * Storage on a locally mounted volume (the external SSD at /mnt/relayfilesDB).
@@ -110,6 +111,18 @@ export class LocalVolumeDriver implements StorageDriver {
 
   readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null> {
     return assets.readAsset(this.layout, asset);
+  }
+
+  moveToVersion(location: StorageLocation, ref: VersionRef): Promise<void> {
+    return versions.moveToVersion(this.layout, location, ref);
+  }
+
+  restoreVersion(ref: VersionRef, location: StorageLocation): Promise<void> {
+    return versions.restoreVersion(this.layout, ref, location);
+  }
+
+  removeVersion(ref: VersionRef): Promise<void> {
+    return versions.removeVersion(this.layout, ref);
   }
 
   removeAssets(accountId: string, nodeIds: readonly string[]): Promise<void> {
