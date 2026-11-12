@@ -41,6 +41,8 @@
 | `INTERNAL` | 500 | `error.tsx` |
 | `MAINTENANCE` | 503 | `/error/503` |
 | `STORAGE_OFFLINE` | 503 | `/error/storage-offline` |
+| `SCAN_PENDING` | 503 | 업로드 링크로 받은 파일이 아직 바이러스 검사 중이다. `Retry-After`(`SCAN.pendingRetrySec`) 뒤 다시 요청 |
+| `FILE_BLOCKED` | 403 | 업로드 링크로 받은 파일을 검사하지 못했다(너무 큼, clamd 거부). 소유자만 받을 수 있다 |
 | `MEDIA_NOT_READY` | 503 | 공개 링크 사진의 메타데이터 제거본을 워커가 아직 만들지 않았다. `Retry-After`(`MEDIA.stripPendingRetrySec`) 뒤 다시 요청 |
 | `STORAGE_BUSY` | 503 | 토스트(계정 이동·레이아웃 마이그레이션 중. 탐색·다운로드는 계속됨) |
 | `INSUFFICIENT_STORAGE` | 507 | 토스트 + 용량 배너 |
@@ -50,7 +52,7 @@
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | `HEAD` | `/api/health` | 생존 확인(204, 백엔드 작업 없음). Status 페이지가 2.5초마다 지연 시간을 잰다 |
-| `GET` | `/api/health` | 준비 상태: `{ status, version, time, components: { database, redis, storage } }`. DB가 죽으면 503 |
+| `GET` | `/api/health` | 준비 상태: `{ status, version, time, components: { database, redis, storage, scanner? } }`. `scanner`는 `CLAMAV_HOST`가 있을 때만 (clamd PING). DB가 죽으면 503 |
 | `GET` | `/api/status` | 공개 Status 페이지 데이터: `{ latency, components, server, incidents }` |
 | `GET` | `/api/auth/session` | 이 기기에 로그인한 계정 목록, 활성 계정 id, 가입 모드, 활성 계정 사용량 `usage { usedBytes, rootItems, storageBusy }`(`SessionState`). `storageBusy`가 true면 파일을 새 저장소로 옮기는 중이라 변경이 잠시 막힌다(배너 표시). 무효 세션이 있으면 쿠키를 정리한다 |
 | `POST` | `/api/auth/anonymous` | `{ inviteCode? }` → 201 `{ account, token, session }`. 익명 계정을 만들고 이 기기를 로그인시킨다. 토큰은 이 응답에서만 평문으로 나온다 |
@@ -80,6 +82,7 @@
 | `GET` | `/api/nodes/:id/activity` | 링크 활동 최신 200개(폴더는 하위 항목 포함). Activity 대화상자가 이 목록으로 종류별(열기·보기·재생·다운로드) 합계와 최근 7일·30일 수를 센다(`domain/link-activity.ts`) |
 | `GET` | `/api/nodes/:id/activity/csv` | 같은 기록을 CSV로 내려받기(`text/csv; charset=utf-8`, UTF-8 BOM, `Content-Disposition: attachment; "<이름> activity.csv"`, `no-store`). 열 `Time (UTC),Event,File,Device,Address,Country`, 최신순 최대 `SHARE.activityExportLimit`(10,000)개. `= + - @`(또는 탭·CR)로 시작하는 칸은 앞에 `'`를 붙여 수식으로 실행되지 않게 한다(`domain/csv.ts`). 소유자만, 다른 계정 항목은 404 |
 | `PUT` | `/api/nodes/:id/pause` | 관리자: 다운로드 일시정지/재개 |
+| `POST` | `/api/nodes/:id/scan` | "Scan again": 바이러스 검사가 실패한(`scan: "failed"`) 파일을 다시 검사 큐에 넣는다 → `{ queued: true }`. `CLAMAV_HOST`가 없거나 실패한 파일이 아니면 400, 다른 계정은 404 |
 | `POST` | `/api/uploads` | 업로드 준비 `{ target: home\|root\|폴더id, files: [{ rel, size }], dup?, fallbackName? }` → `{ kind: duplicates, names }` / `{ kind: nothing }` / `{ kind: ready, batchId, endpoint, folder, files }`. 이름 검증, 용량·볼륨 여유 공간(507), Home 업로드 폴더 생성. `dup`: `replace`(새 내용은 새 node id, 공유 링크·설정·태그·링크 기록은 유지) · `keep`("name (2)") · `skip` |
 | `POST` | `/api/uploads/resume` | 새로고침으로 끊긴 업로드 이어 올리기 `{ batchId, slot, uploadId }` → `{ offset }`. 이 계정의 끝나지 않은 업로드이고 길이·파일 이름이 배치의 `slot` 항목과 같으면 그 칸으로 넘겨받는다(이후 같은 업로드 URL로 tus HEAD/PATCH, 완료되면 새 배치의 폴더에 놓인다). 그 밖에는 404 → 처음부터 보낸다 |
 | tus | `/api/uploads/tus/:volumeId[/:uploadId]` | 재개 가능한 업로드(tus 1.0, 청크 `UPLOAD_CHUNK_SIZE_MB`). 메타데이터 `batch`, `index`, `filename`, `lastModified`(선택, 파일의 `File.lastModified` ms. 없거나 미래 값이면 업로드 시각을 `modifiedAt`으로 저장). 업로드한 기기의 계정만 이어 올리거나 조회할 수 있다. 완료되면 `{ success, data: { nodeId, name, folderId } }`. `proxy.ts`를 거치지 않는다(본문 버퍼링 방지) |

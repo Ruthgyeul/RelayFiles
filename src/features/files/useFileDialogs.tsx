@@ -90,6 +90,14 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
         notify(errorText(caught));
       }
     },
+    rescan: async (item: NodeItem) => {
+      try {
+        await filesApi.rescan(item.id);
+        changed("Scanning again");
+      } catch (caught) {
+        notify(errorText(caught));
+      }
+    },
     togglePause: async (item: NodeItem) => {
       try {
         await filesApi.setPaused(item.id, !item.settings.dlPaused);

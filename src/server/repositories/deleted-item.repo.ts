@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { DbClient, Prisma } from "../db/client";
 import type { Node } from "../db/generated/client";
-import { Access, FileKind, NodeType, Visibility } from "../db/generated/enums";
+import { Access, FileKind, NodeType, ScanState, Visibility } from "../db/generated/enums";
 
 // "Recently deleted" (docs/architecture.md "휴지통"): deleted items with the Node rows to put back.
 
@@ -39,6 +39,8 @@ const snapshotRowSchema = z.object({
   createdAt: z.iso.datetime(),
   modifiedAt: z.iso.datetime().nullable(),
   takenAt: z.iso.datetime().nullable(),
+  /** A file still being scanned, or that could not be scanned, stays so after a restore; absent in older snapshots (NONE). */
+  scanState: z.enum(ScanState).optional(),
   /** Where the item was listed in Favorites (organizing folder, null: the top); absent: not a favorite. */
   favorite: z.object({ folderId: z.string().nullable() }).optional(),
 });
@@ -75,6 +77,7 @@ export function toSnapshot(rows: readonly Node[], favorites: ReadonlyMap<string,
       createdAt: row.createdAt.toISOString(),
       modifiedAt: iso(row.modifiedAt),
       takenAt: iso(row.takenAt),
+      ...(row.scanState !== "NONE" ? { scanState: row.scanState } : {}),
       ...(favorites.has(row.id) ? { favorite: { folderId: favorites.get(row.id) ?? null } } : {}),
     }),
   );
@@ -141,6 +144,7 @@ const LIST_SELECT = {
   itemCount: true,
   originalPath: true,
   deletedAt: true,
+  malware: true,
 } as const;
 
 /** An account's deleted items, newest first. */

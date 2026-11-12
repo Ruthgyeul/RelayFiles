@@ -1,7 +1,7 @@
 /** Environment group schemas: account policy, background jobs and logs. Assembled in src/config/env.ts. */
 import { z } from "zod";
 import { ACCOUNT, AUTH, DUPLICATES, JOBS, LOGIN, MEDIA, RENUMBER, TRANSCODE } from "../policy";
-import { positiveInt, secondsList } from "./fields";
+import { port, positiveInt, secondsList } from "./fields";
 
 export const policyEnv = z.object({
   ACCOUNT_TTL_DAYS: positiveInt.default(ACCOUNT.ttlDays),
@@ -34,6 +34,11 @@ export const jobsEnv = z.object({
    * stay), all = everything but orientation and colour, none = shared as uploaded.
    */
   SHARE_METADATA_STRIP: z.enum(["sensitive", "all", "none"]).default("sensitive"),
+  /** clamd (ClamAV) host: files received through upload-only links are scanned before anyone else gets them. Unset: no scans. */
+  CLAMAV_HOST: z.string().min(1).optional(),
+  CLAMAV_PORT: port.default(3310),
+  /** Time a scan may take before it counts as failed and is tried again (more for large files, SCAN.msPerGb). */
+  CLAMAV_TIMEOUT_MS: positiveInt.default(60_000),
 });
 
 export const observabilityEnv = z.object({

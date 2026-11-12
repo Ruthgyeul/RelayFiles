@@ -12,6 +12,8 @@ export const healthSchema = z.object({
     database: componentStatus,
     redis: componentStatus,
     storage: componentStatus,
+    /** clamd, when CLAMAV_HOST is set (files received through upload links wait for it). */
+    scanner: componentStatus.optional(),
   }),
 });
 export type Health = z.infer<typeof healthSchema>;

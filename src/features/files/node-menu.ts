@@ -17,6 +17,8 @@ export interface NodeActions {
   activity?: () => void;
   settings?: () => void;
   togglePause?: () => void;
+  /** A file whose virus scan failed: queue a new one. */
+  rescan?: () => void;
   rename?: () => void;
   copy?: () => void;
   move?: () => void;
@@ -35,7 +37,7 @@ type Candidate = [label: string, icon: MenuEntry["icon"], action: (() => void) |
  * plus folder tools (renumber, duplicates) before properties. Groups are separated by a line;
  * empty groups disappear.
  */
-export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings" | "favorite">, isRoot: boolean, isAdmin: boolean, actions: NodeActions): MenuEntry[] {
+export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings" | "favorite" | "scan">, isRoot: boolean, isAdmin: boolean, actions: NodeActions): MenuEntry[] {
   const folder = item.type === "folder";
   const paused = item.settings.dlPaused;
   const groups: Candidate[][] = [
@@ -61,7 +63,7 @@ export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings" 
       isRoot ? null : ["Move", "arrow-bend-up-right", actions.move],
       isRoot ? null : ["Delete", "trash", actions.delete],
     ],
-    [folder ? ["Renumber files", "list-numbers", actions.renumber] : null, folder ? ["Find duplicates", "files", actions.duplicates] : null],
+    [folder ? ["Renumber files", "list-numbers", actions.renumber] : null, folder ? ["Find duplicates", "files", actions.duplicates] : null, item.scan === "failed" ? ["Scan again", "shield-check", actions.rescan] : null],
     [["Properties", "info", actions.properties]],
   ];
 

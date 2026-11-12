@@ -50,6 +50,7 @@ export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, lin
       activity: () => dialogs.activity(item),
       settings: () => dialogs.settings(item, current && isRoot, parentVisibility),
       togglePause: isAdmin ? () => void dialogs.togglePause(item) : undefined,
+      rescan: item.scan === "failed" ? () => void dialogs.rescan(item) : undefined,
       rename: () => dialogs.rename(item),
       copy: () => dialogs.move([item], "copy", parentId),
       move: () => dialogs.move([item], "move", parentId),

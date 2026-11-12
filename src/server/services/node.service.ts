@@ -48,6 +48,7 @@ export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: num
       dlPaused: row.dlPaused,
     },
     busy: null,
+    ...(row.scanState === "PENDING" ? { scan: "pending" as const } : row.scanState === "FAILED" ? { scan: "failed" as const } : {}),
   };
 }
 

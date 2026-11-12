@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 import { BusyPill } from "@/shared/ui/BusyPill";
+import { Pill } from "@/shared/ui/Pill";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { kindOf } from "@/shared/ui/node-kind";
 import { MediaThumb, ResumeBar } from "./MediaThumb";
@@ -52,6 +53,11 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPr
             {item.favorite && <Icon name="star" weight="fill" size={12} label="In Favorites" className="shrink-0 text-warn-strong" />}
             {item.settings.hasPassword && <Icon name="lock-simple" size={12} label="Password protected" className="text-t4" />}
             {item.busy && <BusyPill busy={item.busy} />}
+            {item.scan && (
+              <Pill tone={item.scan === "pending" ? "info" : "warn"} icon={item.scan === "pending" ? "shield-check" : "shield-warning"} title={item.scan === "pending" ? "Received through an upload link: being checked for viruses. Visitors can't get it yet." : "The virus check failed, so visitors can't get it. Choose Scan again in its menu."}>
+                {item.scan === "pending" ? "SCANNING" : "NOT SCANNED"}
+              </Pill>
+            )}
           </span>
           <span className="truncate text-[12px] text-t4">{itemMeta(item, parentPath)}</span>
         </div>

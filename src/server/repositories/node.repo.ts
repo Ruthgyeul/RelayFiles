@@ -42,6 +42,7 @@ export const NODE_SELECT = {
   sha256: true,
   hasThumb: true,
   hasDerived: true,
+  scanState: true,
   linkId: true,
   visibility: true,
   expiryLabel: true,
@@ -125,6 +126,10 @@ export function mediaWithStaleCopies(db: DbClient, mode: "SENSITIVE" | "ALL", ta
     take,
     ...(afterId ? { cursor: { id: afterId }, skip: 1 } : {}),
   });
+}
+
+export function setScanState(db: DbClient, nodeId: string, scanState: "PENDING" | "CLEAN" | "FAILED", only?: "PENDING") {
+  return db.node.updateMany({ where: { id: nodeId, ...(only ? { scanState: only } : {}) }, data: { scanState } });
 }
 
 /** The newest files of an account. */
@@ -220,6 +225,8 @@ export interface NewFile extends Partial<CarriedSettings> {
   linkId: string;
   /** The file's own modification time (the uploader's File.lastModified, or the upload time). */
   modifiedAt: Date;
+  /** PENDING for a file received through an upload-only link while scanning is on. */
+  scanState?: "PENDING";
 }
 
 export function createFileNode(db: DbClient, data: NewFile) {

@@ -40,11 +40,19 @@ export function DeletedItemRow({ item, now, busy, onRestore, onDeleteForever }: 
           {formatSize(Number(item.size))}
           {inside} · <span className="text-t3">{deletesInText(item.expiresAt, now)}</span>
         </span>
+        {item.malware && (
+          <span className="flex min-w-0 items-center gap-[5px] text-[12px] font-semibold text-danger-text" title={item.malware}>
+            <Icon name="shield-warning" weight="fill" className="shrink-0" />
+            <span className="truncate">Malware found: {item.malware}</span>
+          </span>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1.5 max-sm:w-full max-sm:justify-end">
-        <Button size={32} icon="arrow-counter-clockwise" iconSize={16} hoverable disabled={busy} onClick={onRestore} aria-label={`Restore ${item.name}`}>
-          Restore
-        </Button>
+        {!item.malware && (
+          <Button size={32} icon="arrow-counter-clockwise" iconSize={16} hoverable disabled={busy} onClick={onRestore} aria-label={`Restore ${item.name}`}>
+            Restore
+          </Button>
+        )}
         <IconButton icon="trash" label={`Delete ${item.name} forever`} title="Delete forever" size={32} tone="danger" hover="btn" disabled={busy} onClick={onDeleteForever} />
       </div>
     </ListRow>

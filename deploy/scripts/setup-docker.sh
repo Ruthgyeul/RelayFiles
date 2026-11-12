@@ -96,6 +96,8 @@ run chown "$UID_:$GID_" "$LOGS"
 run install -d -o "$OPERATOR" -m 0700 "$DATA"
 # The postgres and redis images take ownership of their directory on first start.
 run install -d -m 0700 "$DATA/pg" "$DATA/redis"
+# clamd's signature database (compose profile clamav); unused while the profile is off.
+run install -d -m 0755 "$DATA/clamav"
 run install -d -o "$OPERATOR" -m 0700 "$DATA/backups"
 
 log "Packages"

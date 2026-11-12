@@ -44,6 +44,7 @@ export const nodeItemSchema = z.object({
   settings: nodeSettingsSchema,
   busy: busyBadgeSchema.nullable(),
   favorite: z.literal(true).optional().describe("Listed in Favorites"),
+  scan: z.enum(["pending", "failed"]).optional().describe("Received through an upload link and still being scanned, or not scannable (not shared)"),
 });
 
 export const folderViewSchema = z.object({

@@ -22,6 +22,8 @@ export interface SharedRow {
   stripFailed: boolean;
   /** The mode that copy was made in (null: none, or one from before modes, which removed everything). */
   derivedMode: "SENSITIVE" | "ALL" | null;
+  /** Virus scan of a file received through an upload-only link (visitors get only NONE or CLEAN files). */
+  scanState: "NONE" | "PENDING" | "CLEAN" | "FAILED";
   hasThumb: boolean;
   downloads: number;
   downloadLimit: number | null;
@@ -33,7 +35,7 @@ export interface SharedRow {
 }
 
 /** Columns of a SharedRow, read from "Node" n. */
-const SHARED_COLUMNS = Prisma.sql`n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."derivedMode"::text AS "derivedMode", n."hasThumb", n.downloads,
+const SHARED_COLUMNS = Prisma.sql`n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."derivedMode"::text AS "derivedMode", n."scanState"::text AS "scanState", n."hasThumb", n.downloads,
            n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt"`;
 
 /**

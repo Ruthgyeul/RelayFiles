@@ -353,6 +353,19 @@ $C run --rm tools npm run storage:migrate
 
 중간에 실패하면 볼륨은 `READONLY`로 남는다(`resumeStatus`는 그대로). 원인을 고친 뒤 같은 명령을 다시 실행하면 기록된 버전 다음 단계부터 이어 가고, 끝나면 첫 실행 전 상태로 돌아간다. 이 기능 전 릴리스에서 실패해 `READONLY`로 남은 볼륨은 `resumeStatus`가 비어 있어 `READONLY`로 남으니, 확인 뒤 `UPDATE "StorageVolume" SET status = 'ACTIVE' WHERE id = '<volumeId>';`로 되돌린다. 되돌려야 하면 `migration.journal`의 마지막 `started` 단계를 보고 그 단계의 `rename`을 거꾸로 실행한 뒤 표시 파일의 `layoutVersion`을 이전 값으로 고친다.
 
+## 업로드 링크 바이러스 검사 (ClamAV)
+
+업로드 전용 링크로 받은 파일은 `CLAMAV_HOST`가 있을 때 clamd로 검사한다([security.md "업로드 링크 검사"](security.md#업로드-링크-검사-clamav)).
+
+- **Compose**: `.env`에 `CLAMAV_HOST=clamav`를 넣는다. `sudo install -d -m 0755 $DATA_DIR/clamav`로 폴더를 만들고(`setup-docker.sh`가 만든다), `docker compose --profile clamav up -d`로 띄운다.
+  - 첫 시작은 서명을 받느라 몇 분 걸린다(healthcheck `start_period` 300초). 메모리는 약 1.5GB를 쓴다(`CLAMAV_MEMORY_MAX`, N95 16GB 기준 여유 있음).
+  - 이미지는 x86-64 전용이다.
+- **systemd·Pi**: `sudo apt install clamav-daemon clamav-freshclam`으로 설치하고, `/etc/clamav/clamd.conf`에 `TCPSocket 3310`, `TCPAddr 127.0.0.1`, `StreamMaxLength 2000M`, `MaxFileSize 2000M`, `MaxScanSize 2000M`을 넣는다. 그 뒤 `CLAMAV_HOST=127.0.0.1`로 둔다.
+- **확인**
+  - `curl -s localhost:<APP_PORT>/api/health | jq .data.components.scanner`가 `"ok"`인지 본다.
+  - EICAR 테스트 문자열을 업로드 링크로 보내면 Recently deleted에 "Malware found"로 들어가고 알림이 와야 한다.
+- **clamd가 내려갔을 때**: 받은 파일은 `PENDING`(방문자 503)으로 남는다. 워커가 약 5분 동안 다시 시도한 뒤 `FAILED`로 둔다. clamd를 되살린 뒤 파일 메뉴의 "Scan again"으로 다시 검사한다.
+
 ## 썸네일·미리보기 다시 만들기
 
 ```bash

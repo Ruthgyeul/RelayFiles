@@ -4,12 +4,14 @@ import { getEnv } from "@/config/env";
 import { logger } from "../logger";
 import { processMedia, recordDateTaken } from "../media/process";
 import { storeTranscode } from "../media/transcode-cache";
+import { giveUpScan, runScan } from "../services/scan.service";
 import { MEDIA_QUEUE, queueConnection, type MediaJob } from "./queue";
 
 /** Runs one media job by its task; `signal` aborts when the worker stops (only long conversions watch it). */
 function runMediaJob({ nodeId, task }: MediaJob, signal?: AbortSignal): Promise<unknown> {
   if (task === "transcode") return storeTranscode(nodeId, signal);
   if (task === "taken") return recordDateTaken(nodeId);
+  if (task === "scan") return runScan(nodeId);
   return processMedia(nodeId);
 }
 
@@ -23,7 +25,11 @@ export function startMediaWorker(): Worker<MediaJob> {
     ...queueConnection("worker"),
     concurrency: getEnv("jobs").MEDIA_WORKER_CONCURRENCY,
   });
-  worker.on("failed", (job, error) => logger.error("media job failed", { nodeId: job?.data.nodeId, attempts: job?.attemptsMade, error }));
+  worker.on("failed", (job, error) => {
+    logger.error("media job failed", { nodeId: job?.data.nodeId, attempts: job?.attemptsMade, error });
+    // A scan that ran out of tries leaves its file FAILED (never shared) instead of PENDING for good.
+    if (job?.data.task === "scan" && job.attemptsMade >= (job.opts.attempts ?? 1)) void giveUpScan(job.data.nodeId).catch((cause: unknown) => logger.error("scan state not recorded", { error: cause }));
+  });
   worker.on("error", (error) => logger.error("media worker error", { error }));
   return worker;
 }

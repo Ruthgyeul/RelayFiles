@@ -157,3 +157,17 @@ export const PROCESS = {
   /** Error output kept for messages and logs (the rest is dropped, not buffered). */
   maxStderrBytes: 4_096,
 } as const;
+
+/** Virus scans of files received through upload-only links (clamd, CLAMAV_HOST; docs/security.md "업로드 링크 검사"). */
+export const SCAN = {
+  /** Largest file sent to clamd; larger ones are FAILED (never shared). clamd's StreamMaxLength must be at least this. */
+  maxBytes: 2_000_000_000,
+  /** Bytes per INSTREAM chunk. */
+  chunkBytes: 64 * 1024,
+  /** Longest clamd reply read (a signature name). */
+  maxReplyBytes: 4096,
+  /** A scan waits for clamd this long per GB on top of CLAMAV_TIMEOUT_MS. */
+  msPerGb: 120_000,
+  /** Visitors asking for a file still being scanned are told to come back after this long. */
+  pendingRetrySec: 30,
+} as const;
