@@ -65,6 +65,8 @@ rm deploy/maintenance/on       # 해제
 - restic이 보내기 전에 암호화하므로(`RESTIC_PASSWORD`) 저장소 운영자도 내용을 볼 수 없다. 같은 내용은 한 번만 저장되고(중복 제거) 매일 바뀐 부분만 올라간다.
 - 썸네일·미리보기·휴지통·업로드 조각(`system/`)은 보내지 않는다. 복원한 뒤 `npm run media:backfill`로 다시 만든다.
 - 보관: 실행마다 `restic forget --prune`이 날마다 `OFFSITE_KEEP_DAILY`(7)·주마다 `OFFSITE_KEEP_WEEKLY`(4)·달마다 `OFFSITE_KEEP_MONTHLY`(6)개 스냅숏만 남긴다.
+- **키는 호스트에만 있다**: `RESTIC_*`·`OFFSITE_*`(와 `CLOUDFLARE_TUNNEL_TOKEN`)는 호스트의 스크립트만 쓴다. 앱과 워커는 `.env`를 읽은 직후 이 값을 지우고(`scripts/lib/host-only-env.mjs`), Docker는 컨테이너에 빈 값을 넘기며, k3s Secret에는 아예 넣지 않는다. 앱이 뚫려도 그 키로 백업을 지울 수 없게 하려는 것이다.
+- **지울 수 없는 저장소를 권장한다**: 그래도 서버가 통째로 넘어가면 같은 키로 `restic forget --prune`을 돌려 백업을 지울 수 있다. 버킷에 Object Lock(보관 기간 잠금, R2·B2 지원)을 켜거나, 서버에는 쓰기만 되는(append-only) 키를 두고 `forget --prune`은 서버 밖에서 따로 돌리는 것이 랜섬웨어에 대한 마지막 방어선이다.
 - 주간 [백업 검증](#백업-검증)이 저장소 데이터의 `OFFSITE_CHECK_PERCENT`(5%)를 내려받아 확인한다(`restic check --read-data-subset`). 실패하면 Backup check 행이 failing이 된다.
 
 설정:
@@ -490,7 +492,7 @@ $C up -d app worker
 
 ## CSP 강제 적용
 
-`CSP_MODE=report-only`(기본)는 아무것도 막지 않고 위반만 로그에 남긴다. 운영에서는 위반 로그를 확인한 뒤 `enforce`로 바꾼다. 그전까지 `npm run env:check -- --production`이 경고한다. 정책 내용은 [security.md "응답 헤더·자원 제한"](security.md#응답-헤더자원-제한).
+`CSP_MODE`의 기본값은 `enforce`다(정책이 허용하지 않는 스크립트·스타일을 막는다). `report-only`는 아무것도 막지 않고 위반만 로그에 남긴다. 운영에서 `report-only`면 `npm run env:check -- --production`이 경고한다. 예전 `.env.example`을 복사한 `.env`에는 `CSP_MODE=report-only`가 그대로 남아 있을 수 있다. 그 경우 아래 절차로 위반 로그를 확인한 뒤 `enforce`로 바꾼다(줄을 지워도 기본값 `enforce`가 된다). 정책 내용은 [security.md "응답 헤더·자원 제한"](security.md#응답-헤더자원-제한).
 
 1. report-only로 배포한 뒤 며칠(최소 한 번의 일상적인 사용 주기) 동안 주요 화면을 실제로 쓴다: 로그인·계정 전환, 파일 목록, 사진·영상·PDF·문서·SVG 미리보기, 업로드, 공유 링크(비밀번호 포함), 업로드 전용 링크, Server·관리자 페이지.
 2. 위반 로그를 본다. 같은 위반은 1시간에 한 번만 남는다.

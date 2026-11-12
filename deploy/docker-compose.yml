@@ -44,6 +44,8 @@ x-app-env: &app-env
     RESTIC_PASSWORD: ""
     OFFSITE_ACCESS_KEY_ID: ""
     OFFSITE_SECRET_ACCESS_KEY: ""
+    # The tunnel's own container gets the token; with it, anyone could serve this site's traffic.
+    CLOUDFLARE_TUNNEL_TOKEN: ""
 
 x-image-build: &image-build
   context: ..
@@ -101,7 +103,8 @@ services:
     image: redis:7@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
     restart: unless-stopped
     logging: *logging
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--appendonly", "yes", "--appendfsync", "everysec"]
+    # noeviction: when REDIS_MAXMEMORY_MB is reached, writes fail instead of silently dropping jobs and limits.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory", "${REDIS_MAXMEMORY_MB:-256}mb", "--maxmemory-policy", "noeviction"]
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD}
     volumes:
@@ -202,6 +205,8 @@ services:
       NGINX_AUTH_BURST: ${NGINX_AUTH_BURST:-20}
       NGINX_UPLOAD_RATE_PER_MIN: ${NGINX_UPLOAD_RATE_PER_MIN:-60}
       NGINX_UPLOAD_BURST: ${NGINX_UPLOAD_BURST:-30}
+      NGINX_TUS_RATE_PER_MIN: ${NGINX_TUS_RATE_PER_MIN:-600}
+      NGINX_TUS_BURST: ${NGINX_TUS_BURST:-120}
       NGINX_API_RATE_PER_MIN: ${NGINX_API_RATE_PER_MIN:-120}
       NGINX_API_BURST: ${NGINX_API_BURST:-60}
     ports:

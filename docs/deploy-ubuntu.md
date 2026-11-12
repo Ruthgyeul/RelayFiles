@@ -216,7 +216,8 @@ nano .env
 | `DEFAULT_QUOTA_GB` / `ACCOUNT_TTL_DAYS` | 5 / 14 | 새 계정의 용량과 자동 삭제일 |
 | `UPLOAD_MAX_FILE_SIZE_GB` | 없음 | 파일 하나의 최대 크기 |
 | `UPLOAD_CHUNK_SIZE_MB` | 50 | Cloudflare를 쓰면 100 미만으로 둔다 (Nginx `client_max_body_size`는 `NGINX_MAX_BODY_MB`, 기본 100) |
-| `NGINX_MAX_BODY_MB`, `NGINX_AUTH_RATE_PER_MIN`, `NGINX_AUTH_BURST`, `NGINX_UPLOAD_RATE_PER_MIN`, `NGINX_UPLOAD_BURST` | 100, 20, 20, 60, 30 | 두 Nginx 템플릿(compose·호스트)의 요청 크기와 주소별 요청 수 제한. 바꾸면 nginx를 다시 만든다(`docker compose up -d nginx`, systemd는 `install.sh`) |
+| `NGINX_MAX_BODY_MB`, `NGINX_AUTH_RATE_PER_MIN`, `NGINX_AUTH_BURST`, `NGINX_UPLOAD_RATE_PER_MIN`, `NGINX_UPLOAD_BURST`, `NGINX_TUS_RATE_PER_MIN`, `NGINX_TUS_BURST` | 100, 20, 20, 60, 30, 600, 120 | 두 Nginx 템플릿(compose·호스트)의 요청 크기와 주소별 요청 수 제한(TUS는 파일 하나의 새 업로드). 바꾸면 nginx를 다시 만든다(`docker compose up -d nginx`, systemd는 `install.sh`) |
+| `REDIS_MAXMEMORY_MB` | 256 | Redis 메모리 상한(`noeviction`: 가득 차면 쓰기를 거부한다. 작업 큐·업로드 예약·로그인 잠금을 조용히 지우지 않는다). 바꾸면 `docker compose up -d redis` |
 | `NGINX_API_RATE_PER_MIN`, `NGINX_API_BURST` | 120, 60 | 개인 API 토큰 요청(`/api/v1/`, `/metrics`)의 주소별 분당 수와 버스트. 앱이 토큰을 argon2로 확인하기 전에 Nginx가 먼저 막는다. 스크립트가 한 주소에서 더 많이 보내면 올린다 |
 | `APP_STOP_GRACE_SEC`·`WORKER_STOP_GRACE_SEC` | 30·90 | 멈출 때(릴리스, 재시작) 앱이 진행 중인 요청(스트리밍, zip, 업로드 조각)을, 워커가 실행 중인 작업을 끝낼 시간(초). 지나면 강제 종료한다. compose `stop_grace_period`, systemd `TimeoutStopSec`, k3s `terminationGracePeriodSeconds` |
 | `APP_MEMORY_MAX`·`APP_CPUS`·`WORKER_MEMORY_MAX`·`WORKER_CPUS` | 2G·3·2G·2 | 서버 사양에 맞춰. 둘의 합이 전체 메모리의 절반 정도면 PostgreSQL이 여유 있다 |
