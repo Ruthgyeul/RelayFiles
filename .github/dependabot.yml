@@ -21,6 +21,22 @@ updates:
       - dependency-name: typescript
         update-types: [version-update:semver-major]
 
+  # The command-line client (cli/, its own package).
+  - package-ecosystem: npm
+    directory: /cli
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Seoul
+    cooldown:
+      default-days: 7
+    groups:
+      cli-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

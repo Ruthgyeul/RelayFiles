@@ -24,6 +24,13 @@ export const prepareUploadSchema = z.object({
 
 export type PrepareUploadInput = z.infer<typeof prepareUploadSchema>;
 
+/** POST /api/v1/uploads: a batch a script sends over tus with its API token (no Home folder). */
+export const apiV1PrepareUploadSchema = z.object({
+  folder: z.union([z.literal("root"), z.string().regex(/^[a-z0-9]{12}$/)]).default("root"),
+  files: prepareUploadSchema.shape.files,
+  dup: prepareUploadSchema.shape.dup,
+});
+
 export type PrepareUploadResult =
   | { kind: "duplicates"; names: string[] }
   | { kind: "nothing" }

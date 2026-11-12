@@ -251,5 +251,6 @@ File Manager 툴바의 공유 아이콘(`/files/shared`)이 밖에서 열 수 �
 | 비밀 키 | 암호문 앞의 키 id, `*_PREVIOUS`로 교체 기간 동안 함께 읽기 | [runbook.md "비밀값 교체"](runbook.md#비밀값-교체) |
 | Redis 키 | `REDIS_KEY_PREFIX`(`rf:v1:`). 형식이 바뀌면 접두사 버전을 올려 옛 키를 자연 만료시킨다 | — |
 | API 계약 | `src/contracts/`는 하위 호환으로만 바꾼다(필드 추가는 가능, 삭제·의미 변경은 새 필드로). 배포 중 남아 있는 옛 클라이언트도 동작해야 한다 | — |
+| CLI(`cli/`) | API 타입은 `docs/openapi.json`에서 생성한다(`npm run generate`). v1 계약을 바꾸면 같은 PR에서 다시 생성하고, CI가 차이를 검사한다. 옛 CLI도 동작하도록 v1은 필드 추가만 한다 | [cli/README.md](../cli/README.md) |
 | 브라우저 저장값 | localStorage는 `{ v, data }`로 저장하고 버전이나 형식이 다르면 버린다(`shared/lib/local-setting.ts`) | — |
 | 공유 링크 | `/d/<linkId>` 형식과 `linkId`, 계정 토큰은 어떤 변경에서도 바뀌지 않는다 | — |

@@ -34,6 +34,27 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+  cli:
+    name: CLI (types from OpenAPI · test · build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - run: npm ci
+      # The API types come from docs/openapi.json: a changed API must come with regenerated types.
+      - run: npm run generate && git diff --exit-code src/openapi.ts
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   security:
     name: Security (npm audit · secrets)
     runs-on: ubuntu-latest

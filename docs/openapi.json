@@ -1314,6 +1314,257 @@
         }
       }
     },
+    "/api/v1/uploads": {
+      "post": {
+        "summary": "Plan a resumable upload (tus)",
+        "description": "For large files and resuming: plan a batch, then send each file to `endpoint` with tus 1.0 (`Authorization: Bearer` with the same token, metadata `batch`, `index` and `filename`). Only the token that planned the batch can send, continue or cancel its files. Without `dup`, names already taken answer `duplicates`; `replace` keeps the replaced file as a version.",
+        "x-scope": "files:write",
+        "security": [
+          {
+            "apiToken": [
+              "files:write"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "folder": {
+                    "default": "root",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "root"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]{12}$"
+                      }
+                    ]
+                  },
+                  "files": {
+                    "minItems": 1,
+                    "maxItems": 10000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "rel": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "rel",
+                        "size"
+                      ]
+                    }
+                  },
+                  "dup": {
+                    "type": "string",
+                    "enum": [
+                      "replace",
+                      "keep",
+                      "skip"
+                    ]
+                  }
+                },
+                "required": [
+                  "files"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "duplicates"
+                            },
+                            "names": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Names already taken; ask again with dup"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "names"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "nothing"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "ready"
+                            },
+                            "batchId": {
+                              "type": "string"
+                            },
+                            "endpoint": {
+                              "type": "string",
+                              "description": "tus endpoint (relative to the server)"
+                            },
+                            "folder": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "files": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "index": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "rel": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "index",
+                                  "rel",
+                                  "size"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "description": "Files to send, by index into the request's list"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "batchId",
+                            "endpoint",
+                            "folder",
+                            "files"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or expired API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the scope, or the account may not do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (also another account's item)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests (Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/{id}": {
       "get": {
         "summary": "Download a file (Range and ETag supported)",

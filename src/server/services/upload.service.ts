@@ -67,7 +67,7 @@ async function assertBatchSpace(owner: Owner, files: readonly { rel: string; siz
   await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space, { covering });
 }
 
-export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Promise<PrepareUploadResult> {
+export async function prepareUpload(owner: Owner, input: PrepareUploadInput, { apiTokenId }: { apiTokenId?: string } = {}): Promise<PrepareUploadResult> {
   input.files.forEach((file) => checkRelPath(file.rel));
   await assertAccountWritable(owner.id);
   const volume = await findVolume(db(), owner.volumeId);
@@ -107,7 +107,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput): Pr
   }
 
   const batchId = randomString(BATCH_ID_LENGTH, ID_ALPHABET);
-  const batch: UploadBatch = { accountId: owner.id, volumeId: volume.id, folderId: folder.id, fromHome, dup: input.dup ?? "keep", files: files.map(({ rel, size }) => ({ rel, size })) };
+  const batch: UploadBatch = { accountId: owner.id, volumeId: volume.id, folderId: folder.id, fromHome, dup: input.dup ?? "keep", files: files.map(({ rel, size }) => ({ rel, size })), ...(apiTokenId ? { apiTokenId } : {}) };
   await saveBatch(batchId, batch);
   return {
     kind: "ready",

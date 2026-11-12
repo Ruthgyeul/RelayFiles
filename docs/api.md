@@ -142,7 +142,8 @@
 | `GET` | `/api/v1/me` | 아무거나 | 계정 id·이름·관리자 여부, `quotaBytes`, `usedBytes`, 이 토큰의 `scopes` |
 | `GET` | `/api/v1/folders/:id` | `files:read` | 폴더(`root` 또는 id), 경로, 하위 항목(웹 앱의 `/api/folders/:id`와 같은 형식) |
 | `POST` | `/api/v1/folders` | `files:write` | `{ parentId: "root"\|id, name }` 폴더 만들기(201). 이름이 겹치면 "Name (2)" |
-| `POST` | `/api/v1/files?folder=root\|id&name=` | `files:write` | 요청 본문 전체가 파일 하나(`Content-Length` 필수). 이름이 겹치면 "name (2)". 용량·항목 수·크기 한도는 tus 업로드와 같다. 201 `{ nodeId, name, folderId, linkId, url }` — `url`은 공유 링크(공개 여부는 폴더 설정을 따른다). 본문은 Nginx `client_max_body_size`(`NGINX_MAX_BODY_MB`)까지, 더 큰 파일은 웹 앱(tus)으로 |
+| `POST` | `/api/v1/files?folder=root\|id&name=` | `files:write` | 요청 본문 전체가 파일 하나(`Content-Length` 필수). 이름이 겹치면 "name (2)". 용량·항목 수·크기 한도는 tus 업로드와 같다. 201 `{ nodeId, name, folderId, linkId, url }` — `url`은 공유 링크(공개 여부는 폴더 설정을 따른다). 본문은 Nginx `client_max_body_size`(`NGINX_MAX_BODY_MB`)까지, 더 큰 파일은 `POST /api/v1/uploads`(tus)로 |
+| `POST` | `/api/v1/uploads` | `files:write` | 큰 파일·이어 올리기용 tus 배치를 만든다. 본문 `{ folder: "root"\|id, files: [{ rel, size }], dup? }` → 웹 앱 `/api/uploads`와 같은 `{ kind: "ready", batchId, endpoint, folder, files }`(이름이 겹치고 `dup`이 없으면 `{ kind: "duplicates", names }`). 각 파일은 `endpoint`로 tus 1.0(메타데이터 `batch`·`index`·`filename`)을 보낸다. **같은 토큰**(`Authorization: Bearer`, `files:write`)만 그 배치의 파일을 만들고·이어 보내고·취소할 수 있다(다른 토큰은 404, 토큰 없음 401). tus 요청은 토큰마다 분당 `API.uploadRequestsPerMinute`(600)회까지. `dup: "replace"`면 덮어쓴 파일은 버전으로 남는다. CLI(`cli/`)가 이것을 쓴다 |
 | `GET`·`HEAD` | `/api/v1/files/:id` | `files:read` | 원본 다운로드(Range·ETag는 웹 앱과 같다). `HEAD`는 같은 헤더(`Content-Length`·`ETag`)에 본문 없음, 트래픽으로 세지 않는다 |
 | `GET` | `/api/v1/search?q=` | `files:read` | 웹 앱 `/api/search`와 같다: 빈 값이면 최근 파일, `#태그`(URL에서는 `%23`)는 모든 태그를 가진 항목, 그 밖에는 이름. `?tags=a,b`도 받는다. 결과마다 폴더 경로(`TaggedItem[]`) |
 | `GET` | `/api/v1/shares` | `files:read` | 웹 앱 `/api/shares`와 같은 `{ items, truncated }` |
