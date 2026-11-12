@@ -1,9 +1,10 @@
 import "server-only";
 import { getEnv } from "@/config/env";
-import { AUTH, FILE_REQUEST, MS, SHARE } from "@/config/policy";
+import { AUTH, FILE_REQUEST, INVITE, MS, SHARE } from "@/config/policy";
 import type { AdminAccounts, CleanupResult, ManageInput } from "@/contracts/admin";
 import { isExpired } from "@/domain/account";
 import { applyManage } from "@/domain/admin";
+import { deleteFinishedInvites } from "../repositories/server-config.repo";
 import { BYTES_PER_GB } from "@/domain/quota";
 import { db, type DbClient } from "../db/client";
 import { ApiError } from "../http/api-error";
@@ -118,5 +119,7 @@ export async function runCleanup(now: Date): Promise<CleanupResult> {
   await deleteExpiredApiTokens(db(), now);
   // Expired upload links answer "expired" for a while, then go (their files stay).
   await deleteExpiredFileRequests(db(), new Date(now.getTime() - FILE_REQUEST.expiredKeptDays * MS.day));
+  // Expired and used-up invite codes stay listed for a while, then go.
+  await deleteFinishedInvites(db(), new Date(now.getTime() - INVITE.keepFinishedDays * MS.day));
   return result;
 }

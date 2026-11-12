@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountStatus, applyManage, managePreview, maskInvite, matchesFilter, quotaNote, scheduledDeletion, type AdminLifecycle } from "./admin";
+import { accountStatus, applyManage, inviteStatus, managePreview, maskInvite, matchesFilter, quotaNote, scheduledDeletion, type AdminLifecycle } from "./admin";
 
 const DAY = 86_400_000;
 const now = Date.UTC(2026, 9, 6);
@@ -61,5 +61,20 @@ describe("manage", () => {
 describe("maskInvite", () => {
   it("keeps only the first group of an invite code", () => {
     expect(maskInvite("ABCD-EFGH")).toBe("ABCD-••••");
+  });
+});
+
+describe("inviteStatus", () => {
+  const now = Date.UTC(2026, 10, 6);
+  it("is active while uses are left and the date has not passed", () => {
+    expect(inviteStatus({ uses: 0, maxUses: 1, expiresAt: null }, now)).toBe("active");
+    expect(inviteStatus({ uses: 4, maxUses: 5, expiresAt: now + 1 }, now)).toBe("active");
+  });
+  it("is used up at its last use, even when also expired", () => {
+    expect(inviteStatus({ uses: 1, maxUses: 1, expiresAt: null }, now)).toBe("used-up");
+    expect(inviteStatus({ uses: 5, maxUses: 5, expiresAt: now - 1 }, now)).toBe("used-up");
+  });
+  it("is expired from its expiry time on", () => {
+    expect(inviteStatus({ uses: 0, maxUses: 3, expiresAt: now }, now)).toBe("expired");
   });
 });

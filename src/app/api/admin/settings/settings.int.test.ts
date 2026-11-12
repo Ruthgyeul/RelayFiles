@@ -10,7 +10,8 @@ import { POST as tokenSignIn } from "@/app/api/auth/token/route";
 import type { CreatedAccount, SessionState } from "@/contracts/auth";
 import type { ServerSettings } from "@/contracts/server-settings";
 import { db } from "@/server/db/client";
-import { getServerConfig, updateServerConfig } from "@/server/repositories/server-config.repo";
+import { deleteFinishedInvites, getServerConfig, updateServerConfig } from "@/server/repositories/server-config.repo";
+import { INVITE, MS } from "@/config/policy";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { currentAnnouncement, currentTheme, setTheme } from "@/server/services/server-settings.service";
 import { callRoute } from "../../../../../test/route-call";
@@ -71,6 +72,39 @@ describe("server settings", () => {
     const spare = (await callRoute<{ code: string }>(newInvite, { method: "POST", cookie })).json.data.code;
     expect((await callRoute(revoke, { method: "DELETE", cookie, params: { code: spare } })).status).toBe(200);
     await callRoute(signup, { method: "PUT", cookie, body: { mode: "open" } });
+  });
+
+  it("lets a code create its number of accounts until it expires, never one more", async () => {
+    const cookie = await admin();
+    await callRoute(signup, { method: "PUT", cookie, body: { mode: "invite" } });
+    try {
+      const code = (await callRoute<{ code: string }>(newInvite, { method: "POST", cookie, body: { maxUses: 3, expiresInDays: 7 } })).json.data.code;
+      // Five sign-ups at once for three uses: exactly three get in.
+      const tries = await Promise.all(Array.from({ length: 5 }, () => callRoute<CreatedAccount>(anonymous, { method: "POST", body: { inviteCode: code }, ip: randomTestIp() })));
+      const joined = tries.filter((res) => res.status === 201);
+      created.push(...joined.map((res) => res.json.data.account.id));
+      expect(joined).toHaveLength(3);
+      expect(tries.filter((res) => res.json.code === "INVALID_INVITE")).toHaveLength(2);
+      const listed = (await callRoute<ServerSettings>(settings, { cookie })).json.data.invites.find((invite) => invite.code === code)!;
+      expect(listed).toMatchObject({ uses: 3, maxUses: 3, status: "used-up" });
+
+      const late = (await callRoute<{ code: string }>(newInvite, { method: "POST", cookie, body: { maxUses: 5, expiresInDays: 1 } })).json.data.code;
+      await db().invite.update({ where: { code: late }, data: { expiresAt: new Date(Date.now() - 1_000) } });
+      expect((await callRoute(anonymous, { method: "POST", body: { inviteCode: late }, ip: randomTestIp() })).json.code).toBe("INVALID_INVITE");
+      expect((await callRoute(revoke, { method: "DELETE", cookie, params: { code: late } })).status).toBe(404);
+      expect((await callRoute<ServerSettings>(settings, { cookie })).json.data.invites.find((invite) => invite.code === late)?.status).toBe("expired");
+      // Limits outside the policy are refused.
+      expect((await callRoute(newInvite, { method: "POST", cookie, body: { maxUses: 0 } })).status).toBe(400);
+      expect((await callRoute(newInvite, { method: "POST", cookie, body: { expiresInDays: 365 } })).status).toBe(400);
+
+      // The daily cleanup removes codes finished more than INVITE.keepFinishedDays ago.
+      await db().invite.update({ where: { code }, data: { usedAt: new Date(Date.now() - (INVITE.keepFinishedDays + 1) * MS.day) } });
+      expect(await deleteFinishedInvites(db(), new Date(Date.now() - INVITE.keepFinishedDays * MS.day))).toBeGreaterThanOrEqual(1);
+      expect(await db().invite.findUnique({ where: { code } })).toBeNull();
+      expect(await db().invite.findUnique({ where: { code: late } })).not.toBeNull();
+    } finally {
+      await callRoute(signup, { method: "PUT", cookie, body: { mode: "open" } });
+    }
   });
 
   it("sets the theme every page is rendered with", async () => {
