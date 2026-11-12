@@ -60,6 +60,14 @@ export const API = {
   verifyCacheSec: 5 * 60,
   /** Tokens one process remembers as checked; the oldest is dropped first. */
   verifyCacheMax: 1_000,
+  /**
+   * The profile flags tokens nobody uses: never used this many days after creation, or not used
+   * for staleAfterDays. A forgotten token is a standing way into the account; revoking it costs nothing.
+   */
+  unusedAfterDays: 7,
+  staleAfterDays: 90,
+  /** Tokens that stop working within this many days are flagged so the scripts using them can be updated. */
+  expiringWarnDays: 7,
 } as const;
 
 /** Server settings (admin Settings page). */
