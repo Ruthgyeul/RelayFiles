@@ -14,6 +14,16 @@ export const limitsDownloads = (row: Pick<LimitFacts, "burn" | "downloadLimit">)
 /** Whether an item that limits downloads has none left (its limit reached, or deleted after its first). */
 export const downloadsUsedUp = (row: LimitFacts): boolean => limitHit(row.downloadLimit, row.downloads) || (row.burn && row.downloads >= 1);
 
+/**
+ * What a download that was just counted (`downloads` already includes it) used up: the item's
+ * download limit, its single download before deletion, or nothing. Only the download that
+ * reaches the limit answers, so each item is reported once.
+ */
+export function ranOutWith(row: Omit<LimitFacts, "id">): "limit" | "burn" | null {
+  if (row.burn) return row.downloads === 1 ? "burn" : null;
+  return row.downloadLimit !== null && row.downloadLimit > 0 && row.downloads === row.downloadLimit ? "limit" : null;
+}
+
 /** The items among `rows` that limit downloads themselves (counted with every download below them). */
 export const limitingIds = (rows: readonly Pick<LimitFacts, "id" | "burn" | "downloadLimit">[]): string[] => rows.filter(limitsDownloads).map((row) => row.id);
 

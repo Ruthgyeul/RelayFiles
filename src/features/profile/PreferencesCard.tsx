@@ -10,12 +10,15 @@ const box = "flex flex-wrap items-center gap-3 rounded-xl border border-ctrl bg-
 interface PreferencesCardProps {
   stripMetadata: boolean;
   onStripMetadata: (on: boolean) => void;
+  /** Null when the server sends no notifications (the option is hidden). */
+  notifyLinks: boolean | null;
+  onNotifyLinks: (on: boolean) => void;
   onPurge: () => void;
   busy: boolean;
 }
 
 /** Preferences of this account: expired items cleanup and photo metadata on public links. */
-export function PreferencesCard({ stripMetadata, onStripMetadata, onPurge, busy }: PreferencesCardProps) {
+export function PreferencesCard({ stripMetadata, onStripMetadata, notifyLinks, onNotifyLinks, onPurge, busy }: PreferencesCardProps) {
   return (
     <section aria-label="Preferences" className="flex flex-col gap-4 rounded-2xl border border-card-line bg-card p-5">
       <SectionTitle
@@ -49,6 +52,19 @@ export function PreferencesCard({ stripMetadata, onStripMetadata, onPurge, busy 
           Strip metadata on public links
         </CheckRow>
       </div>
+      {notifyLinks !== null && (
+        <div className={box}>
+          <CheckRow
+            checked={notifyLinks}
+            disabled={busy}
+            onCheckedChange={onNotifyLinks}
+            description="Get the server's notification when one of your share links is opened, reaches its download limit or is downloaded before deletion. Visitors' addresses are never sent."
+            className="flex-1"
+          >
+            Notify me about my share links
+          </CheckRow>
+        </div>
+      )}
     </section>
   );
 }

@@ -9,6 +9,7 @@ import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { POST as createRequest } from "@/app/api/file-requests/route";
 import { POST as prepare } from "@/app/api/r/[id]/uploads/route";
+import { GET as shareDownload } from "@/app/api/share/[linkId]/files/[id]/download/route";
 import * as tus from "@/app/api/uploads/tus/[...path]/route";
 import type { FileRequestDto, RequestUploadPlan } from "@/contracts/file-requests";
 import { layoutOf } from "@/server/storage/layout";
@@ -26,7 +27,7 @@ interface Delivery {
   raw: string;
 }
 
-const { prisma, member, cleanup } = fileFixtures();
+const { prisma, member, addFile, cleanup } = fileFixtures();
 const deliveries: Delivery[] = [];
 let server: Server;
 let worker: Worker;
@@ -158,4 +159,28 @@ describe("owner notifications", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("tells an owner who opted in when a shared file's downloads are used up, and only then", async () => {
+    const download = async (linkId: string, id: string) =>
+      shareDownload(new NextRequest(`http://localhost/api/share/${linkId}/files/${id}/download`, { headers: { "x-real-ip": randomTestIp() } }), { params: Promise.resolve({ linkId, id }) });
+    const shared = async (optedIn: boolean, name: string) => {
+      const m = await member();
+      await prisma.account.update({ where: { id: m.id }, data: { notifyLinkEvents: optedIn } });
+      const id = await addFile(m, m.rootId, [], name, "content", "text/plain");
+      const row = await prisma.node.update({ where: { id }, data: { visibility: "PUBLIC", downloadLimit: 2 }, select: { linkId: true } });
+      return { id, linkId: row.linkId };
+    };
+    const quiet = await shared(false, `quiet-${randomUUID()}.txt`);
+    const loud = await shared(true, `loud-${randomUUID()}.txt`);
+    for (const file of [quiet, loud]) for (let i = 0; i < 2; i += 1) expect((await download(file.linkId, file.id)).status).toBe(200);
+
+    const sent = await delivered((delivery) => delivery.body.event === "link-used-up" && delivery.raw.includes("loud-"));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.body).toMatchObject({ title: "Download limit reached", data: { cause: "limit", downloads: 2 } });
+    expect(sent[0]!.raw).not.toContain(loud.linkId);
+    // The owner who did not opt in hears nothing.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(deliveries.filter((delivery) => delivery.raw.includes("quiet-"))).toHaveLength(0);
+  });
 });
+

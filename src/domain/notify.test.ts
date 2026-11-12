@@ -24,6 +24,18 @@ describe("describeEvent", () => {
     expect(text.message).toContain('"evil Title: x.jpg"');
   });
 
+  it("describes share link events without links or addresses", () => {
+    expect(describeEvent({ kind: "link-opened", owner: "anon-k3x9", item: "Trip", folder: true, country: "KR" })).toEqual({
+      title: "Share link opened",
+      message: 'The link to the folder "Trip" of anon-k3x9 was opened from KR.',
+      urgent: false,
+    });
+    expect(describeEvent({ kind: "link-opened", owner: "anon-k3x9", item: "a.jpg", folder: false, country: null }).message).toBe('The link to "a.jpg" of anon-k3x9 was opened.');
+    expect(describeEvent({ kind: "link-used-up", owner: "o", item: "movie.mp4", cause: "limit", downloads: 3 })).toMatchObject({ title: "Download limit reached", urgent: false });
+    expect(describeEvent({ kind: "link-used-up", owner: "o", item: "movie.mp4", cause: "limit", downloads: 1 }).message).toContain("limit of 1 download.");
+    expect(describeEvent({ kind: "link-used-up", owner: "o", item: "x\ny", cause: "burn", downloads: 1 }).message).toBe('"x y" of o was downloaded. It is deleted at the next cleanup and its link has expired.');
+  });
+
   it("marks storage and backup alerts urgent", () => {
     expect(describeEvent({ kind: "volume-low", volumeId: "v1", freeBytes: 1_000_000_000, reservePct: 5 })).toMatchObject({ title: "Storage volume low", urgent: true });
     expect(describeEvent({ kind: "volume-low", volumeId: "v1", freeBytes: 1_000_000_000, reservePct: 5 }).message).toContain("1.0 GB free, below its 5% reserve");

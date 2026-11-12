@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downloadsUsedUp, limitingFoldersBelow, limitingIds, limitsDownloads, type TreeLimitRow } from "./share-limits";
+import { downloadsUsedUp, limitingFoldersBelow, limitingIds, limitsDownloads, ranOutWith, type TreeLimitRow } from "./share-limits";
 
 const row = (id: string, parentId: string | null, settings: Partial<TreeLimitRow> = {}): TreeLimitRow => ({ id, parentId, burn: false, downloadLimit: null, downloads: 0, ...settings });
 
@@ -44,5 +44,17 @@ describe("limitingFoldersBelow", () => {
   it("nests limits from the nearest folder up", () => {
     const nested = [row("top", null), row("a", "top", { burn: true }), row("b", "a", { downloadLimit: 3 }), row("f", "b")];
     expect(limitingFoldersBelow(nested, "top").get("f")!.map((folder) => folder.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("ranOutWith", () => {
+  it("answers only for the download that used the item up", () => {
+    expect(ranOutWith({ burn: false, downloadLimit: 3, downloads: 2 })).toBeNull();
+    expect(ranOutWith({ burn: false, downloadLimit: 3, downloads: 3 })).toBe("limit");
+    expect(ranOutWith({ burn: false, downloadLimit: 3, downloads: 4 })).toBeNull();
+    expect(ranOutWith({ burn: true, downloadLimit: null, downloads: 1 })).toBe("burn");
+    expect(ranOutWith({ burn: true, downloadLimit: 5, downloads: 1 })).toBe("burn");
+    expect(ranOutWith({ burn: false, downloadLimit: null, downloads: 9 })).toBeNull();
+    expect(ranOutWith({ burn: false, downloadLimit: 0, downloads: 0 })).toBeNull();
   });
 });

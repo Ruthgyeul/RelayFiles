@@ -6,7 +6,7 @@ import { dailySeries, deletionDate, deviceLocation, maskToken } from "@/domain/a
 import { db, type DbClient } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
-import { deleteAccountRow, lastLoginOf, updatePreferences, type AccountRow } from "../repositories/account.repo";
+import { deleteAccountRow, findLinkNotifyOwner, lastLoginOf, updatePreferences, type AccountRow } from "../repositories/account.repo";
 import { countAdmins, lockAdminRoles } from "../repositories/admin.repo";
 import { retireLinks } from "../repositories/link-tombstone.repo";
 import { accountUsage, contentCounts, expiredItemIds } from "../repositories/node.repo";
@@ -17,6 +17,7 @@ import { listApiTokens } from "./api-token.service";
 import { revealToken } from "./auth.service";
 import { deleteItems } from "./node-ops.service";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
+import { notifyEnabled } from "../jobs/notify-queue";
 
 
 export async function listDevices(accountId: string, currentSessionId: string): Promise<DeviceDto[]> {
@@ -38,7 +39,7 @@ export async function listDevices(accountId: string, currentSessionId: string): 
 export async function profileOf(account: AccountRow, currentSessionId: string, now: Date = new Date()): Promise<ProfileData> {
   const ttlDays = getEnv("policy").ACCOUNT_TTL_DAYS;
   const from = new Date(now.getTime() - (ACCOUNT.trafficDays - 1) * MS.day);
-  const [token, usage, counts, traffic, devices, lastLoginAt, apiTokens] = await Promise.all([
+  const [token, usage, counts, traffic, devices, lastLoginAt, apiTokens, notifyLinkEvents] = await Promise.all([
     revealToken(account.id),
     accountUsage(db(), account.id),
     contentCounts(db(), account.id),
@@ -46,6 +47,7 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
     listDevices(account.id, currentSessionId),
     lastLoginOf(db(), account.id),
     listApiTokens(account.id),
+    findLinkNotifyOwner(db(), account.id).then((row) => row?.notifyLinkEvents),
   ]);
   const days = dailySeries(traffic, ACCOUNT.trafficDays, now);
   return {
@@ -60,7 +62,9 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
       deletesAt: deletionDate(account, ttlDays)?.toISOString() ?? null,
       quotaBytes: account.quotaBytes?.toString() ?? null,
       stripMetadataOnShare: account.stripMetadataOnShare,
+      notifyLinkEvents: notifyLinkEvents ?? false,
     },
+    notifyAvailable: notifyEnabled(),
     maskedToken: maskToken(token),
     usage: { usedBytes: usage.usedBytes.toString(), ...counts },
     traffic: { total: days.reduce((sum, bytes) => sum + bytes, 0n).toString(), days: days.map(String) },
