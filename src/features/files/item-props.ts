@@ -12,7 +12,8 @@ export interface ItemProps {
   parentVisibility: "private" | "public";
   selected: boolean;
   now: number;
-  onToggle: () => void;
+  /** Checks or unchecks the item; `range` (Shift held) checks everything from the last one toggled. */
+  onToggle: (range?: boolean) => void;
   onPrimary: () => void;
   /** Opens a file in the viewer (thumbnails, "Open viewer"). */
   onPreview: () => void;

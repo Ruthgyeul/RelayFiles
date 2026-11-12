@@ -112,7 +112,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
     parentVisibility: view.effectiveVisibility,
     selected: selection.has(item.id),
     now,
-    onToggle: () => selection.toggle(item.id),
+    onToggle: (range) => selection.toggle(item.id, range),
     onPrimary: () => openItem(item),
     onPreview: () => media.preview(item),
     onMenu: (anchor) => menu.toggle(item.id, anchor),
@@ -133,6 +133,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
     favorite: () => void open.toggleFavorite(selectedItems, true),
     copy: () => open.move(selectedItems, "copy", folder.id),
     move: () => open.move(selectedItems, "move", folder.id),
+    rename: () => folderTools.open.rename(selectedItems, tagMode ? null : children.map((child) => child.name)),
     remove: () => open.remove(selectedItems),
   });
 

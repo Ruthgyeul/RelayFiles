@@ -10,6 +10,8 @@ export interface ToolbarHandlers {
   favorite: () => void;
   copy: () => void;
   move: () => void;
+  /** "Rename" for several selected items at once. */
+  rename: () => void;
   remove: () => void;
 }
 
@@ -41,6 +43,7 @@ export function toolbarActions(on: ToolbarHandlers) {
         <ToolButton icon="star" label="Favorite" title="Add to favorites" onClick={on.favorite} />
         <ToolButton icon="copy" label="Copy" onClick={on.copy} />
         <ToolButton icon="arrow-bend-up-right" label="Move" onClick={on.move} />
+        <ToolButton icon="pencil-simple" label="Rename" title="Rename the selected items" onClick={on.rename} />
         <ToolButton icon="trash" label="Delete" danger onClick={on.remove} />
       </>
     ),

@@ -38,6 +38,8 @@ export const filesApi = {
   createFolder: (parentId: string, name: string) => apiFetch<CreatedFolder>("/api/folders", { method: "POST", json: { parentId, name } }),
   getProperties: (id: string) => apiFetch<NodeProperties>(node(id)),
   rename: (id: string, name: string) => apiFetch<NodeItem>(node(id), { method: "PATCH", json: { name } }),
+  /** New names for several items of one folder; all or nothing. */
+  renameBatch: (items: { id: string; name: string }[]) => apiFetch<{ renamed: number }>("/api/nodes/rename-batch", { method: "POST", json: { items } }),
   transfer: (ids: string[], targetId: string, mode: "move" | "copy") => apiFetch<TransferResult>("/api/nodes/transfer", { method: "POST", json: { ids, targetId, mode } }),
   remove: (ids: string[]) => apiFetch<{ deleted: number }>("/api/nodes/delete", { method: "POST", json: { ids } }),
   tags: (ids: string[], add: string[], remove: string[]) => apiFetch<{ updated: number }>("/api/nodes/tags", { method: "POST", json: { ids, add, remove } }),

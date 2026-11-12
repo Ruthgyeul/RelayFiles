@@ -5,6 +5,7 @@ Fast and easy file sharing system. A private file drop for sharing and streaming
 ## Features
 
 - File Manager with folders, tags, search, move and copy, "Renumber files" and "Find duplicates"
+- Shift-click to select a range, and rename many items at once (find and replace, prefix and suffix with numbers, letter case) with every new name checked first
 - Favorites: a folder at the top of the root that lists favorite files and folders where they are (no copies), with its own organizing folders
 - Resumable uploads (tus) that continue after a page reload, and upload-only links (file requests)
 - Share links per file or folder: password, download limit, stream only; admins can also set expiry and delete after the first download
