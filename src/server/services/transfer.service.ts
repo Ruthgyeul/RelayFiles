@@ -61,8 +61,9 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
       const moved = await moveIntoFolder(tx, owner.id, target.id, plan);
       if (moved !== plan.length) throw new ApiError("CONFLICT", MOVE_CHANGED_MESSAGE);
       for (const { from, to } of plan) {
-        await driver.rename(from, to);
-        undo.push("undo move", () => driver.rename(to, from));
+        // Never over something that is on the disk only (DB and disk out of step): 409, nothing lost.
+        await driver.renameNoReplace(from, to);
+        undo.push("undo move", () => driver.renameNoReplace(to, from));
       }
     });
   } catch (caught) {

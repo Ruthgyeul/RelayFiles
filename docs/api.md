@@ -52,7 +52,7 @@
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | `HEAD` | `/api/health` | 생존 확인(204, 백엔드 작업 없음). Status 페이지가 2.5초마다 지연 시간을 잰다 |
-| `GET` | `/api/health` | 준비 상태: `{ status, version, time, components: { database, redis, storage, scanner? } }`. `scanner`는 `CLAMAV_HOST`가 있을 때만 (clamd PING). DB가 죽으면 503 |
+| `GET` | `/api/health` | 준비 상태: `{ status, time, components: { database, redis, storage, scanner? } }`. `scanner`는 `CLAMAV_HOST`가 있을 때만 (clamd PING). DB가 죽으면 503. 인증이 없으므로 앱 버전은 보내지 않고, `STATUS.healthCacheMs`(1초) 안의 요청은 한 번의 검사 결과를 함께 쓴다(DB·Redis·디스크 왕복이 요청 수만큼 늘지 않는다) |
 | `GET` | `/api/status` | 공개 Status 페이지 데이터: `{ latency, components, server, incidents }` |
 | `GET` | `/api/auth/session` | 이 기기에 로그인한 계정 목록, 활성 계정 id, 가입 모드, 활성 계정 사용량 `usage { usedBytes, rootItems, storageBusy }`(`SessionState`). `storageBusy`가 true면 파일을 새 저장소로 옮기는 중이라 변경이 잠시 막힌다(배너 표시). 무효 세션이 있으면 쿠키를 정리한다 |
 | `POST` | `/api/auth/anonymous` | `{ inviteCode? }` → 201 `{ account, token, session }`. 익명 계정을 만들고 이 기기를 로그인시킨다. 토큰은 이 응답에서만 평문으로 나온다 |

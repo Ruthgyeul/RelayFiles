@@ -1,5 +1,5 @@
 import { apiHandler, ok } from "@/server/http/api-handler";
-import { checkHealth } from "@/server/services/health.service";
+import { sharedHealth } from "@/server/services/health.service";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,6 @@ export function HEAD() {
 
 /** Readiness: database, Redis and storage volume. 503 when the database is down. */
 export const GET = apiHandler(async () => {
-  const health = await checkHealth();
+  const health = await sharedHealth();
   return ok(health, { status: health.status === "down" ? 503 : 200, headers: { "cache-control": "no-store" } });
 });

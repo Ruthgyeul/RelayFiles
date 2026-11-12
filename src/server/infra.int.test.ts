@@ -3,7 +3,8 @@ import { newAccountId, newLinkId, newNodeId } from "@/domain/ids";
 import { db } from "./db/client";
 import { cached, invalidate } from "./cache/cached";
 import { redis } from "./redis";
-import { checkHealth } from "./services/health.service";
+import { STATUS } from "@/config/policy";
+import { checkHealth, sharedHealth } from "./services/health.service";
 
 const prisma = db();
 const volumeId = `test-${newNodeId()}`;
@@ -78,5 +79,13 @@ describe("health", () => {
     expect(health.components.database).toBe("ok");
     expect(health.components.redis).toBe("ok");
     expect(["ok", "degraded"]).toContain(health.status);
+  });
+
+  it("does not tell the app version, and requests close together share one check", async () => {
+    const start = Date.now();
+    const first = sharedHealth(start);
+    expect(sharedHealth(start + STATUS.healthCacheMs - 1)).toBe(first);
+    expect(sharedHealth(start + STATUS.healthCacheMs)).not.toBe(first);
+    expect(await first).not.toHaveProperty("version");
   });
 });

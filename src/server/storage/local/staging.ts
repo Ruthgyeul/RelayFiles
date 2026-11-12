@@ -1,13 +1,13 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { link, lstat, mkdir, rename, rm } from "node:fs/promises";
+import { link, lstat, mkdir, rm } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { DIR_MODE, type VolumeLayout } from "../layout";
 import { StorageEntryMissingError, type CopyEntry, type StorageLocation } from "../driver";
 import { resolveInsideUserRoot } from "../safe-path";
 import { copyFileEntry, dedupe } from "./copy";
 import { errorCode, NO_HARD_LINK } from "./fs-errors";
-import { pathOf } from "./locations";
+import { pathOf, renameNoReplacePath } from "./locations";
 
 // Bytes prepared in the volume's upload area (system/tmp/uploads) and put into place in one rename.
 
@@ -17,8 +17,9 @@ const STAGED_ITEM = "item";
 export async function moveIntoPlace(layout: VolumeLayout, tempPath: string, location: StorageLocation): Promise<void> {
   if (!tempPath.startsWith(layout.uploads)) throw new Error("Uploads must come from the volume's upload area.");
   // The folder must still exist: creating it again here would bring back a folder renamed or
-  // deleted while the upload finished, outside the database.
-  await rename(tempPath, await pathOf(layout, location));
+  // deleted while the upload finished, outside the database. Something already at the name
+  // (on the disk only) is never replaced: StorageTargetExistsError.
+  await renameNoReplacePath(tempPath, await pathOf(layout, location));
 }
 
 export async function linkExisting(layout: VolumeLayout, from: StorageLocation, to: StorageLocation, size: number): Promise<boolean> {

@@ -61,8 +61,9 @@ export async function renameNode(owner: NodeOwner, nodeId: string, requested: st
     const updated = await withStorageTransaction(db(), async (tx, undo) => {
       await lockAccountForWrite(tx, owner.id, driver.volumeId);
       const result = await updateNode(tx, row.id, { name });
-      await driver.rename(from, to);
-      undo.push("undo rename", () => driver.rename(to, from));
+      // Never over something that is on the disk only (DB and disk out of step): 409, nothing lost.
+      await driver.renameNoReplace(from, to);
+      undo.push("undo rename", () => driver.renameNoReplace(to, from));
       return result;
     });
     return toNodeItem(updated);

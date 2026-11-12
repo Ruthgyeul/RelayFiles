@@ -8,7 +8,8 @@ import { validRequestId } from "@/domain/ids";
 import { deviceOf } from "../auth/current";
 import { requireActive, requireAdmin, type DeviceAccount } from "../auth/device-session";
 import { logger } from "../logger";
-import { ApiError } from "./api-error";
+import { StorageTargetExistsError } from "../storage/driver";
+import { ApiError, DISK_IN_THE_WAY_MESSAGE } from "./api-error";
 
 export interface HandlerContext<P> {
   req: NextRequest;
@@ -57,6 +58,10 @@ export function toFailure(error: unknown, requestId: string): NextResponse<ApiFa
   if (error instanceof ApiError) {
     if (error.status >= 500 && !EXPECTED_UNAVAILABLE.has(error.code)) logger.error("api error", { requestId, code: error.code, error });
     return failure(error.code, error.message, requestId, error.options);
+  }
+  if (error instanceof StorageTargetExistsError) {
+    logger.warn("disk entry in the way", { requestId });
+    return failure("CONFLICT", DISK_IN_THE_WAY_MESSAGE, requestId);
   }
   if (error instanceof ZodError) {
     return failure("BAD_REQUEST", ERRORS.BAD_REQUEST.message, requestId, { fields: zodFields(error) });

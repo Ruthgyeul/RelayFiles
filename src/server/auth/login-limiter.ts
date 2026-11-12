@@ -5,11 +5,12 @@ import type { LockoutPolicy } from "@/domain/lockout";
 import { countInWindow, redis } from "../redis";
 
 /**
- * Failed token sign-ins per client address (docs/security.md "인증"). Counters live in Redis
- * with TTLs, so a Redis flush only resets lockouts and never locks anyone out.
+ * Failed token entries per subject: a client address for sign-in, "reauth:<accountId>" for
+ * re-entering the token on a signed-in session (docs/security.md "인증"). Counters live in
+ * Redis with TTLs, so a Redis flush only resets lockouts and never locks anyone out.
  */
-const failKey = (ipKey: string) => `auth:fail:${ipKey}`;
-const lockKey = (ipKey: string) => `auth:lock:${ipKey}`;
+const failKey = (subject: string) => `auth:fail:${subject}`;
+const lockKey = (subject: string) => `auth:lock:${subject}`;
 const signupKey = (ipKey: string) => `auth:signup:${ipKey}`;
 
 export function lockoutPolicy(): LockoutPolicy {
@@ -41,26 +42,26 @@ return {count, lock}
 
 export type TokenAttempt = { locked: number } | { failures: number; lockSeconds: number };
 
-/** Counts a token entry from this address (see ATTEMPT_SCRIPT); `locked` when it must be refused unchecked. */
-export async function beginTokenAttempt(ipKey: string, policy: LockoutPolicy = lockoutPolicy()): Promise<TokenAttempt> {
-  const [count, seconds] = (await redis().eval(ATTEMPT_SCRIPT, 2, failKey(ipKey), lockKey(ipKey), AUTH.failureWindowSec, policy.maxAttempts, ...policy.lockSeconds)) as [number, number];
+/** Counts a token entry for this subject (see ATTEMPT_SCRIPT); `locked` when it must be refused unchecked. */
+export async function beginTokenAttempt(subject: string, policy: LockoutPolicy = lockoutPolicy()): Promise<TokenAttempt> {
+  const [count, seconds] = (await redis().eval(ATTEMPT_SCRIPT, 2, failKey(subject), lockKey(subject), AUTH.failureWindowSec, policy.maxAttempts, ...policy.lockSeconds)) as [number, number];
   return count < 0 ? { locked: seconds } : { failures: count, lockSeconds: seconds };
 }
 
 /**
- * Gives back the attempt of a correct token. Only that one attempt: the address's earlier
+ * Gives back the attempt of a correct token. Only that one attempt: the subject's earlier
  * failures stay counted (they may have been guesses at other accounts), and a lock this very
  * attempt started is lifted.
  */
-export async function refundTokenAttempt(ipKey: string, attempt: { lockSeconds: number }): Promise<void> {
-  const multi = redis().multi().decr(failKey(ipKey));
-  if (attempt.lockSeconds > 0) multi.del(lockKey(ipKey));
+export async function refundTokenAttempt(subject: string, attempt: { lockSeconds: number }): Promise<void> {
+  const multi = redis().multi().decr(failKey(subject));
+  if (attempt.lockSeconds > 0) multi.del(lockKey(subject));
   await multi.exec();
 }
 
-/** Forgets an address's failures and lock (tests and operator tools). */
-export async function clearFailures(ipKey: string): Promise<void> {
-  await redis().del(failKey(ipKey), lockKey(ipKey));
+/** Forgets a subject's failures and lock (tests and operator tools). */
+export async function clearFailures(subject: string): Promise<void> {
+  await redis().del(failKey(subject), lockKey(subject));
 }
 
 /** Counts an anonymous sign-up; false when the address exceeded the hourly limit. */
