@@ -116,6 +116,8 @@
 | `DELETE` | `/api/me/sessions/:id` | 다른 기기 하나 로그아웃 |
 | `GET` | `/api/me/security-log` | 이 계정의 보안 로그, 최신순 `?cursor=&limit=`(기본 `SECURITY_LOG.pageSize` 20, 최대 100) → `{ events: [{ id, kind, detail, os, browser, ipMasked, country, at }], nextCursor }`. 다른 계정이나 정리된 항목의 cursor는 400. 종류는 `src/domain/security-log.ts` |
 | `GET` | `/api/me/storage` | Storage 페이지 → `{ usedBytes, trashBytes, quotaBytes, bars, largest, stale, staleAfterDays }`. `bars`는 루트 바로 아래 항목마다 하위 전체 파일 바이트(큰 순, `STORAGE_VIEW.maxBars` 8개를 넘으면 나머지를 "Other" 하나로). `largest`는 가장 큰 파일 `STORAGE_VIEW.largestFiles` 50개, `stale`은 `STORAGE_VIEW.staleAfterDays`(180일)보다 전에 추가됐고 그 뒤 공유 링크로 열기·보기·재생·다운로드가 없는 파일(최대 200개, 큰 순). 둘 다 `TaggedItem`(경로 포함). 소유자 본인의 다운로드는 기록하지 않으므로 공유 링크 기준이다 |
+| `GET` | `/api/shares` | Shared by me → `{ items, truncated }`. 밖에서 열 수 있는 항목, 새것부터. 공개된 부분의 맨 위 항목(위가 비공개인데 자기가 Public), 그리고 공개 상태에서 자기 비밀번호·다운로드 한도·만료·첫 다운로드 후 삭제·다운로드 중지가 있는 항목만 나온다. 위 폴더 덕분에 공개된 항목은 따로 나오지 않는다. 항목은 `TaggedItem` + `lastActivityAt`(공유 링크의 마지막 열기·재생·다운로드, 없으면 null). 후보는 `SHARE.sharedListMax`(1,000)개까지 읽고, 넘으면 `truncated: true` |
+| `POST` | `/api/shares/private` | `{ ids }`(최대 `FILES.maxBatchItems`)를 한꺼번에 Private로 바꾼다 → `{ updated }`. 모두 이 계정의 항목이어야 하고, 하나라도 아니면 아무것도 바꾸지 않고 404 |
 | `PATCH` | `/api/me/preferences` | `{ stripMetadataOnShare }` 공개 링크 사진의 위치·카메라 정보 제거 |
 | `POST` | `/api/me/purge` | "Purge now": 만료된 항목(만료 시각이 지났거나 1회 다운로드 후 삭제가 사용됨)을 바로 삭제 → `{ deleted }` |
 | `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 관리자 계정 삭제는 감사 로그에 남으며, 마지막 관리자는 400 `Keep at least one admin` |
@@ -141,6 +143,7 @@
 | `POST` | `/api/v1/files?folder=root\|id&name=` | `files:write` | 요청 본문 전체가 파일 하나(`Content-Length` 필수). 이름이 겹치면 "name (2)". 용량·항목 수·크기 한도는 tus 업로드와 같다. 201 `{ nodeId, name, folderId, linkId, url }` — `url`은 공유 링크(공개 여부는 폴더 설정을 따른다). 본문은 Nginx `client_max_body_size`(`NGINX_MAX_BODY_MB`)까지, 더 큰 파일은 웹 앱(tus)으로 |
 | `GET`·`HEAD` | `/api/v1/files/:id` | `files:read` | 원본 다운로드(Range·ETag는 웹 앱과 같다). `HEAD`는 같은 헤더(`Content-Length`·`ETag`)에 본문 없음, 트래픽으로 세지 않는다 |
 | `GET` | `/api/v1/search?q=` | `files:read` | 웹 앱 `/api/search`와 같다: 빈 값이면 최근 파일, `#태그`(URL에서는 `%23`)는 모든 태그를 가진 항목, 그 밖에는 이름. `?tags=a,b`도 받는다. 결과마다 폴더 경로(`TaggedItem[]`) |
+| `GET` | `/api/v1/shares` | `files:read` | 웹 앱 `/api/shares`와 같은 `{ items, truncated }` |
 | `GET` | `/api/v1/favorites?folder=` | `files:read` | 웹 앱 `/api/favorites`와 같은 `FavoritesView`. 정리용 폴더 관리(만들기·이름 변경·이동·삭제)는 웹 앱에서만 한다 |
 | `PATCH` | `/api/v1/nodes/:id` | `files:write` | `{ name?, parentId?: "root"\|id, favorite?: boolean }`(하나 이상) 이름 변경·이동(디스크도 함께)·즐겨찾기(`true` = Favorites 맨 위에 추가, 이미 있으면 그대로, `false` = 빼기) → `NodeItem`. 이동이 먼저라 새 이름은 대상 폴더에서 검사한다. 끝나는 곳에 같은 이름이 있으면 409와 `Suggested:` 문구(웹 앱 이동과 달리 "Name (2)"로 바꾸지 않는다). 자기 자신·하위·루트 이동은 400 |
 | `DELETE` | `/api/v1/nodes/:id` | `files:write` | 파일이나 폴더(안의 모든 것 포함) 삭제, 볼륨 휴지통으로 → `{ deleted }` |

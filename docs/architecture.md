@@ -183,6 +183,14 @@ File Manager 툴바의 시계 아이콘(`/files/deleted`)이 지운 항목을 �
 - **영구 삭제**(`DELETE /api/trash/:id`): 같은 잠금 아래 `DeletedItem`과 그 `TrashedBytes`를 지우고, 커밋 뒤 `removeFromTrash`로 디스크에서 지운다(실패하면 매일 정리가 지운다).
 - **정리**: 매일 정리가 `forgetTrashedBefore`와 같은 기준 시각·같은 규칙(실제로 비운 `ACTIVE`·`DRAINING` 볼륨만)으로 `forgetDeletedBefore`를 부른다. `deletedAt`은 휴지통으로 옮긴 뒤의 시각이라 기록이 지워지는 항목은 파일도 이미 지워졌다. 그 반대(파일만 먼저 지워진 짧은 틈)는 복원이 410으로 답한다. 계정을 지우면 `DeletedItem`도 cascade로 지워진다. 휴지통 경로는 항목 이름만 보므로(`trashEntry`) 볼륨 마운트 경로가 바뀌어도 찾는다.
 
+### 공유 목록 (Shared by me)
+
+File Manager 툴바의 공유 아이콘(`/files/shared`)이 밖에서 열 수 있는 항목을 모아 보여 준다(`features/shared-by-me`, `services/shared-items.service.ts`, `domain/shared-items.ts`).
+
+- 후보는 공개이거나 자기 공유 제한(비밀번호, 다운로드 한도, 만료, 첫 다운로드 후 삭제, 다운로드 중지)이 있는 행이다(`node.repo` `sharedCandidates`, 새것부터 `SHARE.sharedListMax`개).
+- 실제 공개 여부는 계정의 폴더 목록 하나로 메모리에서 계산한다(`visibilityInside`). 공개된 부분의 맨 위 항목과, 공개 상태에서 자기 제한이 있는 항목만 남긴다(`isListedShare`). 공개 폴더 아래 항목은 그 폴더 행이 대신한다.
+- "Make private"는 `visibility`만 PRIVATE로 바꾼다(링크 id·설정은 그대로라 다시 공개하면 같은 링크가 열린다).
+
 ### 즐겨찾기 (Favorites)
 
 루트 목록 맨 위의 "Favorites"(`/files/favorites`)는 가상 폴더다(`features/favorites`, `services/favorites.service.ts`, `repositories/favorite.repo.ts`, `domain/favorites.ts`).
