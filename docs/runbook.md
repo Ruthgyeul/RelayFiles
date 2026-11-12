@@ -472,6 +472,17 @@ tar -C /mnt/RuthVault2T/.private/Movies -cf - . | \
 - **멤버 계정**은 만료(TTL)되면 계정과 함께 파일도 지워진다. 명령이 시작할 때 만료일을 경고한다. 오래 둘 파일은 관리자 계정이나 만료 없는 계정에 넣는다.
 - 끝에 `Done: N imported (크기), N already there, N ignored.`를 출력한다. 실패하면 종료 코드 1이고, 그때까지 가져온 파일은 남아 있다.
 
+### 계정 내보내기를 다시 가져오기
+
+My Profile → Export account의 "Download everything"이 만든 `.tar`는 그대로 가져올 수 있다. 끝의 `.relayfiles/manifest.json`은 파일로 가져오지 않는다.
+
+```bash
+$C run --rm -T tools npm run -s storage:import -- --account <accountId> --to "Restored" --with-metadata < relayfiles-<계정>-<날짜>.tar
+```
+
+- `--with-metadata`: 파일을 다 넣은 뒤 manifest의 태그·메모를 같은 경로의 항목에 적용하고, 즐겨찾기와 정리용 폴더를 만든다(이미 있으면 그대로 쓴다). 공유 설정은 적용하지 않는다.
+- 끝에 `Metadata: N items with tags or notes, N favorites, N not found.`를 출력한다. `not found`는 가져오지 않았거나 이름이 겹쳐 `name (2)`로 들어간 항목이다. 내보낼 때 읽지 못한 파일은 `not in the export:`로 출력한다.
+
 ## 서버 이전 (N95 → 새 서버)
 
 모든 주소·경로·포트는 `.env`에 있으므로 코드는 바뀌지 않는다. 앱 서버와 DB 서버를 나눌 때도 `POSTGRES_HOST`·`REDIS_HOST`만 바꾼다.

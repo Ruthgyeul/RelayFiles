@@ -15,5 +15,9 @@ export const profileApi = {
   createApiToken: (input: CreateApiTokenInput) => apiFetch<CreatedApiToken>("/api/me/api-tokens", { method: "POST", json: input }),
   revokeApiToken: (id: string) => apiFetch<{ revoked: true }>(`/api/me/api-tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
   deleteAccount: () => apiFetch<SessionState>("/api/me", { method: "DELETE" }),
+  /** Checks an account export can start (recent sign-in, not started minutes ago). */
+  checkExport: () => apiFetch<{ ready: true }>("/api/me/export", { method: "POST" }),
+  /** The export download itself (the browser saves the .tar). */
+  exportUrl: "/api/me/export",
   securityLog: (cursor?: string) => apiFetch<SecurityLogPage>(cursor ? `/api/me/security-log?cursor=${encodeURIComponent(cursor)}` : "/api/me/security-log"),
 };

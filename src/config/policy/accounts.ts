@@ -111,3 +111,11 @@ export const DAV = {
   /** macOS "._name" and ".DS_Store" files are accepted and dropped instead of stored. */
   skipMacMetadata: true,
 } as const;
+
+/** "Export account": the whole account as one tar with a manifest of its settings. */
+export const EXPORT = {
+  /** Minutes before the same account can start another export. */
+  repeatAfterMinutes: 10,
+  /** Lease of the one export slot an account holds while its tar streams (renewed while held). */
+  slotLeaseMs: 60_000,
+} as const;

@@ -2,15 +2,20 @@
  * Imports files from the server into an account, read as a tar stream on stdin so the
  * source keeps its own owner and permissions (docs/runbook.md "서버에 있는 파일 가져오기"):
  *   tar -C <folder> -cf - . | docker compose ... run --rm -T tools \
- *     npm run -s storage:import -- --account <id> [--to "Folder/Sub"] [--ignore-quota]
+ *     npm run -s storage:import -- --account <id> [--to "Folder/Sub"] [--ignore-quota] [--with-metadata]
  * Files are copied (the source is never changed), hashed and recorded like uploads; images and
  * videos get thumbnails from the worker. Re-running skips files already there with the same size.
+ * An account export's manifest (.relayfiles/manifest.json) is never imported as a file; with
+ * --with-metadata its tags, notes and Favorites are applied once the files are in.
  */
 import { parseArgs } from "node:util";
 import { extract } from "tar-stream";
 import { runScript } from "./lib/bootstrap.mjs";
 
 const { importRelPath } = await import("../src/domain/import");
+const { EXPORT_MANIFEST_PATH } = await import("../src/domain/account-export");
+const { exportManifestSchema } = await import("../src/contracts/account-export");
+const { applyExportManifest } = await import("../src/server/services/import-metadata.service");
 const { formatSize } = await import("../src/domain/format");
 const { db } = await import("../src/server/db/client");
 const { closeQueues } = await import("../src/server/jobs/queue");
@@ -22,11 +27,12 @@ const { values } = parseArgs({
     account: { type: "string" },
     to: { type: "string", default: "" },
     "ignore-quota": { type: "boolean", default: false },
+    "with-metadata": { type: "boolean", default: false },
   },
 });
 
 if (!values.account || process.stdin.isTTY) {
-  console.error('Usage: tar -C <folder> -cf - . | npm run -s storage:import -- --account <id> [--to "Folder"] [--ignore-quota]');
+  console.error('Usage: tar -C <folder> -cf - . | npm run -s storage:import -- --account <id> [--to "Folder"] [--ignore-quota] [--with-metadata]');
   process.exit(1);
 }
 const accountId = values.account;
@@ -41,8 +47,16 @@ await runScript(async () => {
     const target = await openImportTarget(account, values["ignore-quota"]);
     const counts = { imported: 0, skipped: 0, ignored: 0, bytes: 0 };
 
+    let manifestText: string | null = null;
+
     for await (const entry of process.stdin.pipe(extract())) {
       const { name, type, size = 0, mtime } = entry.header;
+      if (importRelPath(name) === EXPORT_MANIFEST_PATH) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of entry as AsyncIterable<Buffer>) chunks.push(chunk);
+        manifestText = Buffer.concat(chunks).toString("utf8");
+        continue;
+      }
       const rel = importRelPath(name, values.to);
       if (type !== "file" || rel === null) {
         // Folders are created with their files; links, devices and unsafe names are not imported.
@@ -65,6 +79,16 @@ await runScript(async () => {
       console.log(`imported ${rel}${result.file.name === rel.split("/").at(-1) ? "" : ` as ${result.file.name}`} (${formatSize(size)})`);
     }
     console.log(`Done: ${counts.imported} imported (${formatSize(counts.bytes)}), ${counts.skipped} already there, ${counts.ignored} ignored.`);
+    if (values["with-metadata"]) {
+      if (manifestText === null) {
+        console.warn(`No ${EXPORT_MANIFEST_PATH} in the archive: no tags, notes or favorites to apply.`);
+      } else {
+        const manifest = exportManifestSchema.parse(JSON.parse(manifestText));
+        const applied = await applyExportManifest(account, values.to.split("/").filter((segment) => segment !== "" && segment !== "."), manifest);
+        console.log(`Metadata: ${applied.updated} items with tags or notes, ${applied.favorites} favorites, ${applied.notFound} not found.`);
+        for (const { path, reason } of manifest.skipped) console.warn(`not in the export: ${path} (${reason})`);
+      }
+    }
     return 0;
   } catch (error) {
     console.error(`Import stopped: ${error instanceof Error ? error.message : String(error)}`);
