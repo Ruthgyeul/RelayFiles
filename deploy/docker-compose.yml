@@ -167,7 +167,7 @@ services:
     command: *worker-command
     volumes: *storage
     # relay: the health probe calls the app and notifications leave for the webhook; data: PostgreSQL and Redis.
-    networks: [relay, data]
+    networks: [relay, data, scan]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -238,6 +238,39 @@ services:
     networks: [relay]
     depends_on: [app]
 
+  # Virus scans of files received through upload-only links (docs/security.md "업로드 링크 검사").
+  # Off unless started: docker compose --profile clamav up -d, then CLAMAV_HOST=clamav in .env.
+  # About 1.5 GB of memory for the signatures (x86-64 only; on ARM use the host's clamav-daemon).
+  clamav:
+    # Pinned like the other images; bump it with them.
+    image: clamav/clamav:1.4@sha256:cbc30de94b6e9b33ac14136ff45306cee02a1f9ae522394a3cc5b9215d1affe9
+    profiles: [clamav]
+    restart: unless-stopped
+    logging: *logging
+    # The entrypoint hands /var/lib/clamav to the clamav user and switches to it.
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    pids_limit: 256
+    mem_limit: ${CLAMAV_MEMORY_MAX:-2G}
+    environment:
+      # As large as SCAN.maxBytes (2 GB): larger files are not sent and stay unshared.
+      CLAMD_CONF_StreamMaxLength: 2000M
+      CLAMD_CONF_MaxFileSize: 2000M
+      CLAMD_CONF_MaxScanSize: 2000M
+    volumes:
+      - type: bind
+        source: ${DATA_DIR:-/srv/relayfiles}/clamav
+        target: /var/lib/clamav
+        bind: { create_host_path: false }
+    # freshclam downloads signature updates, so this network reaches the internet; only the worker joins it.
+    networks: [scan]
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 30s
+      start_period: 300s
+      retries: 5
+
   cloudflared:
     # Pinned: `latest` would change the tunnel client on any pull. Bump it with the other images.
     image: cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39
@@ -268,3 +301,5 @@ networks:
   # internet, and Nginx or cloudflared (the parts facing visitors) cannot reach the databases.
   data:
     internal: true
+  # The worker and clamd (profile clamav): clamd's signature updates need the internet.
+  scan: {}

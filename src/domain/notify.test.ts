@@ -33,6 +33,11 @@ describe("describeEvent", () => {
     expect(describeEvent({ kind: "link-opened", owner: "anon-k3x9", item: "a.jpg", folder: false, country: null }).message).toBe('The link to "a.jpg" of anon-k3x9 was opened.');
     expect(describeEvent({ kind: "link-used-up", owner: "o", item: "movie.mp4", cause: "limit", downloads: 3 })).toMatchObject({ title: "Download limit reached", urgent: false });
     expect(describeEvent({ kind: "link-used-up", owner: "o", item: "movie.mp4", cause: "limit", downloads: 1 }).message).toContain("limit of 1 download.");
+    expect(describeEvent({ kind: "file-infected", owner: "o", item: "inv\noice.pdf", signature: "Win.Test.EICAR_HDB-1" })).toEqual({
+      title: "Malware removed",
+      message: '"inv oice.pdf" received for o contains Win.Test.EICAR_HDB-1. It was moved to Recently deleted and can\'t be restored or shared.',
+      urgent: true,
+    });
     expect(describeEvent({ kind: "link-used-up", owner: "o", item: "x\ny", cause: "burn", downloads: 1 }).message).toBe('"x y" of o was downloaded. It is deleted at the next cleanup and its link has expired.');
   });
 

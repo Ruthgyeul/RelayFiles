@@ -48,6 +48,7 @@ import {
 import { driverForAccount } from "../services/volume.service";
 import { zipResponse, type ZipEntry } from "../services/zip.service";
 import { markActive } from "../metrics/activity";
+import { scanBlock } from "@/domain/scan";
 
 /** The link owner's account (for the storage volume and the metadata setting). */
 async function ownerOf(link: LoadedLink): Promise<AccountRow> {
@@ -247,7 +248,7 @@ async function liveTranscode(req: Request, driver: StorageDriver, accountId: str
 }
 
 /** Why a file is left out of "Download all", as written in "Not included.txt". */
-type ZipSkip = DownloadBlock | "location" | "not-ready";
+type ZipSkip = DownloadBlock | "location" | "not-ready" | "scanning" | "blocked";
 
 const SKIP_REASONS: Record<ZipSkip, string> = {
   "stream-only": "Stream only",
@@ -255,6 +256,8 @@ const SKIP_REASONS: Record<ZipSkip, string> = {
   paused: "Downloads paused",
   location: "Photo or video that can't be shared without its location data",
   "not-ready": "Photo or video still being prepared for sharing, try again in a moment",
+  scanning: "Still being checked for viruses, try again in a moment",
+  blocked: "Couldn't be checked for viruses",
 };
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
@@ -273,7 +276,7 @@ function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolde
     // A folder inside with its own download limit counts for the files below it, as when they
     // are downloaded one by one: once it has none left, its files stay out.
     const innerBlock = (inner.get(row.id) ?? []).some(downloadsUsedUp) ? "limit" : null;
-    const skip = link.isOwner ? imageBlock : (downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? innerBlock ?? imageBlock);
+    const skip = link.isOwner ? imageBlock : (scanBlock(row.scanState) ?? downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? innerBlock ?? imageBlock);
     files.push({ row, name, segments, skip });
   }
   return { files, folders };

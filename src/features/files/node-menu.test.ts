@@ -5,11 +5,11 @@ import { buildNodeMenu, type NodeActions } from "./node-menu";
 const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
 const noop = () => undefined;
 const all: Required<NodeActions> = Object.fromEntries(
-  ["open", "preview", "download", "downloadZip", "toggleFavorite", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rename", "copy", "move", "delete", "renumber", "duplicates", "properties"].map((key) => [key, noop]),
+  ["open", "preview", "download", "downloadZip", "toggleFavorite", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rescan", "rename", "copy", "move", "delete", "renumber", "duplicates", "properties"].map((key) => [key, noop]),
 ) as Required<NodeActions>;
 
-const folder: Pick<NodeItem, "type" | "kind" | "settings" | "favorite"> = { type: "folder", kind: null, settings };
-const video: Pick<NodeItem, "type" | "kind" | "settings" | "favorite"> = { type: "file", kind: "video", settings };
+const folder: Pick<NodeItem, "type" | "kind" | "settings" | "favorite" | "scan"> = { type: "folder", kind: null, settings };
+const video: Pick<NodeItem, "type" | "kind" | "settings" | "favorite" | "scan"> = { type: "file", kind: "video", settings };
 
 const labels = (entries: ReturnType<typeof buildNodeMenu>) => entries.map((entry) => `${entry.separator ? "| " : ""}${entry.label}`);
 
@@ -43,6 +43,13 @@ describe("buildNodeMenu (design nodeMenu)", () => {
     expect(labels(entries)).toContain("Resume downloads");
     expect(entries.find((entry) => entry.label === "Delete")?.danger).toBe(true);
     expect(labels(entries)).not.toContain("Renumber files");
+  });
+
+  it("offers a new virus scan only for files whose scan failed", () => {
+    const names = (item: typeof video) => buildNodeMenu(item, false, false, all).map((entry) => entry.label);
+    expect(names({ ...video, scan: "failed" })).toContain("Scan again");
+    expect(names({ ...video, scan: "pending" })).not.toContain("Scan again");
+    expect(names(video)).not.toContain("Scan again");
   });
 
   it("offers adding to or removing from Favorites, never for the root", () => {

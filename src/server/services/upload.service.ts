@@ -28,10 +28,11 @@ import { createFolder } from "./node.service";
 import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
 import { resumableUploads } from "../upload/resume";
 import { assertAccountWritable, driverForAccount, lockAccountForWrite } from "./volume.service";
-import { enqueueMedia } from "../jobs/queue";
+import { enqueueMedia, enqueueScan } from "../jobs/queue";
 import { countOne } from "../metrics/counters";
 import { lockedLocationOf } from "./node-location";
 import { logger } from "../logger";
+import { scanningEnabled } from "../scan/clamd";
 
 type Owner = SpaceOwner;
 
@@ -213,6 +214,8 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
   if (!replace) await assertItemRoom(owner, 1);
   const name = existing && !replace ? uniqName(await listSiblingNames(db(), folder.id), fileName, true) : fileName;
   const location = { accountId: owner.id, segments: [...folder.segments, name] };
+  // A visitor's file is scanned before anyone else can get it (CLAMAV_HOST); the owner's own uploads are not.
+  const scanned = Boolean(batch.requestId) && scanningEnabled();
   // The same bytes already in the account: link to them instead of keeping a second copy.
   const twin = await findFileWithContent(db(), owner.id, sha256, BigInt(entry.size), replace?.id ?? null);
   let linked = false;
@@ -242,6 +245,7 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       // Files a visitor sent through an upload-only link stay private until the owner shares
       // them: in a public folder they would otherwise be published at once, from the owner's site.
       ...(replace ? carriedSettingsOf(replace) : { linkId: newLinkId(), ...(batch.requestId ? { visibility: "PRIVATE" as const } : {}) }),
+      ...(scanned ? { scanState: "PENDING" as const } : {}),
     });
     if (replace) {
       await moveLinkEvents(tx, replace.id, placed.id);
@@ -265,6 +269,8 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
     void countOne("deduplicated_files");
   }
   if (replace) await driver.removeAssets(owner.id, [replace.id]).catch((error: unknown) => logger.warn("old media assets not removed", { error }));
-  if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
+  // Thumbnails and copies are made only once the scan found the file clean (scan.service.ts).
+  if (scanned) void enqueueScan([row.id]);
+  else if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
   return { nodeId: row.id, name: row.name, folderId: folder.id };
 }

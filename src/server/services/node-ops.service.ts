@@ -106,7 +106,7 @@ export const topLocation = (accountId: string, item: TopItem): StorageLocation =
  * unless `recoverable` is false: items the cleanup deletes because their link expired or was
  * downloaded once are gone for good (a restore would bring back the ended link).
  */
-export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable = true }: { recoverable?: boolean } = {}): Promise<{ deleted: number }> {
+export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable = true, malware }: { recoverable?: boolean; malware?: string } = {}): Promise<{ deleted: number }> {
   const items = await topLevel(owner.id, ids);
   if (items.length === 0) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner, "write");
@@ -130,7 +130,7 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
     }
     const deleted = rows.filter((row) => row.type === "FILE");
     // The bytes stay on disk until the daily job empties the trash, and count until then.
-    if (recoverable) await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites });
+    if (recoverable) await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites, malware });
     else
       await recordTrashed(
         tx,
@@ -154,6 +154,8 @@ interface DeletedTrees {
   full: Node[];
   /** Where each row was listed in Favorites. */
   favorites: ReadonlyMap<string, string | null>;
+  /** Removed by the virus scan: listed (with the signature) but never restored. */
+  malware?: string;
 }
 
 /**
@@ -193,6 +195,7 @@ async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: str
       originalParentId: row.parentId,
       originalPath: chain.slice(0, -1).map((ancestor) => ancestor.name),
       deletedAt: at,
+      ...(trees.malware ? { reason: "INFECTED" as const, malware: trees.malware } : {}),
       nodes: toSnapshot(deleted[index]!.tree, trees.favorites),
     })),
   );

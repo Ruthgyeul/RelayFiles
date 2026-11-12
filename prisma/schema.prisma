@@ -146,6 +146,22 @@ enum Visibility {
   PUBLIC
 }
 
+/// Virus scan of a file received through an upload-only link (CLAMAV_HOST): NONE = not scanned
+/// (the owner's own uploads, or scanning off), PENDING = waiting for clamd, CLEAN, FAILED = could
+/// not be scanned (visitors never get it). Infected files are moved to the trash, never kept.
+enum ScanState {
+  NONE
+  PENDING
+  CLEAN
+  FAILED
+}
+
+/// Why an item is in "Recently deleted": deleted by the owner, or removed because it contains malware (not restorable).
+enum DeleteReason {
+  DELETED
+  INFECTED
+}
+
 /// Metadata removed from a shared copy: SENSITIVE keeps capture time and camera, ALL keeps only orientation and colour.
 enum StripMode {
   SENSITIVE
@@ -182,6 +198,7 @@ model Node {
   derivedMode   StripMode?
   /// Set by the reconcile job when the file is missing on disk.
   missing       Boolean     @default(false)
+  scanState     ScanState   @default(NONE)
   /// Public link id (/d/<linkId>). Never changes during migrations; regenerated only on request.
   linkId        String      @unique
   visibility    Visibility  @default(INHERIT)
@@ -437,6 +454,9 @@ model DeletedItem {
   account          Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   /// Volume whose trash holds the item (the account's volume when it was deleted).
   volumeId         String
+  reason           DeleteReason @default(DELETED)
+  /// The signature clamd reported, for an item removed as INFECTED.
+  malware          String?
   /// Where the item waits in that trash (what StorageDriver.moveToTrash returned).
   trashPath        String
   /// The TrashedBytes row holding this item's file bytes, removed on restore; null without files.

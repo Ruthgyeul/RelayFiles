@@ -27,7 +27,9 @@ export type NotifyEvent =
   /** A share link was opened for the first time in a while (owners who turned this on). */
   | { kind: "link-opened"; owner: string; item: string; folder: boolean; country: string | null }
   /** A download used up a link item's downloads: its limit was reached, or it is deleted after this first download. */
-  | { kind: "link-used-up"; owner: string; item: string; cause: "limit" | "burn"; downloads: number };
+  | { kind: "link-used-up"; owner: string; item: string; cause: "limit" | "burn"; downloads: number }
+  /** The virus scan found malware in a file received through an upload-only link; it was moved to the trash. */
+  | { kind: "file-infected"; owner: string; item: string; signature: string };
 
 export type NotifyKind = NotifyEvent["kind"];
 
@@ -97,6 +99,12 @@ export function describeEvent(event: NotifyEvent): NotifyText {
       return event.cause === "burn"
         ? { title: "Downloaded once, deleting", message: `"${clean(event.item)}" of ${clean(event.owner)} was downloaded. It is deleted at the next cleanup and its link has expired.`, urgent: false }
         : { title: "Download limit reached", message: `"${clean(event.item)}" of ${clean(event.owner)} reached its limit of ${plural(event.downloads, "download")}. Its link no longer offers downloads.`, urgent: false };
+    case "file-infected":
+      return {
+        title: "Malware removed",
+        message: `"${clean(event.item)}" received for ${clean(event.owner)} contains ${clean(event.signature)}. It was moved to Recently deleted and can't be restored or shared.`,
+        urgent: true,
+      };
     case "backup-failed":
       return {
         title: "Backup check failed",

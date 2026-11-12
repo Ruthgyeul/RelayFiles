@@ -20,6 +20,8 @@ export interface DeletedItemDto {
   expiresAt: string;
   /** Folder names from the account root down to the folder it was in when it was deleted. */
   location: string[];
+  /** Removed by the virus scan (the signature clamd found); such items cannot be restored. */
+  malware?: string;
 }
 
 /** POST /api/trash/:id/restore: where the item went. */

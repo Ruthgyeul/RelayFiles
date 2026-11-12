@@ -1,7 +1,7 @@
 import "server-only";
 import { verify } from "@node-rs/argon2";
 import { getAppEnv, getEnv } from "@/config/env";
-import { MS, SHARE } from "@/config/policy";
+import { MS, SCAN, SHARE } from "@/config/policy";
 import type { ShareItem, SharePage, ShareView } from "@/contracts/share";
 import { deletionDate } from "@/domain/account";
 import { shareStatus, busyBadge, strictestGuard, type Busy, type ShareStatus } from "@/domain/share";
@@ -20,6 +20,7 @@ import { busyLevels } from "./busy";
 import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "./unlock-cookie";
 import { countUnlockGuess, refundUnlockGuess } from "./unlock-limit";
 import { limitingIds } from "@/domain/share-limits";
+import { scanBlock } from "@/domain/scan";
 
 /** Who is looking at a share link. */
 export interface ShareViewer {
@@ -307,6 +308,12 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
   const trail = trailInLink(chain, link.root.id, now);
   const row = chain.at(-1);
   if (!trail || !row || row.id !== nodeId || row.type !== "FILE") throw new ApiError("NOT_FOUND");
+  // A file received through an upload-only link reaches visitors only once the virus scan found it clean.
+  if (!link.isOwner) {
+    const scan = scanBlock(row.scanState);
+    if (scan === "scanning") throw new ApiError("SCAN_PENDING", undefined, { retryAfter: SCAN.pendingRetrySec });
+    if (scan === "blocked") throw new ApiError("FILE_BLOCKED");
+  }
   const path = trail.map((at) => at.id);
   const guarded = limitingIds(chain);
   const counted = [...new Set([row.id, link.root.id, ...guarded])];

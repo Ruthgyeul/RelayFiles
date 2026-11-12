@@ -26,6 +26,7 @@ const MOVED_MESSAGE = "This item was deleted before your files moved to new stor
 const NAME_TAKEN_MESSAGE = "Something with the same name was just added there. Try again.";
 const IN_THE_WAY_MESSAGE = "Something on the server's disk is in the way. Ask the admin to run a storage check, then try again.";
 const GONE_MESSAGE = "This item was already removed for good.";
+const INFECTED_MESSAGE = "This file was removed because the virus scan found malware in it, so it can't be restored.";
 
 /** "Recently deleted" of an account, newest first. */
 export async function listRecentlyDeleted(accountId: string): Promise<DeletedItemDto[]> {
@@ -40,6 +41,7 @@ export async function listRecentlyDeleted(accountId: string): Promise<DeletedIte
     deletedAt: row.deletedAt.toISOString(),
     expiresAt: trashExpiresAt(row.deletedAt, trashRetentionHours()).toISOString(),
     location: row.originalPath,
+    ...(row.malware ? { malware: row.malware } : {}),
   }));
 }
 
@@ -86,6 +88,7 @@ async function restoreTarget(tx: DbClient, accountId: string, parentId: string |
  */
 export async function restoreDeletedItem(owner: NodeOwner, id: string): Promise<RestoredItem> {
   const item = await requireDeletedItem(owner, id);
+  if (item.reason === "INFECTED") throw new ApiError("FORBIDDEN", INFECTED_MESSAGE);
   const driver = await driverForAccount(owner, "write");
   const now = new Date();
   const rows = fromSnapshot(item.nodes, owner.id, now);

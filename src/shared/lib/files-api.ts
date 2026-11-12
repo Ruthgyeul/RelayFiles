@@ -45,6 +45,7 @@ export const filesApi = {
   saveSettings: (id: string, settings: SettingsInput) => apiFetch<NodeItem>(`${node(id)}/settings`, { method: "PUT", json: settings }),
   newLink: (id: string) => apiFetch<NodeItem>(`${node(id)}/link`, { method: "POST" }),
   activity: (id: string) => apiFetch<LinkEventDto[]>(`${node(id)}/activity`),
+  rescan: (id: string) => apiFetch<{ queued: true }>(`${node(id)}/scan`, { method: "POST" }),
   setPaused: (id: string, paused: boolean) => apiFetch<NodeItem>(`${node(id)}/pause`, { method: "PUT", json: { paused } }),
   renumberPreview: (folderId: string, sort: RenumberSort, order: RenumberOrder) => apiFetch<RenumberPreview>(`${node(folderId)}/renumber?sort=${sort}&order=${order}`),
   /** `expect` = the files whose name changes (plan order), `count` = files the plan numbered. */

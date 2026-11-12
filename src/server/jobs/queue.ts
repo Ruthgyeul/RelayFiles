@@ -10,9 +10,10 @@ export interface MediaJob {
   nodeId: string;
   /**
    * "process" (default): thumbnails, previews, stripped copies and the date taken;
-   * "transcode": store an MP4 conversion; "taken": read only the date taken.
+   * "transcode": store an MP4 conversion; "taken": read only the date taken; "scan": the
+   * virus scan of a file received through an upload-only link (before any other job).
    */
-  task?: "process" | "transcode" | "taken";
+  task?: "process" | "transcode" | "taken" | "scan";
 }
 
 /**
@@ -72,6 +73,16 @@ export async function enqueueTranscode(nodeId: string): Promise<void> {
     await mediaQueue().add("transcode", { nodeId, task: "transcode" }, { jobId: `transcode-${nodeId}` });
   } catch (error) {
     logger.warn("transcode job not queued", { error });
+  }
+}
+
+/** Queues virus scans (one pending job per file). A file stays PENDING (not shared) until its scan ran. */
+export async function enqueueScan(nodeIds: readonly string[]): Promise<void> {
+  if (nodeIds.length === 0) return;
+  try {
+    await mediaQueue().addBulk(nodeIds.map((nodeId) => ({ name: "scan", data: { nodeId, task: "scan" as const }, opts: { jobId: `scan-${nodeId}` } })));
+  } catch (error) {
+    logger.warn("scan jobs not queued", { error, count: nodeIds.length });
   }
 }
 

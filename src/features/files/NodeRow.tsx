@@ -9,6 +9,7 @@ import { ListPreview } from "@/features/viewer/ListPreview";
 import { useResume } from "@/features/viewer/useResume";
 import { cn } from "@/shared/lib/cn";
 import { BusyPill } from "@/shared/ui/BusyPill";
+import { Pill } from "@/shared/ui/Pill";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
@@ -101,6 +102,11 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
             {item.favorite && <Icon name="star" weight="fill" size={13} label="In Favorites" className="shrink-0 text-warn-strong" />}
             {item.settings.hasPassword && <Icon name="lock-simple" size={13} label="Password protected" className="text-t4" />}
             {item.busy && <BusyPill busy={item.busy} />}
+            {item.scan && (
+              <Pill tone={item.scan === "pending" ? "info" : "warn"} icon={item.scan === "pending" ? "shield-check" : "shield-warning"} title={item.scan === "pending" ? "Received through an upload link: being checked for viruses. Visitors can't get it yet." : "The virus check failed, so visitors can't get it. Choose Scan again in its menu."}>
+                {item.scan === "pending" ? "SCANNING" : "NOT SCANNED"}
+              </Pill>
+            )}
           </span>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-t4">
             <span className="flex items-center gap-[5px]">

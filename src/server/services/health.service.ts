@@ -7,6 +7,7 @@ import { logger } from "../logger";
 import { redis } from "../redis";
 import { configuredVolumeRoot } from "../storage/registry";
 import { readVolumeMarker } from "../storage/volume";
+import { pingClamd, scanningEnabled } from "../scan/clamd";
 
 async function probe(name: string, check: () => Promise<boolean>): Promise<ComponentStatus> {
   let timer: NodeJS.Timeout | undefined;
@@ -31,14 +32,15 @@ export function overallStatus(components: Health["components"]): ComponentStatus
 
 /** Checks PostgreSQL, Redis and the storage volume marker. */
 export async function checkHealth(now: Date = new Date()): Promise<Health> {
-  const [database, cache, storage] = await Promise.all([
+  const [database, cache, storage, scanner] = await Promise.all([
     probe("database", async () => {
       await db().$queryRaw`SELECT 1`;
       return true;
     }),
     probe("redis", async () => (await redis().ping()) === "PONG"),
     probe("storage", async () => (await readVolumeMarker(configuredVolumeRoot())) !== null),
+    scanningEnabled() ? probe("scanner", () => pingClamd(STATUS.healthCheckTimeoutMs)) : Promise.resolve(null),
   ]);
-  const components = { database, redis: cache, storage };
+  const components = { database, redis: cache, storage, ...(scanner ? { scanner } : {}) };
   return { status: overallStatus(components), version: APP_VERSION, time: now.toISOString(), components };
 }

@@ -45,6 +45,8 @@ export interface NodeItem {
   busy: BusyBadge | null;
   /** Listed in Favorites (absent otherwise). */
   favorite?: true;
+  /** Received through an upload-only link and not known to be clean yet: being scanned, or the scan failed (visitors cannot get it). */
+  scan?: "pending" | "failed";
 }
 
 export interface FolderCrumb {

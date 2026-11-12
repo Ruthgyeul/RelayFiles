@@ -43,6 +43,8 @@ export const deployEnv = z.object({
   APP_CPUS: cpus.default(3),
   WORKER_MEMORY_MAX: memorySize.default("2G"),
   WORKER_CPUS: cpus.default(2),
+  /** Memory for clamd (compose profile clamav): the virus signatures take about 1.5 GB. */
+  CLAMAV_MEMORY_MAX: memorySize.default("2G"),
   /**
    * Seconds a stopping app or worker gets to finish requests or jobs before it is killed (compose
    * stop_grace_period, systemd TimeoutStopSec, k3s terminationGracePeriodSeconds).

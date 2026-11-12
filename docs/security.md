@@ -92,6 +92,22 @@
 - tus 경로(`/api/uploads/tus/*`)는 `proxy.ts` matcher에서 제외한다. 프록시는 요청 본문을 메모리에 복사(기본 10MB 제한)하기 때문이다. 이 경로는 쿠키(SameSite=Lax)와 배치 소유권으로 보호된다. 배치를 만드는 `POST /api/uploads`는 프록시의 Origin 검사를 거친다.
 - **업로드 전용 링크**(`/r/<id>`, `FileRequest`): 방문자(계정 없음)가 소유자의 폴더 하나에 파일을 넣는다. 방문자에게는 제목·소유자 이름·남은 한도만 보이고 폴더 id·이름·내용은 보내지 않는다(tus 완료 응답도 파일 이름만). 파일은 이름만 받고(폴더 구조 없음) 같은 이름이 있으면 "name (2)"로 둔다. 비밀번호는 공유 링크와 같이 argon2로 저장하고, 입력한 기기는 `rf_sh` 쿠키에 `req:<id>` 항목(비밀번호 해시 태그 포함)으로 기억한다. 틀린 비밀번호는 요청·주소당 `SHARE.unlockMaxAttempts`회까지. 업로드 배치는 요청·주소당 시간당 `FILE_REQUEST.batchesPerHour`(30)개, 한 번에 `maxFilesPerBatch`(100)개까지. 소유자의 쿼터·항목 수·볼륨 공간이 그대로 적용되고, 링크 자체의 "파일 N개까지"·"총 X MB까지"는 업로드 예약과 같은 Lua 예약(`request-files`·`request-bytes` 범위)으로 지켜 동시에 시작한 업로드가 한도를 함께 넘지 못한다. tus 이어 올리기·완료는 업로드 id에 기록된 요청이 아직 받을 수 있고 이 기기가 비밀번호를 입력했을 때만 허용한다(배치 id만 알아서는 보낼 수 없다). 링크를 지우거나 만료되면 진행 중인 업로드도 멈춘다. 만료된 링크는 `FILE_REQUEST.expiredKeptDays`(30일) 동안 "expired"로 답한 뒤 매일 정리에서 지워지고, 받은 파일은 폴더에 남는다. 소유자 계정이 삭제일에 닿으면 링크도 만료로 본다.
 
+### 업로드 링크 검사 (ClamAV)
+
+`CLAMAV_HOST`가 설정되면 업로드 전용 링크로 받은 파일을 clamd(INSTREAM, `server/scan/clamd.ts`)로 검사한다. 소유자가 직접 올린 파일은 검사하지 않는다(`scanState = NONE`).
+
+- **흐름**: 받은 파일은 `PENDING`으로 놓인다. 썸네일과 공유 제거본은 만들지 않고 검사 작업(`media` 큐의 `scan` task)만 큐에 넣는다.
+  - 깨끗하면 `CLEAN`이 되고, 그때부터 미디어 작업을 큐에 넣는다.
+  - 감염이면 `deleteItems`로 휴지통에 옮긴다. `DeletedItem.reason = INFECTED`와 시그니처를 남기고, 복원은 403으로 거부한다. 소유자에게는 긴급 알림 `file-infected`를 보낸다.
+  - clamd가 거부하면(크기 한도 등) `FAILED`가 된다. `SCAN.maxBytes`(2GB)보다 큰 파일은 보내지 않고 바로 `FAILED`로 둔다.
+  - clamd에 닿지 못하거나 시간이 넘으면 작업을 다시 시도한다(`MEDIA.jobAttempts`). 마지막 시도도 실패하면 `FAILED`로 둔다. `PENDING`으로 영원히 남는 파일은 없다.
+- **차단**: 방문자는 `NONE`·`CLEAN` 파일만 받는다(`share.service.ts` `resolveSharedFile`).
+  - `PENDING`이면 503 `SCAN_PENDING`과 `Retry-After`, `FAILED`면 403 `FILE_BLOCKED`.
+  - 파일·스트림·썸네일·미리보기·변환 모두 같은 함수를 거친다. zip에서는 빠지고 "Not included.txt"에 적힌다.
+  - 소유자(내려받기, 링크 미리보기)는 받을 수 있다. 목록에 SCANNING / NOT SCANNED 배지가 붙고, `FAILED`에는 메뉴 "Scan again"(`POST /api/nodes/:id/scan`)이 있다.
+- **복원과 복사**: 휴지통 스냅숏에 `scanState`를 남기므로, 검사 중이거나 실패한 파일을 지웠다가 복원해도 그대로다. 복사본도 같은 상태를 이어받는다.
+- **한계**: 같은 내용의 파일이 계정에 이미 있어도 다시 검사한다. clamd 서명은 컨테이너의 freshclam이 갱신하므로, `scan` 네트워크는 인터넷에 나갈 수 있다(worker와 clamav만 연결).
+
 ## 순번 정리·중복 찾기
 
 - 두 기능 모두 활성 계정의 폴더만 다룬다(다른 계정 폴더는 404). 경로는 서버가 노드 id로 계산하고, 클라이언트가 보내는 것은 정렬 방식과 미리보기에서 받은 `{ id, to }` 목록뿐이다. 서버는 그 목록을 믿지 않고 잠금 뒤 계획을 다시 계산해 같을 때만 실행한다.

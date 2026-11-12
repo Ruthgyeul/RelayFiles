@@ -54,6 +54,8 @@
               "INTERNAL",
               "MAINTENANCE",
               "STORAGE_OFFLINE",
+              "SCAN_PENDING",
+              "FILE_BLOCKED",
               "MEDIA_NOT_READY",
               "STORAGE_BUSY",
               "INSUFFICIENT_STORAGE"
@@ -434,6 +436,14 @@
                               "description": "Listed in Favorites",
                               "type": "boolean",
                               "const": true
+                            },
+                            "scan": {
+                              "description": "Received through an upload link and still being scanned, or not scannable (not shared)",
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "failed"
+                              ]
                             }
                           },
                           "required": [
@@ -679,6 +689,14 @@
                                 "description": "Listed in Favorites",
                                 "type": "boolean",
                                 "const": true
+                              },
+                              "scan": {
+                                "description": "Received through an upload link and still being scanned, or not scannable (not shared)",
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "failed"
+                                ]
                               }
                             },
                             "required": [
@@ -1023,6 +1041,14 @@
                               "description": "Listed in Favorites",
                               "type": "boolean",
                               "const": true
+                            },
+                            "scan": {
+                              "description": "Received through an upload link and still being scanned, or not scannable (not shared)",
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "failed"
+                              ]
                             }
                           },
                           "required": [
@@ -1684,6 +1710,14 @@
                           "description": "Listed in Favorites",
                           "type": "boolean",
                           "const": true
+                        },
+                        "scan": {
+                          "description": "Received through an upload link and still being scanned, or not scannable (not shared)",
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "failed"
+                          ]
                         }
                       },
                       "required": [
@@ -2852,6 +2886,14 @@
                                 "type": "boolean",
                                 "const": true
                               },
+                              "scan": {
+                                "description": "Received through an upload link and still being scanned, or not scannable (not shared)",
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "failed"
+                                ]
+                              },
                               "parentPath": {
                                 "type": "string"
                               },
@@ -3216,6 +3258,14 @@
                             "description": "Listed in Favorites",
                             "type": "boolean",
                             "const": true
+                          },
+                          "scan": {
+                            "description": "Received through an upload link and still being scanned, or not scannable (not shared)",
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "failed"
+                            ]
                           },
                           "parentPath": {
                             "type": "string"
