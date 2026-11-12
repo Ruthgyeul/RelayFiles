@@ -3,7 +3,7 @@
  *   --account <accountId> --to <volumeId>     one account
  *   --volume <volumeId> [--to <volumeId>]     every account on a volume (it stops taking new ones)
  * Files are copied, every SHA-256 is compared, then the account switches; the old copy waits
- * in the source volume's trash for STORAGE.trashRetentionHours. Run `npm run volume:list` first.
+ * in the source volume's trash for TRASH_RETENTION_HOURS. Run `npm run volume:list` first.
  */
 import { parseArgs } from "node:util";
 import { runScript } from "./lib/bootstrap.mjs";

@@ -22,6 +22,8 @@ export interface ClientConfig {
   publicUrl: string;
   /** tus chunk size in bytes (below Cloudflare's request limit). */
   uploadChunkBytes: number;
+  /** Hours deleted items can be restored (TRASH_RETENTION_HOURS), for the delete dialogs' wording. */
+  trashRetentionHours: number;
 }
 
 export interface TokenToSave {

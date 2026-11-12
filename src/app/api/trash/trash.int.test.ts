@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getEnv } from "@/config/env";
 import { afterAll, describe, expect, it } from "vitest";
 import { POST as createFolder } from "@/app/api/folders/route";
 import { POST as remove } from "@/app/api/nodes/delete/route";
@@ -68,7 +69,7 @@ describe("recently deleted", () => {
     const [item, ...rest] = await list(m);
     expect(rest).toEqual([]);
     expect(item).toMatchObject({ name: "Trip", type: "folder", kind: null, size: "12", itemCount: 4, location: ["root"] });
-    expect(new Date(item!.expiresAt).getTime() - new Date(item!.deletedAt).getTime()).toBe(STORAGE.trashRetentionHours * MS.hour);
+    expect(new Date(item!.expiresAt).getTime() - new Date(item!.deletedAt).getTime()).toBe(getEnv("storage").TRASH_RETENTION_HOURS * MS.hour);
 
     const res = await restoreItem(m, item!.id);
     expect(res.status).toBe(200);
@@ -261,6 +262,20 @@ describe("cleanup and volumes", () => {
     expect((await list(m)).map((entry) => entry.name).sort()).toEqual(["fresh.txt", "old.txt"]);
     await forgetDeletedBefore(prisma, cutoff, [volumeId]);
     expect((await list(m)).map((entry) => entry.name)).toEqual(["fresh.txt"]);
+  });
+
+  it("keeps items for TRASH_RETENTION_HOURS", async () => {
+    const env = getEnv("storage") as { TRASH_RETENTION_HOURS: number };
+    const before = env.TRASH_RETENTION_HOURS;
+    env.TRASH_RETENTION_HOURS = 72;
+    try {
+      const m = await member();
+      await del(m, [await addFile(m, m.rootId, [], "keep.txt", "k", "text/plain")]);
+      const [item] = await list(m);
+      expect(new Date(item!.expiresAt).getTime() - new Date(item!.deletedAt).getTime()).toBe(72 * MS.hour);
+    } finally {
+      env.TRASH_RETENTION_HOURS = before;
+    }
   });
 
   it("refuses with 409 once the account moved to another volume, and goes with the account", async () => {

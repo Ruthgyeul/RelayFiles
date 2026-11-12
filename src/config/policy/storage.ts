@@ -16,8 +16,11 @@ export const STORAGE = {
   /**
    * Deleted items stay in the volume's trash this long before they are removed for good (the
    * daily cleanup's first run after it); until then they can be restored from "Recently deleted".
+   * The default of TRASH_RETENTION_HOURS; read it through trashRetentionHours().
    */
   trashRetentionHours: 24,
+  /** Longest TRASH_RETENTION_HOURS (30 days): deleted bytes keep counting toward the quota meanwhile. */
+  trashRetentionMaxHours: 720,
   /** Most items "Recently deleted" lists (newest first). */
   recentlyDeletedListMax: 1_000,
   /** Filesystem limits (ext4; the name limit is domain/names MAX_NAME_BYTES). */

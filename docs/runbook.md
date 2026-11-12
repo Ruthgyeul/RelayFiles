@@ -270,7 +270,7 @@ $C run --rm tools npm run storage:fsck -- --fix        # 디스크에만 있는 
 $C run --rm tools npm run storage:fsck -- --account <id>
 ```
 
-DB 행은 지우지 않는다. 휴지통은 24시간 뒤 비워지므로 그 전에는 되살릴 수 있다. 심볼릭 링크는 옮기지 않고 "not moved"로 보고하니 직접 지운다.
+DB 행은 지우지 않는다. 휴지통은 `TRASH_RETENTION_HOURS`(기본 24시간) 뒤 비워지므로 그 전에는 되살릴 수 있다. 심볼릭 링크는 옮기지 않고 "not moved"로 보고하니 직접 지운다.
 
 `--fix`는 앱이 켜져 있어도 된다. 볼륨마다 진행 중인 쓰기(업로드·복사 등의 스토리지 트랜잭션)가 끝나기를 기다린 뒤(최대 `STORAGE.writeDrainTimeoutSec` 600초) 그 볼륨을 `READONLY`로 잡고 고치며, 끝나면(실패해도) 원래 상태로 되돌린다. 그동안 그 볼륨의 변경은 503 `STORAGE_BUSY`, 탐색·다운로드는 계속된다. 커밋되기 전인 업로드의 파일을 "디스크에만 있음"으로 휴지통에 넣지 않기 위해서다. 보고만 하는 실행은 볼륨을 바꾸지 않는다(진행 중인 업로드가 잠깐 차이로 보일 수 있다).
 
@@ -407,7 +407,7 @@ $C run --rm tools npm run volume:migrate -- --account <accountId> --to <volumeId
 1. 그 계정에서 진행 중인 쓰기(복사·업로드의 스토리지 트랜잭션)가 끝나기를 기다린 뒤(최대 600초) 계정을 `migrating`으로 표시하고 원본의 해시를 계산한다. 그 계정의 변경은 503 `STORAGE_BUSY`로 잠시 막히고(업로드 시작과, 표시 전에 시작해 아직 커밋하지 않은 복사·업로드 포함), 탐색·다운로드·공유 링크는 계속된다.
 2. 사용자 폴더를 새 볼륨에 복사하고(권한 유지), 모든 파일의 SHA-256을 원본과 비교한다(빠진 파일, 다른 파일, 남는 파일). 전환 직전에 원본이 해시한 그대로인지, DB의 모든 항목이 복사본에 있는지 다시 본다. 하나라도 다르면 복사본을 지우고 멈춘다(계정은 원래 볼륨에 그대로, `The copy does not match the account now …`). 디스크에 없는데 `missing` 표시가 없는 파일이 원래 있었다면 `storage:fsck -- --fix --account <id>`로 표시한 뒤 다시 실행한다.
 3. 한 번의 DB 업데이트로 `volumeId`를 바꾸고 표시를 푼다. `linkId`, 노드 id, 토큰은 바뀌지 않는다. 그 뒤 원래 볼륨에 쓰려던 작업은 503으로 거절된다.
-4. 원본은 원래 볼륨의 `system/trash/`로 옮겨져 `STORAGE.trashRetentionHours`(24시간) 뒤 정리된다. 그 전에는 되돌릴 수 있다(같은 명령으로 원래 볼륨을 지정).
+4. 원본은 원래 볼륨의 `system/trash/`로 옮겨져 `TRASH_RETENTION_HOURS`(기본 24시간) 뒤 정리된다. 그 전에는 되돌릴 수 있다(같은 명령으로 원래 볼륨을 지정).
 
 이미 대상 볼륨에 있으면 아무것도 하지 않는다("The account is already on that volume.").
 
@@ -418,7 +418,7 @@ $C run --rm tools npm run volume:migrate -- --account <accountId> --to <volumeId
 ```bash
 $C run --rm tools npm run volume:migrate -- --volume <옛 volumeId> --to <새 volumeId>   # --to를 빼면 여유 공간이 큰 볼륨으로
 $C run --rm tools npm run volume:list       # 옛 볼륨: DRAINING, 0 accounts
-# 24시간 뒤(매일 정리 작업이 DRAINING 볼륨의 휴지통도 비운다) 또는 옛 SSD의 system/trash를 확인한 뒤
+# TRASH_RETENTION_HOURS(기본 24시간) 뒤(매일 정리 작업이 DRAINING 볼륨의 휴지통도 비운다) 또는 옛 SSD의 system/trash를 확인한 뒤
 $C run --rm tools npm run volume:remove -- <옛 volumeId>
 rm deploy/nginx/volumes/<옛 volumeId>.conf   # 있으면. 오버레이에서 마운트도 지운다
 $C up -d app worker nginx

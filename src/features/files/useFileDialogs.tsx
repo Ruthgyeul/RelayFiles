@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { STORAGE } from "@/config/policy";
 import type { NodeItem } from "@/contracts/nodes";
 import { formatSize } from "@/domain/format";
 import { retentionText } from "@/domain/trash";
@@ -33,14 +32,14 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 const labelOf = (items: NodeItem[]) => (items.length === 1 ? `"${items[0]!.name}"` : `${items.length} items`);
 
 /** Delete confirmation text (the design's, with the "Recently deleted" window instead of "can't be undone"). */
-export function deleteText(items: NodeItem[]): { title: string; text: string } {
+export function deleteText(items: NodeItem[], retentionHours: number): { title: string; text: string } {
   const one = items.length === 1 ? items[0]! : null;
   const size = items.reduce((sum, item) => sum + Number(item.size), 0);
   const files = items.reduce((sum, item) => sum + item.fileCount, 0);
   const what = one && one.type === "file" ? formatSize(size) : `${plural(files, "file")} · ${formatSize(size)}`;
   return {
     title: one ? `Delete "${one.name}"?` : `Delete ${items.length} items?`,
-    text: `${what} will be moved to Recently deleted and can be restored for ${retentionText(STORAGE.trashRetentionHours)}, then ${one ? "it is" : "they are"} removed for good. Share links to ${one ? "it" : "them"} stop working.`,
+    text: `${what} will be moved to Recently deleted and can be restored for ${retentionText(retentionHours)}, then ${one ? "it is" : "they are"} removed for good. Share links to ${one ? "it" : "them"} stop working.`,
   };
 }
 
@@ -50,7 +49,7 @@ export function deleteText(items: NodeItem[]): { title: string; text: string } {
  */
 export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }: Context) {
   const router = useRouter();
-  const { notify } = useShell();
+  const { notify, config } = useShell();
   const [rename, setRename] = useState<{ item: NodeItem; error?: string } | null>(null);
   const [move, setMove] = useState<MoveRequest | null>(null);
   const [remove, setRemove] = useState<NodeItem[] | null>(null);
@@ -113,7 +112,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
     }
   };
 
-  const removal = remove ? deleteText(remove) : null;
+  const removal = remove ? deleteText(remove, config.trashRetentionHours) : null;
   const dialogs: ReactNode = (
     <>
       {rename && (

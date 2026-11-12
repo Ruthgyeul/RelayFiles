@@ -1,6 +1,6 @@
 /**
  * "Recently deleted": deleted items wait in the volume's trash for a retention window
- * (STORAGE.trashRetentionHours) and can be restored until the daily job empties it.
+ * (TRASH_RETENTION_HOURS) and can be restored until the daily job empties it.
  */
 
 import { MS } from "@/config/policy";

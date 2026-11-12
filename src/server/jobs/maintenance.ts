@@ -1,7 +1,7 @@
 import "server-only";
 import { Queue, Worker, type Job, type JobSchedulerTemplateOptions } from "bullmq";
 import { getEnv } from "@/config/env";
-import { JOBS, MS, STORAGE, TRANSCODE } from "@/config/policy";
+import { JOBS, MS, TRANSCODE } from "@/config/policy";
 import { db } from "../db/client";
 import { logger } from "../logger";
 import { forgetDeletedBefore } from "../repositories/deleted-item.repo";
@@ -16,6 +16,7 @@ import { purgeOldAuditEvents } from "../services/audit.service";
 import { driverFor } from "../storage/registry";
 import { queueConnection } from "./queue";
 import { watchVolumes } from "./volume-watch";
+import { trashRetentionHours } from "../storage/trash-retention";
 
 /** The daily cleanup, alone on its queue: however long it runs, the probes keep their schedule. */
 export const MAINTENANCE_QUEUE = "maintenance";
@@ -47,7 +48,7 @@ export interface RunningQueue {
 export async function runMaintenance(now: Date) {
   const cleanup = await runCleanup(now);
   await recordCleanup({ at: now.toISOString(), ...cleanup }).catch((error: unknown) => logger.warn("cleanup result not stored", { error }));
-  const trashBefore = new Date(now.getTime() - STORAGE.trashRetentionHours * MS.hour);
+  const trashBefore = new Date(now.getTime() - trashRetentionHours() * MS.hour);
   const uploadsBefore = new Date(now.getTime() - getEnv("uploads").UPLOAD_TMP_TTL_HOURS * MS.hour);
   const transcodedBefore = new Date(now.getTime() - TRANSCODE.cacheKeepDays * MS.day);
   let trash = 0;

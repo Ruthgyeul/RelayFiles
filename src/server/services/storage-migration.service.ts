@@ -15,6 +15,7 @@ import { userRootOf } from "../storage/safe-path";
 import { copyTree, hashTree, treeDifferences } from "../storage/tree";
 import { readVolumeMarker, writeVolumeMarker } from "../storage/volume";
 import { endMaintenanceHold, finishAccountMove, startAccountMove, startMaintenanceHold, volumeForNewAccount } from "./volume.service";
+import { trashRetentionHours } from "../storage/trash-retention";
 
 type Log = (message: string) => void;
 const exists = (path: string) => stat(path).then(() => true, () => false);
@@ -95,7 +96,7 @@ export interface MoveReport {
  * running writes and mark it as migrating (changes are refused, reads keep working) → copy →
  * compare every file's SHA-256 → check the original and the database rows against the copy once
  * more → switch the account in one update → move the old copy to the source trash,
- * where it stays for STORAGE.trashRetentionHours before it is purged.
+ * where it stays for TRASH_RETENTION_HOURS before it is purged.
  * Share links, tokens and node ids do not change.
  */
 export async function moveAccountToVolume(accountId: string, targetVolumeId: string, log: Log = () => undefined): Promise<MoveReport | null> {
@@ -172,6 +173,6 @@ export async function drainVolume(sourceVolumeId: string, targetVolumeId: string
     const report = await moveAccountToVolume(id, target, log);
     if (report) reports.push(report);
   }
-  log(`${sourceVolumeId}: ${reports.length} account(s) moved; the daily job purges its trash after STORAGE.trashRetentionHours, then remove the volume.`);
+  log(`${sourceVolumeId}: ${reports.length} account(s) moved; the daily job purges its trash after ${trashRetentionHours()} hours, then remove the volume.`);
   return reports;
 }
