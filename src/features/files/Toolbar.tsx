@@ -78,6 +78,9 @@ export function Toolbar(props: ToolbarProps) {
         <Icon name="arrows-down-up" size={20} />
         <span className="max-sm:hidden">{SORT_SHORT_LABEL[props.sort]}</span>
       </button>
+      <Link href="/files/storage" title="Storage" aria-label="Storage" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
+        <Icon name="hard-drives" size={20} />
+      </Link>
       <Link href="/files/deleted" title="Recently deleted" aria-label="Recently deleted" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
         <Icon name="clock-counter-clockwise" size={20} />
       </Link>

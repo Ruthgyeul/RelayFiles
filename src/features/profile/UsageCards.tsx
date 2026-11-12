@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ProfileData } from "@/contracts/profile";
 import { formatSize } from "@/domain/format";
 import { quotaMeter } from "@/domain/quota";
@@ -41,6 +42,9 @@ export function UsageCards({ data }: { data: ProfileData }) {
           <div className="h-1.5 rounded-[3px]" style={{ width: `${meter.percent.toFixed(1)}%`, background: METER_COLOR[meter.tone] }} />
         </div>
         <span className="text-[12px] text-t4">{quota === null ? "No storage limit on this account." : "Storage limit set by the server admin."}</span>
+        <Link href="/files/storage" className="text-[13px] font-semibold text-accent-text">
+          See what uses space
+        </Link>
       </section>
       <section aria-label="Traffic" className={card}>
         <CardTitle icon="gauge" box="bg-accent-soft" color="text-accent-icon">

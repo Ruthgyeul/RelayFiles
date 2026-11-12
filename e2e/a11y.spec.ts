@@ -28,6 +28,7 @@ test("app pages have no serious accessibility problems", async ({ page }) => {
     ["/", "Home"],
     ["/settings", "My Profile"],
     ["/status", "Status"],
+    ["/files/storage", "Storage"],
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();

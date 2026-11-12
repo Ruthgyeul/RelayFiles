@@ -111,6 +111,7 @@
 | `GET`·`DELETE` | `/api/me/sessions` | 이 계정에 로그인된 기기 목록(이 기기 먼저) / "Sign out all others" |
 | `DELETE` | `/api/me/sessions/:id` | 다른 기기 하나 로그아웃 |
 | `GET` | `/api/me/security-log` | 이 계정의 보안 로그, 최신순 `?cursor=&limit=`(기본 `SECURITY_LOG.pageSize` 20, 최대 100) → `{ events: [{ id, kind, detail, os, browser, ipMasked, country, at }], nextCursor }`. 다른 계정이나 정리된 항목의 cursor는 400. 종류는 `src/domain/security-log.ts` |
+| `GET` | `/api/me/storage` | Storage 페이지 → `{ usedBytes, trashBytes, quotaBytes, bars, largest, stale, staleAfterDays }`. `bars`는 루트 바로 아래 항목마다 하위 전체 파일 바이트(큰 순, `STORAGE_VIEW.maxBars` 8개를 넘으면 나머지를 "Other" 하나로). `largest`는 가장 큰 파일 `STORAGE_VIEW.largestFiles` 50개, `stale`은 `STORAGE_VIEW.staleAfterDays`(180일)보다 전에 추가됐고 그 뒤 공유 링크로 열기·보기·재생·다운로드가 없는 파일(최대 200개, 큰 순). 둘 다 `TaggedItem`(경로 포함). 소유자 본인의 다운로드는 기록하지 않으므로 공유 링크 기준이다 |
 | `PATCH` | `/api/me/preferences` | `{ stripMetadataOnShare }` 공개 링크 사진의 위치·카메라 정보 제거 |
 | `POST` | `/api/me/purge` | "Purge now": 만료된 항목(만료 시각이 지났거나 1회 다운로드 후 삭제가 사용됨)을 바로 삭제 → `{ deleted }` |
 | `DELETE` | `/api/me` | 계정, 토큰, 모든 파일 삭제(폴더는 볼륨 휴지통으로) 후 이 기기에서 로그아웃. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 관리자 계정 삭제는 감사 로그에 남으며, 마지막 관리자는 400 `Keep at least one admin` |
