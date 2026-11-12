@@ -200,6 +200,8 @@ spec:
           image: ${NGINX_IMAGE}
           env:
             - { name: APP_UPSTREAM, value: "relayfiles-app.${K3S_NAMESPACE}.svc.cluster.local:${APP_PORT}" }
+            # No WebDAV deployment on k3s yet: the name does not resolve and /dav/ answers 502.
+            - { name: DAV_UPSTREAM, value: "relayfiles-dav.${K3S_NAMESPACE}.svc.cluster.local:${DAV_PORT}" }
             - { name: NGINX_RESOLVER, value: "${NGINX_RESOLVER}" }
             - { name: SERVER_NAME, value: "${SERVER_NAME}" }
             - { name: STORAGE_ROOT, value: "${STORAGE_ROOT}" }

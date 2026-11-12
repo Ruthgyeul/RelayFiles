@@ -120,6 +120,13 @@
 - 볼륨 이동·레이아웃 마이그레이션 중에는 다른 변경처럼 `STORAGE_BUSY`(503)로 거절한다.
 - 폴더로 저장하는 다운로드는 사용자가 고른 폴더에만 쓰고, 이미 있는 파일을 덮어쓰지 않는다. 요청은 같은 출처의 다운로드 URL(`/api/files/<id>/download`, `/api/zip`)만 쓰므로 서버 쪽 권한·제한은 그대로다.
 
+## WebDAV
+
+- 개인 API 토큰을 Basic 인증의 비밀번호로 받는다. Basic은 매 요청 토큰을 그대로 보내므로 **반드시 TLS(https) 뒤에서만** 쓴다. Nginx 앞단이 Cloudflare Tunnel이나 certbot으로 https를 끝내는 구성이 전제다.
+- 토큰 확인은 API v1과 같다(`requireApiCaller`: argon2 해시, 폐기·만료 즉시 반영, `files:read` 범위, 거부는 보안 로그). 요청 한도만 `DAV.requestsPerMinute`(600/분)로 따로 센다.
+- 경로는 토큰 계정의 루트 아래로만 해석한다(`domain/dav.ts` `davSegments`: 퍼센트 디코딩 뒤 `nameError`로 `..`·`/`·제어 문자를 거부). 다른 계정의 항목은 404다.
+- 읽기 전용이다(`OPTIONS`, `PROPFIND` Depth 0·1, `GET`, `HEAD`). `Depth: infinity`는 계정 전체를 한 번에 훑게 되므로 거부한다.
+
 ## 공유 링크·다운로드
 
 - 다운로드는 `nosniff`, 미디어 재생 외에는 `attachment`. HTML·SVG는 `application/octet-stream`으로 보낸다.

@@ -150,6 +150,18 @@
 
 ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Method `POST`, Body `Binary`, Header `Authorization: Bearer rfp_…`, URL `{json:data.url}`. curl: `curl -H "Authorization: Bearer $TOKEN" --data-binary @a.png "https://<도메인>/api/v1/files?name=a.png"`.
 
+### WebDAV (읽기 전용, `npm run dav`)
+
+별도 프로세스(`scripts/dav-server.mts`)가 `DAV.prefix`(`/dav`) 아래에서 답한다(Next.js route handler는 PROPFIND를 받을 수 없다). Nginx가 `/dav/`를 `DAV_HOST:DAV_PORT`로 넘긴다.
+
+- **인증**: 개인 API 토큰(`files:read`)을 Basic 인증의 비밀번호로 보낸다(사용자 이름은 무시). Bearer도 된다. 없거나 틀리면 401 + `WWW-Authenticate: Basic`, 범위가 없으면 403.
+- **요청 한도**: 토큰마다 분당 `DAV.requestsPerMinute`(600)회. API v1과 따로 센다. 넘으면 429 + `Retry-After`.
+- **경로**: 토큰 계정의 루트에서 시작한다(`/dav/Photos/a.jpg`). 다른 계정의 항목은 없는 것과 같다(404).
+- `OPTIONS`: `DAV: 1`, `Allow: OPTIONS, PROPFIND, GET, HEAD`. 인증이 필요 없다.
+- `PROPFIND`: `Depth: 0`은 그 항목만, `Depth: 1`은 폴더와 바로 아래 항목을 207 multistatus로 준다. 속성은 `displayname`, `creationdate`, `getlastmodified`, `resourcetype`, `getcontentlength`, `getcontenttype`, `getetag`(SHA-256)이다. `Depth`가 없거나 `infinity`면 403 `propfind-finite-depth`다.
+- `GET`·`HEAD`: 파일 다운로드(첨부, Range·ETag 지원). 폴더는 405.
+- 쓰기(`PUT`, `MKCOL`, `MOVE`, `COPY`, `DELETE`, `LOCK`)는 405다.
+
 ### Prometheus 지표
 
 | 메서드 | 경로 | 설명 |

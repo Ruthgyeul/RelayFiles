@@ -1,0 +1,63 @@
+# RelayFiles WebDAV server (optional): the files of an account as a network drive, read-only,
+# signed in with a personal API token. Nginx forwards /dav/ to DAV_HOST:DAV_PORT.
+# Rendered by deploy/scripts/systemd/install.sh; enable it with: sudo systemctl enable --now relayfiles-dav
+[Unit]
+Description=RelayFiles WebDAV
+Documentation=file://${APP_DIR}/docs/deploy-systemd.md
+After=network-online.target postgresql.service redis-server.service relayfiles-app.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${STORAGE_USER}
+Group=${STORAGE_USER}
+WorkingDirectory=${APP_DIR}
+Environment=HOME=${STORAGE_HOME}
+# One Node process: tsx is loaded as a hook (the tsx CLI would start a second Node process).
+ExecStart=${NODE_BIN} --import tsx --conditions=react-server scripts/dav-server.mts
+UMask=0077
+Restart=on-failure
+RestartSec=5
+# SIGTERM lets the downloads in progress finish; whatever is left after APP_STOP_GRACE_SEC is killed.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=${STOP_GRACE_SEC}
+NoNewPrivileges=true
+# Resource limits (DAV_MEMORY_MAX in .env): file listings and downloads need little memory.
+MemoryMax=${MEMORY_MAX}
+CPUQuota=${CPU_QUOTA}
+TasksMax=512
+PrivateTmp=true
+# Read-only everywhere except the SSD, the log directory, the service home and (app) the
+# release bundles' .next/cache. An extra SSD needs its own line: sudo systemctl edit <unit>,
+# [Service] ReadWritePaths=<mount> (docs/deploy-systemd.md).
+ProtectSystem=strict
+ReadWritePaths=${STORAGE_ROOT} ${LOG_DIR} ${STORAGE_HOME}
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+# No capabilities, not even for programs it starts (the service runs as an unprivileged user).
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Other users' processes are hidden in /proc (/proc/stat and /proc/meminfo for metrics stay).
+ProtectProc=invisible
+RemoveIPC=true
+# The system calls an ordinary service makes; anything else fails with EPERM (libuv then falls
+# back from io_uring to its thread pool).
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# The WebDAV server needs no device files (it reads the SSD's files, not the disk).
+PrivateDevices=true
+
+[Install]
+WantedBy=multi-user.target

@@ -59,6 +59,8 @@ render_unit() {
 log "systemd units"
 render_unit relayfiles-app "$(env_value APP_MEMORY_MAX 2G)" "$(env_value APP_CPUS 3)" "$(env_value APP_STOP_GRACE_SEC 30)"
 render_unit relayfiles-worker "$(env_value WORKER_MEMORY_MAX 2G)" "$(env_value WORKER_CPUS 2)" "$(env_value WORKER_STOP_GRACE_SEC 90)"
+# WebDAV is optional: rendered here, enabled by the operator (docs/deploy-systemd.md).
+render_unit relayfiles-dav "$(env_value DAV_MEMORY_MAX 512M)" 1 "$(env_value APP_STOP_GRACE_SEC 30)"
 systemctl daemon-reload
 systemctl enable relayfiles-app relayfiles-worker
 
@@ -69,10 +71,10 @@ grep -q "managed by Certbot" "$SITE" 2> /dev/null && CERTBOT=true
 NGINX_MAX_BODY_MB="$(env_value NGINX_MAX_BODY_MB 100)" NGINX_AUTH_RATE_PER_MIN="$(env_value NGINX_AUTH_RATE_PER_MIN 20)" NGINX_AUTH_BURST="$(env_value NGINX_AUTH_BURST 20)" \
   NGINX_UPLOAD_RATE_PER_MIN="$(env_value NGINX_UPLOAD_RATE_PER_MIN 60)" NGINX_UPLOAD_BURST="$(env_value NGINX_UPLOAD_BURST 30)" \
   NGINX_TUS_RATE_PER_MIN="$(env_value NGINX_TUS_RATE_PER_MIN 600)" NGINX_TUS_BURST="$(env_value NGINX_TUS_BURST 120)" \
-  PROXY_SHARED_SECRET="$(env_value PROXY_SHARED_SECRET -)" \
+  PROXY_SHARED_SECRET="$(env_value PROXY_SHARED_SECRET -)" DAV_PORT="$(env_value DAV_PORT 3002)" \
   NGINX_API_RATE_PER_MIN="$(env_value NGINX_API_RATE_PER_MIN 120)" NGINX_API_BURST="$(env_value NGINX_API_BURST 60)" \
   render "$ROOT/deploy/nginx/host/relayfiles.conf.template" APP_DIR APP_PORT SERVER_NAME NGINX_LISTEN_PORT NGINX_MAX_BODY_MB \
-  NGINX_AUTH_RATE_PER_MIN NGINX_AUTH_BURST NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST NGINX_TUS_RATE_PER_MIN NGINX_TUS_BURST NGINX_API_RATE_PER_MIN NGINX_API_BURST PROXY_SHARED_SECRET > "$SITE.partial"
+  NGINX_AUTH_RATE_PER_MIN NGINX_AUTH_BURST NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST NGINX_TUS_RATE_PER_MIN NGINX_TUS_BURST NGINX_API_RATE_PER_MIN NGINX_API_BURST PROXY_SHARED_SECRET DAV_PORT > "$SITE.partial"
 # Root-only: the site holds PROXY_SHARED_SECRET (the Nginx master reads it as root).
 chmod 0600 "$SITE.partial"
 mv "$SITE.partial" "$SITE"

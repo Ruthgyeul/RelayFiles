@@ -92,3 +92,7 @@ DB 백업(저장소 노드의 cron, Compose의 `backup.sh`와 같은 위치·형
 - 바이러스 검사(ClamAV)는 매니페스트에 없다. 공식 이미지가 x86-64 전용이라 Pi(arm64)에서는 돌지 않기 때문이다. 쓰려면 저장소 노드의 호스트에 `clamav-daemon`을 설치하고(runbook "업로드 링크 바이러스 검사"), `CLAMAV_HOST`를 그 노드 주소로 둔다.
 - 저장소 노드 하나에 묶인다(호스트 경로). 그 노드가 내려가면 서비스도 내려간다. 다른 노드는 다른 서비스(대시보드, 봇)에 쓴다.
 - `volume:init`으로 추가 SSD를 붙이면 `deploy/nginx/volumes/<id>.conf`가 생긴다. 다시 `deploy.sh`를 실행해야 ConfigMap과 Nginx에 반영되고, 새 마운트 경로를 app·worker·Nginx에 붙이는 패치는 직접 넣어야 한다.
+
+## WebDAV
+
+k3s 템플릿에는 아직 WebDAV 배포가 없다. Nginx는 `/dav/`를 `relayfiles-dav` 서비스로 넘기도록 렌더링되지만 그 이름이 없으므로 502를 준다. 필요하면 Docker Compose나 systemd 배포에서 쓴다.

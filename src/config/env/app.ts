@@ -8,6 +8,9 @@ export const appEnv = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_HOST: z.string().default("127.0.0.1"),
   APP_PORT: port.default(3000),
+  /** WebDAV server (npm run dav): address and port Nginx forwards /dav/ to. */
+  DAV_HOST: z.string().default("127.0.0.1"),
+  DAV_PORT: port.default(3002),
   PUBLIC_URL: z.url().default("http://localhost:3000"),
   DEFAULT_THEME: z.enum(THEME_KEYS).default(DEFAULT_THEME),
   SERVER_LOCATION: z.string().default("Seoul, KR"),
