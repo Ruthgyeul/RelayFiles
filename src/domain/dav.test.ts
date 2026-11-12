@@ -106,7 +106,7 @@ describe("davLockTimeout", () => {
 
 describe("davLockTokenOf", () => {
   it("finds the token in If and Lock-Token headers", () => {
-    const token = "opaquelocktoken:0f8fad5b-d9cb-469f-a165-70867728950e";
+    const token = "opaquelocktoken:00000000-0000-4000-8000-000000000001";
     expect(davLockTokenOf(`(<${token}>)`)).toBe(token);
     expect(davLockTokenOf(`<${token}>`)).toBe(token);
     expect(davLockTokenOf("<urn:other>")).toBeNull();
