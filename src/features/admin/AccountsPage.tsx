@@ -16,6 +16,7 @@ import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { AccountRow } from "./AccountRow";
 import { adminApi } from "./api";
 import { ManageDialog } from "./ManageDialog";
+import { UsageReportCard } from "./UsageReportCard";
 
 /** Rows rendered at a time; filters and search still cover every account. */
 const PAGE_SIZE = 50;
@@ -36,7 +37,7 @@ function StatCard({ icon, box, color, label, value }: { icon: IconName; box: str
   );
 }
 
-/** Admin "Accounts" page: stats, cleanup, filters, search and account rows. */
+/** Admin "Accounts" page: stats, cleanup, filters, search, account rows and the usage report. */
 export function AccountsPage({ data }: { data: AdminAccounts }) {
   usePageTitle("Accounts");
   const router = useRouter();
@@ -160,6 +161,7 @@ export function AccountsPage({ data }: { data: AdminAccounts }) {
           Show more · {visible.length - shown} left
         </button>
       )}
+      <UsageReportCard />
 
       {managed && (
         <ManageDialog

@@ -3,6 +3,7 @@ import { AUTH } from "@/config/policy";
 import { AUDIT_GROUP_KEYS, type AuditAction } from "@/domain/audit";
 import { isAccountId } from "@/domain/ids";
 import { MAX_QUOTA_GB } from "@/domain/quota";
+import type { UsageRowValues } from "@/domain/usage-report";
 
 /** One row of the admin Accounts page. File contents are never listed here. */
 export interface AdminAccount {
@@ -70,4 +71,21 @@ export type AuditQuery = z.infer<typeof auditQuerySchema>;
 export interface AuditPage {
   events: AuditEntry[];
   nextCursor: string | null;
+}
+
+/** GET /api/admin/usage(/csv) query: UTC days, both inclusive; omitted = the last ADMIN_REPORT.defaultDays. */
+export const usageQuerySchema = z.object({ from: z.iso.date().optional(), to: z.iso.date().optional() });
+export type UsageQuery = z.infer<typeof usageQuerySchema>;
+
+/** One account of the usage report. No file names, links or addresses. */
+export type UsageRow = UsageRowValues;
+
+/** The admin usage report: per-account storage and share traffic of a range, and traffic per month. */
+export interface UsageReport {
+  from: string;
+  to: string;
+  days: number;
+  rows: UsageRow[];
+  /** Share traffic of every account per month the range touches, oldest first. */
+  months: { month: string; bytes: string }[];
 }

@@ -144,3 +144,13 @@ export const SHUTDOWN = {
   /** A stopping worker finishes its running jobs: an ffmpeg run (MEDIA.ffmpegTimeoutSec) plus the work around it. */
   workerStopGraceSec: 90,
 } as const;
+
+/** Admin usage report (Accounts page "Usage report"). */
+export const ADMIN_REPORT = {
+  /** Days the report covers when no range is given, ending today (UTC). */
+  defaultDays: 30,
+  /** Longest range one report may cover. */
+  maxDays: 366,
+  /** Ranges the page offers, in days. */
+  rangeChoices: [30, 90, 365],
+} as const;

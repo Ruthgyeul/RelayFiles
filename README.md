@@ -12,6 +12,7 @@ Fast and easy file sharing system. A private file drop for sharing and streaming
 - Media viewer for pictures (with a slideshow), video (on-the-fly conversion, `.vtt`/`.srt` subtitles from the same folder), audio and documents (text, code, Markdown, tables, PDF, Word, Excel), with thumbnails and copies for public links without location and personal metadata (photos and videos; how much goes is `SHARE_METADATA_STRIP`, the date taken stays by default)
 - Recently deleted: deleted items can be restored with their share links and settings for `TRASH_RETENTION_HOURS` (24 by default, up to 30 days)
 - Admin pages: accounts, live server metrics, sign-up mode, theme, announcements and an audit log of admin actions
+- An admin usage report: storage, trash and share traffic per account over 30 days to 12 months, with a CSV export
 - Several storage volumes with volume moves, layout migrations and `storage:fsck`; a public Status page
 - Personal API tokens for scripts (`/api/v1`)
 - A personal security log: sign-ins, sign-outs, token changes and refused API tokens of your own account
