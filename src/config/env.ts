@@ -1,287 +1,37 @@
 import { z } from "zod";
-import { ACCOUNT, AUTH, DUPLICATES, HEADERS, JOBS, K3S, LOGIN, MEDIA, NGINX, OFFSITE, REDIS_SERVER, RENUMBER, SHUTDOWN, STORAGE, TRANSCODE, UPLOAD } from "./policy";
-import { DEFAULT_THEME, THEME_KEYS } from "./theme";
+import { appEnv, testingEnv } from "./env/app";
+import { databaseEnv, redisEnv } from "./env/services";
+import { storageEnv, uploadsEnv } from "./env/storage";
+import { secretsEnv } from "./env/secrets";
+import { policyEnv, jobsEnv, observabilityEnv } from "./env/runtime";
+import { deployEnv, offsiteEnv, notifyEnv } from "./env/deploy";
+import type { Source } from "./env/fields";
 
 /**
  * Environment configuration (docs/architecture.md "설정과 환경 변수").
  * Every runtime setting is read here and nowhere else. Keys are split into groups that are
  * validated lazily when the subsystem first needs them, so the build does not require
- * database or secret values. `.env.example` must list exactly the keys defined below
- * (enforced by env.test.ts).
+ * database or secret values. The group schemas live in src/config/env/; `.env.example` must
+ * list exactly their keys (enforced by env.test.ts).
  */
 
-type Source = Record<string, string | undefined>;
-
-const port = z.coerce.number().int().min(1).max(65_535);
-const positiveInt = z.coerce.number().int().positive();
-const bool = z.stringbool();
-/** A memory size Docker and systemd both read: "512M", "2G". */
-const memorySize = z.string().regex(/^\d+[KMG]$/);
-const cpus = z.coerce.number().positive().max(256);
-const CIDR = /^(\d{1,3})(\.\d{1,3}){3}\/(\d|[12]\d|3[0-2])$/;
-const cidrList = z
-  .string()
-  .transform((value) => value.split(",").map((item) => item.trim()).filter(Boolean))
-  .pipe(z.array(z.string().regex(CIDR, "must be a comma-separated list of IPv4 CIDRs, e.g. 192.168.0.0/24")));
-const secret = (minLength: number) => z.string().min(minLength, `must be at least ${minLength} characters (run npm run env:secrets)`);
-/** Decoded byte length of a base64 string, or -1 when it is not valid base64. */
-function base64ByteLength(value: string): number {
-  try {
-    return atob(value).length;
-  } catch {
-    return -1;
-  }
-}
-const base64Key32 = z
-  .string()
-  .refine((value) => base64ByteLength(value) === 32, "must be 32 random bytes encoded as base64 (run npm run env:secrets)");
-const secondsList = z
-  .string()
-  .transform((value) => value.split(",").map((item) => Number(item.trim())))
-  .pipe(z.array(z.number().int().positive()).min(1));
-
-/** IPv4 ranges a LAN service answers on: loopback, RFC 1918, link-local, CGNAT (Tailscale). */
-const LAN_IPV4 = /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/;
-/** Names only a LAN resolves: one label (a compose service such as `ntfy`) or a local suffix. */
-const LAN_NAME = /^([a-z0-9-]+|.+\.(local|lan|internal|home\.arpa))$/i;
-
-/** True for a host that cannot be reached from the internet, so plain http to it stays on the LAN. */
-export function isLanHost(hostname: string): boolean {
-  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  if (host.includes(":")) return host === "::1" || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return LAN_IPV4.test(host);
-  return LAN_NAME.test(host);
-}
-
-/**
- * Where owner notifications are posted: https anywhere, or plain http to a LAN host (a self-hosted
- * ntfy next to the server). No user:password in the URL (fetch refuses it; use NOTIFY_WEBHOOK_TOKEN).
- */
-const webhookUrl = z.url().superRefine((value, ctx) => {
-  // z.url() has reported a value that does not parse; the refinement still runs.
-  if (!URL.canParse(value)) return;
-  const url = new URL(value);
-  if (url.username || url.password) ctx.addIssue({ code: "custom", message: "must not contain a user name or password (use NOTIFY_WEBHOOK_TOKEN)" });
-  if (url.protocol === "https:") return;
-  if (url.protocol !== "http:" || !isLanHost(url.hostname)) {
-    ctx.addIssue({ code: "custom", message: "must be https, or http to a LAN host (127.x, 10.x, 172.16-31.x, 192.168.x, 100.64-127.x, *.local, *.lan)" });
-  }
-});
-
-export const NOTIFY_FORMATS = ["json", "ntfy", "discord", "telegram"] as const;
+// Field schemas and the groups are split under src/config/env/; this file assembles and reads them.
+export { isLanHost, NOTIFY_FORMATS } from "./env/fields";
 
 export const ENV_GROUPS = {
-  app: z.object({
-    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-    APP_HOST: z.string().default("127.0.0.1"),
-    APP_PORT: port.default(3000),
-    PUBLIC_URL: z.url().default("http://localhost:3000"),
-    DEFAULT_THEME: z.enum(THEME_KEYS).default(DEFAULT_THEME),
-    SERVER_LOCATION: z.string().default("Seoul, KR"),
-    ENABLE_UI_CATALOG: bool.default(false),
-    ADMIN_ALLOWED_CIDRS: cidrList.default([]),
-    /**
-     * Secret Nginx sends in X-Relay-Proxy (both templates). When set, the app believes the
-     * visitor address headers only on requests that carry it (domain/network.ts clientIp).
-     */
-    PROXY_SHARED_SECRET: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/, "must be 32-128 letters, digits, - or _ (run npm run env:secrets)").optional(),
-    /** "enforce" blocks what the policy does not allow; "report-only" only logs it (to /api/csp-report). */
-    CSP_MODE: z.enum(["report-only", "enforce"]).default("enforce"),
-    /** Strict-Transport-Security max-age when PUBLIC_URL is https (0 = do not send it, e.g. Cloudflare already does). */
-    HSTS_MAX_AGE_SEC: z.coerce.number().int().min(0).default(HEADERS.hstsMaxAgeSec),
-    /** Adds includeSubDomains; only when every subdomain of PUBLIC_URL's domain is https. */
-    HSTS_INCLUDE_SUBDOMAINS: bool.default(false),
-  }),
-  database: z.object({
-    POSTGRES_HOST: z.string().default("localhost"),
-    POSTGRES_PORT: port.default(5432),
-    POSTGRES_DB: z.string().default("relayfiles"),
-    POSTGRES_USER: z.string().default("relayfiles"),
-    POSTGRES_PASSWORD: secret(16),
-    POSTGRES_PUBLISH: z.string().default("127.0.0.1:5432"),
-    DATABASE_URL: z.string().startsWith("postgresql://").optional(),
-  }),
-  redis: z.object({
-    REDIS_HOST: z.string().default("localhost"),
-    REDIS_PORT: port.default(6379),
-    REDIS_PASSWORD: secret(16),
-    REDIS_DB: z.coerce.number().int().min(0).max(15).default(0),
-    REDIS_PUBLISH: z.string().default("127.0.0.1:6379"),
-    REDIS_URL: z.string().startsWith("redis://").optional(),
-    REDIS_KEY_PREFIX: z.string().default("rf:v1:"),
-  }),
-  storage: z.object({
-    STORAGE_ROOT: z.string().default("./.data/relayfilesDB"),
-    STORAGE_RESERVE_PERCENT: z.coerce.number().min(0).max(50).default(STORAGE.reservePercent),
-    STORAGE_UID: positiveInt.default(10001),
-    STORAGE_GID: positiveInt.default(10001),
-    STORAGE_ACCEL_ENABLED: bool.default(false),
-    STORAGE_ACCEL_PREFIX: z.string().startsWith("/").endsWith("/").default("/_protected/"),
-    VOLUME_WATCH_INTERVAL_SEC: positiveInt.default(STORAGE.volumeWatchIntervalSec),
-    /** Copies and re-uploads of the same content share their bytes (hard links on the volume). */
-    STORAGE_DEDUPE: bool.default(true),
-  }),
-  uploads: z.object({
-    UPLOAD_CHUNK_SIZE_MB: positiveInt.max(95).default(UPLOAD.chunkSizeMb),
-    UPLOAD_MAX_FILE_SIZE_GB: z.coerce.number().positive().optional(),
-    UPLOAD_TMP_TTL_HOURS: positiveInt.default(UPLOAD.tmpTtlHours),
-  }),
-  secrets: z
-    .object({
-      TOKEN_ENC_KEY: base64Key32,
-      TOKEN_HMAC_KEY: secret(32),
-      COOKIE_SECRET: secret(32),
-      TOKEN_ENC_KEY_PREVIOUS: base64Key32.optional(),
-      TOKEN_HMAC_KEY_PREVIOUS: secret(32).optional(),
-      COOKIE_SECRET_PREVIOUS: secret(32).optional(),
-    })
-    .superRefine((env, ctx) => {
-      // A *_PREVIOUS key equal to the current one is a rotation that did not happen: values made
-      // with the real old key would stop working, and nothing warns until users are locked out.
-      for (const key of ["TOKEN_ENC_KEY", "TOKEN_HMAC_KEY", "COOKIE_SECRET"] as const) {
-        if (env[`${key}_PREVIOUS`] === env[key]) ctx.addIssue({ code: "custom", path: [`${key}_PREVIOUS`], message: `must differ from ${key} (set it to the old key while rotating, or leave it empty)` });
-      }
-    }),
-  policy: z.object({
-    ACCOUNT_TTL_DAYS: positiveInt.default(ACCOUNT.ttlDays),
-    DEFAULT_QUOTA_GB: z.coerce.number().positive().default(ACCOUNT.defaultQuotaGb),
-    /** Total storage all anonymous accounts may use together, in GB (unset = no total limit). */
-    ANON_TOTAL_QUOTA_GB: z.coerce.number().positive().optional(),
-    LOGIN_MAX_ATTEMPTS: positiveInt.default(LOGIN.maxAttempts),
-    LOGIN_LOCK_SECONDS: secondsList.default([...LOGIN.lockSeconds]),
-    SIGNUPS_PER_HOUR: positiveInt.default(AUTH.signupsPerHour),
-    /** "Renumber files": most files one run renames. */
-    RENUMBER_MAX_FILES: positiveInt.default(RENUMBER.maxFiles),
-    /** "Find duplicates": most files one scan compares. */
-    DUPLICATES_MAX_SCAN: positiveInt.default(DUPLICATES.maxScan),
-  }),
-  jobs: z.object({
-    CLEANUP_CRON: z.string().default(JOBS.cleanupCron),
-    JOBS_TIMEZONE: z.string().default(JOBS.timezone),
-    METRICS_SAMPLE_INTERVAL_SEC: positiveInt.default(JOBS.metricsSampleIntervalSec),
-    HEALTH_PROBE_INTERVAL_SEC: positiveInt.default(JOBS.healthProbeIntervalSec),
-    /** Where the worker reaches the app for Status page probes; defaults to this host's APP_PORT. */
-    HEALTH_PROBE_URL: z.url().optional(),
-    MEDIA_WORKER_CONCURRENCY: positiveInt.max(16).default(MEDIA.workerConcurrency),
-    FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
-    /** Video conversions for unplayable containers running at once in the app (0 = off). */
-    VIDEO_TRANSCODE_MAX: z.coerce.number().int().min(0).max(16).default(TRANSCODE.maxConcurrent),
-  }),
-  observability: z.object({
-    LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).optional(),
-    LOG_DIR: z.string().default("/var/log/relayfiles"),
-    /**
-     * Which process writes the logs: its files in LOG_DIR are <name>-error.log and
-     * <name>-combined.log, so the app, the worker and admin scripts never rotate each other's
-     * files. The worker and scripts set it themselves (scripts/worker.mts, scripts/lib/bootstrap.mts).
-     */
-    LOG_SERVICE: z.enum(["app", "worker", "tools"]).default("app"),
-    DISK_DEVICE: z.string().default("/dev/sda"),
-    TLS_CERT_PATH: z.string().optional(),
-  }),
-  deploy: z.object({
-    /** Nginx server_name: the host names served (space-separated); other names get 444, "_" serves every name. */
-    SERVER_NAME: z.string().default("localhost"),
-    /** Host address Nginx is published on: 127.0.0.1 when another proxy on the host sits in front. */
-    NGINX_LISTEN_HOST: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("0.0.0.0"),
-    NGINX_LISTEN_PORT: port.default(80),
-    /** Nginx request limits (both templates): body size in MB, and per-minute rates with bursts. */
-    NGINX_MAX_BODY_MB: positiveInt.max(1_024).default(NGINX.maxBodyMb),
-    NGINX_AUTH_RATE_PER_MIN: positiveInt.default(NGINX.authRatePerMin),
-    NGINX_AUTH_BURST: positiveInt.default(NGINX.authBurst),
-    NGINX_UPLOAD_RATE_PER_MIN: positiveInt.default(NGINX.uploadRatePerMin),
-    NGINX_UPLOAD_BURST: positiveInt.default(NGINX.uploadBurst),
-    NGINX_TUS_RATE_PER_MIN: positiveInt.default(NGINX.tusRatePerMin),
-    NGINX_TUS_BURST: positiveInt.default(NGINX.tusBurst),
-    /** Personal API token requests (/api/v1/, /metrics) per client address per minute, and the burst. */
-    NGINX_API_RATE_PER_MIN: positiveInt.default(NGINX.apiRatePerMin),
-    NGINX_API_BURST: positiveInt.default(NGINX.apiBurst),
-    CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
-    /**
-     * Memory Redis may use, in MB (compose and k3s `--maxmemory`, with `noeviction`: when full,
-     * writes fail loudly instead of dropping queued jobs, upload reservations or lockouts).
-     */
-    REDIS_MAXMEMORY_MB: positiveInt.default(REDIS_SERVER.maxMemoryMb),
-    /** Host directory for PostgreSQL, Redis and backups (docker compose). */
-    DATA_DIR: z.string().startsWith("/").default("/srv/relayfiles"),
-    /** Docker's data-root (images, containers, build cache); set by deploy/scripts/setup-docker.sh. */
-    DOCKER_DATA_ROOT: z.string().startsWith("/").default("/var/lib/docker"),
-    /** Private network of the compose services; cloudflared gets a fixed address in it. */
-    DOCKER_SUBNET: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/).default("172.28.0.0/24"),
-    CLOUDFLARED_IP: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("172.28.0.250"),
-    /** Peer address of a proxy on the host (the DOCKER_SUBNET gateway); Nginx trusts its X-Real-IP. */
-    TRUSTED_PROXY_IP: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).optional(),
-    /** Container log rotation (docker compose json-file driver): size per file and files kept. */
-    DOCKER_LOG_MAX_SIZE: z.string().regex(/^\d+[kmg]$/).default("10m"),
-    DOCKER_LOG_MAX_FILE: positiveInt.default(5),
-    /** Memory (K/M/G) and CPU cores the app and the worker may use (compose limits, systemd MemoryMax/CPUQuota). */
-    APP_MEMORY_MAX: memorySize.default("2G"),
-    APP_CPUS: cpus.default(3),
-    WORKER_MEMORY_MAX: memorySize.default("2G"),
-    WORKER_CPUS: cpus.default(2),
-    /**
-     * Seconds a stopping app or worker gets to finish requests or jobs before it is killed (compose
-     * stop_grace_period, systemd TimeoutStopSec, k3s terminationGracePeriodSeconds).
-     */
-    APP_STOP_GRACE_SEC: positiveInt.default(SHUTDOWN.appStopGraceSec),
-    WORKER_STOP_GRACE_SEC: positiveInt.default(SHUTDOWN.workerStopGraceSec),
-    /** k3s deployment (deploy/scripts/k3s/deploy.sh): GHCR image name without -app/-tools, namespace, app replicas. */
-    K3S_IMAGE_REPO: z
-      .string()
-      .regex(/^[a-z0-9.-]+(:\d+)?(\/[a-z0-9._-]+)+$/, "must be a registry path such as ghcr.io/<owner>/relayfiles")
-      .optional(),
-    K3S_NAMESPACE: z.string().regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).default("relayfiles"),
-    K3S_APP_REPLICAS: positiveInt.max(K3S.maxAppReplicas).default(1),
-  }),
-  offsite: z
-    .object({
-      /**
-       * restic repository for deploy/scripts/offsite-backup.sh, e.g. an S3 bucket on Cloudflare R2
-       * or Backblaze B2 (`s3:https://<endpoint>/<bucket>/relayfiles`). Empty: no offsite backup.
-       */
-      RESTIC_REPOSITORY: z
-        .string()
-        .regex(/^(s3|b2|sftp|rest|azure|gs|swift|rclone):/, "must start with a restic backend such as s3:")
-        .optional(),
-      /** Encrypts every offsite copy; keep a copy away from the server too, it cannot be recovered. */
-      RESTIC_PASSWORD: z.string().min(OFFSITE.passwordMinLength).optional(),
-      /** S3 credentials of the repository (passed to restic as AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). */
-      OFFSITE_ACCESS_KEY_ID: z.string().optional(),
-      OFFSITE_SECRET_ACCESS_KEY: z.string().optional(),
-      OFFSITE_KEEP_DAILY: positiveInt.default(OFFSITE.keepDaily),
-      OFFSITE_KEEP_WEEKLY: positiveInt.default(OFFSITE.keepWeekly),
-      OFFSITE_KEEP_MONTHLY: positiveInt.default(OFFSITE.keepMonthly),
-      OFFSITE_CHECK_PERCENT: z.coerce.number().positive().max(100).default(OFFSITE.checkPercent),
-      /** More directories to back up, space-separated (the users/ folders of extra volumes). */
-      OFFSITE_EXTRA_PATHS: z
-        .string()
-        .regex(/^\/\S*( \/\S*)*$/, "must be absolute paths separated by spaces")
-        .optional(),
-    })
-    .refine((env) => !env.RESTIC_REPOSITORY || env.RESTIC_PASSWORD, { message: "RESTIC_PASSWORD is required with RESTIC_REPOSITORY", path: ["RESTIC_PASSWORD"] }),
-  notify: z
-    .object({
-      /** Owner notifications (file requests, low or offline volumes, failed backup checks). Empty: off. */
-      NOTIFY_WEBHOOK_URL: webhookUrl.optional(),
-      /** Body the receiver expects: generic JSON, ntfy (topic URL), Discord webhook, Telegram Bot API sendMessage. */
-      NOTIFY_WEBHOOK_FORMAT: z.enum(NOTIFY_FORMATS).default("json"),
-      /** Sent as `Authorization: Bearer <token>` (an ntfy access token, a generic receiver's secret). */
-      NOTIFY_WEBHOOK_TOKEN: z.string().min(1).optional(),
-      /** Telegram only: the chat the bot writes to (numeric id or @channel). */
-      NOTIFY_TELEGRAM_CHAT_ID: z
-        .string()
-        .regex(/^(-?\d+|@\w{5,})$/, "must be a numeric chat id or @channelname")
-        .optional(),
-    })
-    .refine((env) => env.NOTIFY_WEBHOOK_FORMAT !== "telegram" || !env.NOTIFY_WEBHOOK_URL || env.NOTIFY_TELEGRAM_CHAT_ID, {
-      message: "NOTIFY_TELEGRAM_CHAT_ID is required with NOTIFY_WEBHOOK_FORMAT=telegram",
-      path: ["NOTIFY_TELEGRAM_CHAT_ID"],
-    }),
-  testing: z.object({
-    E2E_PORT: port.default(3100),
-    E2E_BASE_URL: z.url().optional(),
-    PLAYWRIGHT_CHROMIUM_PATH: z.string().optional(),
-  }),
+  app: appEnv,
+  database: databaseEnv,
+  redis: redisEnv,
+  storage: storageEnv,
+  uploads: uploadsEnv,
+  secrets: secretsEnv,
+  policy: policyEnv,
+  jobs: jobsEnv,
+  observability: observabilityEnv,
+  deploy: deployEnv,
+  offsite: offsiteEnv,
+  notify: notifyEnv,
+  testing: testingEnv,
 } as const;
 
 export type EnvGroup = keyof typeof ENV_GROUPS;
