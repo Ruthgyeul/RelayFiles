@@ -47,7 +47,7 @@ describe("strictTransportSecurity", () => {
 describe("parseCspReports", () => {
   it("reads legacy csp-report bodies without query strings", () => {
     const report = { "csp-report": { "document-uri": "https://files.example.com/s/abc?token=1", "violated-directive": "script-src-elem", "blocked-uri": "https://evil.example/x.js?q=1" } };
-    expect(parseCspReports(report)).toEqual([{ directive: "script-src-elem", blocked: "https://evil.example/x.js", page: "https://files.example.com/s/abc" }]);
+    expect(parseCspReports(report, 10)).toEqual([{ directive: "script-src-elem", blocked: "https://evil.example/x.js", page: "https://files.example.com/s/abc" }]);
   });
 
   it("reads Reporting API batches and skips other report types", () => {
@@ -55,13 +55,18 @@ describe("parseCspReports", () => {
       { type: "csp-violation", body: { documentURL: "https://files.example.com/files", effectiveDirective: "script-src-elem", blockedURL: "inline" } },
       { type: "deprecation", body: { id: "x" } },
     ];
-    expect(parseCspReports(batch)).toEqual([{ directive: "script-src-elem", blocked: "inline", page: "https://files.example.com/files" }]);
+    expect(parseCspReports(batch, 10)).toEqual([{ directive: "script-src-elem", blocked: "inline", page: "https://files.example.com/files" }]);
   });
 
   it("reduces blob and data URLs to their scheme and ignores junk", () => {
-    expect(parseCspReports({ "csp-report": { "blocked-uri": "blob:https://files.example.com/123", "violated-directive": "img-src" } })[0]!.blocked).toBe("blob:");
-    expect(parseCspReports(null)).toEqual([]);
-    expect(parseCspReports("x")).toEqual([]);
-    expect(parseCspReports({ other: 1 })).toEqual([]);
+    expect(parseCspReports({ "csp-report": { "blocked-uri": "blob:https://files.example.com/123", "violated-directive": "img-src" } }, 10)[0]!.blocked).toBe("blob:");
+    expect(parseCspReports(null, 10)).toEqual([]);
+    expect(parseCspReports("x", 10)).toEqual([]);
+    expect(parseCspReports({ other: 1 }, 10)).toEqual([]);
+  });
+
+  it("reads at most `limit` violations of a batch", () => {
+    const batch = Array.from({ length: 50 }, (_, i) => ({ type: "csp-violation", body: { effectiveDirective: "img-src", blockedURL: `https://img.example/${i}` } }));
+    expect(parseCspReports(batch, 3).map((violation) => violation.blocked)).toEqual(["https://img.example/0", "https://img.example/1", "https://img.example/2"]);
   });
 });

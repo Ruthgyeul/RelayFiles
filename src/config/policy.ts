@@ -165,6 +165,15 @@ export const SHARE = {
   /** Wrong passwords allowed per link and address before a pause. */
   unlockMaxAttempts: 10,
   unlockWindowSec: 600,
+  /** The same per link and network (IPv4 /24, IPv6 /48) in the same window: many addresses of one block. */
+  unlockNetworkMaxAttempts: 30,
+  /**
+   * Guesses at one password from everywhere together per window. Spread over many networks
+   * (a botnet) they still run out; the cost is that such an attack also pauses honest
+   * visitors of that link for up to this window.
+   */
+  unlockSubjectMaxAttempts: 200,
+  unlockSubjectWindowSec: 3_600,
   /** "Opened link" / "Played" are logged once per visitor and item in this window. */
   eventDedupeSec: 1_800,
   /** Link activity entries kept per item (design: 200). */
@@ -190,6 +199,12 @@ export const SHARE = {
    * account can hold (FILES.maxItemsPerAccount), so only admin folders larger than that are refused.
    */
   zipMaxItems: 100_000,
+  /**
+   * "Download all" checks (HEAD, counts nothing) per address and window: each one walks the
+   * folder's tree in the database, so they are limited like guesses rather than left open.
+   */
+  zipChecksPerAddress: 30,
+  zipCheckWindowSec: 60,
 } as const;
 
 export const MEDIA = {
@@ -452,6 +467,21 @@ export const TRANSCODE = {
   /** Retry-After sent while every conversion slot is in use. */
   busyRetrySec: 10,
   /**
+   * Conversions one requester (an account, or a link visitor's address) runs at once, so one
+   * visitor cannot hold every VIDEO_TRANSCODE_MAX slot. Two, so seeking (the player drops the
+   * old request as it opens the new one) is not refused while the old one winds down.
+   */
+  maxPerRequester: 2,
+  /**
+   * A conversion whose output nobody reads for this long is stopped: a paused or deliberately
+   * slow reader would otherwise hold its slot through backpressure for as long as it likes.
+   */
+  idleTimeoutMs: 120_000,
+  /** Longest a single live conversion runs, whatever is read (longer than any film at playback pace). */
+  maxRunMs: 4 * 60 * 60 * 1000,
+  /** How often a running conversion checks the two limits above. */
+  watchIntervalMs: 10_000,
+  /**
    * A conversion slot (shared by every app process through Redis) lapses this long after its
    * last renewal, so a crashed process frees its slots; running conversions renew every third of it.
    */
@@ -630,4 +660,11 @@ export const HEADERS = {
   cspReportMaxBytes: 16 * 1024,
   /** The same violation (directive + blocked resource) is logged at most once per this window. */
   cspReportDedupeSec: 60 * 60,
+  /** Violations read from one report body (a page reports a handful; the rest is ignored). */
+  cspReportMaxPerBody: 10,
+  /** Report bodies taken per address and window (cspReportWindowSec); more are dropped unread. */
+  cspReportsPerAddress: 60,
+  cspReportWindowSec: 60 * 60,
+  /** Violation log lines per window from all reporters together, so reports cannot flood the logs. */
+  cspReportLogLinesPerWindow: 200,
 } as const;

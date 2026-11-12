@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientIp, ipInCidrs, isPrivateIp, maskIp, rateLimitSubject } from "./network";
+import { clientIp, ipInCidrs, isPrivateIp, maskIp, rateLimitNetwork, rateLimitSubject } from "./network";
 
 describe("maskIp", () => {
   it("hides the last two IPv4 octets and most of IPv6", () => {
@@ -64,5 +64,24 @@ describe("rateLimitSubject", () => {
     expect(rateLimitSubject("1:2:3")).toBe("1:2:3");
     expect(rateLimitSubject("1::2::3")).toBe("1::2::3");
     expect(rateLimitSubject("zz::1")).toBe("zz::1");
+  });
+});
+
+describe("rateLimitNetwork", () => {
+  it("keys IPv4 addresses on their /24, also when IPv4-mapped", () => {
+    expect(rateLimitNetwork("211.36.12.7")).toBe("211.36.12.0/24");
+    expect(rateLimitNetwork("::ffff:211.36.12.200")).toBe("211.36.12.0/24");
+  });
+
+  it("keys IPv6 addresses on their /48", () => {
+    expect(rateLimitNetwork("2001:db8:1:2:aaaa::1")).toBe("2001:db8:1::/48");
+    expect(rateLimitNetwork("2001:db8:1:ffff::9")).toBe("2001:db8:1::/48");
+    expect(rateLimitNetwork("2001:db8::1")).toBe("2001:db8:0::/48");
+  });
+
+  it("leaves text that is not an address as it is", () => {
+    expect(rateLimitNetwork("")).toBe("");
+    expect(rateLimitNetwork("999.1.1.1")).toBe("999.1.1.1");
+    expect(rateLimitNetwork("zz::1")).toBe("zz::1");
   });
 });

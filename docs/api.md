@@ -56,7 +56,7 @@
 | `POST` | `/api/auth/anonymous` | `{ inviteCode? }` → 201 `{ account, token, session }`. 익명 계정을 만들고 이 기기를 로그인시킨다. 토큰은 이 응답에서만 평문으로 나온다 |
 | `POST` | `/api/auth/token` | `{ token }` → `SessionState`. 실패 시 401 `INVALID_TOKEN`, 잠금 시 429 `retryAfter` |
 | `POST` | `/api/auth/reauth` | `{ token }` → `{ confirmed: true }`. 활성 계정의 토큰을 다시 입력해 이 세션의 토큰 보기·재발급, 계정 삭제, 관리자 작업을 `AUTH.reauthWindowMin`분 동안 허용한다. 틀리면 401 `INVALID_TOKEN`(로그인과 같은 잠금) |
-| `POST` | `/api/csp-report` | 브라우저의 CSP 위반 보고(`application/csp-report`, `application/reports+json`). 인증 없음, 16KB까지만 읽고 같은 위반은 1시간에 한 번 경고 로그. 항상 204 |
+| `POST` | `/api/csp-report` | 브라우저의 CSP 위반 보고(`application/csp-report`, `application/reports+json`). 인증 없음, 16KB까지만 읽고 본문 하나에서 위반 10개까지, 주소당 1시간에 본문 60개, 전체 1시간에 로그 200줄까지. 같은 위반은 1시간에 한 번 경고 로그. 항상 204 |
 | `POST` | `/api/auth/switch` | `{ accountId }` → `SessionState`. 이 기기에 로그인한 다른 계정을 활성화 |
 | `POST` | `/api/auth/signout` | `{ accountId? }`(기본: 활성 계정) → `SessionState`. 세션을 DB에서 폐기 |
 | `GET` | `/api/me/token?accountId=` | 이 기기에 로그인한 계정(기본: 활성 계정)의 전체 토큰(`cache-control: no-store`). 다른 기기의 계정은 404. 최근 로그인·재인증이 필요하다(`REAUTH_REQUIRED`). 관리자 계정 토큰 보기는 감사 로그에 남는다 |
@@ -164,7 +164,7 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 | `POST` | `/api/file-requests` | `{ folderId, title, password\|null, expiresInDays: 1\|7\|30\|null, maxFiles\|null, maxMb\|null }` → 201. 다른 계정의 폴더는 404, 계정당 `FILE_REQUEST.maxPerAccount`(50)개 |
 | `DELETE` | `/api/file-requests/:id` | 링크 삭제(받은 파일은 남는다). 다른 계정의 링크는 404 |
 | `GET` | `/api/r/:id` | 방문자용 `FileRequestView` `{ status: open\|locked\|expired\|full, title, ownerName, filesLeft, bytesLeft, maxFileBytes }`. 없는 링크는 404 |
-| `POST` | `/api/r/:id/unlock` | `{ password }`. 맞으면 `rf_sh` 쿠키에 기록, 틀리면 403 `Wrong password`, 주소당 10분에 10회를 넘기면 429 |
+| `POST` | `/api/r/:id/unlock` | `{ password }`. 맞으면 `rf_sh` 쿠키에 기록, 틀리면 403 `Wrong password`, 주소당 10분에 10회·네트워크당 10분에 30회·전체 1시간에 200회를 넘기면 429 |
 | `POST` | `/api/r/:id/uploads` | `{ files: [{ name, size }] }`(최대 100개) → `{ batchId, endpoint }`. 이후 웹 앱과 같은 tus 엔드포인트로 보낸다(배치 순서 = `index`). 잠김 401, 만료·가득 참 410, 한도 초과 400(`This link accepts 2 more files.`), 쿼터·공간 부족 507, 주소당 시간당 30배치 초과 429 |
 
 ### 공유 링크 (공개, 로그인 불필요)
@@ -173,12 +173,12 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| `POST` | `/api/share/:linkId/unlock` | `{ password }` argon2 확인. 맞으면 서명된 `rf_sh` 쿠키(12시간)에 그 비밀번호를 가진 항목(링크나 위 폴더)을 기록. 다른 비밀번호가 남았으면 페이지가 다시 묻는다. 틀리면 403 `Wrong password`, 주소당 10분에 10회를 넘기면 429 |
+| `POST` | `/api/share/:linkId/unlock` | `{ password }` argon2 확인. 맞으면 서명된 `rf_sh` 쿠키(12시간)에 그 비밀번호를 가진 항목(링크나 위 폴더)을 기록. 다른 비밀번호가 남았으면 페이지가 다시 묻는다. 틀리면 403 `Wrong password`, 주소당 10분에 10회·네트워크당 10분에 30회·전체 1시간에 200회를 넘기면 429 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/stream` | 방문자 재생·보기. 처음 요청만 "Played/Viewed"로 기록(30분 중복 제거). 다운로드 한도나 첫 다운로드 후 삭제가 걸린 파일은 브라우저마다 한 번 다운로드로 센다(`rf_dv` 쿠키). `?transcode=1`은 소유자 `stream`과 같은 변환 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/preview` | 뷰어용 이미지(WebP 미리보기, 메타데이터 없음, 없으면 `stream`과 같은 응답). "Viewed" 기록, 다음 사진 미리 받기(`x-relayfiles-prefetch` 헤더)는 세지 않는다 |
 | — | 만료로 지워진 링크 | 만료(자체 만료일, 첫 다운로드 후 삭제, 계정 삭제일)로 항목이 정리되면 그 링크와 하위 항목의 링크를 `LinkTombstone`에 `SHARE.tombstoneDays`(90일) 동안 남긴다. 그동안 `/d/<linkId>`는 "This link has expired" 카드, 파일 요청은 410. 존재한 적 없는 링크나 새 링크로 바뀐 옛 링크는 계속 404 |
 | `GET` | `/api/share/:linkId/files/:id/thumb` | 목록 미리보기(WebP, 메타데이터 없음). 재생과 같은 접근 검사(만료 410, 잠김 401, 비공개 404)이고 Stream only 링크에서도 허용. 세거나 기록하지 않는다. 썸네일이 아직 없으면 404 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일, 링크, 경로 위의 한도·첫 다운로드 후 삭제 항목의 다운로드 수 +1(이어받기 허가는 `rf_dv` 쿠키, `If-Range`가 ETag와 다르면 파일 전체로 판단), "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
-| `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만. 항목이 `SHARE.zipMaxItems`(100,000)를 넘으면 413 |
+| `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만(세지 않음, 주소당 1분에 30회). 항목이 `SHARE.zipMaxItems`(100,000)를 넘으면 413 |
 
 - 이미지는 계정 설정 "Strip metadata on public links"(기본 켬)일 때 위치·카메라 정보를 지운 사본으로 나간다(워커가 만든 사본만, 요청 중에는 이미지를 디코딩하지 않는다). 사본이 아직 없으면 503 `MEDIA_NOT_READY`와 `Retry-After`(다시 큐에 넣는다), 지울 수 없는 형식(HEIC 등)이나 워커가 실패한 파일(`Node.stripFailed`)은 415로 거절한다. zip에서는 빼고 `Not included.txt`에 이유와 함께 적는다.
