@@ -21,3 +21,10 @@ export async function trafficTotalOn(db: DbClient, day: Date): Promise<bigint> {
   const total = await db.trafficDaily.aggregate({ where: { day }, _sum: { bytes: true } });
   return total._sum.bytes ?? 0n;
 }
+
+/** Bytes an account's share links sent on one UTC day. */
+export async function trafficOfAccountOn(db: DbClient, accountId: string, at: Date): Promise<bigint> {
+  const day = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+  const row = await db.trafficDaily.findUnique({ where: { accountId_day: { accountId, day } }, select: { bytes: true } });
+  return row?.bytes ?? 0n;
+}

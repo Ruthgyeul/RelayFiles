@@ -6,6 +6,7 @@ import { nameError, uniqName } from "@/domain/names";
 import { parseSearchQuery, rankByName } from "@/domain/search";
 import { busyBadge, type Busy } from "@/domain/share";
 import { effectiveVisibility, segmentsBelowRoot } from "@/domain/tree";
+import { bytesToGb } from "@/domain/traffic";
 import type { AccountRow } from "../repositories/account.repo";
 import { db } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
@@ -42,6 +43,7 @@ export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: num
       expAt: row.expAt?.toISOString() ?? null,
       burn: row.burn,
       downloadLimit: row.downloadLimit,
+      dailyCapGb: bytesToGb(row.dailyBytesCap),
       hasPassword: row.passwordHash !== null,
       access: row.access === "STREAM" ? "stream" : "both",
       note: row.note,

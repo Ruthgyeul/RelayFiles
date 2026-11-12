@@ -49,6 +49,7 @@ export const NODE_SELECT = {
   expAt: true,
   burn: true,
   downloadLimit: true,
+  dailyBytesCap: true,
   passwordHash: true,
   access: true,
   note: true,
@@ -196,7 +197,7 @@ export async function setMissing(db: DbClient, ids: readonly string[], missing: 
 }
 
 /** What a file keeps when its content is replaced: its share link, the link's settings and tags. */
-export type CarriedSettings = Pick<NodeRow, "linkId" | "visibility" | "expiryLabel" | "expAt" | "burn" | "downloadLimit" | "passwordHash" | "access" | "note" | "dlPaused" | "downloads" | "tags">;
+export type CarriedSettings = Pick<NodeRow, "linkId" | "visibility" | "expiryLabel" | "expAt" | "burn" | "downloadLimit" | "dailyBytesCap" | "passwordHash" | "access" | "note" | "dlPaused" | "downloads" | "tags">;
 
 export const carriedSettingsOf = (row: NodeRow): CarriedSettings => ({
   linkId: row.linkId,
@@ -205,6 +206,7 @@ export const carriedSettingsOf = (row: NodeRow): CarriedSettings => ({
   expAt: row.expAt,
   burn: row.burn,
   downloadLimit: row.downloadLimit,
+  dailyBytesCap: row.dailyBytesCap,
   passwordHash: row.passwordHash,
   access: row.access,
   note: row.note,

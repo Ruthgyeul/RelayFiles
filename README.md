@@ -6,6 +6,7 @@ Fast and easy file sharing system. A private file drop for sharing and streaming
 
 - File Manager with folders, tags, search, move and copy, "Renumber files" and "Find duplicates"
 - Earlier versions of replaced files are kept for `FILE_VERSIONS_DAYS` (7 by default) and can be downloaded or restored
+- Daily traffic limits per share link and per account (`SHARE_DAILY_BYTES_CAP_GB`)
 - A Storage page: what each top folder holds, the largest files, old files nobody opened through a share link, and the trash
 - Shift-click to select a range, and rename many items at once (find and replace, prefix and suffix with numbers, letter case) with every new name checked first
 - Favorites: a folder at the top of the root that lists favorite files and folders where they are (no copies), with its own organizing folders

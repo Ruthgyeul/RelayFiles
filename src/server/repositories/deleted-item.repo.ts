@@ -30,6 +30,8 @@ const snapshotRowSchema = z.object({
   expAt: z.iso.datetime().nullable(),
   burn: z.boolean(),
   downloadLimit: z.number().int().nullable(),
+  /** Daily traffic limit in bytes; absent in older snapshots (none). */
+  dailyBytesCap: z.string().nullable().optional(),
   passwordHash: z.string().nullable(),
   access: z.enum(Access),
   note: z.string(),
@@ -68,6 +70,7 @@ export function toSnapshot(rows: readonly Node[], favorites: ReadonlyMap<string,
       expAt: iso(row.expAt),
       burn: row.burn,
       downloadLimit: row.downloadLimit,
+      dailyBytesCap: row.dailyBytesCap?.toString() ?? null,
       passwordHash: row.passwordHash,
       access: row.access,
       note: row.note,
@@ -87,10 +90,11 @@ const date = (value: string | null) => (value === null ? null : new Date(value))
 
 /** The Node rows to insert for a restore of `accountId`'s item, generated-file flags cleared. */
 export function fromSnapshot(nodes: Prisma.JsonValue, accountId: string, now: Date): Prisma.NodeCreateManyInput[] {
-  return snapshotSchema.parse(nodes).map(({ favorite: _favorite, ...row }) => ({
+  return snapshotSchema.parse(nodes).map(({ favorite: _favorite, dailyBytesCap, ...row }) => ({
     ...row,
     accountId,
     size: BigInt(row.size),
+    dailyBytesCap: dailyBytesCap ? BigInt(dailyBytesCap) : null,
     expAt: date(row.expAt),
     createdAt: new Date(row.createdAt),
     modifiedAt: date(row.modifiedAt),

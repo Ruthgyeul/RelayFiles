@@ -8,6 +8,8 @@ export const policyEnv = z.object({
   DEFAULT_QUOTA_GB: z.coerce.number().positive().default(ACCOUNT.defaultQuotaGb),
   /** Total storage all anonymous accounts may use together, in GB (unset = no total limit). */
   ANON_TOTAL_QUOTA_GB: z.coerce.number().positive().optional(),
+  /** Bytes, in GB, the share links of one account may send per UTC day together (unset = no limit). */
+  SHARE_DAILY_BYTES_CAP_GB: z.coerce.number().positive().optional(),
   LOGIN_MAX_ATTEMPTS: positiveInt.default(LOGIN.maxAttempts),
   LOGIN_LOCK_SECONDS: secondsList.default([...LOGIN.lockSeconds]),
   SIGNUPS_PER_HOUR: positiveInt.default(AUTH.signupsPerHour),

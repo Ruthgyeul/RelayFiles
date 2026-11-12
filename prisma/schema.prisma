@@ -208,6 +208,8 @@ model Node {
   expAt         DateTime?
   burn          Boolean     @default(false)
   downloadLimit Int?
+  /// Bytes a share link to this item may send per UTC day (null: no limit, SHARE_DAILY_BYTES_CAP_GB still applies per account).
+  dailyBytesCap BigInt?
   passwordHash  String?
   access        Access      @default(BOTH)
   note          String      @default("")

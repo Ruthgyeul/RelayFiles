@@ -82,7 +82,7 @@
 | `DELETE` | `/api/nodes/:id/versions/:vid` | 이전 버전을 바로 지운다(복원 불가) |
 | `GET` | `/api/nodes/:id/duplicates?recursive=0\|1` | 내용(SHA-256·크기)이 같은 파일 묶음 `DuplicatesResult { groups: [{ sha256, size, wasted, files: [{ id, name, folderPath, parentId, parentIsRoot, kind, hasThumb, createdAt, modifiedAt }] }], scanned, unchecked, truncated }`. 묶음은 낭비 바이트가 큰 순, 파일은 오래된 순. `recursive=1`이면 하위 폴더까지. 해시가 없는 파일은 `unchecked`. `DUPLICATES_MAX_SCAN`(기본 10,000)개·`DUPLICATES.maxGroups`(500)개를 넘으면 `truncated`. 지우기는 일반 삭제(`/api/nodes/delete`)로 한다 |
 | `GET` | `/api/tags` | 계정에서 쓰는 태그와 개수(태그 제안) |
-| `PUT` | `/api/nodes/:id/settings` | 공유 설정(공개 범위, 만료·첫 다운로드 후 삭제는 관리자만, 다운로드 한도, 비밀번호(argon2), 접근, 메모, 하위 항목에 적용) |
+| `PUT` | `/api/nodes/:id/settings` | 공유 설정(공개 범위, 만료·첫 다운로드 후 삭제는 관리자만, 다운로드 한도, `dailyCapGb` 일일 트래픽 한도(GB, `null` = 없음, 빼면 그대로), 비밀번호(argon2), 접근, 메모, 하위 항목에 적용) |
 | `POST` | `/api/nodes/:id/link` | 공유 링크 재발급(옛 링크 즉시 무효, 활동 기록에 남음) |
 | `GET` | `/api/nodes/:id/activity` | 링크 활동 최신 200개(폴더는 하위 항목 포함). Activity 대화상자가 이 목록으로 종류별(열기·보기·재생·다운로드) 합계와 최근 7일·30일 수를 센다(`domain/link-activity.ts`) |
 | `GET` | `/api/nodes/:id/activity/csv` | 같은 기록을 CSV로 내려받기(`text/csv; charset=utf-8`, UTF-8 BOM, `Content-Disposition: attachment; "<이름> activity.csv"`, `no-store`). 열 `Time (UTC),Event,File,Device,Address,Country`, 최신순 최대 `SHARE.activityExportLimit`(10,000)개. `= + - @`(또는 탭·CR)로 시작하는 칸은 앞에 `'`를 붙여 수식으로 실행되지 않게 한다(`domain/csv.ts`). 소유자만, 다른 계정 항목은 404 |
@@ -201,7 +201,7 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/preview` | 뷰어용 이미지(WebP 미리보기, 메타데이터 없음, 없으면 `stream`과 같은 응답). "Viewed" 기록, 다음 사진 미리 받기(`x-relayfiles-prefetch` 헤더)는 세지 않는다 |
 | — | 만료로 지워진 링크 | 만료(자체 만료일, 첫 다운로드 후 삭제, 계정 삭제일)로 항목이 정리되면 그 링크와 하위 항목의 링크를 `LinkTombstone`에 `SHARE.tombstoneDays`(90일) 동안 남긴다. 그동안 `/d/<linkId>`는 "This link has expired" 카드, 파일 요청은 410. 존재한 적 없는 링크나 새 링크로 바뀐 옛 링크는 계속 404 |
 | `GET` | `/api/share/:linkId/files/:id/thumb` | 목록 미리보기(WebP, 메타데이터 없음). 재생과 같은 접근 검사(만료 410, 잠김 401, 비공개 404)이고 Stream only 링크에서도 허용. 세거나 기록하지 않는다. 썸네일이 아직 없으면 404 |
-| `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일, 링크, 경로 위의 한도·첫 다운로드 후 삭제 항목의 다운로드 수 +1(이어받기 허가는 `rf_dv` 쿠키, `If-Range`가 ETag와 다르면 파일 전체로 판단), "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
+| `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일, 링크, 경로 위의 한도·첫 다운로드 후 삭제 항목의 다운로드 수 +1(이어받기 허가는 `rf_dv` 쿠키, `If-Range`가 ETag와 다르면 파일 전체로 판단), "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. 링크의 일일 트래픽 한도나 계정의 `SHARE_DAILY_BYTES_CAP_GB`를 다 쓰면 429 + `Retry-After`(UTC 자정까지, `stream`·`zip`도 같다). Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
 | `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만(세지 않음, 주소당 1분에 30회). 항목이 `SHARE.zipMaxItems`(100,000)를 넘으면 413 |
 
 - 이미지는 계정 설정 "Strip metadata on public links"(기본 켬)일 때 위치·카메라 정보를 지운 사본으로 나간다(워커가 만든 사본만, 요청 중에는 이미지를 디코딩하지 않는다). 사본이 아직 없으면 503 `MEDIA_NOT_READY`와 `Retry-After`(다시 큐에 넣는다), 지울 수 없는 형식(HEIC 등)이나 워커가 실패한 파일(`Node.stripFailed`)은 415로 거절한다. zip에서는 빼고 `Not included.txt`에 이유와 함께 적는다.

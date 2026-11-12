@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { NodeItem } from "@/contracts/nodes";
 import { buildNodeMenu, type NodeActions } from "./node-menu";
 
-const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
+const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, dailyCapGb: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
 const noop = () => undefined;
 const all: Required<NodeActions> = Object.fromEntries(
   ["open", "preview", "download", "downloadZip", "toggleFavorite", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rescan", "rename", "copy", "move", "delete", "renumber", "duplicates", "versions", "properties"].map((key) => [key, noop]),
