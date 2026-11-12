@@ -24,6 +24,8 @@ export interface ClientConfig {
   uploadChunkBytes: number;
   /** Hours deleted items can be restored (TRASH_RETENTION_HOURS), for the delete dialogs' wording. */
   trashRetentionHours: number;
+  /** Days an earlier version of a replaced file is kept (FILE_VERSIONS_DAYS; 0: none). */
+  fileVersionsDays: number;
 }
 
 export interface TokenToSave {

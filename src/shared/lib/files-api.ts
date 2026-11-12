@@ -1,6 +1,7 @@
 import type {
   CreatedFolder,
   DuplicatesResult,
+  FileVersionDto,
   FolderNode,
   FolderView,
   LinkEventDto,
@@ -29,6 +30,8 @@ export const fileUrls = {
   zip: (ids: string[]) => `/api/zip?ids=${ids.map(encodeURIComponent).join(",")}`,
   /** The item's link activity as a CSV download. */
   activityCsv: (id: string) => `${node(id)}/activity/csv`,
+  /** An earlier version of a file as a download. */
+  versionContent: (id: string, versionId: string) => `${node(id)}/versions/${encodeURIComponent(versionId)}/content`,
 };
 
 /** File Manager API calls (reads come from the server render; these refresh or change data). */
@@ -47,6 +50,9 @@ export const filesApi = {
   saveSettings: (id: string, settings: SettingsInput) => apiFetch<NodeItem>(`${node(id)}/settings`, { method: "PUT", json: settings }),
   newLink: (id: string) => apiFetch<NodeItem>(`${node(id)}/link`, { method: "POST" }),
   activity: (id: string) => apiFetch<LinkEventDto[]>(`${node(id)}/activity`),
+  versions: (id: string) => apiFetch<FileVersionDto[]>(`${node(id)}/versions`),
+  restoreVersion: (id: string, versionId: string) => apiFetch<{ nodeId: string }>(`${node(id)}/versions/${encodeURIComponent(versionId)}/restore`, { method: "POST" }),
+  deleteVersion: (id: string, versionId: string) => apiFetch<{ deleted: true }>(`${node(id)}/versions/${encodeURIComponent(versionId)}`, { method: "DELETE" }),
   rescan: (id: string) => apiFetch<{ queued: true }>(`${node(id)}/scan`, { method: "POST" }),
   setPaused: (id: string, paused: boolean) => apiFetch<NodeItem>(`${node(id)}/pause`, { method: "PUT", json: { paused } }),
   renumberPreview: (folderId: string, sort: RenumberSort, order: RenumberOrder) => apiFetch<RenumberPreview>(`${node(folderId)}/renumber?sort=${sort}&order=${order}`),

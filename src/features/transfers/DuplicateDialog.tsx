@@ -1,6 +1,7 @@
 "use client";
 
 import type { DuplicatePolicy } from "@/contracts/uploads";
+import { useShell } from "@/features/shell/ShellProvider";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { Modal } from "@/shared/ui/Modal";
 
@@ -18,8 +19,16 @@ const OPTIONS: { policy: DuplicatePolicy; label: string; description: string; ic
   { policy: "skip", label: "Skip duplicates", description: "Upload only new files", icon: "skip-forward" },
 ];
 
+/** What Replace does: with FILE_VERSIONS_DAYS above 0 the replaced files are kept as versions. */
+function replaceText(days: number): string {
+  if (days <= 0) return OPTIONS[0]!.description;
+  return `Overwrite the existing files; the current ones are kept as versions for ${days} ${days === 1 ? "day" : "days"}`;
+}
+
 /** "N files already exist in …" (440px): replace, keep both or skip. */
 export function DuplicateDialog({ request, onChoose, onClose }: { request: DuplicateRequest | null; onChoose: (policy: DuplicatePolicy) => void; onClose: () => void }) {
+  const { config } = useShell();
+  const options = OPTIONS.map((option) => (option.policy === "replace" ? { ...option, description: replaceText(config.fileVersionsDays) } : option));
   const count = request?.names.length ?? 0;
   const title = `${count} ${count === 1 ? "file already exists" : "files already exist"} in ${request?.folderName || "this folder"}`;
   return (
@@ -39,7 +48,7 @@ export function DuplicateDialog({ request, onChoose, onClose }: { request: Dupli
         </div>
       </div>
       <div className="flex flex-col gap-2 px-5 py-4">
-        {OPTIONS.map((option) => (
+        {options.map((option) => (
           <button
             key={option.policy}
             type="button"

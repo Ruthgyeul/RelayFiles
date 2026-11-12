@@ -27,6 +27,8 @@ export interface NodeActions {
   renumber?: () => void;
   /** Folders: files with the same content. */
   duplicates?: () => void;
+  /** Files: earlier versions kept when an upload replaced the file. */
+  versions?: () => void;
   properties?: () => void;
 }
 
@@ -63,7 +65,12 @@ export function buildNodeMenu(item: Pick<NodeItem, "type" | "kind" | "settings" 
       isRoot ? null : ["Move", "arrow-bend-up-right", actions.move],
       isRoot ? null : ["Delete", "trash", actions.delete],
     ],
-    [folder ? ["Renumber files", "list-numbers", actions.renumber] : null, folder ? ["Find duplicates", "files", actions.duplicates] : null, item.scan === "failed" ? ["Scan again", "shield-check", actions.rescan] : null],
+    [
+      folder ? ["Renumber files", "list-numbers", actions.renumber] : null,
+      folder ? ["Find duplicates", "files", actions.duplicates] : null,
+      folder ? null : ["Version history", "clock-counter-clockwise", actions.versions],
+      item.scan === "failed" ? ["Scan again", "shield-check", actions.rescan] : null,
+    ],
     [["Properties", "info", actions.properties]],
   ];
 
