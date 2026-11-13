@@ -205,6 +205,10 @@ File Manager 툴바의 공유 아이콘(`/files/shared`)이 밖에서 열 수 �
   - 삭제하면 FK cascade로 즐겨찾기가 사라진다. 그 전에 위치를 휴지통 스냅샷(`favorite.folderId`)에 남겨, 복원할 때 다시 넣는다(`relistFavorites`). 정리용 폴더가 사라졌으면 맨 위에 넣고, 한도 안에서만 넣는다.
   - 복사본은 새 노드라 즐겨찾기가 아니다.
 - **목록 표시**: 폴더 뷰와 검색 결과는 행마다 한 번의 `favoriteFoldersOf` 조회로 `favorite: true`를 붙인다. 루트는 `favoriteCount`도 함께 보낸다(Favorites 행의 항목 수).
+- **Favorites 화면의 찾기·보기**: 파일 관리자와 같은 툴바(`Toolbar`, 전체 선택·그리드/리스트·검색·정렬·새로고침, 공유·스토리지·휴지통 링크는 숨김), 유형 필터(`FilterBar`), 단축키(`/`, `G`, Ctrl/⌘A, Backspace)를 쓴다(`features/favorites/useFavoriteItems.ts`).
+  - 이름 검색은 지금 단계의 즐겨찾기와 정리용 폴더만 거른다. `#tag` 검색은 정리용 폴더와 상관없이 즐겨찾기 전체에서 찾는다(`GET /api/favorites/tags`, 결과는 `FILES.maxFavorites`까지라 잘리지 않는다). 태그 검색 중에는 정리용 폴더를 숨긴다.
+  - 정렬은 `Recently added`(기본, 서버 순서 = 즐겨찾기에 넣은 최신순)와 파일 관리자의 정렬 키(이름·생성일·크기·유형, `domain/favorites.ts` `sortFavorites`). 정리용 폴더는 항상 항목 위에 이름순이고 "Name Z → A"일 때만 거꾸로다(`visibleFavoriteFolders`). 유형 필터는 All·Folders에서만 정리용 폴더를 보여 준다.
+  - 그리드에서는 정리용 폴더도 카드(`FavoriteFolderCard`)로 보인다. 보기·정렬은 기기별로 파일 관리자와 따로 기억한다(`relay.favoritesView`, `useViewPrefs`).
 
 ### 순번 정리 (Renumber files)
 

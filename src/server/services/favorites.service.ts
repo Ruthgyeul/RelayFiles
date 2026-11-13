@@ -1,6 +1,7 @@
 import "server-only";
 import { FILES } from "@/config/policy";
 import type { FavoriteFolderDeleteMode, FavoriteFolderDto, FavoriteFolderPage, FavoritesView } from "@/contracts/favorites";
+import type { TaggedItem } from "@/contracts/nodes";
 import { favoriteDepth, favoritePath, favoriteSubtree, favoriteTree, fitsDepth, liftedNames, wouldCycle, type FavoriteFolderLink } from "@/domain/favorites";
 import { newNodeId } from "@/domain/ids";
 import { nameError } from "@/domain/names";
@@ -15,6 +16,7 @@ import {
   favoriteFolderCounts,
   favoriteFoldersOf,
   favoritesIn,
+  favoritesWithTags,
   listFavoriteFolders,
   lockFavoritesOf,
   moveFavorites,
@@ -191,6 +193,11 @@ export async function favoritesView(owner: FavoritesOwner, folderId: string | nu
     items,
     tree: folders,
   };
+}
+
+/** Favorites in any organizing folder that carry every tag (tag search on the Favorites page). */
+export async function searchFavoriteTags(owner: FavoritesOwner, tags: string[]): Promise<TaggedItem[]> {
+  return withPaths(owner.id, await favoritesWithTags(db(), owner.id, tags, FILES.maxFavorites));
 }
 
 /**

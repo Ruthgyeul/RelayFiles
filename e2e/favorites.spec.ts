@@ -73,3 +73,55 @@ test("collects favorites where they are and organizes them in folders", async ({
   await expect.poll(async () => (await names(page)).sort()).toEqual(["Docs", "notes.txt"]);
   await expect(page.locator('[data-entry="Favorites"]')).toContainText("1 item");
 });
+
+test("searches, filters by tag, sorts and shows Favorites as a grid", async ({ page }) => {
+  test.slow();
+  await openFiles(page);
+  await newFolder(page, "Alpha");
+  await newFolder(page, "Beta");
+  await uploadText(page, "notes.txt", "remember");
+  await itemMenu(page, "Beta", "Tags");
+  const tags = page.getByRole("dialog", { name: "Tags · Beta" });
+  await tags.getByRole("textbox", { name: "Add a tag" }).fill("work");
+  await tags.getByRole("textbox", { name: "Add a tag" }).press("Enter");
+  await tags.getByRole("button", { name: "Done" }).click();
+  for (const name of ["Alpha", "Beta", "notes.txt"]) {
+    await itemMenu(page, name, "Add to favorites");
+    await expect(page.locator(`[data-item="${name}"]`).getByLabel("In Favorites")).toBeVisible();
+  }
+
+  await page.goto("/files/favorites");
+  await expect(page.getByRole("heading", { level: 1, name: "Favorites" })).toBeVisible();
+  await page.getByRole("button", { name: "New folder" }).click();
+  const create = page.getByRole("dialog", { name: "New folder in Favorites" });
+  await create.getByRole("textbox").fill("Keep");
+  await create.getByRole("button", { name: "Create" }).click();
+  await itemMenu(page, "Beta", "Move in favorites");
+  const move = page.getByRole("dialog", { name: 'Move "Beta" in Favorites' });
+  await move.getByRole("button", { name: "Keep" }).click();
+  await move.getByRole("button", { name: "Move here" }).click();
+
+  // Newest favorite first by default; the File Manager's sorts as well.
+  await expect.poll(() => names(page)).toEqual(["notes.txt", "Alpha"]);
+  await page.getByRole("button", { name: /^Sort:/ }).click();
+  await page.getByRole("menuitem", { name: "Name A → Z" }).click();
+  await expect.poll(() => names(page)).toEqual(["Alpha", "notes.txt"]);
+
+  // Names match this level; a #tag finds favorites in every organizing folder.
+  await page.getByRole("button", { name: "Search in Favorites" }).click();
+  const box = page.getByRole("textbox", { name: "Search in Favorites" });
+  await box.fill("note");
+  await expect.poll(() => names(page)).toEqual(["notes.txt"]);
+  await expect(page.locator('[data-entry="Keep"]')).toHaveCount(0);
+  await box.fill("#work");
+  await expect(page.getByText(/1 item in Favorites/)).toBeVisible();
+  await expect.poll(() => names(page)).toEqual(["Beta"]);
+  await page.getByRole("button", { name: "Clear" }).click();
+
+  // Grid view shows organizing folders as cards too.
+  await page.getByRole("button", { name: "Grid view" }).click();
+  await expect(page.locator('[data-entry="Keep"]')).toContainText("1 item");
+  await expect.poll(() => names(page)).toEqual(["Alpha", "notes.txt"]);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "List view" })).toBeVisible();
+});

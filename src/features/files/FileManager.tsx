@@ -20,7 +20,7 @@ import { PathBar } from "./PathBar";
 import { folderHref, sharePageHref } from "@/shared/lib/routes";
 import { PropertiesDialog } from "./PropertiesDialog";
 import { SearchBox, TagModeBar } from "./SearchBox";
-import { Toolbar } from "./Toolbar";
+import { FILE_SORT_OPTIONS, Toolbar } from "./Toolbar";
 import { toolbarActions } from "./ToolbarActions";
 import { useFileDialogs } from "./useFileDialogs";
 import { useFolderDrop } from "./useFolderDrop";
@@ -167,6 +167,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
         onToggleView={() => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" })}
         onToggleSearch={search.toggleSearch}
         sort={prefs.sort}
+        sortOptions={FILE_SORT_OPTIONS}
         onSort={(sort) => setPrefs({ sort })}
         onRefresh={() => {
           router.refresh();

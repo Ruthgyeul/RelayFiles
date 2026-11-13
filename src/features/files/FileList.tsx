@@ -22,14 +22,17 @@ interface FileListProps {
   onDropFiles: (transfer: DataTransfer) => void;
   /** Rows shown before the items (the Favorites entry, organizing folders). */
   leading?: ReactNode;
+  /** Cards shown before the items in grid view (organizing folders in Favorites); `leading` is not shown then. */
+  leadingCards?: ReactNode;
   /** No empty state under `leading` when there are no items (Favorites with only organizing folders). */
   hideEmpty?: boolean;
 }
 
 /** The items of a folder as rows or cards, and a drop zone for files from the computer. */
-export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onOpen, onDownload, onDropFiles, leading, hideEmpty = false }: FileListProps) {
+export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onOpen, onDownload, onDropFiles, leading, leadingCards, hideEmpty = false }: FileListProps) {
   const [filesOver, setFilesOver] = useState(false);
   const lazy = items.length > FILES.lazyRenderAfter;
+  const cards = view === "grid" && leadingCards !== undefined;
   return (
     <div
       onDragOver={(event) => {
@@ -46,11 +49,12 @@ export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onO
       }}
       className={cn("flex flex-col gap-px overflow-hidden rounded-2xl border bg-card-line", filesOver ? "border-accent-hi" : "border-card-line")}
     >
-      {leading}
-      {items.length === 0 ? (
+      {!cards && leading}
+      {items.length === 0 && !cards ? (
         hideEmpty ? null : <EmptyFolder title={emptyTitle} actions={emptyActions} />
       ) : view === "grid" ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] gap-3 bg-card p-3.5">
+          {leadingCards}
           {items.map((item) => (
             <NodeCard key={item.id} {...itemProps(item)} lazy={lazy} />
           ))}

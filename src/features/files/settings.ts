@@ -15,7 +15,7 @@ export function toShareSettings(settings: NodeSettingsDto): ShareSettings {
 }
 
 /** API item → the shape the domain sort rules use. */
-export function toSortable(item: NodeItem): SortableNode & { item: NodeItem } {
+export function toSortable<T extends NodeItem>(item: T): SortableNode & { item: T } {
   return { type: item.type, name: item.name, kind: item.kind, size: Number(item.size), createdAt: Date.parse(item.createdAt), item };
 }
 

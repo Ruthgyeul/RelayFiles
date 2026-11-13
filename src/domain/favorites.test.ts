@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { favoriteDepth, favoriteHeight, favoritePath, favoriteSubtree, favoriteTree, fitsDepth, liftedNames, wouldCycle } from "./favorites";
+import {
+  FAVORITE_SORT_KEYS,
+  FAVORITE_SORT_OPTION_LABEL,
+  FAVORITE_SORT_SHORT_LABEL,
+  favoriteDepth,
+  favoriteHeight,
+  favoritePath,
+  favoriteSubtree,
+  favoriteTree,
+  fitsDepth,
+  liftedNames,
+  sortFavorites,
+  visibleFavoriteFolders,
+  wouldCycle,
+} from "./favorites";
+import type { SortableNode } from "./tree";
 
 // a ─ b ─ c,  a ─ d,  e
 const tree = favoriteTree([
@@ -51,5 +66,45 @@ describe("favorite folder tree", () => {
       ["y", "Old (3)"],
       ["z", "New"],
     ]);
+  });
+});
+
+describe("favorites listing", () => {
+  const node = (name: string, extra: Partial<SortableNode> = {}): SortableNode => ({ type: "file", name, kind: "other", size: 0, createdAt: 0, ...extra });
+  // As the server lists them: newest favorite first.
+  const added = [node("b.txt", { createdAt: 1, size: 3 }), node("Docs", { type: "folder", kind: null, createdAt: 3 }), node("a.txt", { createdAt: 2, size: 9 })];
+  const names = (list: readonly { name: string }[]) => list.map((entry) => entry.name);
+
+  it("keeps the added order or sorts like the File Manager", () => {
+    expect(names(sortFavorites(added, "added"))).toEqual(["b.txt", "Docs", "a.txt"]);
+    expect(names(sortFavorites(added, "name"))).toEqual(["Docs", "a.txt", "b.txt"]);
+    expect(names(sortFavorites(added, "date"))).toEqual(["Docs", "a.txt", "b.txt"]);
+    expect(names(sortFavorites(added, "date-asc"))).toEqual(["Docs", "b.txt", "a.txt"]);
+    expect(names(sortFavorites(added, "size"))).toEqual(["Docs", "a.txt", "b.txt"]);
+  });
+
+  it("labels every sort key", () => {
+    expect(FAVORITE_SORT_KEYS[0]).toBe("added");
+    for (const key of FAVORITE_SORT_KEYS) {
+      expect(FAVORITE_SORT_OPTION_LABEL[key]).toBeTruthy();
+      expect(FAVORITE_SORT_SHORT_LABEL[key]).toBeTruthy();
+    }
+    expect(FAVORITE_SORT_OPTION_LABEL.added).toBe("Recently added");
+  });
+
+  const folders = [{ name: "Work 10" }, { name: "music" }, { name: "Work 2" }];
+  const listing = { query: "", filter: "all", tagMode: false, sort: "added" } as const;
+
+  it("lists organizing folders by name, reversed only for Name Z to A", () => {
+    expect(names(visibleFavoriteFolders(folders, listing))).toEqual(["music", "Work 2", "Work 10"]);
+    expect(names(visibleFavoriteFolders(folders, { ...listing, sort: "date" }))).toEqual(["music", "Work 2", "Work 10"]);
+    expect(names(visibleFavoriteFolders(folders, { ...listing, sort: "name-desc" }))).toEqual(["Work 10", "Work 2", "music"]);
+  });
+
+  it("matches folders by name and hides them for tag search and file types", () => {
+    expect(names(visibleFavoriteFolders(folders, { ...listing, query: "work" }))).toEqual(["Work 2", "Work 10"]);
+    expect(names(visibleFavoriteFolders(folders, { ...listing, filter: "folder" }))).toHaveLength(3);
+    expect(visibleFavoriteFolders(folders, { ...listing, filter: "video" })).toEqual([]);
+    expect(visibleFavoriteFolders(folders, { ...listing, tagMode: true })).toEqual([]);
   });
 });
