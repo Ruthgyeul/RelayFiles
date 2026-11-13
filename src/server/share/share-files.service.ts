@@ -110,7 +110,9 @@ async function countSharedDownload(file: SharedFile, viewer: ShareViewer, client
   if (!claimed) throw new ApiError("FORBIDDEN", "Download limit reached");
   noteUsedUp(file.link.root.accountId, claimed.usedUp);
   const visitorId = viewer.visitorId ?? newVisitorId();
-  await grantDownload(row.id, visitorId);
+  // Already counted: a Redis hiccup only costs the visitor resuming, never the download itself
+  // (a delete-after-download file would otherwise be used up without anyone receiving it).
+  await grantDownload(row.id, visitorId).catch((error: unknown) => logger.warn("download grant not stored", { error }));
   await recordDownload(file.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
   void logLinkEvent(row, "DOWNLOAD", client);
   return visitorId;
