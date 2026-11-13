@@ -5,7 +5,6 @@ import type { Readable } from "node:stream";
 import { DIR_MODE, type VolumeLayout } from "../layout";
 import { StorageTargetExistsError, type StorageLocation, type StorageStat } from "../driver";
 import { assertNoSymlinks, resolveInsideUserRoot, userRootOf } from "../safe-path";
-import { copyEntry } from "./copy";
 import { errorCode, NO_HARD_LINK, pathExists } from "./fs-errors";
 
 // Items in an account's folder tree (users/<accountId>/…), addressed by StorageLocation.
@@ -41,11 +40,6 @@ export async function createFolder(layout: VolumeLayout, location: StorageLocati
   await mkdir(await pathOf(layout, location), { mode: DIR_MODE });
 }
 
-export async function renameLocation(layout: VolumeLayout, from: StorageLocation, to: StorageLocation): Promise<void> {
-  const [source, target] = await Promise.all([pathOf(layout, from), pathOf(layout, to)]);
-  await rename(source, target);
-}
-
 export async function renameNoReplace(layout: VolumeLayout, from: StorageLocation, to: StorageLocation): Promise<void> {
   const [source, target] = await Promise.all([pathOf(layout, from), pathOf(layout, to)]);
   await renameNoReplacePath(source, target);
@@ -67,7 +61,3 @@ export async function renameNoReplacePath(source: string, target: string): Promi
   await unlink(source);
 }
 
-export async function copyLocation(layout: VolumeLayout, from: StorageLocation, to: StorageLocation): Promise<void> {
-  const [source, target] = await Promise.all([pathOf(layout, from), pathOf(layout, to)]);
-  await copyEntry(source, target);
-}

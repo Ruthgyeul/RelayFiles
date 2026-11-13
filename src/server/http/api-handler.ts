@@ -50,10 +50,10 @@ function zodFields(error: ZodError): Record<string, string> {
   return Object.fromEntries(error.issues.map((issue) => [issue.path.join(".") || "(root)", issue.message]));
 }
 
-/** Converts any thrown value into a client-safe failure response. Exported for tests. */
 /** 5xx answers that are part of normal operation (the client retries), not server faults to log. */
 const EXPECTED_UNAVAILABLE: ReadonlySet<ErrorCode> = new Set(["MEDIA_NOT_READY"]);
 
+/** Converts any thrown value into a client-safe failure response. Exported for tests. */
 export function toFailure(error: unknown, requestId: string): NextResponse<ApiFailure> {
   if (error instanceof ApiError) {
     if (error.status >= 500 && !EXPECTED_UNAVAILABLE.has(error.code)) logger.error("api error", { requestId, code: error.code, error });

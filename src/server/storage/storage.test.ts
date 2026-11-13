@@ -112,7 +112,7 @@ describe("LocalVolumeDriver", () => {
     await driver.createFolder(at("A"));
     await writeFile(join(root, "users", ACCOUNT, "A", "f.txt"), "x");
     await driver.createFolder(at("B"));
-    await driver.rename(at("A"), at("B", "A2"));
+    await driver.renameNoReplace(at("A"), at("B", "A2"));
     expect(await readFile(join(root, "users", ACCOUNT, "B", "A2", "f.txt"), "utf8")).toBe("x");
   });
 
@@ -142,26 +142,18 @@ describe("LocalVolumeDriver", () => {
     expect((await stat(join(user, "01.txt"))).nlink).toBe(2);
   });
 
-  it("copies files and folders without overwriting", async () => {
-    const driver = new LocalVolumeDriver("vol-1", root);
-    await driver.ensureUserRoot(ACCOUNT);
-    await writeFile(join(root, "users", ACCOUNT, "a.txt"), "hello");
-    await driver.copy(at("a.txt"), at("b.txt"));
-    expect(await readFile(join(root, "users", ACCOUNT, "b.txt"), "utf8")).toBe("hello");
-    await expect(driver.copy(at("a.txt"), at("b.txt"))).rejects.toThrow();
-  });
-
-  it("copies by hard link, folders included, and links a re-upload to an existing file of the same size", async () => {
+  it("links a re-upload to an existing file of the same size", async () => {
     const driver = new LocalVolumeDriver("vol-1", root);
     await driver.ensureUserRoot(ACCOUNT);
     const user = join(root, "users", ACCOUNT);
     await mkdir(join(user, "A", "B"), { recursive: true });
     await writeFile(join(user, "A", "B", "f.txt"), "same");
-    await driver.copy(at("A"), at("A2"));
-    expect((await stat(join(user, "A2", "B", "f.txt"))).ino).toBe((await stat(join(user, "A", "B", "f.txt"))).ino);
 
     expect(await driver.linkExisting(at("A", "B", "f.txt"), at("g.txt"), 4)).toBe(true);
-    expect((await stat(join(user, "g.txt"))).nlink).toBe(3);
+    expect((await stat(join(user, "g.txt"))).nlink).toBe(2);
+    // Something on the disk only is in the way: no link, the caller's own placing reports it.
+    await writeFile(join(user, "taken.txt"), "other");
+    expect(await driver.linkExisting(at("A", "B", "f.txt"), at("taken.txt"), 4)).toBe(false);
     expect(await driver.linkExisting(at("A", "B", "f.txt"), at("h.txt"), 5)).toBe(false);
     expect(await driver.linkExisting(at("gone.txt"), at("h.txt"), 4)).toBe(false);
   });
@@ -208,7 +200,12 @@ describe("LocalVolumeDriver", () => {
     await driver.ensureUserRoot(ACCOUNT);
     await mkdir(join(root, "users", ACCOUNT, "A"));
     await symlink("/etc", join(root, "users", ACCOUNT, "A", "etc"));
-    await expect(driver.copy(at("A"), at("A2"))).rejects.toThrow("Only files and folders can be copied.");
+    const entries = [
+      { segments: [], type: "folder" },
+      { segments: ["etc"], type: "folder" },
+    ] as const;
+    await expect(driver.stageCopy(at("A"), entries)).rejects.toThrow(StorageEntryMissingError);
+    expect(await readdir(layoutOf(root).uploads)).toEqual([]);
   });
 
   it("refuses to follow symbolic links planted inside an account", async () => {

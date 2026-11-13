@@ -25,7 +25,7 @@ function accountCap(): bigint | null {
  * day; Retry-After is the time left until midnight UTC. Checked before sending, so the response
  * that crosses a limit still finishes.
  */
-export async function assertShareTraffic(owner: { id: string }, root: { id: string; dailyBytesCap: bigint | null }, now: number = Date.now()): Promise<void> {
+export async function assertShareTraffic(owner: { id: string }, root: { id: string; dailyBytesCap: bigint | null }, now: number): Promise<void> {
   const account = accountCap();
   if (root.dailyBytesCap === null && account === null) return;
   const [linkUsed, accountUsed] = await Promise.all([

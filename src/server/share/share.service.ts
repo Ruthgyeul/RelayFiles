@@ -32,7 +32,8 @@ export interface ShareViewer {
 }
 
 const lower = <T extends string>(value: T) => value.toLowerCase() as Lowercase<T>;
-const kindOf = (row: { kind: string | null }) => (row.kind ? (lower(row.kind) as NodeKind) : null);
+/** The DTO kind of a node row ("IMAGE" → "image"), or null for folders. */
+export const kindOf = (row: { kind: string | null }) => (row.kind ? (lower(row.kind) as NodeKind) : null);
 
 export const shareUrl = (linkId: string) => `${getAppEnv().PUBLIC_URL}/d/${linkId}`;
 

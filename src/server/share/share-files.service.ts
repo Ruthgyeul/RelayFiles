@@ -6,7 +6,6 @@ import { isSubtitleName } from "@/domain/subtitles";
 import { subtreePaths } from "@/domain/subtree";
 import { effectiveRange, parseRange, zipName } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadBlock, type DownloadDecision } from "@/domain/share-access";
-import type { NodeKind } from "@/domain/tree";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { countInWindow } from "../redis";
@@ -24,7 +23,7 @@ import { canStripType } from "../media/process";
 import { copySatisfies, shareStripMode } from "../media/strip-mode";
 import { transcodeResponse } from "../media/transcode";
 import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
-import { findAccountById, type AccountRow } from "../repositories/account.repo";
+import type { AccountRow } from "../repositories/account.repo";
 import { claimDownload, claimEachDownload, type SharedRow } from "../repositories/share.repo";
 import { addTraffic } from "../repositories/traffic.repo";
 import { assertShareTraffic, countLinkTraffic } from "./traffic-cap";
@@ -36,11 +35,11 @@ import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driv
 import {
   assertSharedFolderZippable,
   downloadBlockOf,
+  kindOf,
   pausedOn,
   resolveSharedFile,
   resolveSharedFolder,
   sharedFolderTree,
-  type LoadedLink,
   type SharedFile,
   type SharedFolder,
   type SharedFolderTree,
@@ -51,12 +50,6 @@ import { zipResponse, type ZipEntry } from "../services/zip.service";
 import { markActive } from "../metrics/activity";
 import { scanBlock } from "@/domain/scan";
 
-/** The link owner's account (for the storage volume and the metadata setting). */
-async function ownerOf(link: LoadedLink): Promise<AccountRow> {
-  const owner = await findAccountById(db(), link.root.accountId);
-  if (!owner) throw new ApiError("NOT_FOUND");
-  return owner;
-}
 
 /** Whether visitors get this photo or video as the worker's copy without metadata (SHARE_METADATA_STRIP and the owner's setting). */
 const stripsMedia = (owner: AccountRow, row: Pick<SharedRow, "kind">) => owner.stripMetadataOnShare && shareStripMode() !== "none" && (row.kind === "IMAGE" || row.kind === "VIDEO");
@@ -97,7 +90,6 @@ async function publicImage(driver: StorageDriver, location: StorageLocation, row
   return asset;
 }
 
-const kindOf = (row: Pick<SharedRow, "kind">) => (row.kind ? (row.kind.toLowerCase() as NodeKind) : null);
 
 /**
  * Counts a visitor's download start on the file, the link and every item on the way that
@@ -137,7 +129,8 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   const now = Date.now();
   const file = await resolveSharedFile(linkId, nodeId, viewer, mode, now);
   const { link, row } = file;
-  const owner = await ownerOf(link);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
   const driver = await driverForAccount(owner);
   const location = { accountId: owner.id, segments: file.segments };
   const body = stripsMedia(owner, row) ? await publicImage(driver, location, row) : undefined;
@@ -195,7 +188,8 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
 export async function serveSharedThumb(req: Request, linkId: string, nodeId: string, viewer: ShareViewer): Promise<Response> {
   const { link, row } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
   if (!row.hasThumb) throw new ApiError("NOT_FOUND");
-  const owner = await ownerOf(link);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
   return sendThumb(req, await driverForAccount(owner), owner.id, row);
 }
 
@@ -206,7 +200,8 @@ export async function serveSharedThumb(req: Request, linkId: string, nodeId: str
  */
 export async function serveSharedPreview(req: Request, linkId: string, nodeId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
   const { link, row, limited } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
-  const owner = await ownerOf(link);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
   // A file under a download limit or delete-after-download goes through playback, which counts it.
   const preview = row.kind === "IMAGE" && !limited ? await sendAsset(req, await driverForAccount(owner), owner.id, row, "preview") : null;
   if (!preview) return serveSharedFile(req, linkId, nodeId, "stream", viewer, client);
@@ -222,7 +217,8 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
   const file = await resolveSharedFile(linkId, nodeId, viewer, "stream", now);
   const { link, row } = file;
   if (row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
-  const owner = await ownerOf(link);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
   if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, link.root, now);
   const driver = await driverForAccount(owner);
   // A file under a download limit or delete-after-download: converted playback counts like
@@ -305,7 +301,8 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   const shared = await resolveSharedFolder(linkId, folderId, viewer, now);
   const { link, folder } = shared;
   const tree = await sharedFolderTree(shared, now);
-  const owner = await ownerOf(link);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
   if (!link.isOwner) await assertShareTraffic(owner, link.root, now);
   const driver = await driverForAccount(owner);
   const base = segmentsBelowRoot(shared.chain);

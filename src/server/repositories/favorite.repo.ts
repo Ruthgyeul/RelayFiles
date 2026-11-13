@@ -11,7 +11,6 @@ export async function lockFavoritesOf(tx: DbClient, accountId: string): Promise<
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`favorites:${accountId}`}))`;
 }
 
-/** Every organizing folder of an account (at most FILES.maxFavoriteFolders), to build paths in memory. */
 /** Every favorite of an account with the organizing folder it is in (account export). */
 export function listFavoritesOf(db: DbClient, accountId: string) {
   return db.favorite.findMany({ where: { accountId }, select: { nodeId: true, folderId: true } });

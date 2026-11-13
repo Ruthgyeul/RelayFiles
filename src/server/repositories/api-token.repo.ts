@@ -30,7 +30,6 @@ export function countApiTokens(db: DbClient, accountId: string): Promise<number>
   return db.apiToken.count({ where: { accountId } });
 }
 
-/** Deletes one of the account's tokens; false when it has no such token. */
 /** Deletes one token of the account; returns its name, or null when there was none. */
 export async function deleteApiToken(db: DbClient, accountId: string, id: string): Promise<string | null> {
   const row = await db.apiToken.findFirst({ where: { id, accountId }, select: { name: true } });
