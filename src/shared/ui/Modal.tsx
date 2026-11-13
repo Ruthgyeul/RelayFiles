@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/shared/lib/cn";
 import { useMounted } from "@/shared/hooks/useMounted";
@@ -25,6 +25,24 @@ export type ModalLayer = keyof typeof LAYER;
 
 /** Lets ModalHeader label its dialog without the caller wiring ids. */
 const TitleIdContext = createContext<string | undefined>(undefined);
+
+/**
+ * Open dialogs, newest last. Escape and Tab belong to the newest one only: a confirm dialog over
+ * another dialog must not close both.
+ */
+const openModals: string[] = [];
+const isTopModal = (id: string) => openModals[openModals.length - 1] === id;
+
+/**
+ * The element that most recently lost focus to another one. A dialog field with autoFocus takes
+ * focus during React's commit, before any effect runs, so the dialog reads its opener from here.
+ */
+let lastFocusLeft: EventTarget | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener("focusin", (event) => {
+    lastFocusLeft = event.relatedTarget;
+  }, true);
+}
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -66,18 +84,28 @@ export function Modal({
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const [backdropZ, panelZ] = LAYER[layer];
+  // Callers usually pass a new arrow function on every render: reading it through a ref keeps the
+  // effect below from running again (and moving focus) whenever the parent re-renders.
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
-    const previous = document.activeElement as HTMLElement | null;
     const node = panel.current;
-    const first = node?.querySelector<HTMLElement>("[autofocus]") ?? node?.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? node)?.focus();
+    // An autoFocus field inside the dialog took focus before this effect ran: the element to give
+    // focus back to is the one it took focus from. Otherwise it is whatever has focus now.
+    const focusedInside = node?.contains(document.activeElement) ?? false;
+    const previous = (focusedInside ? lastFocusLeft : document.activeElement) as HTMLElement | null;
+    if (!focusedInside) (node?.querySelector<HTMLElement>(FOCUSABLE) ?? node)?.focus();
+    openModals.push(titleId);
 
     const onKey = (event: globalThis.KeyboardEvent) => {
+      if (!isTopModal(titleId)) return;
       if (event.key === "Escape" && dismissible) {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !node) return;
@@ -96,9 +124,10 @@ export function Modal({
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      openModals.splice(openModals.lastIndexOf(titleId), 1);
+      if (previous?.isConnected) previous.focus();
     };
-  }, [open, dismissible, onClose]);
+  }, [open, dismissible, titleId]);
 
   if (!open || !mounted) return null;
   return createPortal(
