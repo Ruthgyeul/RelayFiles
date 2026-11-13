@@ -1,11 +1,13 @@
 # Dependency updates. Security fixes are opened as soon as an advisory appears; routine updates
 # come weekly, grouped so one PR carries the minor and patch bumps of an ecosystem, and only for
 # releases at least a week old (cooldown): a hijacked release is usually caught and pulled before
-# it reaches us. Major versions get their own PRs (reviewed one by one).
+# it reaches us. Major versions get their own PRs (reviewed one by one). Pull requests target
+# develop like every other change (CLAUDE.md "Git"); main only takes release merges.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday
@@ -24,6 +26,7 @@ updates:
   # The command-line client (cli/, its own package).
   - package-ecosystem: npm
     directory: /cli
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday
@@ -39,6 +42,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday
@@ -52,6 +56,7 @@ updates:
   # Base image of the app and tools images (Dockerfile NODE_IMAGE).
   - package-ecosystem: docker
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday
@@ -62,6 +67,7 @@ updates:
   # postgres, redis, nginx and cloudflared in the production stack.
   - package-ecosystem: docker-compose
     directory: /deploy
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday

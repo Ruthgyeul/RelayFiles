@@ -556,6 +556,25 @@ $C up -d app worker
 5. 확인한다. `curl -sI http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/ | grep -i '^content-security-policy'`가 `content-security-policy:`(뒤에 `-report-only` 없음)를 보여 주고, 브라우저 개발자 도구 콘솔에 `Refused to …` 오류 없이 1번의 화면이 동작한다. 며칠 동안 `csp violation` 로그를 계속 본다(enforce에서도 막은 것을 보고한다).
 6. 문제가 생기면 `CSP_MODE=report-only`로 되돌리고 4번처럼 다시 시작한다. 데이터에는 영향이 없다.
 
+## 릴리스 만들기
+
+기능·수정 PR은 `develop`으로 들어가고, `main`은 릴리스 병합과 버전 태그만 받는다(CLAUDE.md "Git"). 버전은 Semantic Versioning이다: 운영자가 직접 손을 써야 하거나 호환이 깨지면 major, 기능 추가는 minor, 수정·문서는 patch.
+
+1. `develop`에서 `package.json`의 `version`을 올리고 `npm install --package-lock-only`로 `package-lock.json`을 맞춘다. 앱 버전은 화면 아래와 `docs/openapi.json`에 들어가므로 `npm run openapi`도 다시 실행한다.
+2. `CHANGELOG.md`의 "Unreleased" 항목을 `## [X.Y.Z] - YYYY-MM-DD` 아래로 옮긴다. `npm run check:changelog`(`npm run check`·CI 포함)가 이 절이 없으면 실패한다.
+3. DB·스토리지·`.env`·Nginx가 바뀌거나 운영자가 따로 할 일이 있는 릴리스면 `docs/upgrade/vX.Y.Z.md`를 쓰고 [upgrade/README.md](upgrade/README.md) 목록에 올린다.
+4. `develop → main` PR을 Merge Commit으로 병합한다(제목 `release: vX.Y.Z`).
+5. 병합된 `main` 커밋에 태그를 붙여 올린다.
+
+   ```bash
+   git checkout main && git pull
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+6. `Images` 워크플로가 태그가 `package.json` 버전과 같은지 확인한 뒤 `vX.Y.Z`와 `latest` 이미지를 GHCR에 올린다. 태그와 버전이 다르면 이미지를 올리지 않고 실패한다.
+7. 서버에서 평소대로 올린다: `git pull && deploy/scripts/release.sh`(Docker), `deploy/scripts/systemd/release.sh`(systemd), `deploy/scripts/k3s/deploy.sh vX.Y.Z`(k3s).
+
 ## 의존성 업데이트
 
 Dependabot(`.github/dependabot.yml`)이 보안 수정은 바로, 나머지는 매주 월요일에 PR로 올린다. 일반 업데이트는 나온 지 7일이 지난 릴리스만 올린다(`cooldown`, 탈취된 패키지 릴리스는 대개 그 안에 발견되어 내려간다). npm은 minor·patch를 한 PR로 묶고, 메이저 버전은 따로 올린다. 대상은 npm, GitHub Actions(커밋 SHA로 고정), Dockerfile 베이스 이미지, `deploy/docker-compose.yml` 이미지다. 이미지는 태그와 digest(`name:tag@sha256:…`)로 고정한다. 같은 태그가 다른 이미지로 바뀌어도 서버에 들어오지 않고, Dependabot이 새 digest를 PR로 올린다. CI `Security` 잡은 런타임 의존성의 high 이상 advisory(`npm audit --omit=dev --audit-level=high`)와 커밋에 들어간 비밀값(gitleaks)을 막고, `docker` 잡은 이미지의 수정판이 있는 critical CVE(grype)를 막고, tools 이미지에 `.dockerignore` 허용 목록 밖의 파일·테스트·devDependencies가 없는지 본다. `Workflows · shell scripts` 잡은 워크플로(actionlint, 체크섬으로 고정한 릴리스)와 배포 셸 스크립트(`shellcheck -x`, 설정은 `.shellcheckrc`)를 검사한다. `Images` 워크플로(`.github/workflows/images.yml`)는 PR에서 Pi 클러스터용 linux/arm64 빌드를 QEMU로 확인하고, `main` push와 `v*` 태그에서는 amd64·arm64 이미지를 GHCR에 올린다. 올린 이미지에는 BuildKit의 SLSA provenance(`mode=max`)와 SBOM이 붙고, `actions/attest-build-provenance`가 워크플로의 OIDC 신원으로 서명한 provenance를 함께 저장한다(`gh attestation verify oci://<이미지>@<digest> --owner <owner>`로 확인). CI가 쓰는 PostgreSQL·Redis 이미지는 compose와 같은 digest여야 한다(`npm run check:ci-images`, compose를 올리는 Dependabot PR은 CI 쪽도 같이 바꿔야 통과한다). CodeQL은 저장소의 기본 코드 스캐닝 설정으로 돈다.

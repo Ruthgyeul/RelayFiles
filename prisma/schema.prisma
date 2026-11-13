@@ -16,6 +16,8 @@ datasource db {
 // Storage volumes
 // ---------------------------------------------------------------------------
 
+/// S3 is reserved: no driver implements it and nothing registers a volume with it (volume:init
+/// creates LOCAL volumes only). The value stays so that adding the driver needs no enum migration.
 enum StorageDriver {
   LOCAL
   S3
@@ -32,7 +34,7 @@ enum VolumeStatus {
 model StorageVolume {
   id            String        @id
   driver        StorageDriver @default(LOCAL)
-  /// Absolute mount path for LOCAL volumes, bucket URL for S3.
+  /// Absolute mount path for LOCAL volumes (reserved for S3: the bucket URL).
   mountPath     String
   status        VolumeStatus  @default(ACTIVE)
   /// Directory layout version; must match the code (docs/runbook.md "스토리지 레이아웃").

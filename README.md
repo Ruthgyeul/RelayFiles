@@ -56,4 +56,5 @@ Every npm script (development, checks, storage, volumes, keys) is listed with wh
 - [Deployment (Docker)](docs/deploy-ubuntu.md) · [Deployment (systemd)](docs/deploy-systemd.md) · [Deployment (k3s)](docs/deploy-k3s.md) · [Runbook](docs/runbook.md)
 - [Architecture](docs/architecture.md) · [Security](docs/security.md) · [API](docs/api.md)
 - [Design spec](docs/design/spec.md)
+- [Changelog](CHANGELOG.md) · [Upgrade notes](docs/upgrade/README.md)
 - [Project rules for contributors and agents](CLAUDE.md)

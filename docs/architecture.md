@@ -115,7 +115,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 
 | 인터페이스 | 현재 구현 | 확장 |
 |---|---|---|
-| `StorageDriver` | `LocalVolumeDriver` (외장 SSD, 볼륨 여러 개) | `S3Driver` (MinIO/R2) |
+| `StorageDriver` | `LocalVolumeDriver` (외장 SSD, 볼륨 여러 개) | `S3Driver` (MinIO/R2). 예약만 되어 있고 구현은 없다: DB enum에 `S3` 값이 있지만 그 값으로 볼륨을 등록하는 경로가 없고(`volume:init`은 `LOCAL`만 만든다), 그런 행이 있으면 `driverFor()`가 거부한다 |
 
 `LocalVolumeDriver`(`storage/local-volume.ts`)는 볼륨 레이아웃을 묶는 조립만 한다. 실제 작업은 `storage/local/`에 영역별로 있다: `locations.ts`(계정 트리 안의 경로 확인·읽기·이름 변경·복사), `staging.ts`(업로드 영역에서 준비한 바이트를 제자리로, 복사 준비), `trash.ts`(휴지통), `assets.ts`(썸네일·제거본·미리보기·변환본), `maintenance.ts`(매일 정리, 쓰기 확인, 여유 공간), `listing.ts`(fsck용 디스크 목록), 공용 `copy.ts`(하드 링크·reflink·복사)와 `fs-errors.ts`. 메서드는 클래스 프로토타입에 남아 있어 테스트가 그대로 바꿔 끼울 수 있다.
 

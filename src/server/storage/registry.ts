@@ -23,7 +23,8 @@ export function driverFor(volume: VolumeRecord): StorageDriver {
   if (volume.status === "OFFLINE") throw new ApiError("STORAGE_OFFLINE");
   const existing = drivers.get(volume.id);
   if (existing?.mountPath === volume.mountPath) return existing.driver;
-  if (volume.driver !== "LOCAL") throw new ApiError("INTERNAL", "This storage driver is not available.");
+  // S3 is a reserved enum value (prisma/schema.prisma): no driver implements it yet.
+  if (volume.driver !== "LOCAL") throw new ApiError("INTERNAL", "This storage driver is not implemented.");
   const driver = new LocalVolumeDriver(volume.id, volume.mountPath);
   drivers.set(volume.id, { mountPath: volume.mountPath, driver });
   return driver;
