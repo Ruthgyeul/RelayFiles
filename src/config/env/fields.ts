@@ -30,6 +30,13 @@ export const secondsList = z
   .string()
   .transform((value) => value.split(",").map((item) => Number(item.trim())))
   .pipe(z.array(z.number().int().positive()).min(1));
+/** A comma-separated list of the given words, each kept once in the order given: "media, notify" → ["media", "notify"]. */
+export function wordList<const T extends readonly [string, ...string[]]>(words: T) {
+  return z
+    .string()
+    .transform((value) => [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))])
+    .pipe(z.array(z.enum(words)).min(1, `must name at least one of: ${words.join(", ")}`));
+}
 
 /** IPv4 ranges a LAN service answers on: loopback, RFC 1918, link-local, CGNAT (Tailscale). */
 const LAN_IPV4 = /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/;

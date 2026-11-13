@@ -1,0 +1,68 @@
+# Media workers on other nodes (docs/deploy-k3s.md "미디어 워커 분리"). Rendered from .env by
+# deploy/scripts/k3s/deploy.sh only when K3S_MEDIA_REPLICAS is 1 or more (0 deletes them).
+#
+# They take only media jobs (WORKER_ROLES=media: thumbnails, viewer previews, metadata-stripped
+# copies, stored video conversions, virus scans) from the same Redis queue as the worker on the
+# storage node, so their CPU (the Pi nodes labelled relayfiles/media=true) does that work instead
+# of the storage node's. The cleanup, the host samples and notifications stay on the storage node.
+#
+# Files: the storage node exports STORAGE_ROOT over NFS and these pods mount it at the same path,
+# so the volume paths in the database are right here too. Every write goes through the volume's
+# staging folder (system/tmp) and a rename, as on the storage node. The kubelet mounts it with
+# the client's defaults (hard, the highest NFS version both ends speak): while the storage node is
+# down, file access waits instead of failing half-way, and the jobs carry on once it is back.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: relayfiles-media
+  namespace: ${K3S_NAMESPACE}
+spec:
+  replicas: ${K3S_MEDIA_REPLICAS}
+  selector:
+    matchLabels: { app.kubernetes.io/name: relayfiles-media }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: relayfiles-media }
+    spec:
+      nodeSelector: { relayfiles/media: "true" }
+      # One per node where possible: two conversions on one Pi only make both slow.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: { matchLabels: { app.kubernetes.io/name: relayfiles-media } }
+      automountServiceAccountToken: false
+      # The owner of the files on the SSD: NFS (sec=sys) checks this uid on the storage node.
+      securityContext: { runAsUser: ${STORAGE_UID}, runAsGroup: ${STORAGE_GID}, runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      # Running jobs finish before the worker exits; stored conversions are stopped and retried.
+      terminationGracePeriodSeconds: ${WORKER_STOP_GRACE_SEC}
+      containers:
+        - name: media
+          image: ${TOOLS_IMAGE}
+          command: ["node", "--import", "tsx", "--conditions=react-server", "scripts/worker.mts"]
+          envFrom: [{ secretRef: { name: relayfiles-env } }]
+          env:
+            - { name: NODE_ENV, value: production }
+            - { name: WORKER_ROLES, value: media }
+            - { name: MEDIA_WORKER_CONCURRENCY, value: "${K3S_MEDIA_CONCURRENCY}" }
+            - { name: POSTGRES_HOST, value: relayfiles-postgres }
+            - { name: POSTGRES_PORT, value: "5432" }
+            - { name: DATABASE_URL, value: "" }
+            - { name: REDIS_HOST, value: relayfiles-redis }
+            - { name: REDIS_PORT, value: "6379" }
+            - { name: REDIS_URL, value: "" }
+            - { name: RESTIC_REPOSITORY, value: "" }
+            - { name: RESTIC_PASSWORD, value: "" }
+            - { name: OFFSITE_ACCESS_KEY_ID, value: "" }
+            - { name: OFFSITE_SECRET_ACCESS_KEY, value: "" }
+          resources:
+            limits: { memory: ${K3S_MEDIA_MEMORY_MAX}, cpu: "${K3S_MEDIA_CPUS}" }
+          # No LOG_DIR here (the Pi has no log folder for it): the logger keeps to stdout when the
+          # folder cannot be made, read with kubectl logs deployment/relayfiles-media.
+          securityContext: { readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: storage, mountPath: ${STORAGE_ROOT} }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: storage, nfs: { server: ${K3S_MEDIA_NFS_SERVER}, path: ${K3S_MEDIA_NFS_PATH} } }
+        - { name: tmp, emptyDir: {} }

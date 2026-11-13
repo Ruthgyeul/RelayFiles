@@ -117,7 +117,8 @@ metadata:
   name: relayfiles-worker
   namespace: ${K3S_NAMESPACE}
 spec:
-  # One worker: it schedules the daily cleanup and the samplers.
+  # One worker: it schedules the daily cleanup and the samplers (media workers on other nodes:
+  # media.yaml.template).
   replicas: 1
   strategy: { type: Recreate }
   selector:
@@ -138,6 +139,9 @@ spec:
           envFrom: [{ secretRef: { name: relayfiles-env } }]
           env:
             - { name: NODE_ENV, value: production }
+            # Cleanup, host samples and notifications always run here; media jobs too unless
+            # K3S_STORAGE_NODE_MEDIA=false leaves them to the media workers (media.yaml.template).
+            - { name: WORKER_ROLES, value: "${K3S_STORAGE_WORKER_ROLES}" }
             - { name: POSTGRES_HOST, value: relayfiles-postgres }
             - { name: POSTGRES_PORT, value: "5432" }
             - { name: DATABASE_URL, value: "" }

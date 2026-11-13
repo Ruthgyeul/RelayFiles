@@ -2,9 +2,9 @@
 # They run on the storage node with their data in DATA_DIR/pg and DATA_DIR/redis, the same
 # directories docker compose uses, so a server can move between the two.
 #
-# Only the app, the worker and the migration Job may connect to them: without this policy every
-# pod in the cluster (other workloads on the Pi nodes) could reach them with only the password
-# in the way. Enforced by k3s's built-in policy controller (kube-router).
+# Only the app, the workers (the media workers on other nodes too) and the migration Job may
+# connect to them: without this policy every pod in the cluster (other workloads on the Pi nodes)
+# could reach them with only the password in the way. Enforced by k3s's built-in policy controller (kube-router).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -19,7 +19,7 @@ spec:
     - from:
         - podSelector:
             matchExpressions:
-              - { key: app.kubernetes.io/name, operator: In, values: [relayfiles-app, relayfiles-worker, relayfiles-migrate] }
+              - { key: app.kubernetes.io/name, operator: In, values: [relayfiles-app, relayfiles-worker, relayfiles-media, relayfiles-migrate] }
       ports: [{ protocol: TCP, port: 5432 }, { protocol: TCP, port: 6379 }]
 ---
 apiVersion: v1

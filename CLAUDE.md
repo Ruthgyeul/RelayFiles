@@ -47,7 +47,7 @@ npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지�
 npm run check:emoji  # 이모지 사용 검사
 npm run check:cycles # 기능(src/features/*) 사이 순환 import 검사
 npm run check        # typecheck · lint · emoji · cycles · migrations · test · build 전체
-npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
+npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). WORKER_ROLES로 맡을 일(media·maintenance·notify)을 고른다. ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
 npm run dav          # WebDAV 서버(/dav/, API 토큰 Basic 인증, 쓰기는 files:write). Next가 PROPFIND를 못 받아 별도 프로세스
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기 (-- --previews: 큰 이미지의 뷰어 미리보기)
 npm run deploy:error-pages  # Nginx 정적 에러 페이지(deploy/error-pages) 다시 생성
@@ -63,7 +63,7 @@ npm run volume:migrate   # -- --account <id> --to <vol> | --volume <vol> [--to <
 npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해제
 ```
 
-운영 배포는 두 가지다. Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃, 컨테이너 Nginx `deploy/nginx/templates`) — 절차 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 업데이트 `git pull && deploy/scripts/release.sh`(끝나면 `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시 정리). 또는 systemd 서비스 + 호스트 Nginx(`deploy/systemd/`, `deploy/nginx/host/`, `deploy/scripts/systemd/`) — 절차 [`docs/deploy-systemd.md`](docs/deploy-systemd.md), 업데이트 `git pull && deploy/scripts/systemd/release.sh`. k3s(Pi 클러스터)는 GHCR 멀티 아키텍처 이미지(`.github/workflows/images.yml`)와 `deploy/k3s/` 템플릿을 쓴다 — 절차 [`docs/deploy-k3s.md`](docs/deploy-k3s.md), 업데이트 `deploy/scripts/k3s/deploy.sh [태그]`. 운영 작업은 [`docs/runbook.md`](docs/runbook.md).
+운영 배포는 두 가지다. Docker Compose(`deploy/docker-compose.yml`, `Dockerfile`의 `app`·`tools` 타깃, 컨테이너 Nginx `deploy/nginx/templates`) — 절차 [`docs/deploy-ubuntu.md`](docs/deploy-ubuntu.md), 업데이트 `git pull && deploy/scripts/release.sh`(끝나면 `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시 정리). 또는 systemd 서비스 + 호스트 Nginx(`deploy/systemd/`, `deploy/nginx/host/`, `deploy/scripts/systemd/`) — 절차 [`docs/deploy-systemd.md`](docs/deploy-systemd.md), 업데이트 `git pull && deploy/scripts/systemd/release.sh`. k3s(Pi 클러스터)는 GHCR 멀티 아키텍처 이미지(`.github/workflows/images.yml`)와 `deploy/k3s/` 템플릿을 쓴다 — 절차 [`docs/deploy-k3s.md`](docs/deploy-k3s.md), 업데이트 `deploy/scripts/k3s/deploy.sh [태그]`. 미디어 작업은 `K3S_MEDIA_REPLICAS`로 Pi 노드에 나눌 수 있다(SSD를 NFS로 마운트, 같은 문서 §6). 운영 작업은 [`docs/runbook.md`](docs/runbook.md).
 
 결과물을 전달하기 전에 `npm run check`를 통과시킨다. DB나 스토리지를 건드리면 `npm run test:integration`도 통과시킨다.
 

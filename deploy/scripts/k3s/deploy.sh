@@ -2,8 +2,10 @@
 # Deploys a release published to GHCR (.github/workflows/images.yml) to k3s
 # (docs/deploy-k3s.md): .env becomes the relayfiles-env Secret, the Nginx templates and error
 # pages become ConfigMaps, then PostgreSQL and Redis → migrations (a Job with the new tools
-# image) → app, worker and Nginx, all on the node labelled relayfiles/storage=true. Run from a
-# repository checkout (npm ci done) with kubectl access to the cluster:
+# image) → app, worker and Nginx, all on the node labelled relayfiles/storage=true, and the media
+# workers on the nodes labelled relayfiles/media=true when K3S_MEDIA_REPLICAS is 1 or more (they
+# mount STORAGE_ROOT from the storage node over NFS). Run from a repository checkout (npm ci done)
+# with kubectl access to the cluster:
 #   deploy/scripts/k3s/deploy.sh [sha-<12 hex> | vX.Y.Z]   (default: this checkout's commit)
 # When a rollout does not finish within K3S_ROLLOUT_TIMEOUT (default 10m) or /api/health does not
 # say "ok" afterwards, the deployments this run changed are rolled back (kubectl rollout undo) and
@@ -69,12 +71,45 @@ for pair in K3S_APP_REPLICAS:1 APP_PORT:3000 STORAGE_UID:10001 STORAGE_GID:10001
   export "${pair%%:*}=$(env_value "${pair%%:*}" "${pair#*:}")"
 done
 [[ "$STORAGE_ROOT" == /* ]] || { echo "STORAGE_ROOT must be an absolute path on the storage node." >&2; exit 1; }
+
+# Media workers on other nodes (deploy/k3s/media.yaml.template, docs/deploy-k3s.md "미디어 워커 분리").
+MEDIA_REPLICAS="$(env_value K3S_MEDIA_REPLICAS 0)"
+[[ "$MEDIA_REPLICAS" =~ ^[0-9]+$ ]] || { echo "K3S_MEDIA_REPLICAS must be a whole number (0 = no media workers)." >&2; exit 1; }
+STORAGE_NODE_MEDIA="$(env_value K3S_STORAGE_NODE_MEDIA true)"
+case "${STORAGE_NODE_MEDIA,,}" in
+  false | 0 | no | off | n | disabled) STORAGE_NODE_MEDIA=false ;;
+  *) STORAGE_NODE_MEDIA=true ;;
+esac
+MEDIA_KEYS=()
+if [ "$MEDIA_REPLICAS" -gt 0 ]; then
+  for pair in K3S_MEDIA_CONCURRENCY:1 K3S_MEDIA_MEMORY_MAX:1G K3S_MEDIA_CPUS:2 K3S_MEDIA_NFS_SERVER: K3S_MEDIA_NFS_PATH:"$STORAGE_ROOT"; do
+    export "${pair%%:*}=$(env_value "${pair%%:*}" "${pair#*:}")"
+  done
+  export K3S_MEDIA_REPLICAS="$MEDIA_REPLICAS"
+  MEDIA_KEYS=(K3S_MEDIA_REPLICAS K3S_MEDIA_CONCURRENCY K3S_MEDIA_MEMORY_MAX K3S_MEDIA_CPUS K3S_MEDIA_NFS_SERVER K3S_MEDIA_NFS_PATH)
+  [ -n "$K3S_MEDIA_NFS_SERVER" ] || { echo "Set K3S_MEDIA_NFS_SERVER in .env: the storage node's LAN address that exports STORAGE_ROOT over NFS." >&2; exit 1; }
+  [[ "$K3S_MEDIA_NFS_PATH" == /* ]] || { echo "K3S_MEDIA_NFS_PATH must be an absolute path (the NFS export; empty = STORAGE_ROOT)." >&2; exit 1; }
+  MEDIA_NODES="$(kubectl get nodes -l relayfiles/media=true -o name | wc -l)"
+  [ "$MEDIA_NODES" -gt 0 ] || { echo "Label the nodes for the media workers: kubectl label node <node> relayfiles/media=true (labelled now: 0)." >&2; exit 1; }
+elif [ "$STORAGE_NODE_MEDIA" = false ]; then
+  echo "K3S_STORAGE_NODE_MEDIA=false needs K3S_MEDIA_REPLICAS of 1 or more: nothing would make thumbnails." >&2
+  exit 1
+fi
+# The worker on the storage node: always the cleanup, host samples and notifications.
+K3S_STORAGE_WORKER_ROLES="maintenance,notify"
+[ "$STORAGE_NODE_MEDIA" = false ] || K3S_STORAGE_WORKER_ROLES="media,$K3S_STORAGE_WORKER_ROLES"
+export K3S_STORAGE_WORKER_ROLES
 # Kubernetes counts the grace period from the start of preStop.
 export APP_TERMINATION_GRACE_SEC="$((APP_STOP_GRACE_SEC + K3S_PRESTOP_SEC))"
 KEYS=(K3S_NAMESPACE APP_IMAGE TOOLS_IMAGE RELEASE_ID POSTGRES_IMAGE REDIS_IMAGE NGINX_IMAGE NGINX_RESOLVER K3S_APP_REPLICAS APP_PORT STORAGE_UID STORAGE_GID DATA_DIR LOG_DIR
   APP_MEMORY_MAX APP_CPUS WORKER_MEMORY_MAX WORKER_CPUS NGINX_LISTEN_PORT SERVER_NAME STORAGE_ACCEL_PREFIX NGINX_MAX_BODY_MB NGINX_AUTH_RATE_PER_MIN NGINX_AUTH_BURST
-  NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST NGINX_TUS_RATE_PER_MIN NGINX_TUS_BURST NGINX_API_RATE_PER_MIN NGINX_API_BURST WORKER_STOP_GRACE_SEC APP_TERMINATION_GRACE_SEC K3S_PRESTOP_SEC STORAGE_ROOT REDIS_MAXMEMORY_MB DAV_PORT)
-render() { node "$ROOT/scripts/render-template.mjs" "$ROOT/deploy/k3s/$1.yaml.template" "${KEYS[@]}"; }
+  NGINX_UPLOAD_RATE_PER_MIN NGINX_UPLOAD_BURST NGINX_TUS_RATE_PER_MIN NGINX_TUS_BURST NGINX_API_RATE_PER_MIN NGINX_API_BURST WORKER_STOP_GRACE_SEC APP_TERMINATION_GRACE_SEC K3S_PRESTOP_SEC STORAGE_ROOT REDIS_MAXMEMORY_MB DAV_PORT K3S_STORAGE_WORKER_ROLES)
+# render TEMPLATE [KEY ...] → the template with KEYS and the extra keys filled in.
+render() {
+  local template="$1"
+  shift
+  node "$ROOT/scripts/render-template.mjs" "$ROOT/deploy/k3s/$template.yaml.template" "${KEYS[@]}" "$@"
+}
 apply() { kubectl apply -f - > /dev/null; }
 
 log "Release $TAG to namespace $NS"
@@ -108,6 +143,7 @@ fi
 # revision DEPLOYMENT → its current rollout revision (empty when it does not exist yet).
 revision() { kubectl -n "$NS" get deployment "$1" -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2> /dev/null || true; }
 DEPLOYMENTS=(relayfiles-app relayfiles-worker relayfiles-nginx)
+[ "$MEDIA_REPLICAS" = 0 ] || DEPLOYMENTS+=(relayfiles-media)
 declare -A BEFORE
 for name in "${DEPLOYMENTS[@]}"; do BEFORE[$name]="$(revision "$name")"; done
 
@@ -131,11 +167,19 @@ roll_back() {
     echo "Nothing to roll back to (first deploy, or no deployment changed)." >&2
   fi
   echo "Logs: kubectl -n $NS logs deployment/relayfiles-app; probe failures: kubectl -n $NS describe pod -l app.kubernetes.io/name=relayfiles-app" >&2
+  [ "$MEDIA_REPLICAS" = 0 ] || echo "Media workers stuck in ContainerCreating: the NFS mount failed, see kubectl -n $NS describe pod -l app.kubernetes.io/name=relayfiles-media" >&2
   exit 1
 }
 
 log "App, worker and Nginx"
 render relayfiles | apply
+if [ "$MEDIA_REPLICAS" -gt 0 ]; then
+  log "Media workers ($MEDIA_REPLICAS) on the nodes labelled relayfiles/media=true"
+  render media "${MEDIA_KEYS[@]}" | apply
+else
+  # Turned off (K3S_MEDIA_REPLICAS=0): the storage node's worker runs the media jobs again.
+  kubectl -n "$NS" delete deployment relayfiles-media --ignore-not-found > /dev/null
+fi
 for name in "${DEPLOYMENTS[@]}"; do
   kubectl -n "$NS" rollout status "deployment/$name" --timeout="$ROLLOUT_TIMEOUT" || roll_back "deployment/$name did not finish rolling out within $ROLLOUT_TIMEOUT."
 done

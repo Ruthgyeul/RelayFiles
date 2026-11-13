@@ -50,6 +50,8 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 
 웹 앱과 별도 프로세스(`npm run worker`)가 BullMQ 큐를 처리한다. 큐 키는 `REDIS_KEY_PREFIX + "q"` 아래에 있다.
 
+`WORKER_ROLES`(쉼표로 구분, 기본 전부)가 한 프로세스가 맡을 일을 고른다: `media`(`media` 큐), `maintenance`(`maintenance`·`probes` 큐), `notify`(`notify` 큐). `media`는 여러 프로세스·여러 기기에서 함께 돌아도 된다(BullMQ가 작업을 하나씩 나눠 준다). `maintenance`는 저장소 호스트에서 정확히 한 프로세스만 돈다(표본이 그 호스트의 네트워크·디스크를 읽는다). k3s에서는 미디어 워커를 Pi 노드로 나눌 수 있다([deploy-k3s.md §6](deploy-k3s.md#6-미디어-워커-분리-pi-노드)).
+
 | 큐 | 작업 | 넣는 곳 |
 |---|---|---|
 | `maintenance` | 매일 `CLEANUP_CRON`(`JOBS_TIMEZONE`): 삭제일이 지난 계정과 만료 항목 삭제, 볼륨 휴지통에서 `TRASH_RETENTION_HOURS`(기본 24시간, 1–720)가 지난 항목과 `UPLOAD_TMP_TTL_HOURS`가 지난 미완료 업로드 영구 삭제(`ACTIVE`·`DRAINING` 볼륨), 비운 볼륨의 휴지통 바이트 기록과 "Recently deleted" 항목 정리, `FILE_VERSIONS_DAYS`가 지난 이전 파일 버전 삭제. 이 작업만 있는 큐다(동시 1개) | 워커 시작 시 스케줄 등록, 관리자 "Run cleanup now"는 계정·항목 정리만 즉시 실행 |
