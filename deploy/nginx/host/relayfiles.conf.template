@@ -57,6 +57,8 @@ limit_req_zone $relayfiles_auth_limit zone=relayfiles_auth:10m rate=${NGINX_AUTH
 limit_req_zone $relayfiles_upload_limit zone=relayfiles_uploads:10m rate=${NGINX_UPLOAD_RATE_PER_MIN}r/m;
 limit_req_zone $relayfiles_tus_limit zone=relayfiles_tus:10m rate=${NGINX_TUS_RATE_PER_MIN}r/m;
 limit_req_zone $relayfiles_api_limit zone=relayfiles_api:10m rate=${NGINX_API_RATE_PER_MIN}r/m;
+# WebDAV signs in with an API token on every request (argon2 for a known id): limited per address first.
+limit_req_zone $binary_remote_addr zone=relayfiles_dav:10m rate=${NGINX_DAV_RATE_PER_MIN}r/m;
 
 # No client addresses in the access log (same rule as the app's logs).
 log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
@@ -100,6 +102,7 @@ server {
     # WebDAV: a separate server (relayfiles-dav), since the app cannot answer PROPFIND.
     location ^~ /dav/ {
         if (-f ${APP_DIR}/deploy/maintenance/on) { return 503; }
+        limit_req zone=relayfiles_dav burst=${NGINX_DAV_BURST} nodelay;
         proxy_pass http://relayfiles_dav;
         proxy_http_version 1.1;
         proxy_request_buffering off;

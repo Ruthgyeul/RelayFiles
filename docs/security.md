@@ -201,6 +201,7 @@ k3s에서 미디어 워커를 Pi 노드로 나누면(`K3S_MEDIA_REPLICAS` ≥ 1,
   - `POST /api/auth/*`·`POST /api/share/*/unlock`·`POST /api/r/*/unlock`·`POST /api/csp-report`: 분당 20회(버스트 20, `NGINX_AUTH_RATE_PER_MIN`·`NGINX_AUTH_BURST`).
   - `POST /api/uploads`·`POST /api/r/*/uploads`(배치 만들기): 분당 60회(버스트 30, `NGINX_UPLOAD_RATE_PER_MIN`·`NGINX_UPLOAD_BURST`).
   - `POST /api/uploads/tus/*`(파일 하나의 새 업로드): 분당 600회(버스트 120, `NGINX_TUS_RATE_PER_MIN`·`NGINX_TUS_BURST`). 작은 파일이 많은 폴더도 연달아 보내므로 넉넉하게 두고, 브라우저는 429를 받으면 잠시 뒤 다시 보낸다. 청크(PATCH)는 세지 않는다.
+  - WebDAV `/dav/*`: 분당 600회(버스트 300, `NGINX_DAV_RATE_PER_MIN`·`NGINX_DAV_BURST`). 매 요청이 API 토큰으로 로그인하므로, 있는 토큰 id에 틀린 비밀값을 보내면 토큰별 제한 전에 argon2가 돈다.
   - 개인 API 토큰 요청 `/api/v1/*`·`/metrics`와 공유 페이지 `/d/*`: 분당 120회(버스트 60, `NGINX_API_RATE_PER_MIN`·`NGINX_API_BURST`). 있는 토큰 id에 틀린 비밀값을 보내면 앱의 토큰별 제한 전에 argon2가 돌고, `/d/*`는 링크 id 추측을 앱보다 먼저 막는다.
   - 공통: 한도를 넘으면 API 형식 JSON 429와 `Retry-After: 60`. 요청 본문은 `NGINX_MAX_BODY_MB`(100)까지.
 - 호스트 이름(DNS 리바인딩): Nginx는 `SERVER_NAME`(공백으로 여러 개)과 `127.0.0.1`(릴리스 스크립트의 헬스 체크)로 온 요청만 앱에 넘기고, 다른 `Host`는 응답 없이 연결을 끊는다(444). Docker·k3s 템플릿은 `default_server`가 이 일을 하고(`SERVER_NAME=_`이면 모든 이름을 받는다), systemd는 `install.sh`가 다른 기본 사이트가 없을 때 `relayfiles-catchall.conf`를 넣는다.

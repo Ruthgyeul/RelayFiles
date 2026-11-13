@@ -24,6 +24,9 @@ export const deployEnv = z
     /** Personal API token requests (/api/v1/, /metrics) per client address per minute, and the burst. */
     NGINX_API_RATE_PER_MIN: positiveInt.default(NGINX.apiRatePerMin),
     NGINX_API_BURST: positiveInt.default(NGINX.apiBurst),
+    /** WebDAV requests (/dav/) per client address per minute, and the burst. */
+    NGINX_DAV_RATE_PER_MIN: positiveInt.default(NGINX.davRatePerMin),
+    NGINX_DAV_BURST: positiveInt.default(NGINX.davBurst),
     CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
     /**
      * Memory Redis may use, in MB (compose and k3s `--maxmemory`, with `noeviction`: when full,
