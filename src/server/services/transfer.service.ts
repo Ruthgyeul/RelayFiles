@@ -8,7 +8,7 @@ import { segmentsBelowRoot } from "@/domain/tree";
 import { db, Prisma } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import { enqueueMedia } from "../jobs/queue";
+import { enqueueMedia, enqueueScan } from "../jobs/queue";
 import { logger } from "../logger";
 import { insertNodes, listSiblingNames, moveIntoFolder } from "../repositories/node.repo";
 import { ancestorChain, subtreeRowsOf } from "../repositories/node-tree.repo";
@@ -128,6 +128,9 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
     let renamed = 0;
     const now = new Date();
     const media: string[] = [];
+    // A copy of a file still waiting for its virus scan gets a new id: the scan job of the
+    // original never covers it, so it is queued again (and its thumbnails wait for the result).
+    const unscanned: string[] = [];
     await withStorageTransaction(db(), async (tx, undo) => {
       // Staging can take long: the account may have started moving to another volume meanwhile.
       await lockAccountForWrite(tx, owner.id, driver.volumeId);
@@ -167,11 +170,13 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
         undo.push("remove copy", async () => {
           await driver.moveToTrash(to);
         });
-        media.push(...rows.filter((copy) => copy.type === "FILE" && (copy.kind === "IMAGE" || copy.kind === "VIDEO")).map((copy) => copy.id));
+        media.push(...rows.filter((copy) => copy.type === "FILE" && copy.scanState !== "PENDING" && (copy.kind === "IMAGE" || copy.kind === "VIDEO")).map((copy) => copy.id));
+        unscanned.push(...rows.filter((copy) => copy.type === "FILE" && copy.scanState === "PENDING").map((copy) => copy.id));
       }
     });
     // Assets are keyed by node id, so copies get their own (rebuilt by the worker).
     void enqueueMedia(media);
+    void enqueueScan(unscanned);
     return { done: items.length, renamed, targetName: target.name };
   } catch (caught) {
     if (caught instanceof StorageEntryMissingError) throw new ApiError("CONFLICT", CHANGED_MESSAGE);
