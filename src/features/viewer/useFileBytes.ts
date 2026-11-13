@@ -12,7 +12,8 @@ export function useFileBytes(src: string): FileBytes {
   useEffect(() => {
     const abort = new AbortController();
     fetchHead(src, DOCUMENT_PREVIEW.assetMaxBytes, abort.signal)
-      .then((head) => setState(head.truncated ? { status: "too-large" } : { status: "ready", bytes: new Uint8Array(head.bytes) }))
+      // A read that finishes as the source changes must not replace the new file's loading state.
+      .then((head) => !abort.signal.aborted && setState(head.truncated ? { status: "too-large" } : { status: "ready", bytes: new Uint8Array(head.bytes) }))
       .catch(() => {
         if (!abort.signal.aborted) setState({ status: "error" });
       });
