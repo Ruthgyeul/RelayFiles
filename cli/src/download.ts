@@ -4,18 +4,28 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { ApiError, readJson, type Client } from "./client.ts";
 
-/** "a.txt" from `attachment; filename*=UTF-8''a.txt` or `filename="a.txt"`, else null. */
+/**
+ * "a.txt" from `attachment; filename*=UTF-8''a.txt` or `filename="a.txt"`, else null. Only a
+ * plain file name is taken: the name comes from the server (or anything between it and the
+ * client), so a name with a folder part ("../.bashrc") would write outside the current folder.
+ */
 export function fileNameOf(disposition: string | null): string | null {
   if (!disposition) return null;
   const star = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  let name: string | null;
   if (star?.[1]) {
     try {
-      return decodeURIComponent(star[1]);
+      name = decodeURIComponent(star[1]);
     } catch {
       return null;
     }
-  }
-  return /filename="([^"]+)"/i.exec(disposition)?.[1] ?? null;
+  } else name = /filename="([^"]+)"/i.exec(disposition)?.[1] ?? null;
+  return name !== null && plainFileName(name) ? name : null;
+}
+
+/** A name that stays in the current folder: no separators, not "." or "..", no NUL. */
+function plainFileName(name: string): boolean {
+  return name !== "" && name !== "." && name !== ".." && !/[/\\\0]/.test(name);
 }
 
 /** The Range header to continue a partial download of `have` bytes (none for an empty start). */
