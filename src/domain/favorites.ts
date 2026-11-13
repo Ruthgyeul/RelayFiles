@@ -1,4 +1,5 @@
 import { uniqName } from "./names";
+import { SORT_KEYS, SORT_OPTION_LABEL, SORT_SHORT_LABEL, sortNodes, type FilterKey, type SortableNode, type SortKey } from "./tree";
 
 /** An organizing folder inside Favorites (null parent: directly inside Favorites). */
 export interface FavoriteFolderLink {
@@ -71,4 +72,35 @@ export function liftedNames(siblings: readonly string[], moving: readonly Favori
     names.set(folder.id, name);
   }
   return names;
+}
+
+/** Favorites sort: "added" keeps the order they were added in (newest first), then the File Manager's keys. */
+export const FAVORITE_SORT_KEYS = ["added", ...SORT_KEYS] as const;
+export type FavoriteSortKey = (typeof FAVORITE_SORT_KEYS)[number];
+
+export const FAVORITE_SORT_OPTION_LABEL: Record<FavoriteSortKey, string> = { added: "Recently added", ...SORT_OPTION_LABEL };
+export const FAVORITE_SORT_SHORT_LABEL: Record<FavoriteSortKey, string> = { added: "Added", ...SORT_SHORT_LABEL };
+
+/** Favorites in the chosen order; "added" keeps `list` as given (the server lists newest favorite first). */
+export function sortFavorites<T extends SortableNode>(list: readonly T[], key: FavoriteSortKey): T[] {
+  return key === "added" ? [...list] : sortNodes(list, key satisfies SortKey);
+}
+
+interface FolderListing {
+  /** Lowercased, trimmed name query ("" for none). */
+  query: string;
+  filter: FilterKey;
+  /** Tag search lists favorites from every organizing folder, so no folders are shown. */
+  tagMode: boolean;
+  sort: FavoriteSortKey;
+}
+
+/**
+ * Organizing folders shown above the favorites: hidden during tag search and for file-type
+ * filters, matched by name, in name order (reversed only for "Name Z → A").
+ */
+export function visibleFavoriteFolders<T extends { name: string }>(folders: readonly T[], { query, filter, tagMode, sort }: FolderListing): T[] {
+  if (tagMode || (filter !== "all" && filter !== "folder")) return [];
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name, undefined, { numeric: true });
+  return folders.filter((folder) => !query || folder.name.toLowerCase().includes(query)).sort(sort === "name-desc" ? (a, b) => byName(b, a) : byName);
 }

@@ -13,9 +13,10 @@ import { POST as createGroup } from "@/app/api/favorites/folders/route";
 import { POST as move } from "@/app/api/favorites/move/route";
 import { POST as unfavorite } from "@/app/api/favorites/remove/route";
 import { GET as view, POST as favorite } from "@/app/api/favorites/route";
+import { GET as tagged } from "@/app/api/favorites/tags/route";
 import type { CreatedAccount } from "@/contracts/auth";
 import type { FavoriteFolderDto, FavoritesView } from "@/contracts/favorites";
-import type { CreatedFolder, FolderView } from "@/contracts/nodes";
+import type { CreatedFolder, FolderView, TaggedItem } from "@/contracts/nodes";
 import type { DeletedItemDto } from "@/contracts/trash";
 import { FILES } from "@/config/policy";
 import { newLinkId, newNodeId } from "@/domain/ids";
@@ -197,5 +198,27 @@ describe("favorites", () => {
     await expect(favoriteFolderPage(s, [docs.id, elsewhere.id])).rejects.toMatchObject({ code: "NOT_FOUND" });
     const other = await member();
     await expect(favoriteFolderPage(other, [docs.id])).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("searches tags across every organizing folder, only among this account's favorites", async () => {
+    const s = await member();
+    const docs = await folder(s, "root", "Docs");
+    const keep = (await group(s, null, "Keep")).json.data;
+    const both = await file(s, docs.id, "both.txt");
+    const one = await file(s, await rootOf(s), "one.txt");
+    const plain = await file(s, docs.id, "plain.txt");
+    await prisma.node.updateMany({ where: { id: { in: [both, plain] } }, data: { tags: ["a", "b"] } });
+    await prisma.node.update({ where: { id: one }, data: { tags: ["a"] } });
+    await add(s, [both], keep.id);
+    await add(s, [one]);
+    const search = (who: Session, tags: string) => callRoute<TaggedItem[]>(tagged, { cookie: who.cookie, query: `?tags=${tags}` });
+
+    const names = async (who: Session, tags: string) => (await search(who, tags)).json.data.map((item) => item.name).sort();
+    expect(await names(s, "a")).toEqual(["both.txt", "one.txt"]);
+    expect(await names(s, "a,b")).toEqual(["both.txt"]);
+    const [hit] = (await search(s, "b")).json.data;
+    expect({ path: hit!.parentPath, favorite: hit!.favorite }).toEqual({ path: "root / Docs", favorite: true });
+    expect((await search(s, "")).status).toBe(400);
+    expect(await names(await member(), "a")).toEqual([]);
   });
 });

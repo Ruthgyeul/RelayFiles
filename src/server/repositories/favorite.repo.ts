@@ -39,6 +39,13 @@ export function favoritesIn(db: DbClient, accountId: string, folderId: string | 
   return db.favorite.findMany({ where: { accountId, folderId }, orderBy: { createdAt: "desc" }, select: { node: { select: NODE_SELECT } } }).then((rows) => rows.map((row) => row.node));
 }
 
+/** Favorites anywhere in Favorites (any organizing folder) that carry every tag, newest favorite first. */
+export function favoritesWithTags(db: DbClient, accountId: string, tags: string[], limit: number) {
+  return db.favorite
+    .findMany({ where: { accountId, node: { tags: { hasEvery: tags } } }, orderBy: { createdAt: "desc" }, take: limit, select: { node: { select: NODE_SELECT } } })
+    .then((rows) => rows.map((row) => row.node));
+}
+
 /** Where each of these items is listed in Favorites (absent: not a favorite). */
 export async function favoriteFoldersOf(db: DbClient, nodeIds: readonly string[]): Promise<Map<string, string | null>> {
   if (nodeIds.length === 0) return new Map();

@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react";
 import { isTypingTarget } from "@/features/shortcuts/shortcuts";
 
 interface ShortcutHandlers {
-  upload: () => void;
+  /** Absent where nothing can be uploaded (Favorites). */
+  upload?: () => void;
   selectAll: () => void;
   search: () => void;
   toggleView: () => void;
@@ -35,7 +36,7 @@ export function useFileShortcuts(handlers: ShortcutHandlers): void {
       if (key === "/") {
         event.preventDefault();
         search();
-      } else if (key === "u") upload();
+      } else if (key === "u") upload?.();
       else if (key === "g") toggleView();
       else if (key === "backspace") parent();
     };

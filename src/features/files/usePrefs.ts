@@ -6,32 +6,39 @@ import { readLocalSetting, writeLocalSetting } from "@/shared/lib/local-setting"
 
 export type ViewMode = "list" | "grid";
 
-interface Prefs {
+export interface ViewPrefs<S extends string> {
   view: ViewMode;
-  sort: SortKey;
+  sort: S;
 }
 
-const KEY = "relay.filesView";
-const DEFAULT_PREFS: Prefs = { view: "list", sort: "name" };
+const isViewPrefs =
+  <S extends string>(sortKeys: readonly S[]) =>
+  (value: unknown): value is ViewPrefs<S> =>
+    typeof value === "object" &&
+    value !== null &&
+    ((value as ViewPrefs<S>).view === "list" || (value as ViewPrefs<S>).view === "grid") &&
+    (sortKeys as readonly string[]).includes((value as ViewPrefs<S>).sort);
 
-const isPrefs = (value: unknown): value is Prefs =>
-  typeof value === "object" &&
-  value !== null &&
-  ((value as Prefs).view === "list" || (value as Prefs).view === "grid") &&
-  (SORT_KEYS as readonly string[]).includes((value as Prefs).sort);
-
-/** View mode and sort order, remembered per device (localStorage, read after hydration). */
-export function usePrefs(): [Prefs, (next: Partial<Prefs>) => void] {
-  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+/** View mode and sort order of one list, remembered per device under `key` (localStorage, read after hydration). `key` and `sortKeys` are module constants. */
+export function useViewPrefs<S extends string>(key: string, sortKeys: readonly S[], defaults: ViewPrefs<S>): [ViewPrefs<S>, (next: Partial<ViewPrefs<S>>) => void] {
+  const [prefs, setPrefs] = useState<ViewPrefs<S>>(defaults);
   useEffect(() => {
-    const saved = readLocalSetting(KEY, isPrefs);
+    const saved = readLocalSetting(key, isViewPrefs(sortKeys));
     if (saved) queueMicrotask(() => setPrefs(saved));
-  }, []);
-  const update = (next: Partial<Prefs>) =>
+  }, [key, sortKeys]);
+  const update = (next: Partial<ViewPrefs<S>>) =>
     setPrefs((current) => {
       const merged = { ...current, ...next };
-      writeLocalSetting(KEY, merged);
+      writeLocalSetting(key, merged);
       return merged;
     });
   return [prefs, update];
+}
+
+const FILES_KEY = "relay.filesView";
+const FILES_DEFAULTS: ViewPrefs<SortKey> = { view: "list", sort: "name" };
+
+/** The File Manager's view mode and sort order. */
+export function usePrefs(): [ViewPrefs<SortKey>, (next: Partial<ViewPrefs<SortKey>>) => void] {
+  return useViewPrefs(FILES_KEY, SORT_KEYS, FILES_DEFAULTS);
 }

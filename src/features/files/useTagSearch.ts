@@ -8,8 +8,16 @@ import { filesApi } from "@/shared/lib/files-api";
 /** Delay before a tag search runs while typing. */
 const DEBOUNCE_MS = 200;
 
-/** Tag mode of the folder search: a query starting with # searches every folder of the account. */
-export function useTagSearch(query: string): { tagMode: boolean; wanted: string[]; results: TaggedItem[] } {
+/**
+ * Tag mode of the folder search: a query starting with # runs `search` (by default every folder
+ * of the account). `search` must be a stable (module-level) function; a new `reloadOn` value
+ * (the page data after a change) runs it again, keeping the shown results until the new ones arrive.
+ */
+export function useTagSearch(
+  query: string,
+  search: (tags: string[]) => Promise<TaggedItem[]> = filesApi.searchTags,
+  reloadOn?: unknown,
+): { tagMode: boolean; wanted: string[]; results: TaggedItem[] } {
   const q = query.trim().toLowerCase();
   const tagMode = q.startsWith("#");
   const wanted = useMemo(() => (tagMode ? parseTags(q) : []), [tagMode, q]);
@@ -20,8 +28,7 @@ export function useTagSearch(query: string): { tagMode: boolean; wanted: string[
     if (!key) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      filesApi
-        .searchTags(key.split(","))
+      search(key.split(","))
         .then((items) => !cancelled && setFound({ key, items }))
         .catch(() => !cancelled && setFound({ key, items: [] }));
     }, DEBOUNCE_MS);
@@ -29,7 +36,7 @@ export function useTagSearch(query: string): { tagMode: boolean; wanted: string[
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [key]);
+  }, [key, search, reloadOn]);
 
   return { tagMode, wanted, results: found?.key === key ? found.items : [] };
 }
