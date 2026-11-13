@@ -5,6 +5,10 @@ import { API } from "./accounts";
 export const K3S = {
   /** App replicas on the one storage node; more add memory, not storage throughput. */
   maxAppReplicas: 4,
+  /** Media workers on other nodes (deploy/k3s/media.yaml.template): one per Pi is the intent. */
+  maxMediaReplicas: 8,
+  /** Media jobs one of those workers runs at once (K3S_MEDIA_CONCURRENCY): a Pi converts one video at a time well. */
+  mediaConcurrency: 1,
 } as const;
 
 /** Defaults of the Nginx request limits (deploy env NGINX_*; both Nginx templates use them). */

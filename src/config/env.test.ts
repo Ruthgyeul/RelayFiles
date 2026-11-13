@@ -139,6 +139,42 @@ describe("notification settings", () => {
   });
 });
 
+describe("worker roles", () => {
+  it("runs every role by default", () => {
+    expect(parseEnvGroup("jobs", {}).WORKER_ROLES).toEqual(["media", "maintenance", "notify"]);
+  });
+
+  it("takes a subset in any order, once each, and rejects unknown or empty lists", () => {
+    expect(parseEnvGroup("jobs", { WORKER_ROLES: "media" }).WORKER_ROLES).toEqual(["media"]);
+    expect(parseEnvGroup("jobs", { WORKER_ROLES: " notify, maintenance ,notify" }).WORKER_ROLES).toEqual(["notify", "maintenance"]);
+    expect(() => parseEnvGroup("jobs", { WORKER_ROLES: "media,thumbnails" })).toThrow(EnvError);
+    expect(() => parseEnvGroup("jobs", { WORKER_ROLES: " , " })).toThrow(/at least one of/);
+  });
+});
+
+describe("k3s media workers", () => {
+  it("are off by default and keep media on the storage node", () => {
+    const env = parseEnvGroup("deploy", {});
+    expect(env.K3S_MEDIA_REPLICAS).toBe(0);
+    expect(env.K3S_STORAGE_NODE_MEDIA).toBe(true);
+    expect(env.K3S_MEDIA_CONCURRENCY).toBe(1);
+  });
+
+  it("need the NFS server they mount", () => {
+    expect(() => parseEnvGroup("deploy", { K3S_MEDIA_REPLICAS: "2" })).toThrow(/K3S_MEDIA_NFS_SERVER/);
+    expect(parseEnvGroup("deploy", { K3S_MEDIA_REPLICAS: "2", K3S_MEDIA_NFS_SERVER: "192.168.0.100" }).K3S_MEDIA_NFS_SERVER).toBe("192.168.0.100");
+    expect(parseEnvGroup("deploy", { K3S_MEDIA_REPLICAS: "1", K3S_MEDIA_NFS_SERVER: "n95.lan" }).K3S_MEDIA_NFS_SERVER).toBe("n95.lan");
+    expect(() => parseEnvGroup("deploy", { K3S_MEDIA_REPLICAS: "1", K3S_MEDIA_NFS_SERVER: "nfs://n95" })).toThrow(EnvError);
+    expect(() => parseEnvGroup("deploy", { K3S_MEDIA_REPLICAS: "1", K3S_MEDIA_NFS_SERVER: "n95", K3S_MEDIA_NFS_PATH: "relative" })).toThrow(EnvError);
+    expect(() => parseEnvGroup("deploy", { K3S_MEDIA_REPLICAS: "9", K3S_MEDIA_NFS_SERVER: "n95" })).toThrow(EnvError);
+  });
+
+  it("must exist before the storage node stops making thumbnails", () => {
+    expect(() => parseEnvGroup("deploy", { K3S_STORAGE_NODE_MEDIA: "false" })).toThrow(/K3S_STORAGE_NODE_MEDIA/);
+    expect(parseEnvGroup("deploy", { K3S_STORAGE_NODE_MEDIA: "false", K3S_MEDIA_REPLICAS: "1", K3S_MEDIA_NFS_SERVER: "n95" }).K3S_STORAGE_NODE_MEDIA).toBe(false);
+  });
+});
+
 describe("isLanHost", () => {
   it("knows private, loopback, CGNAT and local names", () => {
     const lan = ["10.0.0.1", "172.16.0.1", "172.31.255.1", "192.168.1.1", "127.0.0.1", "169.254.1.1", "100.64.0.1", "100.127.0.1", "localhost", "ntfy", "nas.lan", "box.home.arpa", "[::1]", "fd12:3456::1"];

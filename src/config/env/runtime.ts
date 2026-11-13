@@ -1,7 +1,7 @@
 /** Environment group schemas: account policy, background jobs and logs. Assembled in src/config/env.ts. */
 import { z } from "zod";
-import { ACCOUNT, AUTH, DUPLICATES, JOBS, LOGIN, MEDIA, RENUMBER, TRANSCODE } from "../policy";
-import { port, positiveInt, secondsList } from "./fields";
+import { ACCOUNT, AUTH, DUPLICATES, JOBS, LOGIN, MEDIA, RENUMBER, TRANSCODE, WORKER_ROLES } from "../policy";
+import { port, positiveInt, secondsList, wordList } from "./fields";
 
 export const policyEnv = z.object({
   ACCOUNT_TTL_DAYS: positiveInt.default(ACCOUNT.ttlDays),
@@ -27,6 +27,11 @@ export const jobsEnv = z.object({
   /** Where the worker reaches the app for Status page probes; defaults to this host's APP_PORT. */
   HEALTH_PROBE_URL: z.url().optional(),
   MEDIA_WORKER_CONCURRENCY: positiveInt.max(16).default(MEDIA.workerConcurrency),
+  /**
+   * What this worker process runs (comma-separated, WORKER_ROLES in the policy): media,
+   * maintenance, notify. Every role must run somewhere; maintenance in exactly one process.
+   */
+  WORKER_ROLES: wordList(WORKER_ROLES).default([...WORKER_ROLES]),
   FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   /** Video conversions for unplayable containers running at once in the app (0 = off). */
   VIDEO_TRANSCODE_MAX: z.coerce.number().int().min(0).max(16).default(TRANSCODE.maxConcurrent),

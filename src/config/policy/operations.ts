@@ -96,6 +96,15 @@ export const JOBS = {
   trimBatch: 1_000,
 } as const;
 
+/**
+ * What a worker process runs (WORKER_ROLES): media = thumbnails, previews, stripped copies, stored
+ * conversions and virus scans; maintenance = the daily cleanup and the probes (host bandwidth and
+ * disk samples, Status page, volume watch); notify = owner notifications. Media can run in several
+ * processes on several machines; maintenance must run in exactly one, on the storage host, since
+ * its samples read that host's network and disks.
+ */
+export const WORKER_ROLES = ["media", "maintenance", "notify"] as const;
+
 /** Production log files (LOG_DIR): rotated by size so a busy server cannot fill the disk. */
 export const LOGS = {
   maxFileBytes: 20 * 1024 * 1024,
