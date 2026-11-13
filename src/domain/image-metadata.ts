@@ -7,7 +7,6 @@ import { filterExif } from "./exif-filter";
  * - `all`: everything goes except orientation and the colour profile.
  */
 export type StripMode = "sensitive" | "all";
-export const STRIP_MODES: readonly StripMode[] = ["sensitive", "all"];
 
 /**
  * Lossless removal of location and camera metadata from images sent through public share
@@ -291,7 +290,9 @@ function stripWebp(bytes: Uint8Array, mode: StripMode): Uint8Array | null {
     const type = String.fromCharCode(...bytes.subarray(at, at + 4));
     const size = view.getUint32(at + 4, true);
     const end = at + CHUNK_HEADER + size + (size % 2);
-    need(bytes, Math.min(end, riffEnd));
+    // A chunk that claims more bytes than the file holds is malformed: no half-copied chunk with
+    // its old size field in the output (null, like any other malformed input).
+    if (at + CHUNK_HEADER + size > riffEnd) return null;
     if (WEBP_KEEP.has(type)) {
       const chunk = bytes.slice(at, Math.min(end, riffEnd));
       if (type === "VP8X") chunk[CHUNK_HEADER] = chunk[CHUNK_HEADER]! & ~(VP8X_EXIF_FLAG | VP8X_XMP_FLAG);
