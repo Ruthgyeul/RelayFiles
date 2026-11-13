@@ -128,7 +128,9 @@ export async function moveInFavorites(owner: FavoritesOwner, input: { nodeIds: s
     const listed = await favoriteFoldersOf(tx, nodeIds);
     if (listed.size !== nodeIds.length) throw new ApiError("NOT_FOUND");
     for (const id of folderIds) await updateFavoriteFolder(tx, owner.id, id, { parentId: input.to });
-    if (nodeIds.length > 0) await moveFavorites(tx, owner.id, nodeIds, input.to);
+    // favoriteFoldersOf is not scoped to the account: an id another account favorited passes the
+    // check above, so the scoped update must have moved every one of them (else 404, rolled back).
+    if (nodeIds.length > 0 && (await moveFavorites(tx, owner.id, nodeIds, input.to)).count !== nodeIds.length) throw new ApiError("NOT_FOUND");
     return { moved: nodeIds.length + folderIds.length };
   });
 }
