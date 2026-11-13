@@ -33,6 +33,20 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Fixed
 
+- Dialogs keep focus in the field being typed in while the page updates (an upload in progress moved it to Close), return focus to the button that opened them, and Escape closes only the top dialog
+- An open item menu keeps keyboard focus while the page updates
+- The Delete key deletes the selected items, as the shortcuts list says
+- The failed-upload toast gives the right count
+- Items with names close to the 255-byte limit can be deleted
+- Moving or copying a folder tree under a deep folder is refused instead of leaving items that answer 500
+- A copy or restore of a file still waiting for its virus scan is scanned and no longer stays "Scanning" forever
+- The ClamAV client no longer crashes or blocks the worker when clamd drops the connection mid-file
+- A counted share download is kept when its resume grant cannot be stored (a delete-after-download file was used up without being received)
+- The daily cleanup goes on with the other volumes when one fails; an alert that could not be queued no longer holds back the next one
+- Moving favorites answers 404 for another account's items
+- An upload-only link's size limit is bounded (a huge value gave a 500)
+- Security log "Load more" no longer appends an old page after a reload
+- The CLI keeps downloads in the current folder and stops an upload whose file changes while it is read
 - Account export lists a tree in the same order every time
 - Uploads: one file per batch slot, hidden characters in names are rejected, a resumable upload is no longer counted twice, share links survive a replace, and chunks are dropped when finalizing fails
 - Storage writes are serialized with volume moves, layout migrations and fsck
@@ -40,6 +54,9 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Security
 
+- WebDAV requests are rate limited per address in Nginx (`NGINX_DAV_RATE_PER_MIN`, `NGINX_DAV_BURST`) before the token check
+- IPv4 addresses written in IPv6 form (`::ffff:a.b.c.d`) are masked like other IPv4 addresses
+- Log redaction drops values nested too deep to check instead of logging them
 - Share links: folder limits are counted inside zips, link ids are hardened, password guesses are budgeted per locked item, and a folder's password and access rules apply down the path
 - API tokens are revoked together with the account token; token races are closed
 - CSP reports, password guesses, live conversions and zip checks are bounded
