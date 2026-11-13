@@ -58,10 +58,16 @@ export async function runMaintenance(now: Date) {
   let uploads = 0;
   const emptied: string[] = [];
   for (const volume of await listPurgeableVolumes(db())) {
-    const purged = await driverFor(volume).purgeSystem(trashBefore, uploadsBefore, transcodedBefore);
-    trash += purged.trash;
-    uploads += purged.uploads;
-    emptied.push(volume.id);
+    try {
+      const purged = await driverFor(volume).purgeSystem(trashBefore, uploadsBefore, transcodedBefore);
+      trash += purged.trash;
+      uploads += purged.uploads;
+      emptied.push(volume.id);
+    } catch (error) {
+      // A failing disk keeps its trash records (it is not in `emptied`); the other volumes and the
+      // database clean-ups below still run today.
+      logger.warn("volume not purged", { volumeId: volume.id, error });
+    }
   }
   // The same cut-off as the trash itself: those bytes no longer count toward anyone's storage.
   // Only on the volumes emptied above; a READONLY or OFFLINE volume still holds its trash.

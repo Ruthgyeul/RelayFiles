@@ -55,13 +55,16 @@ export function groupKeys(requestId: string) {
 /**
  * Queues one event. `jobId` makes it idempotent: the same id while the job is pending or kept
  * in the history is ignored. Never throws: a notification is never worth failing the caller.
+ * Returns whether the event was queued.
  */
-export async function queueNotification(event: NotifyEvent, jobId: string): Promise<void> {
-  if (!notifyEnabled()) return;
+export async function queueNotification(event: NotifyEvent, jobId: string): Promise<boolean> {
+  if (!notifyEnabled()) return false;
   try {
     await notifyQueue().add(event.kind, { event }, { jobId });
+    return true;
   } catch (error) {
     logger.warn("notification not queued", { kind: event.kind, error });
+    return false;
   }
 }
 
@@ -72,10 +75,13 @@ export async function queueNotification(event: NotifyEvent, jobId: string): Prom
 export async function queueThrottled(event: NotifyEvent, subject: string, windowMs: number): Promise<boolean> {
   if (!notifyEnabled()) return false;
   try {
-    const first = await redis().set(`notify:throttle:${event.kind}:${subject}`, "1", "PX", windowMs, "NX");
+    const key = `notify:throttle:${event.kind}:${subject}`;
+    const first = await redis().set(key, "1", "PX", windowMs, "NX");
     if (first !== "OK") return false;
-    await queueNotification(event, `${event.kind}-${subject}-${Date.now()}`);
-    return true;
+    if (await queueNotification(event, `${event.kind}-${subject}-${Date.now()}`)) return true;
+    // Not queued: the window starts with an alert that is sent, so the next check tries again.
+    await redis().del(key);
+    return false;
   } catch (error) {
     logger.warn("notification not queued", { kind: event.kind, error });
     return false;
