@@ -82,6 +82,18 @@ function releaseAll(held: readonly SemaphoreSlot[]): void {
   for (const slot of held) slot.release().catch((error: unknown) => logger.warn("conversion slot not released", { error }));
 }
 
+/** The requester's own slot, then a shared one: [shared, own]. Throws 429 when either is taken. */
+async function takeSlots(requester: string, max: number): Promise<[SemaphoreSlot, SemaphoreSlot]> {
+  const own = await slotOf(`transcode:by:${requester}`, TRANSCODE.maxPerRequester);
+  if (!own) throw ownBusy();
+  const slot = await sharedSlot(max);
+  if (!slot) {
+    releaseAll([own]);
+    throw busy();
+  }
+  return [slot, own];
+}
+
 /**
  * Plays a video the browser cannot decode by converting it while it streams. At most
  * VIDEO_TRANSCODE_MAX conversions run at once across every app process (Redis slots), and at
@@ -97,15 +109,18 @@ export async function transcodeResponse(req: Request, path: string, requester: s
   if (VIDEO_TRANSCODE_MAX === 0) throw new ApiError("NOT_FOUND");
   if (req.method === "HEAD") return new Response(null, { headers });
   if (slots.running >= VIDEO_TRANSCODE_MAX) throw busy();
-  const own = await slotOf(`transcode:by:${requester}`, TRANSCODE.maxPerRequester);
-  if (!own) throw ownBusy();
-  const slot = await sharedSlot(VIDEO_TRANSCODE_MAX);
-  if (!slot) {
-    releaseAll([own]);
-    throw busy();
-  }
-
+  // Taken before the Redis round trips below: while Redis is down this count is the only limit,
+  // and requests waiting on Redis at the same time must not all pass the check above.
   slots.running++;
+  let held: [SemaphoreSlot, SemaphoreSlot];
+  try {
+    held = await takeSlots(requester, VIDEO_TRANSCODE_MAX);
+  } catch (error) {
+    slots.running--;
+    throw error;
+  }
+  const [slot, own] = held;
+
   void countOne("transcodes_started");
   const started = Date.now();
   const child = spawn(FFMPEG_PATH, transcodeArgs(path), { stdio: ["ignore", "pipe", "ignore"], shell: false });
