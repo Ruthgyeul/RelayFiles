@@ -17,7 +17,7 @@ import { POST as transfer } from "@/app/api/nodes/transfer/route";
 import type { CreatedAccount } from "@/contracts/auth";
 import type { CreatedFolder, FolderView, LinkEventDto, NodeItem, TransferResult } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
-import { FILES } from "@/config/policy";
+import { FILES, STORAGE } from "@/config/policy";
 import { db } from "@/server/db/client";
 import { forgetTrashedBefore } from "@/server/repositories/trash.repo";
 import { redis } from "@/server/redis";
@@ -147,6 +147,23 @@ describe("move and copy", () => {
     expect((await list(s)).children.map((child) => child.name).sort()).toEqual(["big (2).bin", "big.bin"]);
     const staged = (await readdir(layoutOf(configuredVolumeRoot()).uploads)).filter((name) => name.startsWith("copy-"));
     expect(staged).toEqual([]);
+  });
+
+  it("refuses a move or copy that would nest folders deeper than allowed", async () => {
+    const s = await member();
+    // A chain of folders one short of the limit, and a two-level tree to put at its end.
+    let parent = "root";
+    let deep = "root";
+    for (let level = 1; level < STORAGE.maxFolderDepth; level++) [parent, deep] = [deep, (await folder(s, deep, `L${level}`)).id];
+    const tree = await folder(s, "root", "Tree");
+    await folder(s, tree.id, "Inner");
+    for (const mode of ["move", "copy"] as const) {
+      const refused = await callRoute(transfer, { method: "POST", cookie: s.cookie, body: { ids: [tree.id], targetId: deep, mode } });
+      expect([refused.status, refused.json.error], mode).toEqual([400, `Folders can be nested at most ${STORAGE.maxFolderDepth} levels deep.`]);
+    }
+    // The tree still fits one level higher.
+    const moved = await callRoute<TransferResult>(transfer, { method: "POST", cookie: s.cookie, body: { ids: [tree.id], targetId: parent, mode: "move" } });
+    expect(moved.status).toBe(200);
   });
 
   it("refuses to create more items than an account may hold", async () => {
