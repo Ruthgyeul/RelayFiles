@@ -10,7 +10,7 @@ const { LocalVolumeDriver } = await import("./local-volume");
 const { UnsafePathError, resolveInsideUserRoot } = await import("./safe-path");
 const { checkVolume, initVolume, readVolumeMarker } = await import("./volume");
 const { withStorageTransaction } = await import("./storage-transaction");
-const { layoutOf } = await import("./layout");
+const { inUploadArea, layoutOf } = await import("./layout");
 const { StorageEntryMissingError, StorageTargetExistsError } = await import("./driver");
 
 const ACCOUNT = "abcdefghjkmn";
@@ -40,6 +40,17 @@ describe("resolveInsideUserRoot", () => {
 
   it("limits folder depth", () => {
     expect(() => resolveInsideUserRoot(root, ACCOUNT, Array.from({ length: 33 }, (_, i) => `d${i}`))).toThrow(/too deep/);
+  });
+});
+
+describe("inUploadArea", () => {
+  const layout = layoutOf("/mnt/vol");
+  it("accepts paths inside the upload area only", () => {
+    expect(inUploadArea(layout, "/mnt/vol/system/tmp/uploads/abc")).toBe(true);
+    expect(inUploadArea(layout, "/mnt/vol/system/tmp/uploads/copy-1/item")).toBe(true);
+    expect(inUploadArea(layout, "/mnt/vol/system/tmp/uploads")).toBe(false);
+    expect(inUploadArea(layout, "/mnt/vol/system/tmp/uploads2/abc")).toBe(false);
+    expect(inUploadArea(layout, "/mnt/vol/system/tmp/uploads/../../../users/acc/x")).toBe(false);
   });
 });
 
