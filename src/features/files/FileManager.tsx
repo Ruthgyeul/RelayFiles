@@ -97,6 +97,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
     search: search.openSearch,
     toggleView: () => setPrefs({ view: prefs.view === "grid" ? "list" : "grid" }),
     parent: () => parentHref && router.push(parentHref),
+    remove: () => selection.items.length > 0 && open.remove(selection.items),
   });
 
   const selectedItems = selection.items;
