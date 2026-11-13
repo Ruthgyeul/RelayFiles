@@ -107,6 +107,8 @@ export const FILE_REQUEST = {
   expiryDays: [1, 7, 30],
   /** Largest "at most N files" limit the owner can set. */
   maxFilesLimit: 10_000,
+  /** Largest "at most N MB" limit the owner can set (10 TB: above any disk, below the bigint column). */
+  maxMbLimit: 10_000_000,
   /** Files one visitor upload may contain (one drop or pick). */
   maxFilesPerBatch: 100,
   /** Upload batches one address may start per hour on one request. */
