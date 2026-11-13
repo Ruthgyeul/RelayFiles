@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_NAME_BYTES, nameError, splitExtension, uniqName } from "./names";
+import { MAX_NAME_BYTES, nameError, splitExtension, uniqName, utf8Prefix } from "./names";
 
 describe("nameError (design messages)", () => {
   it.each([
@@ -53,5 +53,25 @@ describe("uniqName (design behaviour)", () => {
 
   it("replaces an existing (n) suffix instead of stacking", () => {
     expect(uniqName(["a (2).mp4", "a.mp4"], "a (2).mp4", true)).toBe("a (3).mp4");
+  });
+});
+
+describe("utf8Prefix", () => {
+  it("keeps text that fits", () => {
+    expect(utf8Prefix("photo.jpg", 255)).toBe("photo.jpg");
+  });
+
+  it("cuts by bytes, never inside a character", () => {
+    // "한" is 3 bytes in UTF-8, the emoji-free astral "𝒜" is 4 (a surrogate pair in JS).
+    expect(utf8Prefix("한한한", 7)).toBe("한한");
+    expect(utf8Prefix("a𝒜b", 4)).toBe("a");
+    expect(utf8Prefix("a𝒜b", 5)).toBe("a𝒜");
+    expect(utf8Prefix("abc", 0)).toBe("");
+  });
+
+  it("fills the limit with long names", () => {
+    const cut = utf8Prefix("가".repeat(200), MAX_NAME_BYTES - 50);
+    expect(new TextEncoder().encode(cut).length).toBeLessThanOrEqual(MAX_NAME_BYTES - 50);
+    expect(new TextEncoder().encode(cut).length).toBeGreaterThan(MAX_NAME_BYTES - 53);
   });
 });
