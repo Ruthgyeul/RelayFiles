@@ -1,7 +1,7 @@
 import "server-only";
 import { segmentsBelowRoot } from "@/domain/tree";
 import type { DbClient } from "../db/client";
-import { ancestorChain } from "../repositories/node-tree.repo";
+import { ancestorChains } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import type { StorageDriver, StorageLocation } from "../storage/driver";
 import { driverFor } from "../storage/registry";
@@ -20,8 +20,16 @@ export function fileReader(db: DbClient) {
       }
       return drivers.get(volumeId)!;
     },
-    async locationOf(accountId: string, nodeId: string): Promise<StorageLocation> {
-      return { accountId, segments: segmentsBelowRoot(await ancestorChain(db, nodeId)) };
+    /** Where each file of a batch is on its volume, from one walk up the tree for the batch. */
+    async locationsOf(rows: readonly { id: string; accountId: string }[]): Promise<Map<string, StorageLocation>> {
+      const chains = await ancestorChains(
+        db,
+        rows.map((row) => row.id),
+      );
+      return new Map(rows.flatMap((row) => {
+        const chain = chains.get(row.id);
+        return chain ? [[row.id, { accountId: row.accountId, segments: segmentsBelowRoot(chain) }] as const] : [];
+      }));
     },
   };
 }

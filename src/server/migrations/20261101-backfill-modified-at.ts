@@ -1,7 +1,7 @@
 import "server-only";
 import { MIGRATION } from "@/config/policy";
 import { logger } from "../logger";
-import { filesWithoutModifiedAt, setFileFacts } from "../repositories/node.repo";
+import { filesWithoutModifiedAt, setModifiedTimes } from "../repositories/node.repo";
 import type { DataMigrationStep } from "./data-migrations";
 import { fileReader } from "./file-backfill";
 
@@ -20,15 +20,19 @@ export const backfillModifiedAt: DataMigrationStep = {
     for (;;) {
       const rows = await filesWithoutModifiedAt(db, MIGRATION.batchSize, after);
       if (rows.length === 0) break;
+      const locations = await files.locationsOf(rows.filter((row) => !row.missing));
+      const times: { id: string; modifiedAt: Date }[] = [];
       for (const row of rows) {
         const driver = await files.driverOf(row.account.volumeId);
         if (!driver) {
           skipped += 1;
           continue;
         }
-        const info = row.missing ? null : await driver.stat(await files.locationOf(row.accountId, row.id));
-        await setFileFacts(db, row.id, { modifiedAt: info?.type === "file" ? info.modifiedAt : row.createdAt });
+        const location = locations.get(row.id);
+        const info = location ? await driver.stat(location) : null;
+        times.push({ id: row.id, modifiedAt: info?.type === "file" ? info.modifiedAt : row.createdAt });
       }
+      await setModifiedTimes(db, times);
       after = rows.at(-1)!.id;
       await save(after);
     }

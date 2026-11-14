@@ -21,9 +21,10 @@ export const backfillSha256: DataMigrationStep = {
     for (;;) {
       const rows = await filesWithoutSha256(db, MIGRATION.batchSize, after);
       if (rows.length === 0) break;
+      const locations = await files.locationsOf(rows.filter((row) => !row.missing));
       for (const row of rows) {
         const driver = row.missing ? null : await files.driverOf(row.account.volumeId);
-        const location = driver ? await files.locationOf(row.accountId, row.id) : null;
+        const location = driver ? locations.get(row.id) : undefined;
         const info = driver && location ? await driver.stat(location) : null;
         if (!driver || !location || info?.type !== "file" || info.size !== row.size) {
           unreadable += 1;

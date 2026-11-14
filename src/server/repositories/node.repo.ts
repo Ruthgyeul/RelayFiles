@@ -338,6 +338,18 @@ export async function setFileFacts(db: DbClient, nodeId: string, data: { modifie
   await db.node.update({ where: { id: nodeId }, data });
 }
 
+/** Records the modification time of many files in one statement (a backfill batch). */
+export async function setModifiedTimes(db: DbClient, times: readonly { id: string; modifiedAt: Date }[]): Promise<void> {
+  if (times.length === 0) return;
+  const ids = times.map((time) => time.id);
+  // Prisma keeps DateTime as UTC in a timestamp without time zone.
+  const ats = times.map((time) => time.modifiedAt.toISOString());
+  await db.$executeRaw`
+    UPDATE "Node" AS n SET "modifiedAt" = v.at::timestamptz AT TIME ZONE 'UTC'
+    FROM unnest(${ids}::text[], ${ats}::text[]) AS v(id, at)
+    WHERE n.id = v.id`;
+}
+
 /**
  * Renames many children of one folder in a single statement (renumbering) and returns how many
  * rows changed (fewer when one was deleted or moved meanwhile). Each new name must be free when
