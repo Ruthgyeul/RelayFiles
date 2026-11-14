@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { redis } from "./redis";
-import { acquireSlot, SlotLostError } from "./redis-semaphore";
+import { acquireSlot, slotsHeld, SlotLostError } from "./redis-semaphore";
 
 afterAll(() => redis().disconnect());
 
@@ -35,6 +35,27 @@ describe("redis semaphore", () => {
     expect(slot).not.toBeNull();
     expect(await redis().zscore(`sem:${name}`, "crashed")).toBeNull();
     await slot!.release();
+  });
+
+  it("times leases by Redis's clock, not the clock of the host asking", async () => {
+    const name = `test-${randomUUID()}`;
+    const held = await acquireSlot(name, 2, LEASE_MS);
+    // A host whose clock runs an hour ahead (a Pi on k3s without NTP) neither purges the live
+    // lease nor gets one that lasts an hour too long.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60 * 60_000);
+    try {
+      const other = await acquireSlot(name, 2, LEASE_MS);
+      expect(other).not.toBeNull();
+      expect(await slotsHeld(name)).toBe(2);
+      const [server] = await redis().time();
+      const newest = (await redis().zrange(`sem:${name}`, "-1", "-1"))[0]!;
+      const lease = Number(await redis().zscore(`sem:${name}`, newest));
+      expect(lease).toBeLessThanOrEqual(Number(server) * 1_000 + LEASE_MS + 1_000);
+      await other!.release();
+    } finally {
+      clock.mockRestore();
+    }
+    await held!.release();
   });
 
   it("keeps the slot of a lone holder that runs for many leases", async () => {

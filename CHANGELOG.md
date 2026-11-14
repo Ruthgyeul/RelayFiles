@@ -49,6 +49,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 - An upload whose batch, link or token is gone by the time it finishes gives its reserved space and received bytes back at once, not after `UPLOAD_TMP_TTL_HOURS`
 - WebDAV COPY or MOVE with Overwrite no longer deletes the destination when the copy is then refused (quota, item limit, busy volume): the new item is put in place first
 - Link activity of a folder with more than about 65,000 items inside no longer fails with a 500
+- Video conversion slots are timed by Redis's clock, so k3s nodes whose clocks drift no longer stop each other's conversions
 - Moving favorites answers 404 for another account's items
 - An upload-only link's size limit is bounded (a huge value gave a 500)
 - Security log "Load more" no longer appends an old page after a reload
