@@ -55,6 +55,8 @@ interface ProvisionOptions {
  * (optionally) a device session in one storage transaction: if any step fails, nothing is
  * left behind in the database or on disk (docs/security.md "계정 생성의 원자성").
  */
+async function provisionAccount(options: ProvisionOptions & { client: ClientInfo }): Promise<ProvisionedAccount & SignedIn>;
+async function provisionAccount(options: ProvisionOptions): Promise<ProvisionedAccount>;
 async function provisionAccount({ isAdmin, inviteCode, client }: ProvisionOptions): Promise<ProvisionedAccount> {
   const driver = await volumeForNewAccount();
   const keys = tokenKeys();
@@ -102,9 +104,8 @@ export async function createAnonymousAccount(input: { inviteCode?: string }, cli
   if (mode === "invite" && !input.inviteCode) throw new ApiError("INVALID_INVITE");
   if (!(await allowSignup(client.ipKey))) throw new ApiError("RATE_LIMITED", "Too many new accounts from this network. Try again later.");
   const created = await provisionAccount({ isAdmin: false, inviteCode: mode === "invite" ? input.inviteCode : undefined, client });
-  if (!created.sessionId) throw new ApiError("INTERNAL");
   await logAccountEvent(created.account.id, client, "account.created");
-  return { ...created, sessionId: created.sessionId };
+  return created;
 }
 
 /** Creates an admin account from the server console (`npm run admin:create`). */

@@ -59,11 +59,6 @@ export async function refundTokenAttempt(subject: string, attempt: { lockSeconds
   await multi.exec();
 }
 
-/** Forgets a subject's failures and lock (tests and operator tools). */
-export async function clearFailures(subject: string): Promise<void> {
-  await redis().del(failKey(subject), lockKey(subject));
-}
-
 /** Counts an anonymous sign-up; false when the address exceeded the hourly limit. */
 export async function allowSignup(ipKey: string): Promise<boolean> {
   return (await countInWindow(signupKey(ipKey), AUTH.signupWindowSec)) <= getEnv("policy").SIGNUPS_PER_HOUR;

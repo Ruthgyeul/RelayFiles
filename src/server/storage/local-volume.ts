@@ -101,10 +101,6 @@ export class LocalVolumeDriver implements StorageDriver {
     return assets.assetSource(this.layout, asset);
   }
 
-  readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null> {
-    return assets.readAsset(this.layout, asset);
-  }
-
   moveToVersion(location: StorageLocation, ref: VersionRef): Promise<void> {
     return versions.moveToVersion(this.layout, location, ref);
   }

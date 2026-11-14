@@ -10,13 +10,15 @@ import { GET as meToken } from "@/app/api/me/token/route";
 import type { CreatedAccount, SessionState } from "@/contracts/auth";
 import { newInviteCode } from "@/domain/ids";
 import { ipKeyOf } from "@/server/auth/client-info";
-import { clearFailures } from "@/server/auth/login-limiter";
 import { MAX_SESSIONS_PER_DEVICE, SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { db } from "@/server/db/client";
 import { redis } from "@/server/redis";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
+
+/** Forgets a sign-in subject's failures and lock (login-limiter keys). */
+const clearFailures = (subject: string) => redis().del(`auth:fail:${subject}`, `auth:lock:${subject}`);
 
 type Handler = (req: NextRequest, ctx: { params: Promise<Record<string, never>> }) => Promise<Response>;
 
