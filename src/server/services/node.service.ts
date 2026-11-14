@@ -13,7 +13,7 @@ import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { countFavorites, favoriteFoldersOf } from "../repositories/favorite.repo";
 import { childCounts, createFolderNode, findByName, findByTags, findNode, findRootFolder, listChildren, listFolders, listSiblingNames, recentFiles, tagUsage, type NodeRow } from "../repositories/node.repo";
-import { ancestorChain, childStats, descendantCounts, folderSizes, type ChildStats } from "../repositories/node-tree.repo";
+import { ancestorChain, ancestorChains, childStats, descendantCounts, folderSizes, type AncestorRow, type ChildStats } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
@@ -134,24 +134,30 @@ export async function getProperties(accountId: string, nodeId: string): Promise<
   };
 }
 
-/** Adds the folder path ("Videos / 2024") to each hit, keeping the order. */
-export async function withPaths(accountId: string, rows: NodeRow[]): Promise<TaggedItem[]> {
-  const [folders, items] = await Promise.all([listFolders(db(), accountId), withFolderStats(rows)]);
-  const byId = new Map(folders.map((folder) => [folder.id, folder]));
-  const pathOf = (parentId: string | null): string => {
-    const names: string[] = [];
-    for (let folder = parentId ? byId.get(parentId) : undefined; folder; folder = folder.parentId ? byId.get(folder.parentId) : undefined) names.unshift(folder.name);
-    return names.join(" / ");
-  };
+/** The folder chains (root first) of the parents of `rows`, from one walk up the tree. */
+export function parentChains(rows: readonly Pick<NodeRow, "parentId">[]): Promise<Map<string, AncestorRow[]>> {
+  return ancestorChains(
+    db(),
+    rows.flatMap((row) => (row.parentId ? [row.parentId] : [])),
+  );
+}
+
+/**
+ * Adds the folder path ("root / Videos / 2024") to each hit, keeping the order. Only the folders
+ * above the hits are read (`chains`, when the caller already has them from {@link parentChains}).
+ */
+export async function withPaths(rows: NodeRow[], chains?: Map<string, AncestorRow[]>): Promise<TaggedItem[]> {
+  const [parents, items] = await Promise.all([chains ?? parentChains(rows), withFolderStats(rows)]);
   return items.map((item, index) => {
-    const parentId = rows[index]!.parentId ?? "root";
-    return { ...item, parentPath: pathOf(rows[index]!.parentId), parentId, parentIsRoot: byId.get(parentId)?.parentId === null };
+    const parentId = rows[index]!.parentId;
+    const chain = (parentId && parents.get(parentId)) || [];
+    return { ...item, parentPath: chain.map((folder) => folder.name).join(" / "), parentId: parentId ?? "root", parentIsRoot: chain.length === 1 };
   });
 }
 
 /** Items anywhere in the account that carry every tag, with their folder path. */
 export async function searchByTags(accountId: string, tags: string[]): Promise<TaggedItem[]> {
-  return withPaths(accountId, await findByTags(db(), accountId, tags, SEARCH.tagResultLimit));
+  return withPaths(await findByTags(db(), accountId, tags, SEARCH.tagResultLimit));
 }
 
 /**
@@ -160,13 +166,13 @@ export async function searchByTags(accountId: string, tags: string[]): Promise<T
  */
 export async function searchItems(accountId: string, raw: string): Promise<TaggedItem[]> {
   const query = parseSearchQuery(raw);
-  if (query.mode === "recent") return withPaths(accountId, await recentFiles(db(), accountId, SEARCH.recentItems));
+  if (query.mode === "recent") return withPaths(await recentFiles(db(), accountId, SEARCH.recentItems));
   const rows = query.mode === "tags" ? await findByTags(db(), accountId, query.tags, SEARCH.tagResultLimit) : await findByName(db(), accountId, query.text, SEARCH.nameCandidates);
   const ranked = rankByName(
     rows.map((row) => ({ row, name: row.name, type: row.type === "FOLDER" ? ("folder" as const) : ("file" as const) })),
     query.mode === "name" ? query.text : "",
   ).slice(0, SEARCH.maxResults);
-  return withPaths(accountId, ranked.map(({ row }) => row));
+  return withPaths(ranked.map(({ row }) => row));
 }
 
 /**

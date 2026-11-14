@@ -187,7 +187,7 @@ export async function favoritesView(owner: FavoritesOwner, folderId: string | nu
   const tree = favoriteTree(folders);
   requireGroup(tree, folderId);
   const dto = (folder: FavoriteFolderLink): FavoriteFolderDto => ({ ...folder, itemCount: counts.get(folder.id) ?? 0 });
-  const items = await withPaths(owner.id, await favoritesIn(db(), owner.id, folderId));
+  const items = await withPaths(await favoritesIn(db(), owner.id, folderId));
   return {
     folder: folderId ? dto(tree.get(folderId)!) : null,
     path: favoritePath(tree, folderId).map(({ id, name }) => ({ id, name })),
@@ -199,7 +199,7 @@ export async function favoritesView(owner: FavoritesOwner, folderId: string | nu
 
 /** Favorites in any organizing folder that carry every tag (tag search on the Favorites page). */
 export async function searchFavoriteTags(owner: FavoritesOwner, tags: string[]): Promise<TaggedItem[]> {
-  return withPaths(owner.id, await favoritesWithTags(db(), owner.id, tags, FILES.maxFavorites));
+  return withPaths(await favoritesWithTags(db(), owner.id, tags, FILES.maxFavorites));
 }
 
 /**

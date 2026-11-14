@@ -28,7 +28,7 @@ export async function storageOverview(account: Pick<AccountRow, "id" | "quotaByt
   ]);
   const entries = children.map((child) => ({ id: child.id, name: child.name, folder: child.type === "FOLDER", bytes: stats.get(child.id)?.size ?? 0n }));
   // One folder walk for both lists.
-  const items = await withPaths(account.id, [...largest, ...stale]);
+  const items = await withPaths([...largest, ...stale]);
   return {
     usedBytes: usage.usedBytes.toString(),
     trashBytes: trash.toString(),

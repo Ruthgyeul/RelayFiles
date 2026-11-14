@@ -255,3 +255,39 @@ describe("bulk operations", () => {
     expect(await prisma.trashedBytes.count({ where: { accountId: m.id } })).toBe(2);
   }, SLOW);
 });
+
+describe("item paths", () => {
+  it("reads only the folders above the hits, in a constant number of queries", async () => {
+    const { searchByTags } = await import("./node.service");
+    const { sharedItems } = await import("./shared-items.service");
+    const run = async (m: FixtureMember) => ({ tagged: await measure(() => searchByTags(m.id, ["deep"])), shared: await measure(() => sharedItems(m.id)) });
+
+    const small = await member();
+    const large = await member();
+    for (const m of [small, large]) {
+      const trip = await folderRow(m, m.rootId, "Trip", { visibility: "PUBLIC" });
+      const day = await folderRow(m, trip.id, "Day1");
+      await filesIn(m, day.id, null, 1, "hit", { tags: ["deep"], downloadLimit: 3 });
+      await filesIn(m, m.rootId, null, 1, "top", { tags: ["deep"], visibility: "PUBLIC" });
+    }
+    // Folders nobody asked about: the old code read every one of them.
+    for (let index = 0; index < 600; index++) await folderRow(large, large.rootId, `other-${index}`);
+
+    const before = await run(small);
+    const after = await run(large);
+    for (const { tagged, shared } of [before, after]) {
+      expect(tagged.result.map((item) => [item.name, item.parentPath, item.parentIsRoot]).sort()).toEqual([
+        ["hit-1.txt", "root / Trip / Day1", false],
+        ["top-1.txt", "root", true],
+      ]);
+      expect(shared.result.items.map((item) => [item.name, item.parentPath]).sort()).toEqual([
+        ["Trip", "root"],
+        ["hit-1.txt", "root / Trip / Day1"],
+        ["top-1.txt", "root"],
+      ]);
+    }
+    report("tag search paths", before.tagged, after.tagged);
+    expect(after.tagged.queries).toBe(before.tagged.queries);
+    expect(after.shared.queries).toBe(before.shared.queries);
+  }, SLOW);
+});
