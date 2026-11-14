@@ -126,8 +126,8 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 ## Git
 
 - Conventional Commits: `feat(scope): subject`, 소문자, 명령형, 마침표 없음.
-- 브랜치: 작업 브랜치(`feat/…`, `fix/…`, `docs/…`, `chore/…`, `refactor/…`)는 `develop`에서 만들고 PR의 base도 `develop`이다. `main`은 릴리스 병합(`develop → main`, Merge Commit)과 버전 태그 전용이고, `hotfix/…`만 `main`에서 갈라 `main`과 `develop` 양쪽에 병합한다.
-- 릴리스: `package.json` 버전을 올리고 `CHANGELOG.md`의 "Unreleased"를 그 버전 아래로 옮긴 뒤 `main`에 병합하고 `vX.Y.Z` 태그를 붙인다(절차 [`docs/runbook.md`](docs/runbook.md#릴리스-만들기)). 사용자가 보는 변경은 PR마다 `CHANGELOG.md` "Unreleased"에 한 줄 적는다.
+- 브랜치: `main` 하나로 운용한다. 작업 브랜치(`feat/…`, `fix/…`, `docs/…`, `chore/…`, `refactor/…`)는 `main`에서 만들고 PR의 base도 `main`이며, Merge Commit으로 병합한다.
+- 릴리스: `package.json` 버전을 올리고 `CHANGELOG.md`의 "Unreleased"를 그 버전 아래로 옮기는 PR을 `main`에 병합한 뒤, 그 커밋에 `vX.Y.Z` 태그를 붙인다(절차 [`docs/runbook.md`](docs/runbook.md#릴리스-만들기)). 사용자가 보는 변경은 PR마다 `CHANGELOG.md` "Unreleased"에 한 줄 적는다.
 - PR 본문: `## Changes` / `## How to Test` / `## Related Issues`.
 - npm만 쓰고 `package-lock.json`을 커밋한다.
 - 의존성의 설치 스크립트(preinstall/install/postinstall)는 `package.json`의 `allowScripts`로 승인한다(npm 11.19+는 승인되지 않은 스크립트를 `npm warn install-scripts`로 알린다). 새 의존성이 스크립트를 가지면 내용을 확인한 뒤 `npm install-scripts approve --no-allow-scripts-pin <pkg>`로 추가한다(버전 고정 없이 이름만 등록해 Dependabot 업데이트마다 다시 승인하지 않게 한다).

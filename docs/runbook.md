@@ -558,12 +558,12 @@ $C up -d app worker
 
 ## 릴리스 만들기
 
-기능·수정 PR은 `develop`으로 들어가고, `main`은 릴리스 병합과 버전 태그만 받는다(CLAUDE.md "Git"). 버전은 Semantic Versioning이다: 운영자가 직접 손을 써야 하거나 호환이 깨지면 major, 기능 추가는 minor, 수정·문서는 patch.
+브랜치는 `main` 하나다. 기능·수정 PR이 `main`으로 들어가고, 릴리스는 버전을 올리는 PR을 병합한 커밋에 태그를 붙여 만든다(CLAUDE.md "Git"). 버전은 Semantic Versioning이다: 운영자가 직접 손을 써야 하거나 호환이 깨지면 major, 기능 추가는 minor, 수정·문서는 patch.
 
-1. `develop`에서 `package.json`의 `version`을 올리고 `npm install --package-lock-only`로 `package-lock.json`을 맞춘다. 앱 버전은 화면 아래와 `docs/openapi.json`에 들어가므로 `npm run openapi`도 다시 실행한다.
+1. `main`에서 만든 브랜치(`chore/release-vX.Y.Z`)에서 `package.json`의 `version`을 올리고 `npm install --package-lock-only`로 `package-lock.json`을 맞춘다. 앱 버전은 화면 아래와 `docs/openapi.json`에 들어가므로 `npm run openapi`도 다시 실행한다.
 2. `CHANGELOG.md`의 "Unreleased" 항목을 `## [X.Y.Z] - YYYY-MM-DD` 아래로 옮긴다. `npm run check:changelog`(`npm run check`·CI 포함)가 이 절이 없으면 실패한다.
 3. DB·스토리지·`.env`·Nginx가 바뀌거나 운영자가 따로 할 일이 있는 릴리스면 `docs/upgrade/vX.Y.Z.md`를 쓰고 [upgrade/README.md](upgrade/README.md) 목록에 올린다.
-4. `develop → main` PR을 Merge Commit으로 병합한다(제목 `release: vX.Y.Z`).
+4. 그 PR을 `main`에 Merge Commit으로 병합한다(제목 `release: vX.Y.Z`).
 5. 병합된 `main` 커밋에 태그를 붙여 올린다.
 
    ```bash
