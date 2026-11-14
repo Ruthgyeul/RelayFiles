@@ -8,6 +8,7 @@
     "read-excel-file": "sharedStrings",
     "react-markdown": "remarkRehypeOptions",
     "tus-js-client": "Upload-Offset",
-    "qrcode-generator": "getModuleCount"
+    "qrcode-generator": "getModuleCount",
+    "hls.js": "liveSyncDurationCount"
   }
 }

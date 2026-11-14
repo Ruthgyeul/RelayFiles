@@ -103,7 +103,8 @@
 | `GET` | `/api/search?q=…` | 전역 검색(Ctrl/⌘ K): 빈 값이면 최근 파일 8개, `#태그`로 시작하면 모든 태그를 가진 항목, 그 밖에는 이름 검색(후보 200개를 순위로 정렬해 최대 30개). 결과마다 폴더 경로. `q`는 200자까지 |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
 | `GET`·`HEAD` | `/api/files/:id/download` | 원본 그대로 첨부 파일로 받기. SHA-256 ETag(304), Range(206/416), RFC 6266 파일명(한글). `STORAGE_ACCEL_ENABLED`면 Nginx `X-Accel-Redirect`로 넘긴다. 받은 바이트는 `TrafficDaily`에 기록 |
-| `GET`·`HEAD` | `/api/files/:id/stream` | 뷰어·인라인 재생용. 영상·음악·이미지만 inline, SVG·HTML은 항상 첨부(`nosniff`). `?transcode=1`: 브라우저가 못 여는 영상을 ffmpeg로 720p H.264/AAC fragmented MP4로 변환하며 전송(동시 `VIDEO_TRANSCODE_MAX`개, 꽉 차면 429 + `Retry-After`, 0이면 404) |
+| `GET` | `/api/files/:id/hls/:segment` | 브라우저가 못 여는 영상의 HLS 재생. `index.m3u8`: 영상 전체의 VOD 목록(4초 세그먼트, 이름에 `?v=<버전>`). `<n>.ts`: 그 세그먼트(MPEG-TS, 720p H.264/AAC, 메타데이터 없음), 요청할 때 그 자리부터 변환한다. 아직 변환 중이면 503 `VIDEO_CONVERTING` + `Retry-After`, 변환 슬롯이 없으면 429, ffmpeg가 열 수 없는 파일은 404 |
+| `GET`·`HEAD` | `/api/files/:id/stream` | 뷰어·인라인 재생용. 영상·음악·이미지만 inline, SVG·HTML은 항상 첨부(`nosniff`). `?transcode=1`: 브라우저가 못 여는 영상을 ffmpeg로 720p H.264/AAC fragmented MP4로 변환하며 전송(동시 `VIDEO_TRANSCODE_MAX`개, 꽉 차면 429 + `Retry-After`, 0이면 404). 저장된 변환본이 있으면 그것을 Range로 보낸다. 응답(HEAD 포함)의 `x-relayfiles-transcode`가 `stored` 또는 `live` |
 | `GET`·`HEAD` | `/api/files/:id/preview` | 뷰어용 이미지: 워커가 만든 WebP 미리보기(최대 2560px, 메타데이터 없음). 없으면(작은 파일, GIF, 처리 전) `stream`과 같은 원본 |
 | `GET` | `/api/files/:id/thumb` | 워커가 만든 WebP 썸네일(최대 576px, 메타데이터 없음). 아직 없으면 404 |
 | `GET` | `/api/zip?ids=a,b` | 파일·폴더를 하나의 zip으로(store 모드, 폴더 구조와 빈 폴더 유지). 이름은 `폴더.zip` / `파일.zip` / `상위 · N items.zip` |
@@ -230,6 +231,7 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | `POST` | `/api/share/:linkId/unlock` | `{ password }` argon2 확인. 맞으면 서명된 `rf_sh` 쿠키(12시간)에 그 비밀번호를 가진 항목(링크나 위 폴더)을 기록. 다른 비밀번호가 남았으면 페이지가 다시 묻는다. 틀리면 403 `Wrong password`, 주소당 10분에 10회·네트워크당 10분에 30회·전체 1시간에 200회를 넘기면 429 |
+| `GET` | `/api/share/:linkId/files/:id/hls/:segment` | 소유자 `hls`와 같은 HLS 재생. 다운로드 한도나 첫 다운로드 후 삭제가 걸린 파일은 `index.m3u8`을 열 때 브라우저마다 한 번 세고(`rf_dv`), 세그먼트는 그 브라우저의 grant가 있어야 한다(없으면 403). 세그먼트마다 일일 트래픽 한도에 넣는다 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/stream` | 방문자 재생·보기. 처음 요청만 "Played/Viewed"로 기록(30분 중복 제거). 다운로드 한도나 첫 다운로드 후 삭제가 걸린 파일은 브라우저마다 한 번 다운로드로 센다(`rf_dv` 쿠키). `?transcode=1`은 소유자 `stream`과 같은 변환 |
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/preview` | 뷰어용 이미지(WebP 미리보기, 메타데이터 없음, 없으면 `stream`과 같은 응답). "Viewed" 기록, 다음 사진 미리 받기(`x-relayfiles-prefetch` 헤더)는 세지 않는다 |
 | — | 만료로 지워진 링크 | 만료(자체 만료일, 첫 다운로드 후 삭제, 계정 삭제일)로 항목이 정리되면 그 링크와 하위 항목의 링크를 `LinkTombstone`에 `SHARE.tombstoneDays`(90일) 동안 남긴다. 그동안 `/d/<linkId>`는 "This link has expired" 카드, 파일 요청은 410. 존재한 적 없는 링크나 새 링크로 바뀐 옛 링크는 계속 404 |

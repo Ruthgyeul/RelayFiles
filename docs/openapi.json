@@ -57,6 +57,7 @@
               "SCAN_PENDING",
               "FILE_BLOCKED",
               "MEDIA_NOT_READY",
+              "VIDEO_CONVERTING",
               "STORAGE_BUSY",
               "INSUFFICIENT_STORAGE"
             ]

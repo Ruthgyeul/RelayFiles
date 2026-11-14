@@ -52,7 +52,7 @@ function zodFields(error: ZodError): Record<string, string> {
 }
 
 /** 5xx answers that are part of normal operation (the client retries), not server faults to log. */
-const EXPECTED_UNAVAILABLE: ReadonlySet<ErrorCode> = new Set(["MEDIA_NOT_READY"]);
+const EXPECTED_UNAVAILABLE: ReadonlySet<ErrorCode> = new Set(["MEDIA_NOT_READY", "VIDEO_CONVERTING"]);
 
 /** Methods that change nothing: a request with any other method may have changed the account's files. */
 const READ_ONLY_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);

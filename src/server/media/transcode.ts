@@ -1,12 +1,15 @@
 import "server-only";
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 import { pipeline, Readable, Transform, type TransformCallback } from "node:stream";
 import { getEnv } from "@/config/env";
 import { IMMUTABLE_CACHE, TRANSCODE } from "@/config/policy";
+import { CONVERSION, type ConversionKind } from "@/contracts/api";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { countOne } from "../metrics/counters";
 import { acquireSlot, type SemaphoreSlot } from "../redis-semaphore";
+import { segmentStart } from "@/domain/hls";
 import { ffmpegInput } from "./ffmpeg-input";
 
 const globalForTranscode = globalThis as unknown as { relayTranscodes?: { running: number } };
@@ -15,10 +18,14 @@ const slots = (globalForTranscode.relayTranscodes ??= { running: 0 });
 /** Conversions running now in this process. */
 export const runningTranscodes = () => slots.running;
 
-/** ffmpeg input and encoding: the first video and audio track as 720p H.264/AAC, without metadata. */
-function encodeArgs(path: string): string[] {
+/**
+ * ffmpeg input and encoding: the first video and audio track as 720p H.264/AAC, without metadata.
+ * `inputOptions` go before the input (a seek with `-ss` there is fast: it jumps to a keyframe).
+ */
+function encodeArgs(path: string, inputOptions: readonly string[] = []): string[] {
   return [
     ...["-nostdin", "-hide_banner", "-loglevel", "error"],
+    ...inputOptions,
     // Only the file itself as a video container; a seekable file also reads MP4/MOV with the index at the end.
     ...ffmpegInput(path),
     ...["-map", "0:v:0", "-map", "0:a:0?"],
@@ -40,6 +47,22 @@ export function transcodeArgs(path: string): string[] {
 /** Stored conversion: a regular MP4 with its index first (seekable with Range requests), at most maxOutputBytes. */
 export function storedTranscodeArgs(path: string, output: string): string[] {
   return [...encodeArgs(path), ...["-movflags", "+faststart", "-fs", String(TRANSCODE.maxOutputBytes), "-f", "mp4", output]];
+}
+
+/**
+ * HLS conversion from segment `start` on (docs/architecture.md "미리보기 전송"): `<n>.ts` files in
+ * `dir`, each TRANSCODE.hlsSegmentSec long with a keyframe forced at every boundary and the
+ * timestamps of the whole video, so segments of conversions started anywhere line up. Each
+ * file is written under a temporary name and renamed when complete.
+ */
+export function hlsArgs(path: string, dir: string, start: number): string[] {
+  const seconds = String(segmentStart(start, TRANSCODE.hlsSegmentSec));
+  return [
+    ...encodeArgs(path, ["-ss", seconds]),
+    ...["-force_key_frames", `expr:gte(t,n_forced*${TRANSCODE.hlsSegmentSec})`, "-output_ts_offset", seconds],
+    ...["-f", "hls", "-hls_time", String(TRANSCODE.hlsSegmentSec), "-hls_list_size", "0", "-hls_flags", "temp_file", "-start_number", String(start)],
+    ...["-hls_segment_filename", join(dir, "%d.ts"), join(dir, "run.m3u8")],
+  ];
 }
 
 /** Passes bytes through, fails once more than `limit` went by, and remembers when bytes last moved. */
@@ -95,20 +118,21 @@ async function takeSlots(requester: string, max: number): Promise<[SemaphoreSlot
   return [slot, own];
 }
 
+/** The slots one conversion holds, and how to give them back (once; later calls do nothing). */
+export interface ConversionSlots {
+  /** Aborts when a shared slot was lost: the conversion must stop. */
+  signals: readonly AbortSignal[];
+  release(): void;
+}
+
 /**
- * Plays a video the browser cannot decode by converting it while it streams. At most
- * VIDEO_TRANSCODE_MAX conversions run at once across every app process (Redis slots), and at
- * most TRANSCODE.maxPerRequester for one `requester` (an account, or a link visitor's address
- * key). Each one is killed (SIGKILL) as soon as the viewer leaves, the output limit is
- * reached, nobody reads its output for TRANSCODE.idleTimeoutMs, it ran TRANSCODE.maxRunMs or
- * its shared slot is lost, and is always reaped (`close`).
+ * Takes what one conversion needs: a place among VIDEO_TRANSCODE_MAX in this process and across
+ * every app process (Redis), and one of the requester's TRANSCODE.maxPerRequester. Throws 404
+ * when conversion is turned off and 429 when a limit is reached.
  */
-export async function transcodeResponse(req: Request, path: string, requester: string, { onServe }: { onServe?: (bytes: number) => void } = {}): Promise<Response> {
-  // A finished conversion is kept by the browser: watching again costs no CPU.
-  const headers = new Headers({ "content-type": "video/mp4", "cache-control": IMMUTABLE_CACHE, "x-content-type-options": "nosniff", "x-accel-buffering": "no" });
-  const { FFMPEG_PATH, VIDEO_TRANSCODE_MAX } = getEnv("jobs");
+export async function acquireConversion(requester: string): Promise<ConversionSlots> {
+  const { VIDEO_TRANSCODE_MAX } = getEnv("jobs");
   if (VIDEO_TRANSCODE_MAX === 0) throw new ApiError("NOT_FOUND");
-  if (req.method === "HEAD") return new Response(null, { headers });
   if (slots.running >= VIDEO_TRANSCODE_MAX) throw busy();
   // Taken before the Redis round trips below: while Redis is down this count is the only limit,
   // and requests waiting on Redis at the same time must not all pass the check above.
@@ -120,9 +144,35 @@ export async function transcodeResponse(req: Request, path: string, requester: s
     slots.running--;
     throw error;
   }
-  const [slot, own] = held;
-
   void countOne("transcodes_started");
+  let released = false;
+  return {
+    signals: held.map((slot) => slot.signal),
+    release: () => {
+      if (released) return;
+      released = true;
+      slots.running--;
+      releaseAll(held);
+    },
+  };
+}
+
+/**
+ * Plays a video the browser cannot decode by converting it while it streams. At most
+ * VIDEO_TRANSCODE_MAX conversions run at once across every app process (Redis slots), and at
+ * most TRANSCODE.maxPerRequester for one `requester` (an account, or a link visitor's address
+ * key). Each one is killed (SIGKILL) as soon as the viewer leaves, the output limit is
+ * reached, nobody reads its output for TRANSCODE.idleTimeoutMs, it ran TRANSCODE.maxRunMs or
+ * its shared slot is lost, and is always reaped (`close`).
+ */
+export async function transcodeResponse(req: Request, path: string, requester: string, { onServe }: { onServe?: (bytes: number) => void } = {}): Promise<Response> {
+  // A finished conversion is kept by the browser: watching again costs no CPU.
+  const headers = new Headers({ "content-type": "video/mp4", "cache-control": IMMUTABLE_CACHE, "x-content-type-options": "nosniff", "x-accel-buffering": "no", [CONVERSION.header]: "live" satisfies ConversionKind });
+  const { FFMPEG_PATH, VIDEO_TRANSCODE_MAX } = getEnv("jobs");
+  if (VIDEO_TRANSCODE_MAX === 0) throw new ApiError("NOT_FOUND");
+  if (req.method === "HEAD") return new Response(null, { headers });
+  const conversion = await acquireConversion(requester);
+
   const started = Date.now();
   const child = spawn(FFMPEG_PATH, transcodeArgs(path), { stdio: ["ignore", "pipe", "ignore"], shell: false });
   const output = new OutputLimit(TRANSCODE.maxOutputBytes);
@@ -139,13 +189,9 @@ export async function transcodeResponse(req: Request, path: string, requester: s
   }, TRANSCODE.watchIntervalMs);
   watch.unref();
 
-  let released = false;
   const release = () => {
-    if (released) return;
-    released = true;
-    slots.running--;
     clearInterval(watch);
-    releaseAll([slot, own]);
+    conversion.release();
   };
   child.on("error", (error) => {
     logger.warn("video conversion could not start", { error });
@@ -162,9 +208,9 @@ export async function transcodeResponse(req: Request, path: string, requester: s
     logger.warn("video conversion stopped: its conversion slot was lost");
     stop();
   };
-  for (const held of [slot, own]) {
-    held.signal.addEventListener("abort", lost, { once: true });
-    child.once("close", () => held.signal.removeEventListener("abort", lost));
+  for (const signal of conversion.signals) {
+    signal.addEventListener("abort", lost, { once: true });
+    child.once("close", () => signal.removeEventListener("abort", lost));
   }
 
   // The viewer closed, seeked away or the limit was hit: stop converting right away. What was

@@ -65,14 +65,20 @@ export function StageVideo({ name, src, thumbSrc, transcodeSrc, subtitles, handl
   const tracks = useSubtitleTracks(subtitles);
   const element = useRef<HTMLVideoElement | null>(null);
   // Stable, so React does not detach and re-attach it (which would release single playback) on every render.
-  const ref = useCallback((node: HTMLVideoElement | null) => {
-    element.current = node;
-    if (!node) return undefined;
-    return () => {
-      element.current = null;
-      playback.release(node);
-    };
-  }, []);
+  const { attach } = video;
+  const ref = useCallback(
+    (node: HTMLVideoElement | null) => {
+      element.current = node;
+      attach(node);
+      if (!node) return undefined;
+      return () => {
+        element.current = null;
+        attach(null);
+        playback.release(node);
+      };
+    },
+    [attach],
+  );
   // `default` on a track added after the video started still turns it on; this covers browsers that skip it.
   useEffect(() => showFirstTrack(element.current), [tracks]);
   return (

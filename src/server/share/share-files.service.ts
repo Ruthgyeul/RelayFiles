@@ -21,6 +21,7 @@ import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
 import { canStripType } from "../media/process";
 import { copySatisfies, shareStripMode } from "../media/strip-mode";
+import { hlsRequestOf, hlsResponse, type HlsVideo } from "../media/hls-response";
 import { transcodeResponse } from "../media/transcode";
 import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
 import type { AccountRow } from "../repositories/account.repo";
@@ -235,6 +236,40 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
   // Converted playback counts toward the account's and the link's daily traffic like the original.
   const onServe = trafficOf(req, owner, file);
   const response = (await sendStoredTranscode(req, driver, owner.id, row, onServe)) ?? (await liveTranscode(req, driver, owner.id, file, row.id, link.isOwner ? `account:${owner.id}` : `visitor:${client.ipKey}`, onServe));
+  return newVisitor ? setVisitorCookie(response, newVisitor) : response;
+}
+
+/**
+ * A visitor's HLS playback of a video converted for seeking (`index.m3u8` or a segment). A file
+ * under a download limit or delete-after-download is counted once, when its playlist is
+ * opened (that grants the browser); segments then need the grant, so they are not a way
+ * around the limit. Every segment counts toward the daily traffic limits.
+ */
+export async function serveSharedHls(req: Request, linkId: string, nodeId: string, name: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
+  const now = Date.now();
+  const file = await resolveSharedFile(linkId, nodeId, viewer, "stream", now);
+  const { link, row } = file;
+  if (row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
+  const { owner } = link;
+  if (!link.isOwner) await assertShareTraffic(owner, file.capped, now);
+  const driver = await driverForAccount(owner);
+  const path = await driver.localPath({ accountId: owner.id, segments: file.segments });
+  if (!path) throw new ApiError("NOT_FOUND");
+  const requester = link.isOwner ? `account:${owner.id}` : `visitor:${client.ipKey}`;
+  const video: HlsVideo = { nodeId: row.id, path, version: row.sha256 ?? row.id, requester, newDir: () => driver.stagingPath() };
+  const parsed = await hlsRequestOf(video, name);
+  let newVisitor: string | null = null;
+  if (parsed.request.kind === "playlist") {
+    if (!link.isOwner && file.limited) {
+      newVisitor = await applyDecision(limitedStreamDecision({ method: "GET", range: null, granted: await hasDownloadGrant(row.id, viewer.visitorId) }), file, viewer, client, now);
+    }
+    if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
+    void markActive("stream", `${row.id}:${client.ipKey}`);
+    void notePlay(row.id);
+  } else if (!link.isOwner && file.limited && !(await hasDownloadGrant(row.id, viewer.visitorId))) {
+    throw new ApiError("FORBIDDEN", "Start the video again.");
+  }
+  const response = await hlsResponse(video, parsed, trafficOf(req, owner, file));
   return newVisitor ? setVisitorCookie(response, newVisitor) : response;
 }
 

@@ -7,6 +7,7 @@ import { NextRequest } from "next/server";
 import sharp from "sharp";
 import { afterAll, describe, expect, it } from "vitest";
 import { GET as shareDownload } from "@/app/api/share/[linkId]/files/[id]/download/route";
+import { GET as shareHls } from "@/app/api/share/[linkId]/files/[id]/hls/[segment]/route";
 import { GET as shareStream } from "@/app/api/share/[linkId]/files/[id]/stream/route";
 import { GET as sharePreview } from "@/app/api/share/[linkId]/files/[id]/preview/route";
 import { GET as shareThumb } from "@/app/api/share/[linkId]/files/[id]/thumb/route";
@@ -21,6 +22,7 @@ import { hash } from "@node-rs/argon2";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
 import { processMedia } from "@/server/media/process";
+import { endHlsSessions } from "@/server/media/hls-session";
 import { runningTranscodes } from "@/server/media/transcode";
 import { getFolderView } from "@/server/services/node.service";
 import { zipItems } from "@/server/services/zip.service";
@@ -40,6 +42,7 @@ const { prisma, member, addFile, cleanup } = fileFixtures();
 const noViewer = { accountIds: [], unlocks: new Map() as Unlocks, visitorId: null };
 
 afterAll(async () => {
+  await endHlsSessions();
   await closeQueues();
   await cleanup();
 });
@@ -379,6 +382,48 @@ describe("settings on the way to a file", () => {
       await expect.poll(async () => Number(await redis().get(`traffic:link:${trip.id}:${day}`))).toBe(sent);
       await expect.poll(async () => ((await prisma.trafficDaily.aggregate({ where: { accountId: m.id }, _sum: { bytes: true } }))._sum.bytes ?? 0n) - before).toBe(BigInt(sent));
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("plays a video over HLS: counted once at the playlist, segments only for that browser", async () => {
+    const { m, trip, hidden } = await sharedTrip({ dailyBytesCap: 10_000_000n });
+    const dir = await mkdtemp(join(tmpdir(), "relay-share-"));
+    try {
+      const clip = join(dir, "clip.avi");
+      await promisify(execFile)(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=6:size=64x36:rate=5", "-c:v", "mpeg4", clip]);
+      const bytes = await readFile(clip);
+      const id = await addFile(m, trip.id, ["Trip"], "clip.avi", bytes, "video/vnd.avi", "VIDEO");
+      await prisma.node.update({ where: { id }, data: { downloadLimit: 1 } });
+      const hlsOf = (linkId: string, node: string, segment: string, options: { cookies?: string[]; owner?: FixtureMember } = {}) =>
+        visit(shareHls, `${path(linkId, node, "hls")}/${segment}`, { linkId, id: node, segment }, options);
+
+      const playlist = await hlsOf(trip.linkId, id, "index.m3u8");
+      expect(playlist.status).toBe(200);
+      expect(await playlist.text()).toContain("0.ts?v=");
+      expect((await prisma.node.findUniqueOrThrow({ where: { id } })).downloads).toBe(1);
+      const browser = visitorCookie(playlist);
+
+      const segment = await hlsOf(trip.linkId, id, "0.ts", { cookies: [browser] });
+      expect(segment.status).toBe(200);
+      const sent = (await segment.arrayBuffer()).byteLength;
+      // Another browser has no grant: neither the playlist (the limit is used up) nor a segment.
+      expect((await hlsOf(trip.linkId, id, "index.m3u8")).status).toBe(403);
+      expect((await hlsOf(trip.linkId, id, "1.ts")).status).toBe(403);
+      // The segments count toward the link's daily traffic.
+      const day = new Date().toISOString().slice(0, 10);
+      await expect.poll(async () => Number(await redis().get(`traffic:link:${trip.id}:${day}`))).toBe(sent);
+
+      // Not through a private folder, and not through another account's link.
+      const secretClip = await addFile(m, hidden.id, ["Trip", "Hidden"], "secret.avi", bytes, "video/vnd.avi", "VIDEO");
+      expect((await hlsOf(trip.linkId, secretClip, "index.m3u8")).status).toBe(404);
+      const other = await sharedTrip();
+      expect((await hlsOf(other.trip.linkId, id, "index.m3u8")).status).toBe(404);
+      // The owner plays it without counting.
+      expect((await hlsOf(trip.linkId, id, "index.m3u8", { owner: m })).status).toBe(200);
+      expect((await prisma.node.findUniqueOrThrow({ where: { id } })).downloads).toBe(1);
+    } finally {
+      await endHlsSessions();
       await rm(dir, { recursive: true, force: true });
     }
   });
