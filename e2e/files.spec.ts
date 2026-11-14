@@ -4,8 +4,11 @@ import { newFolder, openFiles } from "./helpers";
 test("an empty root shows the design's empty state", async ({ page }) => {
   await openFiles(page);
   await expect(page.getByRole("main").getByText("This folder is empty")).toBeVisible();
-  await expect(page.getByText("root folder")).toBeVisible();
-  await expect(page.getByText("Private", { exact: true })).toBeVisible();
+  // Scoped to the folder header: while the page swaps in after sign-in, the old copy can still be
+  // in the document for a moment and a page-wide match finds two.
+  const header = page.getByRole("region", { name: "Folder" });
+  await expect(header.getByText("root folder")).toBeVisible();
+  await expect(header.getByText("Private", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy path" })).toHaveText("/");
 });
 
