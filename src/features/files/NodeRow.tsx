@@ -43,7 +43,6 @@ function RowTags({ item, parentVisibility, now, onTag }: Pick<ItemProps, "item" 
           size="sm"
           icon="hash"
           title={tag}
-          className="cursor-pointer"
           onClick={(event) => {
             event.stopPropagation();
             onTag(tag);
