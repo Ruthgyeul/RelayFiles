@@ -74,7 +74,12 @@ export async function loadLink(linkId: string, viewer: ShareViewer, now: number)
         },
         now,
       );
-  return { root, chain, owner, status, isOwner: viewer.accountIds.includes(root.accountId) };
+  const isOwner = viewer.accountIds.includes(root.accountId);
+  // To anyone but its owner a private link is "private" whatever else is true of it, and every
+  // caller answers that as a link that does not exist: an "expired" or "limit reached" card (or
+  // a 410/403, or an argon2 check on unlock) would tell someone guessing ids they found a real one.
+  // The owner keeps the design's order and sees why the link is closed.
+  return { root, chain, owner, status: !isOwner && visibility !== "public" ? "private" : status, isOwner };
 }
 
 export type LoadedLink = NonNullable<Awaited<ReturnType<typeof loadLink>>>;

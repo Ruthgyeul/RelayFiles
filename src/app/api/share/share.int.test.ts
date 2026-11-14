@@ -126,6 +126,22 @@ describe("share page", () => {
     expect(await statusOf({ passwordHash: await hash("open sesame") })).toBe("locked");
   });
 
+  it("hides a private link from everyone but its owner, whatever else is true of it", async () => {
+    const now = Date.now();
+    for (const data of [{ expAt: new Date(now - 1_000) }, { burn: true, downloads: 1 }, { downloadLimit: 1, downloads: 1 }]) {
+      const { m, trip, a } = await sharedTrip({ ...data, visibility: "PRIVATE" });
+      // To a visitor it looks like a link that does not exist (no "expired" card, no 410 or 403).
+      expect((await sharePage(trip.linkId, null, noViewer, now))!.page.status).toBe("private");
+      const download = await visit(shareDownload, `/api/share/${trip.linkId}/files/${a}/download`, { linkId: trip.linkId, id: a });
+      expect(download.status, JSON.stringify(data)).toBe(404);
+      const unlocked = await visit(unlock, `/api/share/${trip.linkId}/unlock`, { linkId: trip.linkId }, { method: "POST", body: { password: "guess" } });
+      expect(unlocked.status).toBe(404);
+      // The owner still sees why the link is closed.
+      const owner = { ...noViewer, accountIds: [m.id] };
+      expect((await sharePage(trip.linkId, null, owner, now))!.page.status).not.toBe("private");
+    }
+  });
+
   it("still says a link expired after its items were deleted", async () => {
     const { m, trip, a } = await sharedTrip({ expAt: new Date(Date.now() - 1_000) });
     const linkOf = async (id: string) => (await prisma.node.findUniqueOrThrow({ where: { id } })).linkId;
