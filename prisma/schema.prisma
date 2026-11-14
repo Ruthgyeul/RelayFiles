@@ -237,6 +237,9 @@ model Node {
   @@index([tags], type: Gin)
   /// Largest files of an account (Storage page).
   @@index([accountId, size])
+  /// Name search (case-insensitive "contains", ILIKE '%text%'): a trigram index, so a search does not
+  /// read every item of the account. Needs the pg_trgm extension (created by its migration).
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 /// A folder inside the virtual "Favorites" folder, made only to organize favorites. It holds no

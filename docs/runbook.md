@@ -308,6 +308,7 @@ $C exec postgres psql -U relayfiles -c 'SELECT at, "actorName", action, "targetI
   3. contract: 다음 릴리스에서 옛 열을 지운다. 이 마이그레이션 SQL 맨 위에 `-- relayfiles: contract <이유>`를 적는다.
 - `npm run check:migrations`(CI 포함)는 `DROP`, 타입 변경, `RENAME`, `DELETE FROM`, `TRUNCATE`가 있는데 contract 표시가 없는 마이그레이션을 막는다.
 - CI는 모든 마이그레이션을 빈 DB에 적용하고, 결과가 `schema.prisma`와 같은지(`prisma migrate diff`) 확인한다.
+- 확장: 이름 검색 trigram 인덱스(`Node_name_idx`)가 `pg_trgm`을 쓰고, 그 마이그레이션이 `CREATE EXTENSION IF NOT EXISTS pg_trgm`으로 만든다. Docker·k3s의 `postgres:16` 이미지와 Ubuntu `postgresql-16` 패키지에 들어 있다. 다른 PostgreSQL을 쓰면 contrib 패키지가 필요하다.
 - 공유 링크(`linkId`)와 계정 토큰은 어떤 마이그레이션에서도 바꾸지 않는다.
 
 ### 데이터 마이그레이션 (백필, 값 변환)

@@ -186,6 +186,8 @@ PostgreSQL: `.env`와 같은 이름의 역할과 DB를 만든다. 비밀번호�
 ```bash
 sudo -u postgres createuser --pwprompt relayfiles
 sudo -u postgres createdb -O relayfiles relayfiles
+# 이름 검색 인덱스가 쓰는 pg_trgm 확장: Ubuntu의 postgresql-16 패키지에 들어 있고(contrib),
+# PostgreSQL 13부터 trusted 확장이라 DB 소유자인 relayfiles가 마이그레이션에서 직접 만든다
 ```
 
 기본 설정에서는 `127.0.0.1`에서만 접속을 받으므로 따로 열 것이 없다. 접속 확인:
