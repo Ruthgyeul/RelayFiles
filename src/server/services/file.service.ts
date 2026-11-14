@@ -62,10 +62,15 @@ export async function serveOwnTranscode(req: Request, owner: Owner, nodeId: stri
   if (!row || row.type !== "FILE" || row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner);
   if (req.method === "GET") void markActive("stream", `${row.id}:${owner.id}`);
-  const stored = await sendStoredTranscode(req, driver, owner.id, row);
+  // Converted playback is traffic like playback of the original.
+  const onServe = (bytes: number) => {
+    if (req.method === "HEAD" || bytes === 0) return;
+    addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
+  };
+  const stored = await sendStoredTranscode(req, driver, owner.id, row, onServe);
   if (stored) return stored;
   const path = await driver.localPath(await locationOf(owner.id, row.id));
   if (!path) throw new ApiError("NOT_FOUND");
   if (req.method === "GET") void notePlay(row.id);
-  return transcodeResponse(req, path, `account:${owner.id}`);
+  return transcodeResponse(req, path, `account:${owner.id}`, { onServe });
 }

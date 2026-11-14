@@ -44,7 +44,8 @@ export function storedTranscodeArgs(path: string, output: string): string[] {
 
 /** Passes bytes through, fails once more than `limit` went by, and remembers when bytes last moved. */
 class OutputLimit extends Transform {
-  private sent = 0;
+  /** Bytes passed on to the reader so far. */
+  sent = 0;
   /** When output last passed through (a stalled reader stops the flow through backpressure). */
   lastFlowAt = Date.now();
 
@@ -102,7 +103,7 @@ async function takeSlots(requester: string, max: number): Promise<[SemaphoreSlot
  * reached, nobody reads its output for TRANSCODE.idleTimeoutMs, it ran TRANSCODE.maxRunMs or
  * its shared slot is lost, and is always reaped (`close`).
  */
-export async function transcodeResponse(req: Request, path: string, requester: string): Promise<Response> {
+export async function transcodeResponse(req: Request, path: string, requester: string, { onServe }: { onServe?: (bytes: number) => void } = {}): Promise<Response> {
   // A finished conversion is kept by the browser: watching again costs no CPU.
   const headers = new Headers({ "content-type": "video/mp4", "cache-control": IMMUTABLE_CACHE, "x-content-type-options": "nosniff", "x-accel-buffering": "no" });
   const { FFMPEG_PATH, VIDEO_TRANSCODE_MAX } = getEnv("jobs");
@@ -166,8 +167,12 @@ export async function transcodeResponse(req: Request, path: string, requester: s
     child.once("close", () => held.signal.removeEventListener("abort", lost));
   }
 
-  // The viewer closed, seeked away or the limit was hit: stop converting right away.
+  // The viewer closed, seeked away or the limit was hit: stop converting right away. What was
+  // sent counts as traffic once the stream ends (the length is not known before).
   pipeline(child.stdout, output, () => stop());
-  output.once("close", stop);
+  output.once("close", () => {
+    stop();
+    if (output.sent > 0) onServe?.(output.sent);
+  });
   return new Response(Readable.toWeb(output) as ReadableStream, { headers });
 }

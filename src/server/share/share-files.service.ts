@@ -171,11 +171,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
     mode,
     body,
     rateLimit: file.busy.level === 1 ? SHARE.throttledBytesPerSec : undefined,
-    onServe: (bytes) => {
-      if (req.method === "HEAD" || bytes === 0) return;
-      addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
-      if (!link.isOwner) countLinkTraffic(file.capped, BigInt(bytes));
-    },
+    onServe: trafficOf(req, owner, file),
   });
   return newVisitor ? setVisitorCookie(response, newVisitor) : response;
 }
@@ -236,18 +232,29 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
     if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
     void markActive("stream", `${row.id}:${client.ipKey}`);
   }
-  const response = (await sendStoredTranscode(req, driver, owner.id, row)) ?? (await liveTranscode(req, driver, owner.id, file, row.id, link.isOwner ? `account:${owner.id}` : `visitor:${client.ipKey}`));
+  // Converted playback counts toward the account's and the link's daily traffic like the original.
+  const onServe = trafficOf(req, owner, file);
+  const response = (await sendStoredTranscode(req, driver, owner.id, row, onServe)) ?? (await liveTranscode(req, driver, owner.id, file, row.id, link.isOwner ? `account:${owner.id}` : `visitor:${client.ipKey}`, onServe));
   return newVisitor ? setVisitorCookie(response, newVisitor) : response;
 }
 
 /** Length passed to parseRange when only the start of a request matters. */
 const UNKNOWN_LENGTH = Number.MAX_SAFE_INTEGER;
 
-async function liveTranscode(req: Request, driver: StorageDriver, accountId: string, file: SharedFile, nodeId: string, requester: string): Promise<Response> {
+async function liveTranscode(req: Request, driver: StorageDriver, accountId: string, file: SharedFile, nodeId: string, requester: string, onServe: (bytes: number) => void): Promise<Response> {
   const path = await driver.localPath({ accountId, segments: file.segments });
   if (!path) throw new ApiError("NOT_FOUND");
   if (req.method === "GET") void notePlay(nodeId);
-  return transcodeResponse(req, path, requester);
+  return transcodeResponse(req, path, requester, { onServe });
+}
+
+/** Counts bytes sent to a share visitor: the owner's account traffic, and every limited item on the way. */
+function trafficOf(req: Request, owner: AccountRow, file: SharedFile): (bytes: number) => void {
+  return (bytes) => {
+    if (req.method === "HEAD" || bytes === 0) return;
+    addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
+    if (!file.link.isOwner) countLinkTraffic(file.capped, BigInt(bytes));
+  };
 }
 
 /** Why a file is left out of "Download all", as written in "Not included.txt". */

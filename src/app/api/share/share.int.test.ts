@@ -361,6 +361,28 @@ describe("settings on the way to a file", () => {
     }
   });
 
+  it("counts converted playback toward the link's and the account's daily traffic", async () => {
+    const { m, trip } = await sharedTrip({ dailyBytesCap: 10_000_000n });
+    const dir = await mkdtemp(join(tmpdir(), "relay-share-"));
+    try {
+      const clip = join(dir, "clip.mp4");
+      await promisify(execFile)(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x36:rate=5", "-c:v", "mpeg4", clip]);
+      const id = await addFile(m, trip.id, ["Trip"], "clip.mp4", await readFile(clip), "video/mp4", "VIDEO");
+      const before = (await prisma.trafficDaily.aggregate({ where: { accountId: m.id }, _sum: { bytes: true } }))._sum.bytes ?? 0n;
+      const played = await visit(shareStream, `${path(trip.linkId, id, "stream")}?transcode=1`, fileParams(trip.linkId, id));
+      expect(played.status).toBe(200);
+      const sent = (await played.arrayBuffer()).byteLength;
+      expect(sent).toBeGreaterThan(0);
+      await expect.poll(runningTranscodes).toBe(0);
+      // Counted when the stream ends: the link's counter for the day and the account's traffic.
+      const day = new Date().toISOString().slice(0, 10);
+      await expect.poll(async () => Number(await redis().get(`traffic:link:${trip.id}:${day}`))).toBe(sent);
+      await expect.poll(async () => ((await prisma.trafficDaily.aggregate({ where: { accountId: m.id }, _sum: { bytes: true } }))._sum.bytes ?? 0n) - before).toBe(BigInt(sent));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("serves a limited picture through counted playback, not the uncounted preview", async () => {
     const { m, trip } = await sharedTrip();
     const big = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: "#808080", noise: { type: "gaussian", mean: 128, sigma: 40 } } }).jpeg({ quality: 95 }).toBuffer();
