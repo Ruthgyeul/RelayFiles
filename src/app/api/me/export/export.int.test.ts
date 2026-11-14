@@ -5,6 +5,7 @@ import { AUTH, MS } from "@/config/policy";
 import { exportManifestSchema, type ExportManifest } from "@/contracts/account-export";
 import { EXPORT_MANIFEST_PATH } from "@/domain/account-export";
 import { newLinkId, newNodeId } from "@/domain/ids";
+import { acquireSlot } from "@/server/redis-semaphore";
 import { findAccountById } from "@/server/repositories/account.repo";
 import { applyExportManifest } from "@/server/services/import-metadata.service";
 import { importFile, openImportTarget } from "@/server/services/import.service";
@@ -75,6 +76,21 @@ describe("account export", () => {
     expect(manifest.skipped).toEqual([{ path: "gone.txt", reason: "not on disk" }]);
 
     expect(await prisma.accountEvent.count({ where: { accountId: m.id, kind: "account.exported" } })).toBe(1);
+  });
+
+  it("ends quietly and frees its slot when the download is stopped halfway through a file", async () => {
+    const m = await member();
+    await addFile(m, m.rootId, [], "big.bin", Buffer.alloc(8 * 1024 * 1024, 7), "application/octet-stream");
+    const res = await callRouteRaw(exportAccount, { cookie: m.cookie });
+    const reader = res.body!.getReader();
+    await reader.read();
+    // The person cancels: the tar entry being written is destroyed while its file streams.
+    await reader.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // The process is still here, and the account's export slot is free again.
+    const slot = await acquireSlot(`export:${m.id}`, 1, 60_000);
+    expect(slot).not.toBeNull();
+    await slot!.release();
   });
 
   it("starts once per few minutes and needs a recent sign-in", async () => {

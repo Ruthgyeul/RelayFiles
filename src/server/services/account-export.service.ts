@@ -1,4 +1,5 @@
 import "server-only";
+import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { pack as tarPack, type Pack } from "tar-stream";
 import { EXPORT } from "@/config/policy";
@@ -101,11 +102,10 @@ async function addFile(pack: Pack, driver: StorageDriver, owner: Owner, entry: E
   }
   // Exactly the bytes stat counted, so the tar header stays right if the file grows meanwhile.
   const source = await driver.createReadStream(location, { start: 0, end: size - 1 });
-  await new Promise<void>((resolve, reject) => {
-    const sink = pack.entry({ name: entry.path, size, mtime }, (error) => (error ? reject(error) : resolve()));
-    source.once("error", reject);
-    source.pipe(sink);
-  });
+  // pipeline, not pipe: a download cancelled mid-file destroys the entry, and pipe() would throw
+  // that error again with nobody listening (an uncaught exception ends the server process) and
+  // leave the file open. pipeline settles, closes the file, and the export ends below.
+  await pipeline(source, pack.entry({ name: entry.path, size, mtime }));
   return { bytes: size };
 }
 
@@ -151,7 +151,9 @@ export async function exportAccount(owner: Owner, now: Date = new Date()): Promi
   fillTar(pack, driver, owner, plan)
     .then((bytes) => addTraffic(db(), owner.id, BigInt(bytes), new Date()))
     .catch((error: unknown) => {
-      logger.error("account export failed", { error });
+      // The person stopped the download: not a server fault.
+      if (pack.destroyed) logger.warn("account export stopped", { error });
+      else logger.error("account export failed", { error });
       pack.destroy();
     })
     .finally(() => void slot.release());
