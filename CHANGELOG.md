@@ -39,7 +39,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 - The Delete key deletes the selected items, as the shortcuts list says
 - The viewer ignores letters typed into the search over it and shortcuts with Ctrl/⌘ (Ctrl+K no longer also plays or pauses)
 - The failed-upload toast gives the right count
-- Items with names close to the 255-byte limit can be deleted
+- Items with names close to the 255-byte limit can be deleted, and get a shortened "name (2)" instead of failing when the name is taken
 - Moving or copying a folder tree under a deep folder is refused instead of leaving items that answer 500
 - A copy or restore of a file still waiting for its virus scan is scanned and no longer stays "Scanning" forever
 - The ClamAV client no longer crashes or blocks the worker when clamd drops the connection mid-file

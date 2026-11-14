@@ -56,14 +56,17 @@ export function splitExtension(name: string, isFile: boolean): [string, string] 
 /**
  * Returns `name` if it is free among `siblings`, otherwise the first free variant
  * "name (2).ext", "name (3).ext", … (an existing " (n)" suffix is replaced, not stacked).
+ * The base is shortened when needed so a variant never goes past {@link MAX_NAME_BYTES}.
  */
 export function uniqName(siblings: Iterable<string>, name: string, isFile: boolean): string {
   const taken = new Set(siblings);
   if (!taken.has(name)) return name;
   const [rawBase, ext] = splitExtension(name, isFile);
   const base = rawBase.replace(/ \(\d+\)$/, "");
+  const encoder = new TextEncoder();
   for (let i = 2; ; i++) {
-    const candidate = `${base} (${i})${ext}`;
+    const suffix = ` (${i})${ext}`;
+    const candidate = `${utf8Prefix(base, MAX_NAME_BYTES - encoder.encode(suffix).length)}${suffix}`;
     if (!taken.has(candidate)) return candidate;
   }
 }

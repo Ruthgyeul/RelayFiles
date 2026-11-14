@@ -75,3 +75,13 @@ describe("utf8Prefix", () => {
     expect(new TextEncoder().encode(cut).length).toBeGreaterThan(MAX_NAME_BYTES - 53);
   });
 });
+
+describe("uniqName near the length limit", () => {
+  it("shortens the base so a variant still fits in one path segment", () => {
+    const long = `${"가".repeat(83)}.mp4`; // 249 + 4 = 253 bytes
+    const name = uniqName([long], long, true);
+    expect(new TextEncoder().encode(name).length).toBeLessThanOrEqual(MAX_NAME_BYTES);
+    expect(name.endsWith(" (2).mp4")).toBe(true);
+    expect(nameError(name)).toBe("");
+  });
+});
