@@ -18,6 +18,7 @@ import { checkUploadStart, finalizeUpload } from "../services/upload.service";
 import { beginPlacing, claimSlot, forgetUpload, loadBatch, reboundSlot, releaseSlot, setUploadOwner, settleSlot, setUploadRequest, setUploadToken, uploadOwner, uploadRequest, uploadToken, type UploadBatch, type UploadSlot } from "./batches";
 import { recordRequestUpload, releaseRequestRoom, requestFor, reserveRequestRoom } from "./request-uploads";
 import { noteRequestArrival } from "../jobs/notify-queue";
+import { publishAccountChange } from "../events/account-events";
 import { markActive } from "../metrics/activity";
 import { RedisLocker } from "./redis-locker";
 
@@ -175,6 +176,8 @@ function createServer(volumeId: string, mountPath: string): Server {
           await noteRequestArrival({ requestId, owner: owner.name, request: request?.title ?? "", file: { name: file.name, size } });
         }
         placed = true;
+        // The owner's open pages show the new file (also when a visitor sent it through a link).
+        publishAccountChange(owner.id);
         await forgetUpload(upload.id);
         // A visitor learns only that the file arrived, not where it went.
         const data = requestId ? { name: file.name } : { nodeId: file.nodeId, name: file.name, folderId: file.folderId };

@@ -205,6 +205,7 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 | `GET` | `/api/admin/audit` | 감사 로그 최신순 페이지 `{ events: AuditEntry[], nextCursor }`. `?limit=`(기본 `AUTH.auditPageSize` 50, 최대 200) · `?cursor=<이전 페이지 마지막 id>`(없어진 id는 400) · `?group=accounts\|signup\|tokens\|server` · `?account=<계정 id>`(행위자 또는 대상). Server 페이지 "Audit log" 카드가 쓴다(역할·삭제일·용량 변경, 계정 삭제, 가입 모드, 정리 실행, 초대 생성·취소, 관리자 토큰 보기·재발급, 공지 게시·내리기, 테마 변경, 장애 등록·수정·삭제, API 토큰 만들기·폐기, 사용량 리포트 CSV 받기) |
 | `GET` | `/api/admin/usage` | 사용량 리포트 `?from=&to=`(UTC 날짜, 양끝 포함; 생략하면 오늘까지 `ADMIN_REPORT.defaultDays` 30일, 최대 `ADMIN_REPORT.maxDays` 366일, 벗어나면 400). 계정마다 사용 바이트·할당량·파일·폴더 수·휴지통 바이트(현재 값), 기간의 공유 트래픽, API 토큰 수, 마지막 로그인. 전체 공유 트래픽은 월별로 준다. 파일 이름·링크·IP는 넣지 않는다 |
 | `GET` | `/api/admin/usage/csv` | 같은 리포트의 CSV(수식 주입 방지 `domain/csv.ts`). 감사 로그 `report.export` |
+| `GET` | `/api/events` | 파일 목록 실시간 갱신 SSE(활성 계정). 다른 기기·WebDAV·CLI·워커가 계정의 파일을 바꾸면 `data: changed`(내용 없음)를 보낸다. 몰려 온 변경은 `LIVE.coalesceMs`(1초)마다 하나로 합친다. `LIVE.heartbeatMs`(25초)마다 주석 줄, 세션은 `LIVE.sessionCheckMs`(60초)마다 다시 확인, `LIVE.maxLifetimeMs`(1시간) 뒤 끝나면 브라우저가 다시 연결한다. 한 계정이 한 앱 프로세스에 `LIVE.maxPerAccount`(10)개까지 열 수 있고 넘으면 429 |
 | `GET` | `/api/admin/server/stream` | Server 페이지 실측 지표 SSE(1.5초마다 스냅샷, 느린 스냅샷은 겹치지 않고 건너뜀) |
 | `POST` | `/api/admin/incidents` | Status 페이지 Incident 등록 `{ title, text, severity, date, duration, resolved }` |
 | `PUT`·`DELETE` | `/api/admin/incidents/:id` | Incident 수정 / 삭제 |

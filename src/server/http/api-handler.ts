@@ -7,6 +7,7 @@ import { ERRORS, type ErrorCode } from "@/contracts/errors";
 import { validRequestId } from "@/domain/ids";
 import { deviceOf } from "../auth/current";
 import { requireActive, requireAdmin, type DeviceAccount } from "../auth/device-session";
+import { publishAccountChange } from "../events/account-events";
 import { logger } from "../logger";
 import { StorageTargetExistsError } from "../storage/driver";
 import { ApiError, DISK_IN_THE_WAY_MESSAGE } from "./api-error";
@@ -53,6 +54,18 @@ function zodFields(error: ZodError): Record<string, string> {
 /** 5xx answers that are part of normal operation (the client retries), not server faults to log. */
 const EXPECTED_UNAVAILABLE: ReadonlySet<ErrorCode> = new Set(["MEDIA_NOT_READY"]);
 
+/** Methods that change nothing: a request with any other method may have changed the account's files. */
+const READ_ONLY_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * After a signed-in request that may have changed something (not a read, not refused), the
+ * account's other open pages hear about it (GET /api/events) and reload what they show.
+ */
+export function noteAccountWrite(req: Request, result: unknown, accountId: string): void {
+  if (READ_ONLY_METHODS.has(req.method) || (result instanceof Response && !result.ok)) return;
+  publishAccountChange(accountId);
+}
+
 /** Converts any thrown value into a client-safe failure response. Exported for tests. */
 export function toFailure(error: unknown, requestId: string): NextResponse<ApiFailure> {
   if (error instanceof ApiError) {
@@ -81,7 +94,14 @@ export function apiHandler<T, P = Record<string, never>>(handler: Handler<P, T>)
 export function apiHandler<T, P = Record<string, never>>(options: HandlerOptions, handler: AuthedHandler<P, T>): RouteHandler<P>;
 export function apiHandler<T, P>(first: HandlerOptions | Handler<P, T>, second?: AuthedHandler<P, T>): RouteHandler<P> {
   const handler: Handler<P, T> =
-    typeof first === "function" ? first : async (ctx) => second!({ ...ctx, active: REQUIRE[first.auth](await deviceOf(ctx.req)) });
+    typeof first === "function"
+      ? first
+      : async (ctx) => {
+          const active = REQUIRE[first.auth](await deviceOf(ctx.req));
+          const result = await second!({ ...ctx, active });
+          noteAccountWrite(ctx.req, result, active.account.id);
+          return result;
+        };
   return async (req, context) => {
     const requestId = validRequestId(req.headers.get(REQUEST_ID_HEADER)) ?? randomUUID();
     try {

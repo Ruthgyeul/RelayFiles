@@ -1,4 +1,5 @@
 import "server-only";
+import { publishAccountChange } from "../events/account-events";
 import { access, constants, readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { MEDIA } from "@/config/policy";
@@ -143,6 +144,8 @@ export async function processMedia(nodeId: string, signal?: AbortSignal): Promis
     stripFailed,
     ...(takenAt ? { takenAt } : {}),
   });
+  // Open pages of the owner show the new thumbnail.
+  publishAccountChange(row.accountId);
   return result;
 }
 
@@ -159,6 +162,10 @@ export async function recordDateTaken(nodeId: string): Promise<boolean> {
   const path = await driver.localPath(await locationOf(row.accountId, row.id));
   if (!path) throw new Error("Media processing needs a local volume.");
   const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"), { path, volumeId: account.volumeId });
-  if (takenAt) await setFileFacts(db(), row.id, { takenAt });
+  if (takenAt) {
+    await setFileFacts(db(), row.id, { takenAt });
+    // Photos places it by the date it was taken now.
+    publishAccountChange(row.accountId);
+  }
   return takenAt !== null;
 }

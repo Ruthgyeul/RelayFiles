@@ -7,6 +7,7 @@ import type { CreatedAccount, SessionAccount, SessionState } from "@/contracts/a
 import { accountApi } from "@/features/account/api";
 import { useNotice } from "@/shared/hooks/useNotice";
 import { autoAccountStore } from "./auto-account";
+import { useLiveRefresh } from "./useLiveRefresh";
 
 /** Account switch toast duration from the design. */
 const ACCOUNT_TOAST_MS = 3_200;
@@ -193,6 +194,9 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
       })
       .catch(() => setSignInOpen(true));
   }, [initialSession, router]);
+
+  // Changes made elsewhere (another device, WebDAV, the CLI, the worker) show up without a reload.
+  useLiveRefresh(session.activeAccountId);
 
   return <ShellContext value={value}>{children}</ShellContext>;
 }

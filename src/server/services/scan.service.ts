@@ -1,4 +1,5 @@
 import "server-only";
+import { publishAccountChange } from "../events/account-events";
 import { SCAN } from "@/config/policy";
 import { permanentScanError } from "@/domain/scan";
 import { db } from "../db/client";
@@ -28,6 +29,7 @@ export async function runScan(nodeId: string): Promise<ScanOutcome | null> {
   if (!account) return null;
   if (row.size > BigInt(SCAN.maxBytes)) {
     await setScanState(db(), row.id, "FAILED", "PENDING");
+    publishAccountChange(row.accountId);
     return "failed";
   }
   const driver = await driverForAccount(account);
@@ -42,6 +44,8 @@ export async function runScan(nodeId: string): Promise<ScanOutcome | null> {
     case "clean":
       await setScanState(db(), row.id, "CLEAN", "PENDING");
       if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
+      // The owner's open pages drop the "Scanning" badge.
+      publishAccountChange(row.accountId);
       return "clean";
     case "infected":
       logger.warn("malware found in an uploaded file", { nodeId: row.id, signature: verdict.signature });
@@ -52,6 +56,7 @@ export async function runScan(nodeId: string): Promise<ScanOutcome | null> {
       if (!permanentScanError(verdict.message)) throw new Error(`clamd: ${verdict.message}`);
       logger.warn("file could not be scanned", { nodeId: row.id, reason: verdict.message });
       await setScanState(db(), row.id, "FAILED", "PENDING");
+      publishAccountChange(row.accountId);
       return "failed";
   }
 }

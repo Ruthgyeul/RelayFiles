@@ -93,6 +93,16 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - 자막: 영상을 열면 같은 폴더 목록에서 이름이 같은 `.vtt`·`.srt`(`movie.vtt`, `movie.mp4.srt`, 언어 태그 `movie.en.srt` → "English")를 찾는다(`domain/subtitles.ts` `subtitlesFor`, 뷰어 `withSubtitles`). 파일은 텍스트 미리보기와 같은 `stream` URL을 Range 요청 하나(`VIEWER.subtitleMaxBytes` = 텍스트 미리보기 한도 1MB, 공유 링크의 `streamReach` 텍스트 한도 안)로 읽고, `.srt`는 브라우저에서 WebVTT로 바꿔(`srtToVtt`: 시간의 `,`→`.`, `<font>` 제거, `&`·`<` 이스케이프) `blob:` URL의 `<track kind="subtitles">`로 붙인다. CSP는 `media-src 'self' blob:`이라 다른 출처는 여전히 막힌다. 한도를 넘거나 바이너리인 파일은 건너뛴다. 뷰어는 자막을 읽을 때 `?subtitle=1`(`SUBTITLE_PARAM`)을 붙인다. 공유 링크는 이 표시가 있고 이름이 자막 파일이면 그 읽기를 `VIEW`로 기록하지 않는다. 다운로드 한도가 걸린 자막 파일은 표시가 있어도 재생처럼 센다(표시만으로 한도를 피할 수 없다).
 - 슬라이드쇼: 그림을 보고 있고 그림이 둘 이상이면 머리글에 재생 버튼이 생긴다(Space도 같다). `VIEWER.slideshowIntervalMs`(4초)마다 목록 순서로 다음 그림을 열고(`domain/slideshow.ts`, 그림이 아닌 파일은 건너뜀), 마지막 그림에서 멈춘다. 사용자가 앞뒤로 넘기거나(버튼·화살표·N/P) 뷰어를 닫으면 멈춘다. 그림은 페이드인하지만 `prefers-reduced-motion: reduce`이면 전환 효과가 없다(`motion-safe:`). 공유 페이지의 폴더 뷰어도 같은 뷰어라 그대로 쓴다.
 
+### 실시간 갱신 (다른 곳에서 바꾼 파일)
+
+다른 기기, WebDAV, CLI, `storage:import`, 워커(썸네일·바이러스 검사 결과)가 계정의 파일을 바꾸면 열려 있는 페이지가 새로고침 없이 따라온다.
+
+- 알림(`server/events/account-events.ts`): 바꾼 프로세스가 Redis 채널 `<REDIS_KEY_PREFIX>events:account:<계정 id>`에 `changed`만 보낸다(ioredis의 `keyPrefix`는 채널에 붙지 않아 `channelName()`이 붙인다). 내용은 싣지 않는다: 받은 페이지는 평소의 권한 검사를 거치는 요청으로 다시 읽는다.
+- 보내는 곳: 로그인한 요청 중 GET·HEAD·OPTIONS가 아니고 성공한 것(`apiHandler`·`apiV1Handler`의 `noteAccountWrite`), WebDAV 쓰기, tus 업로드 완료(업로드 전용 링크로 받은 파일 포함), `storage:import`, 워커의 미디어·찍은 날짜·바이러스 검사 작업. 서비스 함수마다 넣지 않고 이 입구에서 보낸다.
+- 받는 곳(`GET /api/events`, `server/http/sse.ts`): 앱 프로세스마다 구독 연결 하나를 모든 스트림이 나눠 쓴다. 변경이 몰려 오면 `LIVE.coalesceMs`마다 하나로 보낸다. Server 페이지 지표 스트림과 같은 제한(계정당 개수, 세션 재확인, 최대 수명)을 `sseResponse()` 하나로 쓴다.
+- 브라우저(`features/shell/useLiveRefresh.ts`): 셸이 탭마다 `EventSource` 하나를 열고, 이벤트가 그친 뒤 `LIVE.clientDebounceMs`가 지나면 `router.refresh()`한다. 숨겨진 탭은 다시 보일 때 한 번 새로 읽는다. 서버가 거절한 스트림(로그아웃, 탭이 너무 많음)은 `LIVE.clientRetryMs` 뒤에 다시 연다. 목록을 자기 상태로 들고 있는 페이지(Recently deleted)는 새로 받은 목록으로 바꾼다.
+- Nginx: `location /`가 이미 `proxy_read_timeout 1h`이고 앱이 `X-Accel-Buffering: no`를 보내 스트림이 버퍼링되지 않는다. CSP `connect-src 'self'`가 같은 출처의 EventSource를 허용한다.
+
 ### 전송 패널 (파일별 진행률·취소)
 
 - 2개 이상인 배치(`TRANSFERS.fileListMin`)는 카드의 "Show files"로 파일 목록을 연다. 파일마다 진행 막대(`Meter`), 받은/보낸 바이트, 속도 스파크라인(`LineChart`, 1초 간격 최근 30개), 취소 버튼.
