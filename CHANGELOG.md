@@ -55,7 +55,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 - Moving favorites answers 404 for another account's items
 - An upload-only link's size limit is bounded (a huge value gave a 500)
 - Security log "Load more" no longer appends an old page after a reload
-- The CLI keeps downloads in the current folder and stops an upload whose file changes while it is read
+- The CLI keeps downloads in the current folder, stops an upload whose file changes while it is read, and resumes a download only when the server names its content (ETag)
 - Account export lists a tree in the same order every time
 - Uploads: one file per batch slot, hidden characters in names are rejected, a resumable upload is no longer counted twice, share links survive a replace, and chunks are dropped when finalizing fails
 - Storage writes are serialized with volume moves, layout migrations and fsck

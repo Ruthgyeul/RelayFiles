@@ -51,10 +51,12 @@ export async function downloadFile(client: Client, id: string, target: string | 
     (info) => info.size,
     () => 0,
   );
-  const range = have < total ? resumeRange(have) : null;
+  // Resume only when the server names the content (ETag, sent back as If-Range): without it a
+  // file replaced since the first run would be continued with the other version's bytes.
+  const range = etag && have < total ? resumeRange(have) : null;
 
   onStart(name, total);
-  const res = await client.raw("GET", `/api/v1/files/${encodeURIComponent(id)}`, { headers: { ...(range ? { range } : {}), ...(range && etag ? { "if-range": etag } : {}) } });
+  const res = await client.raw("GET", `/api/v1/files/${encodeURIComponent(id)}`, { headers: { ...(range && etag ? { range, "if-range": etag } : {}) } });
   if (!res.ok || !res.body) throw new ApiError(`HTTP ${res.status}`, res.status, null);
   // 206: the rest of the same file; 200: the file changed (or no Range), start over.
   const append = res.status === 206;
