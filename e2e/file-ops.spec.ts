@@ -86,7 +86,9 @@ test("tags items and finds them by tag", async ({ page }) => {
   await expect(dialog.getByText("road-trip")).toBeVisible();
   await dialog.getByRole("button", { name: "Done" }).click();
 
-  await page.locator('[data-item="Trip"]').getByText("road-trip").click();
+  // Row tags are buttons, so the tag search works from the keyboard too.
+  await page.locator('[data-item="Trip"]').getByRole("button", { name: "road-trip" }).focus();
+  await page.keyboard.press("Enter");
   await expect(page.getByText("across all folders")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Search in this folder" })).toHaveValue("#road-trip");
   await expect.poll(() => names(page)).toEqual(["Trip"]);

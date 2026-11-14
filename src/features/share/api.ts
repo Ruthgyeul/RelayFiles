@@ -1,3 +1,4 @@
+import { CONVERSION } from "@/contracts/api";
 import { ERRORS } from "@/contracts/errors";
 import { filesApi } from "@/shared/lib/files-api";
 import { withVisibility } from "@/features/files/settings";
@@ -11,7 +12,7 @@ export const shareUrls = {
   download: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/download`,
   thumb: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/thumb`,
   preview: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/preview`,
-  transcode: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}/stream?transcode=1`,
+  transcode: (linkId: string, id: string) => `${base(linkId)}/files/${encodeURIComponent(id)}${CONVERSION.streamSuffix}`,
   zip: (linkId: string, folderId: string) => `${base(linkId)}/zip?folder=${encodeURIComponent(folderId)}`,
 };
 

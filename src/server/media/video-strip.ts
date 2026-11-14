@@ -20,7 +20,7 @@ import { ffmpegInput } from "./ffmpeg-input";
  * (an unknown container, or larger than MEDIA.maxVideoStripBytes); throws on storage trouble
  * (no room above the volume's reserve, a failed write), so the job is tried again later.
  */
-export async function writeVideoStrippedCopy(driver: StorageDriver, asset: Omit<AssetRef, "kind">, input: { path: string; mime: string; size: number; volumeId: string }, mode: StripMode): Promise<boolean> {
+export async function writeVideoStrippedCopy(driver: StorageDriver, asset: Omit<AssetRef, "kind">, input: { path: string; mime: string; size: number; volumeId: string }, mode: StripMode, signal?: AbortSignal): Promise<boolean> {
   if (input.size > MEDIA.maxVideoStripBytes) return false;
   const temp = await driver.stagingPath();
   const args = videoStripArgs(ffmpegInput(input.path), temp, input.mime, keptVideoTags(await videoMetadata(input.path), mode));
@@ -30,7 +30,8 @@ export async function writeVideoStrippedCopy(driver: StorageDriver, asset: Omit<
   if (!volume || availableAboveReserve(space.total, space.available, volume.reservePct) < BigInt(input.size)) throw new Error("no room for the video's shared copy; retrying later");
   try {
     const timeoutMs = (MEDIA.ffmpegTimeoutSec + Math.ceil(input.size / BYTES_PER_GB) * MEDIA.videoStripSecPerGb) * MS.second;
-    await runCommand(getEnv("jobs").FFMPEG_PATH, args, { timeoutMs });
+    // The copy of a large video takes minutes: a stopping worker ends ffmpeg instead of waiting.
+    await runCommand(getEnv("jobs").FFMPEG_PATH, args, { timeoutMs, signal });
     await driver.adoptAsset({ ...asset, kind: "derived" }, temp);
     return true;
   } finally {

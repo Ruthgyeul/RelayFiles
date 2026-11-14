@@ -4,15 +4,24 @@ import { logger } from "./logger";
 import { redis } from "./redis";
 
 /**
+ * Lease times come from Redis's own clock (TIME, in milliseconds), never from the calling
+ * process: on k3s the Pi workers take the same slots as the N95, and a host whose clock ran
+ * ahead would otherwise purge leases that are still live elsewhere (or keep its own too long).
+ */
+const NOW_MS = `local t = redis.call("TIME")
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)`;
+
+/**
  * Drops lapsed holders, then takes a slot when fewer than the limit are held. One script,
  * so two processes cannot both take the last slot.
- * KEYS[1] holders (sorted set: holder id → lease end). ARGV: now, lease end, limit, holder id, lease ms.
+ * KEYS[1] holders (sorted set: holder id → lease end). ARGV: limit, holder id, lease ms.
  */
 const ACQUIRE_SCRIPT = `
-redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
-if redis.call("ZCARD", KEYS[1]) >= tonumber(ARGV[3]) then return 0 end
-redis.call("ZADD", KEYS[1], ARGV[2], ARGV[4])
-redis.call("PEXPIRE", KEYS[1], ARGV[5])
+${NOW_MS}
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now)
+if redis.call("ZCARD", KEYS[1]) >= tonumber(ARGV[1]) then return 0 end
+redis.call("ZADD", KEYS[1], now + tonumber(ARGV[3]), ARGV[2])
+redis.call("PEXPIRE", KEYS[1], ARGV[3])
 return 1
 `;
 
@@ -22,18 +31,25 @@ return 1
  * (its lease lapsed and another acquire purged it, or Redis lost the key) takes a slot again
  * only when one is free, in the same script, so the limit still holds.
  * Returns 1 when renewed, 2 when taken again, 0 when the slot is lost.
- * KEYS[1] holders. ARGV: now, lease end, limit, holder id, lease ms.
+ * KEYS[1] holders. ARGV: limit, holder id, lease ms.
  */
 const RENEW_SCRIPT = `
+${NOW_MS}
 local result = 1
-if not redis.call("ZSCORE", KEYS[1], ARGV[4]) then
-  redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
-  if redis.call("ZCARD", KEYS[1]) >= tonumber(ARGV[3]) then return 0 end
+if not redis.call("ZSCORE", KEYS[1], ARGV[2]) then
+  redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now)
+  if redis.call("ZCARD", KEYS[1]) >= tonumber(ARGV[1]) then return 0 end
   result = 2
 end
-redis.call("ZADD", KEYS[1], ARGV[2], ARGV[4])
-redis.call("PEXPIRE", KEYS[1], ARGV[5])
+redis.call("ZADD", KEYS[1], now + tonumber(ARGV[3]), ARGV[2])
+redis.call("PEXPIRE", KEYS[1], ARGV[3])
 return result
+`;
+
+/** Holders whose lease has not lapsed, by Redis's clock. KEYS[1] holders. */
+const HELD_SCRIPT = `
+${NOW_MS}
+return redis.call("ZCOUNT", KEYS[1], now, "+inf")
 `;
 
 const RENEWED = { kept: 1, retaken: 2 } as const;
@@ -69,15 +85,13 @@ export interface SemaphoreSlot {
 export async function acquireSlot(name: string, limit: number, leaseMs: number): Promise<SemaphoreSlot | null> {
   const key = `sem:${name}`;
   const holder = randomUUID();
-  const now = Date.now();
-  const taken = Number(await redis().eval(ACQUIRE_SCRIPT, 1, key, now, now + leaseMs, limit, holder, leaseMs));
+  const taken = Number(await redis().eval(ACQUIRE_SCRIPT, 1, key, limit, holder, leaseMs));
   if (taken !== 1) return null;
 
   const lost = new AbortController();
   let released = false;
   const renewOnce = async () => {
-    const at = Date.now();
-    const result = Number(await redis().eval(RENEW_SCRIPT, 1, key, at, at + leaseMs, limit, holder, leaseMs));
+    const result = Number(await redis().eval(RENEW_SCRIPT, 1, key, limit, holder, leaseMs));
     // A renewal that ran after release() took the slot again: give it back.
     if (released) {
       if (result !== 0) await redis().zrem(key, holder);
@@ -109,5 +123,5 @@ export async function acquireSlot(name: string, limit: number, leaseMs: number):
 
 /** Slots of `name` held right now (lapsed holders not counted), for /metrics. */
 export async function slotsHeld(name: string): Promise<number> {
-  return redis().zcount(`sem:${name}`, Date.now(), "+inf");
+  return Number(await redis().eval(HELD_SCRIPT, 1, `sem:${name}`));
 }

@@ -57,3 +57,6 @@ Thumbs.db
 /deploy/backups/
 /deploy/docker-compose.volumes.yml
 /deploy/nginx/volumes/*.conf
+
+# Redis snapshot of a local redis-server started in the checkout
+dump.rdb

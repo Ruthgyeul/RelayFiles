@@ -7,6 +7,8 @@ export const ACCOUNT = {
   trafficDays: 30,
   /** Storage quota for new member accounts, in GB (decimal, 1 GB = 1e9 bytes like the design). */
   defaultQuotaGb: 5,
+  /** Admin Accounts: accounts deleted within this many days are "Expiring soon" (design: 7). */
+  expiringSoonDays: 7,
 } as const;
 
 export const LOGIN = {
@@ -100,6 +102,8 @@ export const SECURITY_LOG = {
   listLimit: 100,
   /** A rejected API token is logged at most once per token in this window. */
   rejectedTokenRepeatSec: 600,
+  /** Longest place name (city, region from the proxy's geo headers) kept with an entry. */
+  placeTextMax: 80,
 } as const;
 
 /** WebDAV (npm run dav): the files of an account as a network drive, signed in with a personal API token. */
@@ -112,6 +116,8 @@ export const DAV = {
   lockTimeoutSeconds: 3600,
   /** macOS "._name" and ".DS_Store" files are accepted and dropped instead of stored. */
   skipMacMetadata: true,
+  /** Random characters in the temporary name of an item waiting to replace another (COPY/MOVE with Overwrite). */
+  replacingIdLength: 12,
 } as const;
 
 /** "Export account": the whole account as one tar with a manifest of its settings. */

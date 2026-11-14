@@ -42,6 +42,16 @@ describe("zipResponse", () => {
     expect(peak).toBe(1);
   });
 
+  it("sends no faster than a given rate", async () => {
+    const entries: ZipEntry[] = [{ name: "a.bin", open: async () => Readable.from([Buffer.alloc(4_000)]) }];
+    const plain = await buffer(Readable.fromWeb(zipResponse(entries, "a.zip").body! as never));
+    const started = Date.now();
+    const throttled = await buffer(Readable.fromWeb(zipResponse(entries, "a.zip", { bytesPerSecond: 10_000 }).body! as never));
+    // The same bytes, at no more than 10 kB/s: about 0.4 s for the ~4 kB zip.
+    expect(throttled.length).toBe(plain.length);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(Math.floor((plain.length / 10_000) * 1_000) - 50);
+  });
+
   it("closes the file being archived when the download is cancelled", async () => {
     const opened: Readable[] = [];
     const open = async () => {

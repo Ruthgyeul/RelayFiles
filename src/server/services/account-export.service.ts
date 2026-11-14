@@ -1,7 +1,8 @@
 import "server-only";
+import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { pack as tarPack, type Pack } from "tar-stream";
-import { EXPORT } from "@/config/policy";
+import { EXPORT, SECONDS } from "@/config/policy";
 import { EXPORT_FORMAT, type ExportItem, type ExportManifest } from "@/contracts/account-export";
 import { compareExportPaths, EXPORT_MANIFEST_PATH, exportFileName, favoriteFolderPaths } from "@/domain/account-export";
 import { contentDisposition } from "@/domain/serving";
@@ -23,7 +24,6 @@ import { driverForAccount } from "./volume.service";
 type Owner = Pick<AccountRow, "id" | "name" | "volumeId">;
 type TreeNode = Awaited<ReturnType<typeof subtreeRowsOf>> extends Map<string, (infer R)[]> ? R : never;
 
-const MINUTE_SEC = 60;
 const turnKey = (accountId: string) => `export:turn:${accountId}`;
 
 /** Refuses an export while the last one started less than EXPORT.repeatAfterMinutes ago. */
@@ -34,7 +34,7 @@ export async function assertExportAllowed(accountId: string): Promise<void> {
 
 /** Takes this account's export turn: one start per EXPORT.repeatAfterMinutes. */
 async function takeTurn(accountId: string): Promise<void> {
-  const seconds = EXPORT.repeatAfterMinutes * MINUTE_SEC;
+  const seconds = EXPORT.repeatAfterMinutes * SECONDS.minute;
   if ((await redis().set(turnKey(accountId), "1", "EX", seconds, "NX")) !== "OK") await assertExportAllowed(accountId);
 }
 
@@ -101,11 +101,10 @@ async function addFile(pack: Pack, driver: StorageDriver, owner: Owner, entry: E
   }
   // Exactly the bytes stat counted, so the tar header stays right if the file grows meanwhile.
   const source = await driver.createReadStream(location, { start: 0, end: size - 1 });
-  await new Promise<void>((resolve, reject) => {
-    const sink = pack.entry({ name: entry.path, size, mtime }, (error) => (error ? reject(error) : resolve()));
-    source.once("error", reject);
-    source.pipe(sink);
-  });
+  // pipeline, not pipe: a download cancelled mid-file destroys the entry, and pipe() would throw
+  // that error again with nobody listening (an uncaught exception ends the server process) and
+  // leave the file open. pipeline settles, closes the file, and the export ends below.
+  await pipeline(source, pack.entry({ name: entry.path, size, mtime }));
   return { bytes: size };
 }
 
@@ -137,7 +136,7 @@ async function fillTar(pack: Pack, driver: StorageDriver, owner: Owner, plan: Ex
 export async function exportAccount(owner: Owner, now: Date = new Date()): Promise<Response> {
   await takeTurn(owner.id);
   const slot: SemaphoreSlot | null = await acquireSlot(`export:${owner.id}`, 1, EXPORT.slotLeaseMs);
-  if (!slot) throw new ApiError("RATE_LIMITED", "An export of this account is already running.", { retryAfter: EXPORT.repeatAfterMinutes * MINUTE_SEC });
+  if (!slot) throw new ApiError("RATE_LIMITED", "An export of this account is already running.", { retryAfter: EXPORT.repeatAfterMinutes * SECONDS.minute });
   let plan: ExportPlan;
   let driver: StorageDriver;
   try {
@@ -151,7 +150,9 @@ export async function exportAccount(owner: Owner, now: Date = new Date()): Promi
   fillTar(pack, driver, owner, plan)
     .then((bytes) => addTraffic(db(), owner.id, BigInt(bytes), new Date()))
     .catch((error: unknown) => {
-      logger.error("account export failed", { error });
+      // The person stopped the download: not a server fault.
+      if (pack.destroyed) logger.warn("account export stopped", { error });
+      else logger.error("account export failed", { error });
       pack.destroy();
     })
     .finally(() => void slot.release());

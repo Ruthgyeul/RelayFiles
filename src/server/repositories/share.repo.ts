@@ -32,11 +32,13 @@ export interface SharedRow {
   /** Delete after the first download. */
   burn: boolean;
   createdAt: Date;
+  /** storage:fsck found the file gone from the disk: it cannot be sent. */
+  missing: boolean;
 }
 
 /** Columns of a SharedRow, read from "Node" n. */
 const SHARED_COLUMNS = Prisma.sql`n.id, n."parentId", n.type::text AS type, n.name, n.kind::text AS kind, n.mime, n.size, n.sha256, n."hasDerived", n."stripFailed", n."derivedMode"::text AS "derivedMode", n."scanState"::text AS "scanState", n."hasThumb", n.downloads,
-           n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt"`;
+           n."downloadLimit", n."dlPaused", n.access::text AS access, n.burn, n."createdAt", n.missing`;
 
 /**
  * What visitors of a link may see below it (on "Node" n): not private, without a password of its
@@ -97,6 +99,8 @@ export type ChainRow = SharedRow & {
   linkId: string;
   expAt: Date | null;
   passwordHash: string | null;
+  /** The item's own daily traffic limit in bytes (null: none). */
+  dailyBytesCap: bigint | null;
 };
 
 /**
@@ -110,7 +114,7 @@ export async function sharedChain(db: DbClient, nodeId: string): Promise<ChainRo
       UNION ALL
       SELECT n.id, n."parentId", c.depth + 1 FROM "Node" n JOIN chain c ON n.id = c."parentId"
     )
-    SELECT ${SHARED_COLUMNS}, n.visibility::text AS visibility, n."linkId", n."expAt", n."passwordHash"
+    SELECT ${SHARED_COLUMNS}, n.visibility::text AS visibility, n."linkId", n."expAt", n."passwordHash", n."dailyBytesCap"
     FROM chain JOIN "Node" n ON n.id = chain.id
     ORDER BY chain.depth DESC`;
 }

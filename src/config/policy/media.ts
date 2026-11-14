@@ -50,6 +50,8 @@ export const MEDIA = {
    */
   cacheMaxAgeSec: 365 * 24 * 60 * 60,
   workerConcurrency: 2,
+  /** Upper bound of MEDIA_WORKER_CONCURRENCY, VIDEO_TRANSCODE_MAX and K3S_MEDIA_CONCURRENCY: past it a box runs out of CPU and memory. */
+  maxConcurrency: 16,
   /**
    * A job that fails for a reason outside the file (storage I/O error, volume offline, all
    * conversion slots busy, a timeout) is tried again with exponential backoff from jobBackoffMs:
@@ -146,6 +148,31 @@ export const TRANSCODE = {
    * stopped (SIGTERM, then SIGKILL) and not retried until it is played often enough again.
    */
   storeTimeoutSec: 6 * 60 * 60,
+  /**
+   * HLS playback of a conversion (seeking anywhere, docs/architecture.md "미리보기 전송"): segment
+   * length; keyframes are forced at every boundary so a conversion can start at any segment.
+   */
+  hlsSegmentSec: 4,
+  /** A playback session nobody asked a segment of for this long stops converting and drops its segments. */
+  hlsIdleMs: 60_000,
+  /** A segment request waits this long for the running conversion to write it (then 503). */
+  hlsSegmentWaitMs: 20_000,
+  /** How often a waiting segment request looks for its file. */
+  hlsPollMs: 200,
+  /** A requested segment this many places past what the conversion wrote starts a new conversion there (a seek). */
+  hlsAheadSegments: 3,
+  /** The conversion pauses once it is this many segments ahead of the player (resumed by the next request). */
+  hlsMaxAheadSegments: 45,
+  /** Segments more than this many places behind the player are deleted (seeking back converts them again). */
+  hlsKeepBehindSegments: 30,
+  /** ffmpeg error output kept for the log of a failed HLS conversion. */
+  hlsErrorLogBytes: 2_048,
+  /** Retry-After of a segment still converting when its wait ran out. */
+  hlsRetrySec: 1,
+  /** Reading a video's length (its container header) is stopped after this long. */
+  hlsProbeTimeoutMs: 30_000,
+  /** Video lengths (read from the file once) are kept this long, by content hash. */
+  hlsDurationCacheSec: 7 * 24 * 60 * 60,
 } as const;
 
 /** Child processes (ffmpeg, smartctl) started through runCommand. */
@@ -168,6 +195,8 @@ export const SCAN = {
   maxReplyBytes: 4096,
   /** A scan waits for clamd this long per GB on top of CLAMAV_TIMEOUT_MS. */
   msPerGb: 120_000,
+  /** Default of CLAMAV_TIMEOUT_MS: how long a scan may take before it counts as failed and is tried again. */
+  timeoutMs: 60_000,
   /** Visitors asking for a file still being scanned are told to come back after this long. */
   pendingRetrySec: 30,
 } as const;

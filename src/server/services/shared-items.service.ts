@@ -5,10 +5,20 @@ import { isListedShare, visibilityInside, type ShareFolder } from "@/domain/shar
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { lastLinkEventAt } from "../repositories/link-event.repo";
-import { listFolders, makeNodesPrivate, sharedCandidates, type NodeRow } from "../repositories/node.repo";
-import { VISIBILITY, withPaths } from "./node.service";
+import { makeNodesPrivate, sharedCandidates, type NodeRow } from "../repositories/node.repo";
+import type { AncestorRow } from "../repositories/node-tree.repo";
+import { parentChains, VISIBILITY, withPaths } from "./node.service";
 
 const restricted = (row: NodeRow) => row.passwordHash !== null || row.downloadLimit !== null || row.expAt !== null || row.burn || row.dlPaused;
+
+/** Each folder on the chains with its parent and visibility (a chain lists root first). */
+function foldersOf(chains: ReadonlyMap<string, readonly AncestorRow[]>): Map<string, ShareFolder> {
+  const folders = new Map<string, ShareFolder>();
+  for (const chain of chains.values()) {
+    chain.forEach((folder, index) => folders.set(folder.id, { parentId: chain[index - 1]?.id ?? null, visibility: VISIBILITY[folder.visibility] }));
+  }
+  return folders;
+}
 
 /**
  * "Shared by me": the items of an account that can be opened from outside. A public folder
@@ -16,12 +26,15 @@ const restricted = (row: NodeRow) => row.passwordHash !== null || row.downloadLi
  * have limits of their own. Private items with leftover settings are not listed.
  */
 export async function sharedItems(accountId: string): Promise<SharedView> {
-  const [rows, folderRows] = await Promise.all([sharedCandidates(db(), accountId, SHARE.sharedListMax + 1), listFolders(db(), accountId)]);
+  const rows = await sharedCandidates(db(), accountId, SHARE.sharedListMax + 1);
   const truncated = rows.length > SHARE.sharedListMax;
-  const folders = new Map<string, ShareFolder>(folderRows.map((folder) => [folder.id, { parentId: folder.parentId, visibility: VISIBILITY[folder.visibility] }]));
-  const listed = rows.slice(0, SHARE.sharedListMax).filter((row) => isListedShare({ visibility: VISIBILITY[row.visibility], restricted: restricted(row) }, visibilityInside(row.parentId, folders)));
+  const candidates = rows.slice(0, SHARE.sharedListMax);
+  // The folders above the candidates, read once for both the visibility check and the paths.
+  const chains = await parentChains(candidates);
+  const folders = foldersOf(chains);
+  const listed = candidates.filter((row) => isListedShare({ visibility: VISIBILITY[row.visibility], restricted: restricted(row) }, visibilityInside(row.parentId, folders)));
   const [items, lastUsed] = await Promise.all([
-    withPaths(accountId, listed),
+    withPaths(listed, chains),
     lastLinkEventAt(
       db(),
       listed.map((row) => row.id),

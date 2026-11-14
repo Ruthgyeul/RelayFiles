@@ -1,11 +1,11 @@
 import "server-only";
-import { METRICS } from "@/config/policy";
+import { METRICS, MS } from "@/config/policy";
 import { redis } from "../redis";
 
 /** Short-lived activity markers for the Server page ("ACTIVE STREAMS", "TRANSFERS"). */
 export type ActivityKind = "stream" | "upload";
 const keyOf = (kind: ActivityKind) => `activity:${kind}`;
-const WINDOW_MS = METRICS.activeWindowSec * 1_000;
+const WINDOW_MS = METRICS.activeWindowSec * MS.second;
 
 /** Marks one stream or upload as active now. Never fails the request it is called from. */
 export async function markActive(kind: ActivityKind, id: string, now = Date.now()): Promise<void> {

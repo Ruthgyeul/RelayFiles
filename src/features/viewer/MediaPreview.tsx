@@ -50,7 +50,7 @@ export interface MediaPreviewProps {
  */
 export function MediaPreview({ id, name, kind, src, thumbSrc, previewSrc, transcodeSrc, variant, loadOriginal, onOpen }: MediaPreviewProps) {
   const [playing, setPlaying] = useState(false);
-  const video = useVideoSource(name, src, transcodeSrc);
+  const { src: videoSrc, attach, onError } = useVideoSource(name, src, transcodeSrc);
   const fit = variant === "row" ? "object-contain" : "object-cover";
   const still = thumbSrc ? (
     // eslint-disable-next-line @next/next/no-img-element -- user media is served with auth cookies, not optimizable by next/image
@@ -68,8 +68,9 @@ export function MediaPreview({ id, name, kind, src, thumbSrc, previewSrc, transc
       <>
         <video
           {...playbackProps}
-          src={video.src}
-          onError={video.onError}
+          ref={attach}
+          src={videoSrc}
+          onError={onError}
           poster={thumbSrc ?? undefined}
           controls
           autoPlay

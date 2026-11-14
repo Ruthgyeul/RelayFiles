@@ -18,7 +18,6 @@ interface HourRow {
   ok: bigint;
   fail: bigint;
   avg: number | null;
-  p95: number | null;
 }
 
 /** Recomputes the hourly rollups of whole hours from `since` (an hour start) on. */
@@ -26,12 +25,11 @@ export async function rollUpHours(db: DbClient, since: Date): Promise<void> {
   const rows = await db.$queryRaw<HourRow[]>`
     SELECT component, date_trunc('hour', at) AS hour,
            count(*) FILTER (WHERE ok) AS ok, count(*) FILTER (WHERE NOT ok) AS fail,
-           round(avg(ms) FILTER (WHERE ok))::float8 AS avg,
-           round(percentile_cont(0.95) WITHIN GROUP (ORDER BY ms) FILTER (WHERE ok AND ms IS NOT NULL))::float8 AS p95
+           round(avg(ms) FILTER (WHERE ok))::float8 AS avg
     FROM "HealthSample" WHERE at >= ${since}
     GROUP BY component, date_trunc('hour', at)`;
   for (const row of rows) {
-    const data = { okCount: Number(row.ok), failCount: Number(row.fail), avgMs: row.avg, p95Ms: row.p95 };
+    const data = { okCount: Number(row.ok), failCount: Number(row.fail), avgMs: row.avg };
     await db.healthHourly.upsert({ where: { component_hour: { component: row.component, hour: row.hour } }, create: { component: row.component, hour: row.hour, ...data }, update: data });
   }
 }
@@ -47,7 +45,7 @@ interface DayRow {
  * Recomputes the daily rollups for calendar days (in `timeZone`) from `firstDay` on. Samples
  * are kept longer than two days, so yesterday and today are always complete.
  */
-export async function rollUpDays(db: DbClient, timeZone: string, firstDay: string, since: Date, levelOf: (ok: number, fail: number) => "OK" | "WARN" | "DOWN"): Promise<void> {
+export async function rollUpDays(db: DbClient, timeZone: string, firstDay: string, since: Date): Promise<void> {
   const rows = await db.$queryRaw<DayRow[]>`
     SELECT component, to_char((at AT TIME ZONE 'UTC') AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
            count(*) FILTER (WHERE ok) AS ok, count(*) FILTER (WHERE NOT ok) AS fail
@@ -56,7 +54,7 @@ export async function rollUpDays(db: DbClient, timeZone: string, firstDay: strin
     GROUP BY 1, 2`;
   for (const row of rows) {
     const day = new Date(`${row.day}T00:00:00Z`);
-    const data = { okCount: Number(row.ok), failCount: Number(row.fail), level: levelOf(Number(row.ok), Number(row.fail)) };
+    const data = { okCount: Number(row.ok), failCount: Number(row.fail) };
     await db.healthDaily.upsert({ where: { component_day: { component: row.component, day } }, create: { component: row.component, day, ...data }, update: data });
   }
 }

@@ -225,6 +225,8 @@ spec:
             - { name: PROXY_SHARED_SECRET, valueFrom: { secretKeyRef: { name: relayfiles-env, key: PROXY_SHARED_SECRET } } }
             - { name: NGINX_API_RATE_PER_MIN, value: "${NGINX_API_RATE_PER_MIN}" }
             - { name: NGINX_API_BURST, value: "${NGINX_API_BURST}" }
+            - { name: NGINX_DAV_RATE_PER_MIN, value: "${NGINX_DAV_RATE_PER_MIN}" }
+            - { name: NGINX_DAV_BURST, value: "${NGINX_DAV_BURST}" }
           ports: [{ containerPort: 8080 }]
           # A TCP check: an HTTP probe names the pod's address as Host, which Nginx closes (444)
           # unless SERVER_NAME is "_".

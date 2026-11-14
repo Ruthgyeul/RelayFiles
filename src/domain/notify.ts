@@ -31,8 +31,6 @@ export type NotifyEvent =
   /** The virus scan found malware in a file received through an upload-only link; it was moved to the trash. */
   | { kind: "file-infected"; owner: string; item: string; signature: string };
 
-export type NotifyKind = NotifyEvent["kind"];
-
 export interface NotifyText {
   title: string;
   message: string;

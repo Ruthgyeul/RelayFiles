@@ -38,15 +38,25 @@ npm run start        # scripts/start-server.mjs: .env 로드 후 .next/standalon
 npm run typecheck    # next typegen && tsc --noEmit
 npm run lint         # eslint (경고 0개 허용)
 npm run test         # 단위 테스트 (외부 서비스 없음)
+npm run test:watch   # 단위 테스트 watch 모드
 npm run test:integration  # PostgreSQL·Redis가 필요한 통합 테스트 (.env 사용)
+npm run test:coverage     # 단위+통합 테스트의 서버·도메인 코드 커버리지 (coverage/, PostgreSQL·Redis 필요)
 npm run db:migrate   # prisma migrate dev (개발: 스키마 변경 → 마이그레이션 생성)
 npm run db:deploy    # prisma migrate deploy (운영)
+npm run db:generate  # prisma generate (postinstall이 실행함, 스키마만 바꿨을 때 수동으로)
+npm run env:secrets  # .env에 넣을 무작위 비밀값 출력
+npm run env:check    # .env 검증
 npm run volume:init  # STORAGE_ROOT(또는 인자로 준 경로) 볼륨 초기화·등록 (재실행 안전)
 npm run admin:create # 관리자 계정 생성, 토큰을 한 번만 출력
 npm run test:e2e     # playwright (PLAYWRIGHT_CHROMIUM_PATH로 브라우저 지정 가능)
 npm run check:emoji  # 이모지 사용 검사
 npm run check:cycles # 기능(src/features/*) 사이 순환 import 검사
-npm run check        # typecheck · lint · emoji · cycles · migrations · test · build 전체
+npm run check:ci-images  # CI의 PostgreSQL·Redis 이미지가 deploy/docker-compose.yml과 같은 digest인지 검사
+npm run openapi      # docs/openapi.json 다시 생성 (API v1 계약을 바꾼 뒤)
+npm run check:openapi    # docs/openapi.json이 코드와 같은지 검사
+npm run check:changelog  # package.json 버전의 항목이 CHANGELOG.md에 있는지 검사
+npm run check:bundle     # 빌드 뒤 페이지별 첫 로드 JS(gzip)가 scripts/bundle-budget.json 안인지, 지연 로드할 라이브러리가 첫 로드에 없는지 검사
+npm run check        # typecheck · lint · emoji · cycles · migrations · ci-images · openapi · changelog · test · build · bundle 전체
 npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). WORKER_ROLES로 맡을 일(media·maintenance·notify)을 고른다. ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
 npm run dav          # WebDAV 서버(/dav/, API 토큰 Basic 인증, 쓰기는 files:write). Next가 PROPFIND를 못 받아 별도 프로세스
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기 (-- --previews: 큰 이미지의 뷰어 미리보기)
@@ -118,6 +128,8 @@ npm run volume:remove    # -- <vol> 비운(DRAINING, 계정 0) 볼륨 등록 해
 ## Git
 
 - Conventional Commits: `feat(scope): subject`, 소문자, 명령형, 마침표 없음.
+- 브랜치: `main` 하나로 운용한다. 작업 브랜치(`feat/…`, `fix/…`, `docs/…`, `chore/…`, `refactor/…`)는 `main`에서 만들고 PR의 base도 `main`이며, Merge Commit으로 병합한다.
+- 릴리스: `package.json` 버전을 올리고 `CHANGELOG.md`의 "Unreleased"를 그 버전 아래로 옮기는 PR을 `main`에 병합한 뒤, 그 커밋에 `vX.Y.Z` 태그를 붙인다(절차 [`docs/runbook.md`](docs/runbook.md#릴리스-만들기)). 사용자가 보는 변경은 PR마다 `CHANGELOG.md` "Unreleased"에 한 줄 적는다.
 - PR 본문: `## Changes` / `## How to Test` / `## Related Issues`.
 - npm만 쓰고 `package-lock.json`을 커밋한다.
 - 의존성의 설치 스크립트(preinstall/install/postinstall)는 `package.json`의 `allowScripts`로 승인한다(npm 11.19+는 승인되지 않은 스크립트를 `npm warn install-scripts`로 알린다). 새 의존성이 스크립트를 가지면 내용을 확인한 뒤 `npm install-scripts approve --no-allow-scripts-pin <pkg>`로 추가한다(버전 고정 없이 이름만 등록해 Dependabot 업데이트마다 다시 승인하지 않게 한다).

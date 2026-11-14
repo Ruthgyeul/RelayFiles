@@ -13,6 +13,14 @@ describe("fileNameOf", () => {
     assert.equal(fileNameOf("attachment"), null);
     assert.equal(fileNameOf("attachment; filename*=UTF-8''%E0%A4%A"), null);
   });
+
+  it("refuses names that would leave the current folder", () => {
+    assert.equal(fileNameOf("attachment; filename*=UTF-8''..%2F..%2F.bashrc"), null);
+    assert.equal(fileNameOf("attachment; filename*=UTF-8''%2Fetc%2Fpasswd"), null);
+    assert.equal(fileNameOf('attachment; filename="..\\evil.txt"'), null);
+    assert.equal(fileNameOf('attachment; filename=".."'), null);
+    assert.equal(fileNameOf("attachment; filename*=UTF-8''a%00b"), null);
+  });
 });
 
 describe("resumeRange", () => {

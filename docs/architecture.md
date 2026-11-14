@@ -43,7 +43,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - File Manager 폴더 보기(`getFolderView`)는 쿼리 4개다: 폴더, `ancestorChain`, 자식(`listChildren`), 자식마다의 바이트·파일 수·바로 아래 항목 수(`childStats`, 폴더 아래를 한 번 걷는 재귀 CTE를 맨 위 자식별로 `GROUP BY`). 폴더 자신의 크기·파일 수는 자식 값의 합이라 트리를 두 번 걷지 않는다(예전: 폴더 한 번 + 자식 폴더들 한 번, 쿼리 7개). 응답 모양은 같고 자식은 여전히 한 번에 모두 보낸다. 클라이언트에 페이지 나누기가 없고 긴 목록은 렌더링만 미룬다(`FILES.lazyRenderAfter`, `content-visibility`). 검색 결과·Properties처럼 계정 곳곳의 항목은 예전처럼 `folderSizes`·`childCounts`(id 목록 하나로 쿼리 하나씩)를 쓴다.
 - 여러 항목 작업(삭제·이동·복사·zip)은 고른 항목 수와 관계없이 쿼리 수가 같다. `topLevel`이 행(`findNodes`)과 모든 항목의 조상 체인(`ancestorChains`, 재귀 CTE 한 번)을 읽어 `{ row, chain }`을 돌려주고, 위치(`topLocation`)·원래 경로는 그 체인에서 계산한다(항목마다 `locationOf`를 부르지 않는다). 하위 트리는 `subtreeRowsOf`(CTE 한 번 + 행 읽기 한 번)로 한꺼번에 읽는다. 트랜잭션 안의 쓰기도 한 문장씩이다: 이동 `moveIntoFolder`(`unnest` UPDATE, 바뀐 행 수가 모자라면 409), 복사 `insertNodes` 한 번, 삭제 기록 `addTrashedBytesEach`·`createDeletedItems`(`createMany`). 디스크 작업(rename, 휴지통, 복사 준비)만 항목마다다. 하위 트리를 디스크·zip 경로로 펼치는 일은 `domain/subtree.ts` `subtreePaths`(깊이 우선, 부모가 먼저) 하나가 한다(소유자 zip, 공유 "Download all", 복사 준비). 개발 환경 측정(1,000개 선택, 10개일 때와 같은 쿼리 수): `topLevel` 1,003 → 2, zip 4,004 → 7, 복사 5,020 → 24, 이동 5,012 → 14(6.9초 → 0.46초), 삭제 4,013 → 16(4.0초 → 1.4초). `src/server/services/tree-queries.int.test.ts`가 쿼리 수가 늘지 않는지 검사한다(`test/query-counter.ts`).
 
-- 쿼리는 repository에만 쓴다. 서비스·잡·스크립트에서 `db()`는 repository 함수에 넘기거나 트랜잭션(`$transaction`)을 열 때만 쓴다(`no-restricted-syntax`). `src/app`은 `@/server/db`·`@/server/repositories`를 import하지 않고 서비스를 부른다(`no-restricted-imports`).
+- 쿼리는 repository에만 쓴다. 서비스·잡·스크립트에서 `db()`는 repository 함수에 넘기거나 트랜잭션(`$transaction`)을 열 때만 쓴다(`no-restricted-syntax`). 넘겨받은 `DbClient`·트랜잭션으로 모델을 직접 부르는 것(`tx.node.update`)도 막는다. 모델 목록은 `prisma/schema.prisma`에서 읽는다. `src/app`은 `@/server/db`·`@/server/repositories`를 import하지 않고 서비스를 부른다(`no-restricted-imports`).
 - 예외: tus 업로드 라우트(`src/app/api/uploads/tus`)는 `apiHandler`를 거치지 않는다. tus가 자체 평문 프로토콜로 응답하기 때문이며, 같은 방식으로 try-catch와 에러 마스킹을 직접 한다. 볼륨 조회는 `upload.service.tusVolume()`이 한다.
 
 ## 백그라운드 워커
@@ -65,7 +65,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
   - `FILE_VERSIONS_DAYS`(기본 7, 0이면 예전처럼 휴지통) 동안 보관하고, 계정 용량에 포함한다(`space.service` `heldBytes`). 매일 정리 작업이 기한이 지난 버전의 바이트와 행을 지운다.
   - `nodeId`는 외래 키가 아니다. 파일을 지워도 버전은 기한까지 남고, "Recently deleted"에서 복원하면 같은 id라 다시 붙는다. 파일이 새 내용으로 바뀔 때마다(덮어쓰기·버전 복원) 새 node id로 옮겨 간다(`handOver`).
   - 볼륨 이동은 `ASSET_DIRS`처럼 함께 복사하고, 계정 삭제는 함께 지운다. 레이아웃 디렉터리는 필요할 때 만들어지므로 레이아웃 버전은 그대로다.
-- ffmpeg·smartctl은 `runCommand`(`src/server/process/run-command.ts`)로 실행한다. 셸 없이, 시간 초과나 중단(`signal`) 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지, 끝나면 항상 회수한다. 실시간 변환(`?transcode=1`)만 응답 스트림 때문에 직접 `spawn`한다(시청자가 떠나면 SIGKILL).
+- ffmpeg·smartctl은 `runCommand`(`src/server/process/run-command.ts`)로 실행한다. 셸 없이, 시간 초과나 중단(`signal`) 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지, 끝나면 항상 회수한다. 실시간 변환(`?transcode=1`)과 HLS 변환(`/hls/`)만 직접 `spawn`한다(응답 스트림이나 세션이 끝나면 SIGKILL).
 - 작업 기록: `maintenance`·`probes`·`notify` 큐는 끝난 작업을 최근 `JOBS.keepCompleted`(100)개, 실패한 작업을 `keepFailed`(1,000)개만 Redis에 남긴다(프로브만 하루 5,700개쯤 끝난다). 워커가 시작할 때 이 한도 전에 쌓인 하루 넘은 작업을 `JOBS.trimBatch`개씩 지운다(한 번에 지우면 Redis가 멈춘다). `media` 큐는 끝나거나 실패한 작업을 바로 지운다. 작업 id가 노드 id라 남겨 두면 같은 파일을 다시 큐에 넣을 수 없기 때문이다.
 - 미디어 작업 실패: 파일 자체를 디코딩·정리할 수 없으면(sharp·ffmpeg 오류, 원본과 볼륨은 정상) 그 단계만 건너뛰고 기록한다(제거본이 없으면 `stripFailed`, 공개 링크 415). 저장소·시스템 문제(`server/media/failure.ts`: EIO·ENOSPC·EROFS·ENOENT 같은 errno, `STORAGE_OFFLINE`·`STORAGE_BUSY`, 명령 시간 초과·중단·실행 실패, 또는 디코더 오류인데 원본을 읽을 수 없거나 볼륨 표시 파일이 없을 때)는 예외를 던져 작업 전체를 BullMQ가 `MEDIA.jobAttempts`(6)번까지 지수 backoff(10초부터, 약 5분)로 다시 시도한다. 그동안 아무것도 영구 기록하지 않으므로 공개 링크는 503 `MEDIA_NOT_READY`이고, 끝내 실패하면 `npm run media:backfill`로 다시 넣는다.
 - 종료: `npm run worker`는 SIGTERM/SIGINT에 새 작업을 받지 않고 실행 중인 작업이 끝나기를 기다린다. 저장 변환(`task: "transcode"`)만 BullMQ 중단 신호로 ffmpeg를 멈추고(작업은 실패로 남아 재시작 뒤 다시 시도), 나머지는 짧다(ffmpeg `MEDIA.ffmpegTimeoutSec`).
@@ -78,6 +78,12 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - 이미지: 목록에서 이미 받은 썸네일을 흐리게 바로 보여 주고, 워커가 만든 미리보기(`/api/files/<id>/preview`, 공유 링크도 같은 경로)가 오면 바꾼다. 미리보기가 없으면(작은 파일, GIF, 처리 전) 같은 URL이 원본을 보낸다. 앞뒤 이미지는 미리 받아 둔다(공유 링크에서는 `x-relayfiles-prefetch` 헤더로 조회 수에서 뺀다).
 - 캐시: 파일의 바이트는 URL(node id)이 같으면 바뀌지 않는다(교체하면 새 id. 공유 링크(`linkId`)·공유 설정·태그·다운로드 수·링크 기록은 새 행으로 넘어가 이미 보낸 링크가 그대로 동작한다). 그래서 재생(`stream`), 썸네일, 미리보기, 변환 영상은 `private, max-age=1년, immutable`이다. 이미 본 구간으로 되감거나, 다른 영상을 보다가 돌아와도 브라우저 디스크 캐시에서 바로 읽고 서버에는 요청이 가지 않는다. 다운로드(`download`, zip)는 다운로드 제한·횟수 때문에 캐시하지 않고, 에러 응답은 `no-store`다. Nginx의 X-Accel 위치에는 `Cache-Control`을 붙이지 않는다(앱 값이 그대로 전달된다. 둘이 되면 `no-cache`가 이겨 캐시가 꺼진다). 공유 링크 미리보기는 앞뒤 이미지 미리 받기만 조회에서 빠지고, 캐시에서 다시 보는 것은 조회로 다시 세지 않는다.
 - 영상: 썸네일을 포스터로 바로 보여 주고 원본을 Range 요청으로 재생한다(Docker 배포는 Nginx X-Accel, systemd 배포는 앱이 직접 전송). 브라우저가 못 여는 컨테이너(AVI, WMV, MPEG-TS 등, `videoNeedsTranscode`)와 재생 오류가 난 MKV·MOV는 `?transcode=1`로 바꾼다. 앱이 ffmpeg로 720p H.264/AAC fragmented MP4를 만들면서 바로 흘려보낸다. 동시에 `VIDEO_TRANSCODE_MAX`개까지, 시청자가 떠나면 즉시 종료(SIGKILL)하고 출력은 4GB로 제한한다.
+  - **HLS**(`server/media/hls-session.ts`, `hls-response.ts`, `domain/hls.ts`): 실시간 변환은 처음부터만 재생된다. 뷰어는 저장된 변환본이 없으면(`HEAD ?transcode=1`의 `x-relayfiles-transcode: stored|live`) `<base>/hls/index.m3u8`을 연다. Safari·최신 Chrome은 네이티브로, 그 밖의 브라우저는 MSE가 있으면 hls.js(light, `enableWorker: false`라 CSP `worker-src`를 넓히지 않는다, 처음 쓸 때만 내려받는다)로 재생하고, 둘 다 안 되거나 HLS가 실패하면 `?transcode=1`로 돌아간다.
+    - 재생 목록은 영상 전체를 `TRANSCODE.hlsSegmentSec`(4초) 세그먼트로 미리 적은 VOD 목록이다. 길이는 ffmpeg가 컨테이너에서 읽고(`-t 0`, 디코딩 없음) Redis에 내용 해시로 7일 둔다. 세그먼트 이름에 `?v=<해시>`를 붙여 `immutable` 캐시가 교체 뒤에도 틀리지 않는다.
+    - 세션은 (영상, 버전, 요청자)마다 하나, 앱 프로세스 메모리에 있고 세그먼트는 볼륨 업로드 영역의 폴더(`asset-<uuid>`)에 쓴다. ffmpeg는 세션마다 한 개만 돌고, 요청한 세그먼트에서 `-ss`로 시작해 경계마다 키프레임을 강제하고(`-force_key_frames`) 전체 영상의 타임스탬프(`-output_ts_offset`, `-start_number`)를 쓰므로 어디서 시작한 세그먼트든 처음부터 만든 것과 맞물린다(차이 0.1초 미만). 세그먼트는 임시 이름으로 쓰고 다 쓰면 바꾼다(`-hls_flags temp_file`).
+    - 없는 세그먼트: 돌고 있는 변환이 곧 닿을 곳(`hlsAheadSegments`(3) 안)이면 `hlsSegmentWaitMs`(20초)까지 기다리고(넘으면 503 `VIDEO_CONVERTING`, 플레이어가 다시 묻는다), 멀면 그 자리에서 다시 시작한다(탐색). 변환은 플레이어보다 `hlsMaxAheadSegments`(45) 앞서면 멈추고 다음 요청이 다시 시작한다. 플레이어보다 `hlsKeepBehindSegments`(30) 뒤의 세그먼트는 지운다. `hlsIdleMs`(1분) 동안 요청이 없으면 세션을 끝내고(ffmpeg SIGKILL, 폴더 삭제), 앱 종료 때도 ffmpeg를 멈춘다. 크래시로 남은 폴더는 업로드 영역 매일 정리가 지운다.
+    - 슬롯은 실시간 변환과 같다(`acquireConversion`: `VIDEO_TRANSCODE_MAX`와 요청자별 `maxPerRequester`, 없으면 429). 돌고 있는 동안만 쥐고, 슬롯을 잃으면 ffmpeg를 멈춘다. 보낸 세그먼트는 트래픽으로 센다. 재생 목록을 열 때 재생 횟수(`notePlay`)를 세므로 자주 보는 영상은 계속 저장 변환본이 된다.
+    - k3s에서 앱 복제본이 둘 이상이면 같은 시청자의 요청이 다른 복제본으로 갈 수 있다. 그 복제본도 그 자리부터 자기 변환을 돌려 결과는 맞지만 CPU를 더 쓴다(deploy-k3s.md).
   - **저장된 변환본**(`server/media/transcode-cache.ts`): 같은 영상이 `TRANSCODE.cacheWindowSec`(7일) 안에 `cacheAfterPlays`(3)번 실시간 변환되면 워커가 한 번 변환해 `system/transcoded/<accountId>/<nodeId>`에 MP4(`+faststart`, 메타데이터 없음)로 저장한다. 그 뒤 `?transcode=1`은 이 파일을 일반 파일처럼 Range 요청(206)으로 보내므로 되감기가 되고 CPU를 쓰지 않는다. 워커도 같은 `VIDEO_TRANSCODE_MAX` 슬롯을 쓰고(모두 사용 중이면 작업을 나중에 다시 시도), 볼륨 예비 공간을 넘길 것 같으면 만들지 않는다. ffmpeg는 `runCommand`로 돌고 `TRANSCODE.storeTimeoutSec`(6시간, 720p는 N95에서 실시간보다 빠르다)이 지나면 멈춘다. 시간 초과는 다시 시도하지 않는다(또 시간 초과가 날 뿐이다. 실시간 변환은 그대로 되고, 다음 기간에 다시 자주 재생되면 큐에 다시 들어간다). 워커 종료와 슬롯을 잃은 경우(아래)는 실패로 처리해 나중에 다시 시도한다.
   - 변환 슬롯(`redis-semaphore.ts`): 쥔 쪽이 임대의 1/3마다 갱신하고, 갱신은 항목의 만료 시각과 키의 만료를 함께 늘린다. 갱신할 때 항목이 없으면(임대가 지나 다른 프로세스가 지웠거나 Redis가 키를 잃음) 빈 슬롯이 있을 때만 같은 Lua 스크립트 안에서 다시 잡는다. 빈 슬롯이 없으면 갱신을 멈추고 `slot.signal`을 중단시킨다. 이때 실시간 변환은 ffmpeg를 SIGKILL로 끝내고(시청자에게는 스트림이 끊긴다), 저장 변환은 ffmpeg를 멈추고 작업을 다시 시도한다. 그래서 `VIDEO_TRANSCODE_MAX`를 넘겨 돌지 않는다. Redis에 닿지 않아 갱신하지 못한 것은 로그만 남긴다(임대는 아직 유효할 수 있다).
   - 변환본은 계정 용량에 넣지 않는다(썸네일·미리보기처럼 서버가 만든 파일이다). 만든 지 `TRANSCODE.cacheKeepDays`(30일)가 지나면 매일 정리에서 지우고, 여전히 자주 보는 영상이면 다시 만든다. 원본을 지우면 함께 지운다.
@@ -92,6 +98,16 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
   - 공유 링크에서 문서를 여는 것은 `VIEW`로 기록된다(영상·오디오만 `PLAY`).
 - 자막: 영상을 열면 같은 폴더 목록에서 이름이 같은 `.vtt`·`.srt`(`movie.vtt`, `movie.mp4.srt`, 언어 태그 `movie.en.srt` → "English")를 찾는다(`domain/subtitles.ts` `subtitlesFor`, 뷰어 `withSubtitles`). 파일은 텍스트 미리보기와 같은 `stream` URL을 Range 요청 하나(`VIEWER.subtitleMaxBytes` = 텍스트 미리보기 한도 1MB, 공유 링크의 `streamReach` 텍스트 한도 안)로 읽고, `.srt`는 브라우저에서 WebVTT로 바꿔(`srtToVtt`: 시간의 `,`→`.`, `<font>` 제거, `&`·`<` 이스케이프) `blob:` URL의 `<track kind="subtitles">`로 붙인다. CSP는 `media-src 'self' blob:`이라 다른 출처는 여전히 막힌다. 한도를 넘거나 바이너리인 파일은 건너뛴다. 뷰어는 자막을 읽을 때 `?subtitle=1`(`SUBTITLE_PARAM`)을 붙인다. 공유 링크는 이 표시가 있고 이름이 자막 파일이면 그 읽기를 `VIEW`로 기록하지 않는다. 다운로드 한도가 걸린 자막 파일은 표시가 있어도 재생처럼 센다(표시만으로 한도를 피할 수 없다).
 - 슬라이드쇼: 그림을 보고 있고 그림이 둘 이상이면 머리글에 재생 버튼이 생긴다(Space도 같다). `VIEWER.slideshowIntervalMs`(4초)마다 목록 순서로 다음 그림을 열고(`domain/slideshow.ts`, 그림이 아닌 파일은 건너뜀), 마지막 그림에서 멈춘다. 사용자가 앞뒤로 넘기거나(버튼·화살표·N/P) 뷰어를 닫으면 멈춘다. 그림은 페이드인하지만 `prefers-reduced-motion: reduce`이면 전환 효과가 없다(`motion-safe:`). 공유 페이지의 폴더 뷰어도 같은 뷰어라 그대로 쓴다.
+
+### 실시간 갱신 (다른 곳에서 바꾼 파일)
+
+다른 기기, WebDAV, CLI, `storage:import`, 워커(썸네일·바이러스 검사 결과)가 계정의 파일을 바꾸면 열려 있는 페이지가 새로고침 없이 따라온다.
+
+- 알림(`server/events/account-events.ts`): 바꾼 프로세스가 Redis 채널 `<REDIS_KEY_PREFIX>events:account:<계정 id>`에 `changed`만 보낸다(ioredis의 `keyPrefix`는 채널에 붙지 않아 `channelName()`이 붙인다). 내용은 싣지 않는다: 받은 페이지는 평소의 권한 검사를 거치는 요청으로 다시 읽는다.
+- 보내는 곳: 로그인한 요청 중 GET·HEAD·OPTIONS가 아니고 성공한 것(`apiHandler`·`apiV1Handler`의 `noteAccountWrite`), WebDAV 쓰기, tus 업로드 완료(업로드 전용 링크로 받은 파일 포함), `storage:import`, 워커의 미디어·찍은 날짜·바이러스 검사 작업. 서비스 함수마다 넣지 않고 이 입구에서 보낸다.
+- 받는 곳(`GET /api/events`, `server/http/sse.ts`): 앱 프로세스마다 구독 연결 하나를 모든 스트림이 나눠 쓴다. 변경이 몰려 오면 `LIVE.coalesceMs`마다 하나로 보낸다. Server 페이지 지표 스트림과 같은 제한(계정당 개수, 세션 재확인, 최대 수명)을 `sseResponse()` 하나로 쓴다.
+- 브라우저(`features/shell/useLiveRefresh.ts`): 셸이 탭마다 `EventSource` 하나를 열고, 이벤트가 그친 뒤 `LIVE.clientDebounceMs`가 지나면 `router.refresh()`한다. 숨겨진 탭은 다시 보일 때 한 번 새로 읽는다. 서버가 거절한 스트림(로그아웃, 탭이 너무 많음)은 `LIVE.clientRetryMs` 뒤에 다시 연다. 목록을 자기 상태로 들고 있는 페이지(Recently deleted)는 새로 받은 목록으로 바꾼다.
+- Nginx: `location /`가 이미 `proxy_read_timeout 1h`이고 앱이 `X-Accel-Buffering: no`를 보내 스트림이 버퍼링되지 않는다. CSP `connect-src 'self'`가 같은 출처의 EventSource를 허용한다.
 
 ### 전송 패널 (파일별 진행률·취소)
 
@@ -115,7 +131,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 
 | 인터페이스 | 현재 구현 | 확장 |
 |---|---|---|
-| `StorageDriver` | `LocalVolumeDriver` (외장 SSD, 볼륨 여러 개) | `S3Driver` (MinIO/R2) |
+| `StorageDriver` | `LocalVolumeDriver` (외장 SSD, 볼륨 여러 개) | `S3Driver` (MinIO/R2). 예약만 되어 있고 구현은 없다: DB enum에 `S3` 값이 있지만 그 값으로 볼륨을 등록하는 경로가 없고(`volume:init`은 `LOCAL`만 만든다), 그런 행이 있으면 `driverFor()`가 거부한다 |
 
 `LocalVolumeDriver`(`storage/local-volume.ts`)는 볼륨 레이아웃을 묶는 조립만 한다. 실제 작업은 `storage/local/`에 영역별로 있다: `locations.ts`(계정 트리 안의 경로 확인·읽기·이름 변경·복사), `staging.ts`(업로드 영역에서 준비한 바이트를 제자리로, 복사 준비), `trash.ts`(휴지통), `assets.ts`(썸네일·제거본·미리보기·변환본), `maintenance.ts`(매일 정리, 쓰기 확인, 여유 공간), `listing.ts`(fsck용 디스크 목록), 공용 `copy.ts`(하드 링크·reflink·복사)와 `fs-errors.ts`. 메서드는 클래스 프로토타입에 남아 있어 테스트가 그대로 바꿔 끼울 수 있다.
 
@@ -211,6 +227,13 @@ File Manager 툴바의 공유 아이콘(`/files/shared`)이 밖에서 열 수 �
   - 이름 검색은 지금 단계의 즐겨찾기와 정리용 폴더만 거른다. `#tag` 검색은 정리용 폴더와 상관없이 즐겨찾기 전체에서 찾는다(`GET /api/favorites/tags`, 결과는 `FILES.maxFavorites`까지라 잘리지 않는다). 태그 검색 중에는 정리용 폴더를 숨긴다.
   - 정렬은 `Recently added`(기본, 서버 순서 = 즐겨찾기에 넣은 최신순)와 파일 관리자의 정렬 키(이름·생성일·크기·유형, `domain/favorites.ts` `sortFavorites`). 정리용 폴더는 항상 항목 위에 이름순이고 "Name Z → A"일 때만 거꾸로다(`visibleFavoriteFolders`). 유형 필터는 All·Folders에서만 정리용 폴더를 보여 준다.
   - 그리드에서는 정리용 폴더도 카드(`FavoriteFolderCard`)로 보인다. 보기·정렬은 기기별로 파일 관리자와 따로 기억한다(`relay.favoritesView`, `useViewPrefs`).
+
+### 사진 타임라인 (Photos)
+
+`/files/photos`(File Manager 도구 막대의 그림 아이콘)는 계정의 사진·영상을 찍은 날짜 최신순으로 달별로 보여 준다. 날짜는 워커가 EXIF·영상 메타데이터에서 읽은 `Node.takenAt`, 없으면 파일 날짜(`modifiedAt`, 업로드 때 브라우저가 알려 준 값), 그것도 없으면 올린 시각이다(순번 정리와 같은 규칙, `domain/renumber.ts`). 달 경계는 보는 사람의 시간대로 나눈다(`domain/timeline.ts` `groupByMonth`).
+
+- 쿼리(`repositories/timeline.repo.ts`): `COALESCE(takenAt, modifiedAt, createdAt) DESC, id DESC`의 keyset 페이지. cursor는 앞 페이지 마지막 항목의 `(날짜, id)`라 몇 번째 페이지든 비용이 같다. `@@index([accountId, kind])`가 계정의 미디어만 고르고, 정렬은 그 행들에서 한다. 미디어가 수십만 개로 늘면 정렬 키를 저장 열로 두고 `(accountId, 그 열, id)` 인덱스를 거는 것이 다음 단계다(COALESCE 식 인덱스는 Prisma 스키마로 표현되지 않아 CI drift 검사에 걸린다).
+- 화면(`features/photos`): 첫 페이지는 서버가 그린다. 나머지는 "Load more"로 이어 붙인다. 격자와 카드는 File Manager 격자와 같은 값(`minmax(160px)`, `gap-3`, `aspect-[4/3]`, `content-visibility:auto`)을 쓰고, 그림은 `MediaPreview`, 뷰어는 `useFileMedia`(지금까지 불러온 항목 순서로 넘김)를 그대로 쓴다. 각 카드의 폴더 아이콘이 그 파일이 있는 폴더로 간다.
 
 ### 순번 정리 (Renumber files)
 

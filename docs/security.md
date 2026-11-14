@@ -39,6 +39,11 @@
 - 내용 주입: 이름의 제어 문자(줄바꿈 등)는 공백으로 바꾼다. Discord는 `allowed_mentions: { parse: [] }`로 `@everyone` 같은 이름이 아무도 부르지 않게 하고, Telegram은 `parse_mode` 없이 평문으로 보낸다. ntfy 헤더(제목·우선순위)에는 고정 문구만 넣는다.
 - 양: 업로드 링크 알림은 링크마다 60초에 한 번으로 묶이고(방문자가 파일 1만 개를 올려도 메시지는 몇 개), 볼륨 경보는 종류·볼륨마다 반복 제한이 있다.
 
+## 실시간 갱신 스트림
+
+- `GET /api/events`는 로그인한 계정의 것만 열리고(`auth: "active"`), 세션을 `LIVE.sessionCheckMs`마다 다시 확인해 로그아웃되면 끝난다. 이벤트는 `changed` 한 단어라 파일 이름이나 경로가 실리지 않는다. 받은 페이지는 평소의 요청(권한 검사, 다른 계정은 404)으로 다시 읽는다.
+- 한 계정이 한 앱 프로세스에 여는 스트림은 `LIVE.maxPerAccount`(10)개까지다. Redis 채널 이름에 `REDIS_KEY_PREFIX`가 붙어 Redis를 함께 쓰는 다른 설치와 섞이지 않는다(tus 잠금 해제 채널도 같다).
+
 ## API
 
 - 예상하지 못한 예외는 응답에 내용을 싣지 않는다(`apiHandler`). 요청 id로 로그를 찾는다.
@@ -165,7 +170,7 @@ k3s에서 미디어 워커를 Pi 노드로 나누면(`K3S_MEDIA_REPLICAS` ≥ 1,
 - 링크 비밀번호는 argon2 해시로 저장한다. 맞히면 서명한 `rf_sh` 쿠키(v2)로 12시간(`SHARE.unlockHours`) 열린다. 쿠키 항목은 `[linkId, until, pwTag]`이고 `pwTag`는 `HMAC(COOKIE_SECRET, passwordHash)` 앞 8바이트다. 비밀번호를 바꾸면 기존 기기는 다시 입력해야 한다(v1 쿠키는 무시). 틀린 비밀번호는 아직 필요한 비밀번호를 가진 항목마다 세 가지 예산으로 센다(`share/unlock-limit.ts`, `countInWindow`, INCR+EXPIRE 원자 실행): 주소마다 600초에 10회(`SHARE.unlockMaxAttempts`), 그 주소의 네트워크(IPv4 /24, IPv6 /48, `rateLimitNetwork`)마다 600초에 30회(`unlockNetworkMaxAttempts`), 모든 곳을 합쳐 1시간에 200회(`unlockSubjectMaxAttempts`). 하나라도 넘으면 argon2를 돌리기 전에 429. IPv6 대역이나 봇넷으로 주소를 바꿔 가며 추측해도 예산이 끝난다. 대신 전체 예산이 끝나면 그 링크의 정상 방문자도 최대 1시간 동안 비밀번호를 입력하지 못한다(의도한 트레이드오프). 어느 링크로 시도해도 같은 항목의 횟수에 쌓이므로, 잠긴 폴더 아래 여러 링크를 번갈아 써도 시도 횟수가 늘지 않는다. 맞힌 비밀번호는 그것이 연 항목에서 이번 시도 하나만(세 예산 모두) 돌려받는다(로그인과 같다). 아는 비밀번호로 다른 비밀번호의 실패 기록을 지울 수 없다. 업로드 전용 링크도 같다.
 - 혼잡도: 10분에 다운로드 5회부터 속도를 제한하고, 10회부터 멈춘다(429 + `Retry-After`).
 - **일일 트래픽 한도**(`share/traffic-cap.ts`): 방문자의 다운로드·재생·변환 재생·zip은 시작할 때 두 가지를 확인한다. 하나라도 넘었으면 429 + `Retry-After`(UTC 자정까지)로 거부한다.
-  - 링크 한도: 공유한 항목의 "Daily traffic limit"(`Node.dailyBytesCap`, 1·5·10·50 GB). Redis `traffic:link:<항목 id>:<UTC 날짜>`에 센다.
+  - 항목 한도: 항목의 "Daily traffic limit"(`Node.dailyBytesCap`, 1·5·10·50 GB). 계정 루트부터 보내는 파일(zip은 그 폴더)까지 경로 위에 한도가 걸린 항목을 모두 확인하고 모두에 센다. 그래서 폴더의 한도는 그 안 파일·하위 폴더의 링크로 받은 트래픽에도 적용된다(다른 링크로 돌아가 한도를 피할 수 없다). Redis `traffic:link:<항목 id>:<UTC 날짜>`에 센다.
   - 계정 한도: 계정의 모든 링크를 합한 `SHARE_DAILY_BYTES_CAP_GB`(비어 있으면 없음). `TrafficDaily`로 센다.
   - 응답을 시작하기 전에 확인하므로, 한도를 넘기는 응답 하나는 끝까지 보낸다. 소유자 본인의 요청은 세지만 막지 않는다. 미리보기 이미지와 목록 썸네일은 세지 않는다.
 - **경로 전체의 설정**(`domain/share.ts` `strictestGuard`, `share.service.ts`): 링크로 연 항목은 계정 루트에서 그 항목까지 위에 있는 모든 폴더(계정 루트 폴더 자신 포함)의 설정을 함께 따른다. 위 폴더가 만료됐거나 첫 다운로드 후 삭제가 이미 쓰였으면 만료, 위 폴더에 비밀번호가 있으면 그것까지 입력해야 열린다(비밀번호를 하나 맞히면 그 비밀번호를 가진 항목들이 열리고, 남은 것이 있으면 다시 묻는다). 소유자 계정이 삭제일에 닿아도 정리 작업 전에 링크가 닫힌다.
@@ -176,7 +181,7 @@ k3s에서 미디어 워커를 Pi 노드로 나누면(`K3S_MEDIA_REPLICAS` ≥ 1,
 - 다운로드 횟수(`domain/share-access.ts` `downloadDecision`): Range 헤더 문자열이 아니라 **실제로 보낼 범위**로 판단한다(`effectiveRange`). 첫 바이트를 보내는 요청(Range 없음, `bytes=0-…`, 파일 전체를 덮는 `bytes=-N`)은 시작으로 세고, 그 브라우저에 `dl:grant:<파일>:<방문자 id>`를 `SHARE.downloadGrantHours` 동안 준다. 방문자 id는 `rf_dv` 쿠키(무작위 128비트, `Path=/api/share`, HttpOnly)다. IP가 아니므로 같은 NAT 뒤의 다른 사람은 grant를 쓰지 못한다. 0이 아닌 위치에서 시작하는 Range(이어받기)는 grant가 있을 때만 보낸다(없으면 403, 다시 시작하면 한 번 더 센다).
   - `If-Range`가 파일의 ETag와 다르면 Nginx와 `sendFile`은 Range를 무시하고 파일 전체를 보낸다. 그래서 그런 요청은 파일 전체 요청으로 판단한다(만든 `If-Range`로 미리보기 한도나 Stream only, 다운로드 횟수를 넘지 못한다). 이어받기는 앱의 ETag(SHA-256)를 보내므로 범위가 유지된다. Docker 템플릿의 X-Accel location은 Nginx 자체 ETag 대신 앱의 ETag를 보낸다(`etag off; add_header ETag $upstream_http_etag`).
   - 다운로드는 첫 바이트부터 읽는 요청(Range 없음, `bytes=0-…`)마다 센다. 그래서 링크를 가진 사람은 1바이트 요청으로도 한도나 첫 다운로드 후 삭제를 소진하고 혼잡도를 올릴 수 있다. 링크를 가진 사람은 파일을 받을 수 있는 사람이라는 전제로 받아들인 동작이다.
-  - 다운로드 한도나 첫 다운로드 후 삭제가 걸린 파일은 재생(`/stream`)도 센다(`limitedStreamDecision`): 첫 요청이 한 번 세고 grant를 받으며, 같은 브라우저의 탐색·재요청은 grant로 통과한다. 변환 재생(`?transcode=1`)도 같은 규칙으로 센다. 실시간 변환은 Range를 무시하고 영상 전체를 보내므로 어떤 파일로도 만족할 수 없는 Range는 전체 요청으로 본다. 이런 이미지는 세지 않는 뷰어 미리보기 대신 세는 재생 경로로 보낸다.
+  - 다운로드 한도나 첫 다운로드 후 삭제가 걸린 파일은 재생(`/stream`)도 센다(`limitedStreamDecision`): 첫 요청이 한 번 세고 grant를 받으며, 같은 브라우저의 탐색·재요청은 grant로 통과한다. 변환 재생(`?transcode=1`)도 같은 규칙으로 센다. HLS 재생은 재생 목록(`index.m3u8`)을 열 때 한 번 세고 grant를 주며, 세그먼트는 grant가 있는 브라우저에만 보낸다(세그먼트만 따로 받아 한도를 피할 수 없다). 실시간 변환은 Range를 무시하고 영상 전체를 보내므로 어떤 파일로도 만족할 수 없는 Range는 전체 요청으로 본다. 이런 이미지는 세지 않는 뷰어 미리보기 대신 세는 재생 경로로 보낸다.
 - 카운트는 원자적이다(`share.repo.ts` `claimDownload`): 센 항목 모두를 한 트랜잭션에서 `downloads < downloadLimit`(첫 다운로드 후 삭제면 `downloads = 0`) 조건으로 올리고, 하나라도 실패하면 되돌린다. 한도 N-1에서 동시에 들어온 요청은 하나만 통과한다.
 - "Download all"(zip)은 파일마다 단일 다운로드와 같은 규칙(`downloadBlock`: Stream only, 한도 도달, 일시정지·혼잡도 2단계)으로 거르고, 압축하는 폴더 **안쪽** 폴더의 다운로드 한도·첫 다운로드 후 삭제도 적용한다(`domain/share-limits.ts` `limitingFoldersBelow`: 그런 폴더는 zip마다 한 번 세고, 남은 횟수가 없으면 그 아래 파일을 뺀다. 예전에는 위쪽 폴더만 세어 안쪽 폴더의 한도를 zip으로 무한히 넘을 수 있었다), 뺀 파일은 사유와 함께 `Not included.txt`에 적는다. 넣은 파일은 각각 한 번씩 센다(`claimEachDownload`, 그 사이 한도에 닿은 파일은 뺀다). 폴더 아래 항목이 `SHARE.zipMaxItems`(100,000)를 넘으면 아무것도 세지 않고 413으로 거절한다(소유자도. zip은 트리 전체를 메모리에 읽는다). zip 항목 이름은 세그먼트마다 `\`·`:`·제어 문자를 `_`로 바꾸고 `.`·`..`을 `_`로 바꿔(`zipEntryName`), 이름에 역슬래시가 든 파일이 압축을 풀 때 대상 폴더 밖으로 나가지 못하게 한다(zip slip).
 - 공유 재생 경로(`/stream`, `streamReach`)는 뷰어가 읽는 만큼만 보낸다: 미디어와 PDF는 범위 제한 없음, 텍스트·코드·표는 앞 `DOCUMENT_PREVIEW.textMaxBytes`, SVG·폰트·Word·Excel은 앞 `assetMaxBytes`까지(넘으면 403), 미리보기가 없는 형식(압축, 실행 파일, 디스크 이미지 등)은 404. 소유자 본인에게는 적용하지 않는다.
@@ -189,7 +194,7 @@ k3s에서 미디어 워커를 Pi 노드로 나누면(`K3S_MEDIA_REPLICAS` ≥ 1,
   - 제거본은 만든 모드를 `Node.derivedMode`에 적는다. 지금 모드보다 덜 지운 사본(`SENSITIVE` 사본인데 env가 `all`)은 내보내지 않고 503으로 다시 만든다. 이 컬럼 전의 사본(null)은 모두 지운 것으로 본다. 모드를 바꾼 뒤에는 `npm run media:backfill -- --derived`로 다시 만든다.
   - GIF·AVIF·TIFF는 다시 인코딩하면서 모든 메타데이터가 빠지므로 항상 `all` 사본이다.
 - 공개 링크 이미지·영상은 워커가 만든 메타데이터 제거본만 보낸다. 요청 처리 중에는 이미지를 메모리에 올리거나 디코딩하지 않는다(비로그인 방문자가 큰·깨진 사진 폴더로 앱 메모리를 고갈시킬 수 있었다). 사본이 없으면 503 `MEDIA_NOT_READY` + `Retry-After`, 워커가 파일 자체를 정리하지 못한 파일(`stripFailed`: 디코딩 불가, 너무 큼)과 제거할 수 없는 형식은 415. 디스크 I/O 오류·볼륨 분리·시간 초과 같은 저장소 문제는 `stripFailed`로 기록하지 않고 작업을 다시 시도하므로 그동안 503으로 남는다(원본이 메타데이터째 나가는 일은 어느 쪽이든 없다). PNG·WebP는 허용 목록 청크만 남긴다(이미지 데이터, 색 정보, 애니메이션: C2PA `caBX`·`C2PA`, 텍스트·EXIF·XMP·개인 청크는 모두 지운다). 뷰어 미리보기도 메타데이터 없이 다시 인코딩한 WebP다.
-- 변환 재생(`?transcode=1`)은 `-map_metadata -1 -map_metadata:s -1 -map_chapters -1`로 원본의 메타데이터(휴대폰이 기록한 촬영 위치 `©xyz` 등)를 넘기지 않는다. 변환하지 않는 영상 재생·다운로드는 위의 제거본을 보낸다(`SHARE_METADATA_STRIP=none`이거나 소유자가 끈 경우에만 원본). 워커가 저장하는 변환본(자주 재생되는 영상)도 같은 인자로 만들어 메타데이터가 없다.
+- 변환 재생(`?transcode=1`)은 `-map_metadata -1 -map_metadata:s -1 -map_chapters -1`로 원본의 메타데이터(휴대폰이 기록한 촬영 위치 `©xyz` 등)를 넘기지 않는다. 변환하지 않는 영상 재생·다운로드는 위의 제거본을 보낸다(`SHARE_METADATA_STRIP=none`이거나 소유자가 끈 경우에만 원본). 워커가 저장하는 변환본(자주 재생되는 영상)과 HLS 세그먼트도 같은 인자로 만들어 메타데이터가 없다.
 
 ## 리버스 프록시·헤더
 
@@ -201,6 +206,7 @@ k3s에서 미디어 워커를 Pi 노드로 나누면(`K3S_MEDIA_REPLICAS` ≥ 1,
   - `POST /api/auth/*`·`POST /api/share/*/unlock`·`POST /api/r/*/unlock`·`POST /api/csp-report`: 분당 20회(버스트 20, `NGINX_AUTH_RATE_PER_MIN`·`NGINX_AUTH_BURST`).
   - `POST /api/uploads`·`POST /api/r/*/uploads`(배치 만들기): 분당 60회(버스트 30, `NGINX_UPLOAD_RATE_PER_MIN`·`NGINX_UPLOAD_BURST`).
   - `POST /api/uploads/tus/*`(파일 하나의 새 업로드): 분당 600회(버스트 120, `NGINX_TUS_RATE_PER_MIN`·`NGINX_TUS_BURST`). 작은 파일이 많은 폴더도 연달아 보내므로 넉넉하게 두고, 브라우저는 429를 받으면 잠시 뒤 다시 보낸다. 청크(PATCH)는 세지 않는다.
+  - WebDAV `/dav/*`: 분당 600회(버스트 300, `NGINX_DAV_RATE_PER_MIN`·`NGINX_DAV_BURST`). 매 요청이 API 토큰으로 로그인하므로, 있는 토큰 id에 틀린 비밀값을 보내면 토큰별 제한 전에 argon2가 돈다.
   - 개인 API 토큰 요청 `/api/v1/*`·`/metrics`와 공유 페이지 `/d/*`: 분당 120회(버스트 60, `NGINX_API_RATE_PER_MIN`·`NGINX_API_BURST`). 있는 토큰 id에 틀린 비밀값을 보내면 앱의 토큰별 제한 전에 argon2가 돌고, `/d/*`는 링크 id 추측을 앱보다 먼저 막는다.
   - 공통: 한도를 넘으면 API 형식 JSON 429와 `Retry-After: 60`. 요청 본문은 `NGINX_MAX_BODY_MB`(100)까지.
 - 호스트 이름(DNS 리바인딩): Nginx는 `SERVER_NAME`(공백으로 여러 개)과 `127.0.0.1`(릴리스 스크립트의 헬스 체크)로 온 요청만 앱에 넘기고, 다른 `Host`는 응답 없이 연결을 끊는다(444). Docker·k3s 템플릿은 `default_server`가 이 일을 하고(`SERVER_NAME=_`이면 모든 이름을 받는다), systemd는 `install.sh`가 다른 기본 사이트가 없을 때 `relayfiles-catchall.conf`를 넣는다.
@@ -228,4 +234,4 @@ k3s에서 미디어 워커를 Pi 노드로 나누면(`K3S_MEDIA_REPLICAS` ≥ 1,
 - 캐시: 파일 응답은 [architecture.md "미리보기 전송"](architecture.md#미리보기-전송), API 에러는 `no-store`. 다운로드는 한도·횟수 때문에 캐시하지 않는다.
 - ffmpeg 입력(`server/media/ffmpeg-input.ts`): 업로드 파일은 `-protocol_whitelist file -format_whitelist <MEDIA.ffmpegDemuxers>`로만 연다. HLS 플레이리스트·concat 목록처럼 다른 파일을 가리키는 형식은 이름이나 내용과 상관없이 거부되므로, 조작한 업로드로 ffmpeg가 서버의 다른 파일을 읽어 변환 결과로 돌려줄 수 없다. Docker 이미지는 `node:24-trixie-slim`(ffmpeg 7.1)이다.
 - 프로세스 격리: Compose의 app·worker·tools는 `cap_drop: ALL`, `read_only`(쓰기는 tmpfs `/tmp`, app은 `.next/cache`도), `pids_limit: 512`, `mem_limit`/`cpus`(`APP_MEMORY_MAX`·`APP_CPUS`, `WORKER_MEMORY_MAX`·`WORKER_CPUS`)로 돈다. nginx도 `cap_drop: ALL`. systemd 배포는 같은 값을 `MemoryMax`·`CPUQuota`·`TasksMax=512`로 건다. 폭주한 변환·썸네일 작업은 자기 서비스 상한에서 멈추고 PostgreSQL을 OOM으로 끌고 가지 않는다.
-- 영상 변환(`?transcode=1`)은 모든 앱 프로세스를 합쳐 동시에 `VIDEO_TRANSCODE_MAX`개(0이면 끔)까지만 돌고(Redis 슬롯 `redis-semaphore.ts`, 프로세스가 죽으면 `TRANSCODE.slotLeaseMs` 뒤 풀린다. Redis가 안 되면 프로세스마다 같은 수로 제한), 넘으면 429와 `Retry-After`. 요청자(소유자 계정, 또는 링크 방문자의 주소 키)마다 따로 `TRANSCODE.maxPerRequester`(2)개까지만 돌려(슬롯 `transcode:by:<요청자>`) 방문자 한 명이 모든 슬롯을 차지하지 못한다. 출력을 `TRANSCODE.idleTimeoutMs`(2분) 동안 아무도 읽지 않거나(일시정지했거나 일부러 천천히 읽어 backpressure로 슬롯을 붙잡는 경우) `TRANSCODE.maxRunMs`(4시간)를 넘기면 SIGKILL로 멈추고 슬롯을 돌려준다. 워커가 변환본을 저장할 때도 같은 슬롯을 쓴다. 슬롯을 잃은 변환(임대가 지난 사이 다른 프로세스가 모든 슬롯을 잡음)은 갱신이 이를 알아채 멈추므로 상한을 넘기지 않는다. 출력은 4GB에서 끊는다(저장본은 ffmpeg `-fs`). ffmpeg·smartctl은 셸 없이 실행하고 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지만 받는다(`PROCESS`). 저장 변환의 시간 제한은 `TRANSCODE.storeTimeoutSec`(6시간)이고, 멈춘 ffmpeg가 슬롯을 영원히 쥐거나 워커 종료를 막지 못한다(종료 시 중단 신호로 멈춘다).
+- 영상 변환(`?transcode=1`, HLS `/hls/`)은 모든 앱 프로세스를 합쳐 동시에 `VIDEO_TRANSCODE_MAX`개(0이면 끔)까지만 돌고(Redis 슬롯 `redis-semaphore.ts`, 프로세스가 죽으면 `TRANSCODE.slotLeaseMs` 뒤 풀린다. Redis가 안 되면 프로세스마다 같은 수로 제한), 넘으면 429와 `Retry-After`. 요청자(소유자 계정, 또는 링크 방문자의 주소 키)마다 따로 `TRANSCODE.maxPerRequester`(2)개까지만 돌려(슬롯 `transcode:by:<요청자>`) 방문자 한 명이 모든 슬롯을 차지하지 못한다. 출력을 `TRANSCODE.idleTimeoutMs`(2분) 동안 아무도 읽지 않거나(일시정지했거나 일부러 천천히 읽어 backpressure로 슬롯을 붙잡는 경우) `TRANSCODE.maxRunMs`(4시간)를 넘기면 SIGKILL로 멈추고 슬롯을 돌려준다. 워커가 변환본을 저장할 때도 같은 슬롯을 쓴다. 슬롯을 잃은 변환(임대가 지난 사이 다른 프로세스가 모든 슬롯을 잡음)은 갱신이 이를 알아채 멈추므로 상한을 넘기지 않는다. 출력은 4GB에서 끊는다(저장본은 ffmpeg `-fs`). HLS는 세그먼트 이름(`<n>.ts`, 영상 길이 안)만 받고 경로는 서버가 정한다. 세션은 플레이어보다 45개 앞서면 멈추고 30개 뒤는 지우며, 1분 동안 요청이 없으면 끝나므로 디스크와 CPU를 붙잡지 않는다. ffmpeg·smartctl은 셸 없이 실행하고 시간 초과 시 SIGTERM 후 SIGKILL, 출력은 메모리 상한까지만 받는다(`PROCESS`). 저장 변환의 시간 제한은 `TRANSCODE.storeTimeoutSec`(6시간)이고, 멈춘 ffmpeg가 슬롯을 영원히 쥐거나 워커 종료를 막지 못한다(종료 시 중단 신호로 멈춘다).

@@ -1,3 +1,4 @@
+import { CONVERSION } from "@/contracts/api";
 import type {
   CreatedFolder,
   DuplicatesResult,
@@ -18,6 +19,11 @@ import { apiFetch } from "@/shared/lib/api-client";
 
 const node = (id: string) => `/api/nodes/${encodeURIComponent(id)}`;
 
+/** The HLS playlist of a conversion URL (`fileUrls.transcode`, `shareUrls.transcode`), or null for another URL. */
+export function hlsPlaylistOf(transcodeSrc: string): string | null {
+  return transcodeSrc.endsWith(CONVERSION.streamSuffix) ? transcodeSrc.slice(0, -CONVERSION.streamSuffix.length) + CONVERSION.hlsSuffix : null;
+}
+
 /** URLs the browser loads directly (media elements, downloads). */
 export const fileUrls = {
   stream: (id: string) => `/api/files/${encodeURIComponent(id)}/stream`,
@@ -25,7 +31,7 @@ export const fileUrls = {
   /** Screen-sized picture of an image (the original when there is none). */
   preview: (id: string) => `/api/files/${encodeURIComponent(id)}/preview`,
   /** A video converted while it plays (containers the browser cannot decode). */
-  transcode: (id: string) => `/api/files/${encodeURIComponent(id)}/stream?transcode=1`,
+  transcode: (id: string) => `/api/files/${encodeURIComponent(id)}${CONVERSION.streamSuffix}`,
   download: (id: string) => `/api/files/${encodeURIComponent(id)}/download`,
   zip: (ids: string[]) => `/api/zip?ids=${ids.map(encodeURIComponent).join(",")}`,
   /** The item's link activity as a CSV download. */

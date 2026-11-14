@@ -11,10 +11,17 @@ async function ensureRow(db: DbClient): Promise<void> {
   await db.serverConfig.createMany({ data: [{ id: CONFIG_ID }], skipDuplicates: true });
 }
 
-/** The singleton settings row; created with defaults on first use. */
+const CONFIG_SELECT = { signupMode: true, theme: true } as const;
+
+/**
+ * The singleton settings row; created with defaults on first use. Read on every page, so the
+ * insert only runs when the row is missing (once per database), not on each read.
+ */
 export async function getServerConfig(db: DbClient) {
+  const row = await db.serverConfig.findUnique({ where: { id: CONFIG_ID }, select: CONFIG_SELECT });
+  if (row) return row;
   await ensureRow(db);
-  return db.serverConfig.findUniqueOrThrow({ where: { id: CONFIG_ID }, select: { signupMode: true, theme: true } });
+  return db.serverConfig.findUniqueOrThrow({ where: { id: CONFIG_ID }, select: CONFIG_SELECT });
 }
 
 /**

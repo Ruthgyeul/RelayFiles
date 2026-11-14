@@ -2,6 +2,7 @@ import "server-only";
 import { DAV } from "@/config/policy";
 import type { ApiScope } from "@/contracts/api-tokens";
 import { davSegments } from "@/domain/dav";
+import { publishAccountChange } from "../events/account-events";
 import { ApiError, DISK_IN_THE_WAY_MESSAGE } from "../http/api-error";
 import { StorageTargetExistsError } from "../storage/driver";
 import { logger } from "../logger";
@@ -85,7 +86,11 @@ export async function davHandler(req: Request): Promise<Response> {
     const caller = await callerOf(req, reading ? "files:read" : "files:write");
     const segments = davSegments(new URL(req.url).pathname, DAV.prefix);
     if (segments === null) return davText(404, "Not found");
-    return await (reading ? read(req, caller, segments) : write(req, caller, segments));
+    if (reading) return await read(req, caller, segments);
+    const response = await write(req, caller, segments);
+    // The account's open pages in the browser follow what the drive changed.
+    if (response.ok) publishAccountChange(caller.account.id);
+    return response;
   } catch (error) {
     if (error instanceof ApiError) {
       const headers: Record<string, string> = error.status === 401 ? { "WWW-Authenticate": REALM } : {};

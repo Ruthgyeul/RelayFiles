@@ -36,9 +36,6 @@ export async function invalidate(keys: string[], client: Redis = redis()): Promi
 
 /** Cache key builders, one place for all key shapes (prefix is added by the client). */
 export const cacheKey = {
-  folderSize: (nodeId: string) => `cache:folder-size:${nodeId}`,
-  nodePath: (nodeId: string) => `cache:node-path:${nodeId}`,
-  adminStats: () => "cache:admin-stats",
   status: () => "cache:status",
   serverServices: () => "cache:server-services",
   serverHistory: () => "cache:server-history",

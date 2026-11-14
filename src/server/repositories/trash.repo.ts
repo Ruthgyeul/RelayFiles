@@ -17,7 +17,7 @@ export async function recordTrashed(db: DbClient, accountId: string, bytes: bigi
  * the item they belong to can take exactly them back (a restore from "Recently deleted").
  * Null when there were no bytes (no row is written).
  */
-export async function addTrashedBytes(db: DbClient, entry: { accountId: string; volumeId: string | null; bytes: bigint; at: Date }): Promise<string | null> {
+async function addTrashedBytes(db: DbClient, entry: { accountId: string; volumeId: string | null; bytes: bigint; at: Date }): Promise<string | null> {
   if (entry.bytes <= 0n) return null;
   const id = randomUUID();
   await db.trashedBytes.create({ data: { id, accountId: entry.accountId, bytes: entry.bytes, volumeId: entry.volumeId, trashedAt: entry.at } });

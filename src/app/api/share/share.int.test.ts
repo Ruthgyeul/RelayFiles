@@ -7,6 +7,7 @@ import { NextRequest } from "next/server";
 import sharp from "sharp";
 import { afterAll, describe, expect, it } from "vitest";
 import { GET as shareDownload } from "@/app/api/share/[linkId]/files/[id]/download/route";
+import { GET as shareHls } from "@/app/api/share/[linkId]/files/[id]/hls/[segment]/route";
 import { GET as shareStream } from "@/app/api/share/[linkId]/files/[id]/stream/route";
 import { GET as sharePreview } from "@/app/api/share/[linkId]/files/[id]/preview/route";
 import { GET as shareThumb } from "@/app/api/share/[linkId]/files/[id]/thumb/route";
@@ -21,8 +22,10 @@ import { hash } from "@node-rs/argon2";
 import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { closeQueues } from "@/server/jobs/queue";
 import { processMedia } from "@/server/media/process";
+import { endHlsSessions } from "@/server/media/hls-session";
 import { runningTranscodes } from "@/server/media/transcode";
 import { getFolderView } from "@/server/services/node.service";
+import { zipItems } from "@/server/services/zip.service";
 import { retiredSharePage, sharePage } from "@/server/share/share.service";
 import { purgeExpired } from "@/server/services/profile.service";
 import { findAccountById } from "@/server/repositories/account.repo";
@@ -39,6 +42,7 @@ const { prisma, member, addFile, cleanup } = fileFixtures();
 const noViewer = { accountIds: [], unlocks: new Map() as Unlocks, visitorId: null };
 
 afterAll(async () => {
+  await endHlsSessions();
   await closeQueues();
   await cleanup();
 });
@@ -124,6 +128,22 @@ describe("share page", () => {
     expect(await statusOf({ downloadLimit: 2, downloads: 2 })).toBe("blocked");
     expect(await statusOf({ visibility: "INHERIT" })).toBe("private");
     expect(await statusOf({ passwordHash: await hash("open sesame") })).toBe("locked");
+  });
+
+  it("hides a private link from everyone but its owner, whatever else is true of it", async () => {
+    const now = Date.now();
+    for (const data of [{ expAt: new Date(now - 1_000) }, { burn: true, downloads: 1 }, { downloadLimit: 1, downloads: 1 }]) {
+      const { m, trip, a } = await sharedTrip({ ...data, visibility: "PRIVATE" });
+      // To a visitor it looks like a link that does not exist (no "expired" card, no 410 or 403).
+      expect((await sharePage(trip.linkId, null, noViewer, now))!.page.status).toBe("private");
+      const download = await visit(shareDownload, `/api/share/${trip.linkId}/files/${a}/download`, { linkId: trip.linkId, id: a });
+      expect(download.status, JSON.stringify(data)).toBe(404);
+      const unlocked = await visit(unlock, `/api/share/${trip.linkId}/unlock`, { linkId: trip.linkId }, { method: "POST", body: { password: "guess" } });
+      expect(unlocked.status).toBe(404);
+      // The owner still sees why the link is closed.
+      const owner = { ...noViewer, accountIds: [m.id] };
+      expect((await sharePage(trip.linkId, null, owner, now))!.page.status).not.toBe("private");
+    }
   });
 
   it("still says a link expired after its items were deleted", async () => {
@@ -340,6 +360,70 @@ describe("settings on the way to a file", () => {
       expect((await converted({ range: "bytes=5-2" })).status).toBe(403);
       await expect.poll(runningTranscodes).toBe(0);
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("counts converted playback toward the link's and the account's daily traffic", async () => {
+    const { m, trip } = await sharedTrip({ dailyBytesCap: 10_000_000n });
+    const dir = await mkdtemp(join(tmpdir(), "relay-share-"));
+    try {
+      const clip = join(dir, "clip.mp4");
+      await promisify(execFile)(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x36:rate=5", "-c:v", "mpeg4", clip]);
+      const id = await addFile(m, trip.id, ["Trip"], "clip.mp4", await readFile(clip), "video/mp4", "VIDEO");
+      const before = (await prisma.trafficDaily.aggregate({ where: { accountId: m.id }, _sum: { bytes: true } }))._sum.bytes ?? 0n;
+      const played = await visit(shareStream, `${path(trip.linkId, id, "stream")}?transcode=1`, fileParams(trip.linkId, id));
+      expect(played.status).toBe(200);
+      const sent = (await played.arrayBuffer()).byteLength;
+      expect(sent).toBeGreaterThan(0);
+      await expect.poll(runningTranscodes).toBe(0);
+      // Counted when the stream ends: the link's counter for the day and the account's traffic.
+      const day = new Date().toISOString().slice(0, 10);
+      await expect.poll(async () => Number(await redis().get(`traffic:link:${trip.id}:${day}`))).toBe(sent);
+      await expect.poll(async () => ((await prisma.trafficDaily.aggregate({ where: { accountId: m.id }, _sum: { bytes: true } }))._sum.bytes ?? 0n) - before).toBe(BigInt(sent));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("plays a video over HLS: counted once at the playlist, segments only for that browser", async () => {
+    const { m, trip, hidden } = await sharedTrip({ dailyBytesCap: 10_000_000n });
+    const dir = await mkdtemp(join(tmpdir(), "relay-share-"));
+    try {
+      const clip = join(dir, "clip.avi");
+      await promisify(execFile)(getEnv("jobs").FFMPEG_PATH, ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=6:size=64x36:rate=5", "-c:v", "mpeg4", clip]);
+      const bytes = await readFile(clip);
+      const id = await addFile(m, trip.id, ["Trip"], "clip.avi", bytes, "video/vnd.avi", "VIDEO");
+      await prisma.node.update({ where: { id }, data: { downloadLimit: 1 } });
+      const hlsOf = (linkId: string, node: string, segment: string, options: { cookies?: string[]; owner?: FixtureMember } = {}) =>
+        visit(shareHls, `${path(linkId, node, "hls")}/${segment}`, { linkId, id: node, segment }, options);
+
+      const playlist = await hlsOf(trip.linkId, id, "index.m3u8");
+      expect(playlist.status).toBe(200);
+      expect(await playlist.text()).toContain("0.ts?v=");
+      expect((await prisma.node.findUniqueOrThrow({ where: { id } })).downloads).toBe(1);
+      const browser = visitorCookie(playlist);
+
+      const segment = await hlsOf(trip.linkId, id, "0.ts", { cookies: [browser] });
+      expect(segment.status).toBe(200);
+      const sent = (await segment.arrayBuffer()).byteLength;
+      // Another browser has no grant: neither the playlist (the limit is used up) nor a segment.
+      expect((await hlsOf(trip.linkId, id, "index.m3u8")).status).toBe(403);
+      expect((await hlsOf(trip.linkId, id, "1.ts")).status).toBe(403);
+      // The segments count toward the link's daily traffic.
+      const day = new Date().toISOString().slice(0, 10);
+      await expect.poll(async () => Number(await redis().get(`traffic:link:${trip.id}:${day}`))).toBe(sent);
+
+      // Not through a private folder, and not through another account's link.
+      const secretClip = await addFile(m, hidden.id, ["Trip", "Hidden"], "secret.avi", bytes, "video/vnd.avi", "VIDEO");
+      expect((await hlsOf(trip.linkId, secretClip, "index.m3u8")).status).toBe(404);
+      const other = await sharedTrip();
+      expect((await hlsOf(other.trip.linkId, id, "index.m3u8")).status).toBe(404);
+      // The owner plays it without counting.
+      expect((await hlsOf(trip.linkId, id, "index.m3u8", { owner: m })).status).toBe(200);
+      expect((await prisma.node.findUniqueOrThrow({ where: { id } })).downloads).toBe(1);
+    } finally {
+      await endHlsSessions();
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -749,6 +833,24 @@ describe("share downloads", () => {
     for (const text of ["only once", "stream me", "on hold"]) expect(body.includes(Buffer.from(text)), text).toBe(false);
     const counts = await prisma.node.findMany({ where: { id: { in: [a, b, once] } }, select: { id: true, downloads: true } });
     expect(Object.fromEntries(counts.map((row) => [row.id, row.downloads]))).toEqual({ [a]: 1, [b]: 1, [once]: 1 });
+  });
+
+  it("leaves files missing on the disk out of zips and lists them, for visitors and the owner", async () => {
+    const { m, trip, a } = await sharedTrip();
+    // storage:fsck --fix marked it missing: the bytes are gone from the disk.
+    await prisma.node.update({ where: { id: a }, data: { missing: true } });
+    await rm(join(layoutOf(configuredVolumeRoot()).root, "users", m.id, "Trip", "a.txt"));
+    const res = await visit(shareZip, `/api/share/${trip.linkId}/zip?folder=${trip.id}`, { linkId: trip.linkId });
+    expect(res.status).toBe(200);
+    const body = Buffer.from(await res.arrayBuffer());
+    for (const text of ["bravo", "Not included.txt", "Trip/a.txt  (Missing on the server's disk)"]) expect(body.includes(Buffer.from(text)), text).toBe(true);
+    // A complete zip: its end-of-central-directory record is there.
+    expect(body.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06]))).toBe(true);
+
+    const owner = (await findAccountById(prisma, m.id))!;
+    const own = Buffer.from(await (await zipItems(owner, [trip.id])).arrayBuffer());
+    for (const text of ["bravo", "Not included.txt", "Trip/a.txt  (Missing on the server's disk)"]) expect(own.includes(Buffer.from(text)), text).toBe(true);
+    expect(own.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06]))).toBe(true);
   });
 
   it("applies the download limit of a folder inside the zipped one, like single downloads", async () => {

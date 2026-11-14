@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { menuPlace, type Placement } from "@/domain/menu";
 import { useMounted } from "@/shared/hooks/useMounted";
@@ -52,8 +52,15 @@ export function ActionMenu({ anchor, label, onClose, entries, children, placemen
   const mounted = useMounted();
   const { small } = useViewport();
   const menu = useRef<HTMLDivElement>(null);
+  // Read through a ref: callers pass a new function on every render, and re-running the effect
+  // would move focus back to the first item while the user arrows through the menu.
+  const close = useRef(onClose);
+  useLayoutEffect(() => {
+    close.current = onClose;
+  });
 
   useEffect(() => {
+    const onClose = () => close.current();
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
     // Close when the anchor really moves (the user scrolled or resized), not when rows
     // rendered later shift the page and scroll anchoring keeps the anchor in place.
@@ -75,7 +82,7 @@ export function ActionMenu({ anchor, label, onClose, entries, children, placemen
       window.removeEventListener("scroll", onMove);
       window.removeEventListener("resize", onMove);
     };
-  }, [anchor, onClose, small]);
+  }, [anchor, small]);
 
   const body = entries
     ? entries.map((entry) => (

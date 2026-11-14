@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Queue, Worker } from "bullmq";
-import { afterAll, describe, expect, it } from "vitest";
-import { JOBS } from "@/config/policy";
-import { KEEP_HISTORY, MAINTENANCE_QUEUE, PROBES_QUEUE, scheduleMaintenance, trimFinishedJobs } from "./maintenance";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { AUTH, JOBS, MS } from "@/config/policy";
+import { db } from "../db/client";
+import { LocalVolumeDriver } from "../storage/local-volume";
+import { KEEP_HISTORY, MAINTENANCE_QUEUE, PROBES_QUEUE, runMaintenance, scheduleMaintenance, trimFinishedJobs } from "./maintenance";
 import { queueConnection } from "./queue";
 
 const queues: Queue[] = [];
@@ -75,5 +77,25 @@ describe("maintenance queues", () => {
     expect(await trimFinishedJobs(queue)).toBe(0);
     expect(await trimFinishedJobs(queue, 0)).toBe(5);
     expect(await queue.getCompletedCount()).toBe(0);
+  });
+});
+
+describe("daily cleanup", () => {
+  it("goes on with the database clean-ups when a volume cannot be purged", async () => {
+    const prisma = db();
+    const id = `test-${randomUUID()}`;
+    // An audit event past its retention: the clean-up after the volumes removes it.
+    await prisma.auditEvent.create({ data: { id, actorId: "nobody", actorName: "nobody", action: "test.old", ipMasked: "", at: new Date(Date.now() - (AUTH.auditRetentionDays + 1) * MS.day) } });
+    const purge = vi.spyOn(LocalVolumeDriver.prototype, "purgeSystem").mockRejectedValue(Object.assign(new Error("EIO: i/o error"), { code: "EIO" }));
+    try {
+      const result = await runMaintenance(new Date());
+      expect(purge).toHaveBeenCalled();
+      // Nothing was purged on the failing volume, and the rest of the job still ran.
+      expect([result.trash, result.uploads]).toEqual([0, 0]);
+      expect(await prisma.auditEvent.findUnique({ where: { id } })).toBeNull();
+    } finally {
+      purge.mockRestore();
+      await prisma.auditEvent.deleteMany({ where: { id } });
+    }
   });
 });

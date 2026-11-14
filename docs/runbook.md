@@ -308,6 +308,7 @@ $C exec postgres psql -U relayfiles -c 'SELECT at, "actorName", action, "targetI
   3. contract: 다음 릴리스에서 옛 열을 지운다. 이 마이그레이션 SQL 맨 위에 `-- relayfiles: contract <이유>`를 적는다.
 - `npm run check:migrations`(CI 포함)는 `DROP`, 타입 변경, `RENAME`, `DELETE FROM`, `TRUNCATE`가 있는데 contract 표시가 없는 마이그레이션을 막는다.
 - CI는 모든 마이그레이션을 빈 DB에 적용하고, 결과가 `schema.prisma`와 같은지(`prisma migrate diff`) 확인한다.
+- 확장: 이름 검색 trigram 인덱스(`Node_name_idx`)가 `pg_trgm`을 쓰고, 그 마이그레이션이 `CREATE EXTENSION IF NOT EXISTS pg_trgm`으로 만든다. Docker·k3s의 `postgres:16` 이미지와 Ubuntu `postgresql-16` 패키지에 들어 있다. 다른 PostgreSQL을 쓰면 contrib 패키지가 필요하다.
 - 공유 링크(`linkId`)와 계정 토큰은 어떤 마이그레이션에서도 바꾸지 않는다.
 
 ### 데이터 마이그레이션 (백필, 값 변환)
@@ -555,6 +556,25 @@ $C up -d app worker
 
 5. 확인한다. `curl -sI http://127.0.0.1:${NGINX_LISTEN_PORT:-80}/ | grep -i '^content-security-policy'`가 `content-security-policy:`(뒤에 `-report-only` 없음)를 보여 주고, 브라우저 개발자 도구 콘솔에 `Refused to …` 오류 없이 1번의 화면이 동작한다. 며칠 동안 `csp violation` 로그를 계속 본다(enforce에서도 막은 것을 보고한다).
 6. 문제가 생기면 `CSP_MODE=report-only`로 되돌리고 4번처럼 다시 시작한다. 데이터에는 영향이 없다.
+
+## 릴리스 만들기
+
+브랜치는 `main` 하나다. 기능·수정 PR이 `main`으로 들어가고, 릴리스는 버전을 올리는 PR을 병합한 커밋에 태그를 붙여 만든다(CLAUDE.md "Git"). 버전은 Semantic Versioning이다: 운영자가 직접 손을 써야 하거나 호환이 깨지면 major, 기능 추가는 minor, 수정·문서는 patch.
+
+1. `main`에서 만든 브랜치(`chore/release-vX.Y.Z`)에서 `package.json`의 `version`을 올리고 `npm install --package-lock-only`로 `package-lock.json`을 맞춘다. 앱 버전은 화면 아래와 `docs/openapi.json`에 들어가므로 `npm run openapi`도 다시 실행한다.
+2. `CHANGELOG.md`의 "Unreleased" 항목을 `## [X.Y.Z] - YYYY-MM-DD` 아래로 옮긴다. `npm run check:changelog`(`npm run check`·CI 포함)가 이 절이 없으면 실패한다.
+3. DB·스토리지·`.env`·Nginx가 바뀌거나 운영자가 따로 할 일이 있는 릴리스면 `docs/upgrade/vX.Y.Z.md`를 쓰고 [upgrade/README.md](upgrade/README.md) 목록에 올린다.
+4. 그 PR을 `main`에 Merge Commit으로 병합한다(제목 `release: vX.Y.Z`).
+5. 병합된 `main` 커밋에 태그를 붙여 올린다.
+
+   ```bash
+   git checkout main && git pull
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+6. `Images` 워크플로가 태그가 `package.json` 버전과 같은지 확인한 뒤 `vX.Y.Z`와 `latest` 이미지를 GHCR에 올린다. 태그와 버전이 다르면 이미지를 올리지 않고 실패한다.
+7. 서버에서 평소대로 올린다: `git pull && deploy/scripts/release.sh`(Docker), `deploy/scripts/systemd/release.sh`(systemd), `deploy/scripts/k3s/deploy.sh vX.Y.Z`(k3s).
 
 ## 의존성 업데이트
 

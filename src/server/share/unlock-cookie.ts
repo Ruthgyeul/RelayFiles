@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { MS, SHARE } from "@/config/policy";
+import { MS, SECONDS, SHARE } from "@/config/policy";
 import { decodeSigned, encodeSigned } from "../auth/signed-cookie";
 
 /**
@@ -12,7 +12,6 @@ import { decodeSigned, encodeSigned } from "../auth/signed-cookie";
  */
 export const UNLOCK_COOKIE = "rf_sh";
 const SECOND = MS.second;
-const HOUR_SECONDS = MS.hour / MS.second;
 const PURPOSE = "share:";
 /** Bytes of the password tag (64 bits: enough to tell passwords apart, too short to brute-force anything). */
 const TAG_BYTES = 8;
@@ -64,7 +63,7 @@ export function unlocksWith(current: Unlocks, links: readonly { linkId: string; 
   const next = new Map(current);
   for (const { linkId, passwordHash } of links) {
     next.delete(linkId);
-    next.set(linkId, { until: Math.floor(now / SECOND) + SHARE.unlockHours * HOUR_SECONDS, tag: passwordTag(passwordHash, secret) });
+    next.set(linkId, { until: Math.floor(now / SECOND) + SHARE.unlockHours * SECONDS.hour, tag: passwordTag(passwordHash, secret) });
   }
   const entries = [...next.entries()].slice(-SHARE.unlockCookieMaxLinks).map(([id, { until, tag }]) => [id, until, tag]);
   return encodeSigned({ v: 2, u: entries }, secret, PURPOSE);
@@ -75,4 +74,4 @@ export function addUnlock(current: Unlocks, linkId: string, passwordHash: string
   return unlocksWith(current, [{ linkId, passwordHash }], secret, now);
 }
 
-export const UNLOCK_COOKIE_MAX_AGE = SHARE.unlockHours * HOUR_SECONDS;
+export const UNLOCK_COOKIE_MAX_AGE = SHARE.unlockHours * SECONDS.hour;

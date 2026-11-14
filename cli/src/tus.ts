@@ -50,7 +50,9 @@ export async function tusUpload(client: Client, endpoint: string, batchId: strin
     for (;;) {
       const { start, length } = nextChunk(offset, file.size, chunkSize);
       const bytes = Buffer.alloc(length);
-      await handle.read(bytes, 0, length, start);
+      const { bytesRead } = await handle.read(bytes, 0, length, start);
+      // The file shrank or was rewritten while uploading: never send the zero-filled rest as data.
+      if (bytesRead !== length) throw new Error(`${file.path} changed while it was uploading. Upload it again.`);
       const res = await client
         .raw("PATCH", location, { headers: { ...TUS, "upload-offset": String(start), "content-type": "application/offset+octet-stream" }, body: bytes })
         .catch((error: unknown) => error as Error);

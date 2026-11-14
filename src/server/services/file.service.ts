@@ -5,6 +5,7 @@ import { sendFile } from "../http/send-file";
 import { sendAsset, sendThumb } from "../http/send-thumb";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
+import { hlsRequestOf, hlsResponse, type HlsVideo } from "../media/hls-response";
 import { transcodeResponse } from "../media/transcode";
 import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
 import type { AccountRow } from "../repositories/account.repo";
@@ -62,10 +63,37 @@ export async function serveOwnTranscode(req: Request, owner: Owner, nodeId: stri
   if (!row || row.type !== "FILE" || row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner);
   if (req.method === "GET") void markActive("stream", `${row.id}:${owner.id}`);
-  const stored = await sendStoredTranscode(req, driver, owner.id, row);
+  // Converted playback is traffic like playback of the original.
+  const onServe = (bytes: number) => {
+    if (req.method === "HEAD" || bytes === 0) return;
+    addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
+  };
+  const stored = await sendStoredTranscode(req, driver, owner.id, row, onServe);
   if (stored) return stored;
   const path = await driver.localPath(await locationOf(owner.id, row.id));
   if (!path) throw new ApiError("NOT_FOUND");
   if (req.method === "GET") void notePlay(row.id);
-  return transcodeResponse(req, path, `account:${owner.id}`);
+  return transcodeResponse(req, path, `account:${owner.id}`, { onServe });
+}
+
+/**
+ * The owner's video converted for HLS (`index.m3u8` or a segment `<n>.ts`): seeking anywhere
+ * converts from there, unlike the live conversion that plays from the start.
+ */
+export async function serveOwnHls(owner: Owner, nodeId: string, name: string): Promise<Response> {
+  const row = await findNode(db(), owner.id, nodeId);
+  if (!row || row.type !== "FILE" || row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
+  const driver = await driverForAccount(owner);
+  const path = await driver.localPath(await locationOf(owner.id, row.id));
+  if (!path) throw new ApiError("NOT_FOUND");
+  const video: HlsVideo = { nodeId: row.id, path, version: row.sha256 ?? row.id, requester: `account:${owner.id}`, newDir: () => driver.stagingPath() };
+  const parsed = await hlsRequestOf(video, name);
+  if (parsed.request.kind === "playlist") {
+    void notePlay(row.id);
+    void markActive("stream", `${row.id}:${owner.id}`);
+  }
+  // Converted playback is traffic like playback of the original.
+  return hlsResponse(video, parsed, (bytes) => {
+    addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
+  });
 }

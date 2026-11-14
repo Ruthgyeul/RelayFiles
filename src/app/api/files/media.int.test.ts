@@ -167,6 +167,11 @@ describe("media processing", () => {
       expect(bare.stdout).not.toContain("2024-05-01");
       expect(bare.stdout).not.toContain("Apple");
 
+      // A worker shutting down stops the copy and records nothing (the job runs again later).
+      const stopped = await addFile(m, m.rootId, [], "stopped.mov", original, "video/quicktime", "VIDEO");
+      await expect(processMedia(stopped, AbortSignal.abort())).rejects.toThrow();
+      expect(await prisma.node.findUniqueOrThrow({ where: { id: stopped } })).toMatchObject({ hasDerived: false, stripFailed: false });
+
       // A container ffmpeg may not copy into: no copy, so it is never shared as is.
       const odd = await addFile(m, m.rootId, [], "clip.wmv", original, "video/x-unknown", "VIDEO");
       await processMedia(odd);

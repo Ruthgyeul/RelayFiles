@@ -2,6 +2,7 @@
  * Storage quota rules from the design: the sidebar meter color and the quota banners.
  * Sizes are numbers of bytes; null quota means unlimited (admins).
  */
+import { QUOTA } from "@/config/policy";
 
 /** Storage sizes are decimal like the design (1 GB = 10^9 bytes). */
 export const BYTES_PER_GB = 1_000_000_000;
@@ -9,15 +10,6 @@ export const BYTES_PER_MB = 1_000_000;
 /** Largest storage limit an admin can set (1 PB): far above any disk, it only stops typos and overflow. */
 export const MAX_QUOTA_GB = 1_000_000;
 
-/** Banner thresholds (percent of quota). */
-export const QUOTA_WARN_PERCENT = 80;
-export const QUOTA_FULL_PERCENT = 95;
-/** Meter color thresholds (percent of quota). */
-const METER_DANGER_PERCENT = 90;
-const METER_WARN_PERCENT = 70;
-/** Width of the meter for unlimited accounts and the minimum visible width. */
-const UNLIMITED_METER_PERCENT = 2;
-const MIN_METER_PERCENT = 1;
 
 export function usedPercent(used: number, quota: number | null): number {
   if (quota === null || quota <= 0) return 0;
@@ -28,15 +20,15 @@ export function usedPercent(used: number, quota: number | null): number {
 export function quotaLevel(used: number, quota: number | null): 0 | 1 | 2 {
   if (quota === null) return 0;
   const percent = usedPercent(used, quota);
-  if (percent >= QUOTA_FULL_PERCENT) return 2;
-  if (percent >= QUOTA_WARN_PERCENT) return 1;
+  if (percent >= QUOTA.fullPercent) return 2;
+  if (percent >= QUOTA.warnPercent) return 1;
   return 0;
 }
 
 /** Sidebar meter: width in percent and tone. */
 export function quotaMeter(used: number, quota: number | null): { percent: number; tone: "accent" | "warn" | "danger" } {
-  if (quota === null) return { percent: UNLIMITED_METER_PERCENT, tone: "accent" };
+  if (quota === null) return { percent: QUOTA.unlimitedMeterPercent, tone: "accent" };
   const percent = Math.min(100, usedPercent(used, quota));
-  const tone = percent >= METER_DANGER_PERCENT ? "danger" : percent >= METER_WARN_PERCENT ? "warn" : "accent";
-  return { percent: Math.max(percent, MIN_METER_PERCENT), tone };
+  const tone = percent >= QUOTA.meterDangerPercent ? "danger" : percent >= QUOTA.meterWarnPercent ? "warn" : "accent";
+  return { percent: Math.max(percent, QUOTA.minMeterPercent), tone };
 }

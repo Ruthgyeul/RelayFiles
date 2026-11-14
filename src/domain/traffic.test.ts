@@ -21,13 +21,19 @@ describe("utcDay", () => {
 describe("capReached", () => {
   const none = { used: 10n, cap: null };
   it("refuses once a limit is used up, the link's first", () => {
-    expect(capReached({ used: 100n, cap: 100n }, { used: 500n, cap: 100n })).toBe("link");
-    expect(capReached({ used: 99n, cap: 100n }, { used: 500n, cap: 500n })).toBe("account");
-    expect(capReached({ used: 99n, cap: 100n }, { used: 499n, cap: 500n })).toBeNull();
+    expect(capReached([{ used: 100n, cap: 100n }], { used: 500n, cap: 100n })).toBe("link");
+    expect(capReached([{ used: 99n, cap: 100n }], { used: 500n, cap: 500n })).toBe("account");
+    expect(capReached([{ used: 99n, cap: 100n }], { used: 499n, cap: 500n })).toBeNull();
+  });
+
+  it("refuses when any limited item on the way is used up", () => {
+    expect(capReached([{ used: 1n, cap: 100n }, { used: 50n, cap: 50n }], none)).toBe("link");
+    expect(capReached([none, { used: 49n, cap: 50n }], none)).toBeNull();
   });
 
   it("allows everything without limits", () => {
-    expect(capReached(none, none)).toBeNull();
+    expect(capReached([], none)).toBeNull();
+    expect(capReached([none], none)).toBeNull();
   });
 });
 

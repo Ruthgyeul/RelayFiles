@@ -23,6 +23,7 @@ export const ERRORS = {
   SCAN_PENDING: { status: 503, message: "This file is still being checked for viruses. Try again in a moment." },
   FILE_BLOCKED: { status: 403, message: "This file couldn't be checked for viruses, so it can't be shared." },
   MEDIA_NOT_READY: { status: 503, message: "This photo or video is still being prepared for sharing. Try again in a moment." },
+  VIDEO_CONVERTING: { status: 503, message: "This part of the video is still converting. Try again in a moment." },
   STORAGE_BUSY: { status: 503, message: "Your files are being moved to new storage. Changes are paused for a few minutes; browsing and downloads still work." },
   INSUFFICIENT_STORAGE: { status: 507, message: "Not enough space on the server." },
 } as const satisfies Record<string, { status: number; message: string }>;

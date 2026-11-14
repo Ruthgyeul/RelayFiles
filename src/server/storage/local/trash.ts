@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { MAX_NAME_BYTES, utf8Prefix } from "@/domain/names";
 import { DIR_MODE, type VolumeLayout } from "../layout";
 import { StorageEntryMissingError, StorageTargetExistsError, type StorageLocation } from "../driver";
 import { pathExists } from "./fs-errors";
@@ -26,7 +27,11 @@ export function trashTime(name: string): number | null {
 export async function moveToTrash(layout: VolumeLayout, location: StorageLocation): Promise<string> {
   const source = await pathOf(layout, location);
   // A random part after the time: two items with the same name trashed in the same millisecond must not collide.
-  const name = `${trashStamp(new Date())}-${randomUUID().slice(0, TRASH_NONCE_LENGTH)}-${location.accountId}-${basename(source)}`;
+  // Only the prefix is ever read back (trashTime, restores use the stored path), so the item's own
+  // name is cut to keep the entry within one ext4 path segment: a 230-byte name plus the prefix
+  // would otherwise fail with ENAMETOOLONG and the item could never be deleted.
+  const prefix = `${trashStamp(new Date())}-${randomUUID().slice(0, TRASH_NONCE_LENGTH)}-${location.accountId}-`;
+  const name = prefix + utf8Prefix(basename(source), MAX_NAME_BYTES - Buffer.byteLength(prefix));
   const target = join(layout.trash, name);
   await mkdir(layout.trash, { recursive: true, mode: DIR_MODE });
   await rename(source, target);

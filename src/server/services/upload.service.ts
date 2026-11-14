@@ -2,7 +2,7 @@ import "server-only";
 import { createReadStream } from "node:fs";
 import { rm, stat, unlink } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
-import { STORAGE } from "@/config/policy";
+import { STORAGE, UPLOAD } from "@/config/policy";
 import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
 import { randomString, ID_ALPHABET, newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
@@ -12,7 +12,7 @@ import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { carriedSettingsOf, createFileNode, createFolderNode, findChildByName, findFileWithContent, findNode, findRootFolder, listSiblingNames, type NodeRow } from "../repositories/node.repo";
-import { ancestorChain, relativePaths } from "../repositories/node-tree.repo";
+import { ancestorChain, lockFolderForNames, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { sha256Of } from "../storage/hash";
 import { layoutOf } from "../storage/layout";
@@ -34,7 +34,6 @@ import { scanningEnabled } from "../scan/clamd";
 
 type Owner = SpaceOwner;
 
-const BATCH_ID_LENGTH = 24;
 /** Folder depth of the folder a Home upload creates: the account root, then the upload folder. */
 const HOME_UPLOAD_DEPTH = 2;
 
@@ -106,7 +105,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput, { a
     folder = target;
   }
 
-  const batchId = randomString(BATCH_ID_LENGTH, ID_ALPHABET);
+  const batchId = randomString(UPLOAD.batchIdLength, ID_ALPHABET);
   const batch: UploadBatch = { accountId: owner.id, volumeId: volume.id, folderId: folder.id, fromHome, dup: input.dup ?? "keep", files: files.map(({ rel, size }) => ({ rel, size })), ...(apiTokenId ? { apiTokenId } : {}) };
   await saveBatch(batchId, batch);
   return {
@@ -203,21 +202,25 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
   const detected = await fileTypeFromFile(tempPath).catch(() => undefined);
   const mime = detected?.mime ?? mimeFromName(fileName);
   const sha256 = await sha256Of(createReadStream(tempPath));
-  const existing = await findChildByName(db(), folder.id, fileName);
-  const replace = batch.dup === "replace" && existing?.type === "FILE" ? existing : null;
-  // Checked when the batch was prepared too; again here, as files of other batches may have
-  // arrived since (a replacement adds no item).
-  if (!replace) await assertItemRoom(owner, 1);
-  const name = existing && !replace ? uniqName(await listSiblingNames(db(), folder.id), fileName, true) : fileName;
-  const location = { accountId: owner.id, segments: [...folder.segments, name] };
   // A visitor's file is scanned before anyone else can get it (CLAMAV_HOST); the owner's own uploads are not.
   const scanned = Boolean(batch.requestId) && scanningEnabled();
-  // The same bytes already in the account: link to them instead of keeping a second copy.
-  const twin = await findFileWithContent(db(), owner.id, sha256, BigInt(entry.size), replace?.id ?? null);
   let linked = false;
 
-  const row = await withStorageTransaction(db(), async (tx, undo) => {
+  const { row, replace } = await withStorageTransaction(db(), async (tx, undo) => {
     await lockAccountForWrite(tx, owner.id, driver.volumeId);
+    // The name is chosen under the folder's lock: two uploads of one name finishing together take
+    // turns, and the second one sees the first and becomes "name (2)" instead of failing on the
+    // unique (parentId, name) index and losing what it received.
+    await lockFolderForNames(tx, folder.id);
+    const existing = await findChildByName(tx, folder.id, fileName);
+    const replace = batch.dup === "replace" && existing?.type === "FILE" ? existing : null;
+    // Checked when the batch was prepared too; again here, as files of other batches may have
+    // arrived since (a replacement adds no item).
+    if (!replace) await assertItemRoom(owner, 1);
+    const name = existing && !replace ? uniqName(await listSiblingNames(tx, folder.id), fileName, true) : fileName;
+    const location = { accountId: owner.id, segments: [...folder.segments, name] };
+    // The same bytes already in the account: link to them instead of keeping a second copy.
+    const twin = await findFileWithContent(tx, owner.id, sha256, BigInt(entry.size), replace?.id ?? null);
     // The replaced bytes become an earlier version (FILE_VERSIONS_DAYS) or go to the trash, and
     // the old row steps aside (its name and link are taken by the replacement below).
     const aside = replace ? await setAside(tx, driver, undo, owner.id, replace, location) : null;
@@ -251,7 +254,7 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
     undo.push("remove placed file", async () => {
       await driver.moveToTrash(location);
     });
-    return placed;
+    return { row: placed, replace };
   });
   // tus keeps upload state next to the data file; the data moved (or was linked), so drop the state too.
   await unlink(`${tempPath}.json`).catch(() => undefined);

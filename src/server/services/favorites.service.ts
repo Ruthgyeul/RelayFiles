@@ -128,7 +128,9 @@ export async function moveInFavorites(owner: FavoritesOwner, input: { nodeIds: s
     const listed = await favoriteFoldersOf(tx, nodeIds);
     if (listed.size !== nodeIds.length) throw new ApiError("NOT_FOUND");
     for (const id of folderIds) await updateFavoriteFolder(tx, owner.id, id, { parentId: input.to });
-    if (nodeIds.length > 0) await moveFavorites(tx, owner.id, nodeIds, input.to);
+    // favoriteFoldersOf is not scoped to the account: an id another account favorited passes the
+    // check above, so the scoped update must have moved every one of them (else 404, rolled back).
+    if (nodeIds.length > 0 && (await moveFavorites(tx, owner.id, nodeIds, input.to)).count !== nodeIds.length) throw new ApiError("NOT_FOUND");
     return { moved: nodeIds.length + folderIds.length };
   });
 }
@@ -185,7 +187,7 @@ export async function favoritesView(owner: FavoritesOwner, folderId: string | nu
   const tree = favoriteTree(folders);
   requireGroup(tree, folderId);
   const dto = (folder: FavoriteFolderLink): FavoriteFolderDto => ({ ...folder, itemCount: counts.get(folder.id) ?? 0 });
-  const items = await withPaths(owner.id, await favoritesIn(db(), owner.id, folderId));
+  const items = await withPaths(await favoritesIn(db(), owner.id, folderId));
   return {
     folder: folderId ? dto(tree.get(folderId)!) : null,
     path: favoritePath(tree, folderId).map(({ id, name }) => ({ id, name })),
@@ -197,7 +199,7 @@ export async function favoritesView(owner: FavoritesOwner, folderId: string | nu
 
 /** Favorites in any organizing folder that carry every tag (tag search on the Favorites page). */
 export async function searchFavoriteTags(owner: FavoritesOwner, tags: string[]): Promise<TaggedItem[]> {
-  return withPaths(owner.id, await favoritesWithTags(db(), owner.id, tags, FILES.maxFavorites));
+  return withPaths(await favoritesWithTags(db(), owner.id, tags, FILES.maxFavorites));
 }
 
 /**

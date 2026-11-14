@@ -8,7 +8,7 @@ import { trashExpiresAt } from "@/domain/trash";
 import { db, type DbClient } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError, DISK_IN_THE_WAY_MESSAGE } from "../http/api-error";
-import { enqueueMedia } from "../jobs/queue";
+import { enqueueMedia, enqueueScan } from "../jobs/queue";
 import { logger } from "../logger";
 import { favoritesOfSnapshot, findDeletedItem, fromSnapshot, listDeletedItems, takeDeletedItem, takenLinkIds } from "../repositories/deleted-item.repo";
 import { findNode, findRootFolder, insertNodes, listSiblingNames } from "../repositories/node.repo";
@@ -122,7 +122,9 @@ export async function restoreDeletedItem(owner: NodeOwner, id: string): Promise<
       return { name, renamed: name !== item.name, folderId: target.id, folderName: target.name, folderIsRoot: target.isRoot, inOriginalFolder: target.original };
     });
     // Generated files are keyed by node id and were removed on delete: the worker makes them again.
-    void enqueueMedia(rows.filter((row) => row.type === "FILE" && !row.missing && (row.kind === "IMAGE" || row.kind === "VIDEO")).map((row) => row.id));
+    void enqueueMedia(rows.filter((row) => row.type === "FILE" && !row.missing && row.scanState !== "PENDING" && (row.kind === "IMAGE" || row.kind === "VIDEO")).map((row) => row.id));
+    // Its scan job found the item deleted and stopped: a file still waiting for its scan is queued again.
+    void enqueueScan(rows.filter((row) => row.type === "FILE" && !row.missing && row.scanState === "PENDING").map((row) => row.id));
     return restored;
   } catch (caught) {
     if (isUniqueViolation(caught)) throw new ApiError("CONFLICT", NAME_TAKEN_MESSAGE);

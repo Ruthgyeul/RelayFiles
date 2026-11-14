@@ -19,6 +19,7 @@ import { findByLinkId, publicChildren, publicChildStats, publicTree, publicTreeS
 import { busyLevels } from "./busy";
 import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "./unlock-cookie";
 import { countUnlockGuess, refundUnlockGuess } from "./unlock-limit";
+import { cappedOn, type CappedItem } from "./traffic-cap";
 import { limitingIds } from "@/domain/share-limits";
 import { scanBlock } from "@/domain/scan";
 
@@ -32,7 +33,8 @@ export interface ShareViewer {
 }
 
 const lower = <T extends string>(value: T) => value.toLowerCase() as Lowercase<T>;
-const kindOf = (row: { kind: string | null }) => (row.kind ? (lower(row.kind) as NodeKind) : null);
+/** The DTO kind of a node row ("IMAGE" → "image"), or null for folders. */
+export const kindOf = (row: { kind: string | null }) => (row.kind ? (lower(row.kind) as NodeKind) : null);
 
 export const shareUrl = (linkId: string) => `${getAppEnv().PUBLIC_URL}/d/${linkId}`;
 
@@ -73,7 +75,12 @@ export async function loadLink(linkId: string, viewer: ShareViewer, now: number)
         },
         now,
       );
-  return { root, chain, owner, status, isOwner: viewer.accountIds.includes(root.accountId) };
+  const isOwner = viewer.accountIds.includes(root.accountId);
+  // To anyone but its owner a private link is "private" whatever else is true of it, and every
+  // caller answers that as a link that does not exist: an "expired" or "limit reached" card (or
+  // a 410/403, or an argon2 check on unlock) would tell someone guessing ids they found a real one.
+  // The owner keeps the design's order and sees why the link is closed.
+  return { root, chain, owner, status: !isOwner && visibility !== "public" ? "private" : status, isOwner };
 }
 
 export type LoadedLink = NonNullable<Awaited<ReturnType<typeof loadLink>>>;
@@ -290,6 +297,8 @@ export interface SharedFile {
   /** One of them limits downloads, so playback is counted too (`limitedStreamDecision`). */
   limited: boolean;
   busy: Busy;
+  /** Items from the account root down to the file with their own daily traffic limit. */
+  capped: CappedItem[];
 }
 
 
@@ -331,7 +340,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
         break;
     }
   }
-  return { link, row, path, segments: segmentsBelowRoot(chain), counted, limited: guarded.length > 0, busy };
+  return { link, row, path, segments: segmentsBelowRoot(chain), counted, limited: guarded.length > 0, busy, capped: cappedOn(chain) };
 }
 
 /**
@@ -355,7 +364,7 @@ export async function resolveSharedFolder(linkId: string, folderId: string, view
   // Counted for a "Download all" like a single download: the folder, the link and every item
   // on the way that limits downloads (the files inside are counted one by one).
   const counted = [...new Set([folder.id, link.root.id, ...limitingIds(link.chain), ...limitingIds(trail)])];
-  return { link, folder, chain, aboveFolder, path, counted, busy };
+  return { link, folder, chain, aboveFolder, path, counted, busy, capped: cappedOn(chain) };
 }
 
 export type SharedFolder = Awaited<ReturnType<typeof resolveSharedFolder>>;

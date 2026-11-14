@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BottomSheet } from "./BottomSheet";
 import { Button } from "./Button";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Menu, MenuItem } from "./Menu";
@@ -44,6 +45,92 @@ describe("Modal", () => {
     fireEvent.click(screen.getByText("open"));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  // A typing field keeps focus while the parent re-renders with a new onClose, and the opener gets
+  // focus back even though the field took focus with autoFocus before any effect ran.
+  function TypingHarness() {
+    const [open, setOpen] = useState(false);
+    const [text, setText] = useState("");
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>open</button>
+        <Modal open={open} onClose={() => setOpen(false)} width={480}>
+          <ModalHeader title="Rename" onClose={() => setOpen(false)} />
+          <ModalBody>
+            <input aria-label="name" autoFocus value={text} onChange={(event) => setText(event.target.value)} />
+          </ModalBody>
+        </Modal>
+      </>
+    );
+  }
+
+  it("keeps focus in an autoFocus field while typing and returns it to the opener", () => {
+    render(<TypingHarness />);
+    const opener = screen.getByText("open");
+    opener.focus();
+    fireEvent.click(opener);
+    const field = screen.getByLabelText("name");
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: "a" } });
+    fireEvent.change(field, { target: { value: "ab" } });
+    expect(document.activeElement).toBe(field);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).toBe(opener);
+  });
+
+  function StackedHarness() {
+    const [outer, setOuter] = useState(true);
+    const [inner, setInner] = useState(true);
+    return (
+      <>
+        <Modal open={outer} onClose={() => setOuter(false)} width={480}>
+          <ModalHeader title="Manage" onClose={() => setOuter(false)} />
+        </Modal>
+        <Modal open={inner} onClose={() => setInner(false)} width={360} layer="subdialog">
+          <ModalHeader title="Confirm" onClose={() => setInner(false)} />
+        </Modal>
+      </>
+    );
+  }
+
+  it("closes only the newest dialog on Escape", () => {
+    render(<StackedHarness />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Confirm" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Manage" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Manage" })).toBeNull();
+  });
+});
+
+describe("BottomSheet", () => {
+  function SheetHarness() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>more</button>
+        <BottomSheet open={open} onClose={() => setOpen(false)} label="Actions">
+          <button role="menuitem">Rename</button>
+          <button role="menuitem">Delete</button>
+        </BottomSheet>
+      </>
+    );
+  }
+
+  it("moves focus in, keeps Tab inside, closes on Escape and gives focus back", () => {
+    render(<SheetHarness />);
+    const trigger = screen.getByText("more");
+    trigger.focus();
+    fireEvent.click(trigger);
+    const [rename, remove] = screen.getAllByRole("menuitem");
+    expect(document.activeElement).toBe(rename);
+    remove!.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(rename);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });
 

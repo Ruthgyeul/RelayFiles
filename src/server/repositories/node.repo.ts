@@ -18,6 +18,11 @@ export async function accountUsage(db: DbClient, accountId: string): Promise<{ u
   return { usedBytes: sum._sum.size ?? 0n, rootItems };
 }
 
+/** Items of an account that expire (and lose their link) after `from` and by `until`. */
+export function countExpiring(db: DbClient, accountId: string, from: Date, until: Date): Promise<number> {
+  return db.node.count({ where: { accountId, expAt: { gt: from, lte: until } } });
+}
+
 /** Files and folders of an account, its root folder included. */
 export function countItems(db: DbClient, accountId: string): Promise<number> {
   return db.node.count({ where: { accountId } });
@@ -159,10 +164,10 @@ export function setScanState(db: DbClient, nodeId: string, scanState: "PENDING" 
 
 /** The newest files of an account. */
 export function recentFiles(db: DbClient, accountId: string, limit: number) {
-  return db.node.findMany({ where: { accountId, type: "FILE" }, orderBy: { createdAt: "desc" }, select: NODE_SELECT, take: limit });
+  return db.node.findMany({ where: { accountId, type: "FILE" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: NODE_SELECT, take: limit });
 }
 
-/** Every folder of an account (id, name, parent) to build paths. */
+/** Every folder of an account (id, name, parent): the move/copy picker. */
 export function listFolders(db: DbClient, accountId: string) {
   return db.node.findMany({ where: { accountId, type: "FOLDER" }, select: { id: true, name: true, parentId: true, visibility: true } });
 }
@@ -331,6 +336,18 @@ export function filesWithoutSha256(db: DbClient, take: number, afterId: string |
 /** Records a value a backfill computed. */
 export async function setFileFacts(db: DbClient, nodeId: string, data: { modifiedAt?: Date; sha256?: string; takenAt?: Date }): Promise<void> {
   await db.node.update({ where: { id: nodeId }, data });
+}
+
+/** Records the modification time of many files in one statement (a backfill batch). */
+export async function setModifiedTimes(db: DbClient, times: readonly { id: string; modifiedAt: Date }[]): Promise<void> {
+  if (times.length === 0) return;
+  const ids = times.map((time) => time.id);
+  // Prisma keeps DateTime as UTC in a timestamp without time zone.
+  const ats = times.map((time) => time.modifiedAt.toISOString());
+  await db.$executeRaw`
+    UPDATE "Node" AS n SET "modifiedAt" = v.at::timestamptz AT TIME ZONE 'UTC'
+    FROM unnest(${ids}::text[], ${ats}::text[]) AS v(id, at)
+    WHERE n.id = v.id`;
 }
 
 /**

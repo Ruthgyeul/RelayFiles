@@ -2,6 +2,7 @@ import "server-only";
 import { rm } from "node:fs/promises";
 import { getEnv } from "@/config/env";
 import { MS, TRANSCODE } from "@/config/policy";
+import { CONVERSION, type ConversionKind } from "@/contracts/api";
 import { db } from "../db/client";
 import { sendFile } from "../http/send-file";
 import { enqueueTranscode } from "../jobs/queue";
@@ -29,11 +30,11 @@ import { sharedSlot, storedTranscodeArgs } from "./transcode";
 const playsKey = (nodeId: string) => `transcode:plays:${nodeId}`;
 
 /** The stored conversion of a video as a ranged playback response, or null when there is none yet. */
-export async function sendStoredTranscode(req: Request, driver: StorageDriver, accountId: string, row: { id: string; name: string; sha256: string | null }): Promise<Response | null> {
+export async function sendStoredTranscode(req: Request, driver: StorageDriver, accountId: string, row: { id: string; name: string; sha256: string | null }, onServe?: (bytes: number) => void): Promise<Response | null> {
   const source = await driver.assetSource({ kind: "transcode", accountId, nodeId: row.id });
   if (!source) return null;
   if (req.method === "GET") void countOne("transcode_cache_hits");
-  return sendFile(req, {
+  const response = await sendFile(req, {
     driver,
     location: { accountId, segments: [] },
     name: `${row.name.replace(/\.[^.]+$/, "")}.mp4`,
@@ -42,7 +43,10 @@ export async function sendStoredTranscode(req: Request, driver: StorageDriver, a
     etag: `${row.sha256 ?? row.id}-mp4`,
     mode: "stream",
     body: source,
+    onServe,
   });
+  response.headers.set(CONVERSION.header, "stored" satisfies ConversionKind);
+  return response;
 }
 
 /** Counts a live conversion of a video; once it is played often enough, the worker stores one. Never fails the request. */

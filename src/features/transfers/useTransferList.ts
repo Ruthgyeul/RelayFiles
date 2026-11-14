@@ -41,7 +41,8 @@ export function useTransferList(notify: (message: string) => void) {
     (id: string, failed: number, firstError?: string) => {
       runners.current.delete(id);
       update(id, (current) => (failed > 0 ? { status: "error", error: failedText(failed, current.files, firstError), ...stopClock(current) } : { status: "complete", done: current.total, ...stopClock(current) }));
-      if (failed > 0) notify(failedText(failed, failed, firstError));
+      // The total is only known inside the update above: the toast gives the failures alone.
+      if (failed > 0) notify(`${failed} ${failed === 1 ? "file" : "files"} failed${firstError ? ` · ${firstError}` : ""}`);
     },
     [notify, update],
   );

@@ -5,7 +5,7 @@ import { ERRORS, type Lock, type Locker, type RequestRelease } from "@tus/server
 import type { Redis } from "ioredis";
 import { UPLOAD } from "@/config/policy";
 import { logger } from "../logger";
-import { redis } from "../redis";
+import { channelName, redis } from "../redis";
 
 /** Deletes the lock only while this holder still owns it (a lapsed lock may belong to another). */
 const UNLOCK_SCRIPT = `
@@ -23,7 +23,7 @@ return 0
 const RENEWALS_PER_LEASE = 3;
 
 const lockKey = (id: string) => `tus:lock:${id}`;
-const releaseChannel = (id: string) => `tus:release:${id}`;
+const releaseChannel = (id: string) => channelName(`tus:release:${id}`);
 
 /**
  * Release requests for locks held by this process: one subscriber connection, one handler

@@ -10,11 +10,13 @@ interface ShortcutHandlers {
   search: () => void;
   toggleView: () => void;
   parent: () => void;
+  /** Absent where items cannot be deleted here (Favorites). */
+  remove?: () => void;
 }
 
 /**
  * File Manager keys from the design: U upload, / search, G grid or list, Ctrl/Cmd+A select all,
- * Backspace parent folder. Ignored while typing or while a dialog is open.
+ * Delete the selected items, Backspace parent folder. Ignored while typing or while a dialog is open.
  */
 export function useFileShortcuts(handlers: ShortcutHandlers): void {
   const latest = useRef(handlers);
@@ -26,7 +28,7 @@ export function useFileShortcuts(handlers: ShortcutHandlers): void {
     const onKey = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target) || document.querySelector('[role="dialog"]')) return;
       const key = event.key.toLowerCase();
-      const { upload, selectAll, search, toggleView, parent } = latest.current;
+      const { upload, selectAll, search, toggleView, parent, remove } = latest.current;
       if ((event.metaKey || event.ctrlKey) && key === "a") {
         event.preventDefault();
         selectAll();
@@ -39,6 +41,7 @@ export function useFileShortcuts(handlers: ShortcutHandlers): void {
       } else if (key === "u") upload?.();
       else if (key === "g") toggleView();
       else if (key === "backspace") parent();
+      else if (key === "delete") remove?.();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

@@ -8,15 +8,18 @@ import { POST as switchAccount } from "@/app/api/auth/switch/route";
 import { POST as tokenSignIn } from "@/app/api/auth/token/route";
 import { GET as meToken } from "@/app/api/me/token/route";
 import type { CreatedAccount, SessionState } from "@/contracts/auth";
+import { MS } from "@/config/policy";
 import { newInviteCode } from "@/domain/ids";
 import { ipKeyOf } from "@/server/auth/client-info";
-import { clearFailures } from "@/server/auth/login-limiter";
 import { MAX_SESSIONS_PER_DEVICE, SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { db } from "@/server/db/client";
 import { redis } from "@/server/redis";
 import { createAdminAccount } from "@/server/services/auth.service";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
+
+/** Forgets a sign-in subject's failures and lock (login-limiter keys). */
+const clearFailures = (subject: string) => redis().del(`auth:fail:${subject}`, `auth:lock:${subject}`);
 
 type Handler = (req: NextRequest, ctx: { params: Promise<Record<string, never>> }) => Promise<Response>;
 
@@ -75,7 +78,7 @@ describe("anonymous accounts", () => {
     expect(account.isAdmin).toBe(false);
     expect(account.deletesAt).not.toBeNull();
     expect(state.activeAccountId).toBe(account.id);
-    expect(state.usage).toEqual({ usedBytes: "0", rootItems: 0, storageBusy: false });
+    expect(state.usage).toEqual({ usedBytes: "0", rootItems: 0, storageBusy: false, expiringLinks: 0 });
     expect(res.setCookie).toMatch(/HttpOnly/i);
     expect(res.setCookie).toMatch(/SameSite=lax/i);
 
@@ -94,6 +97,19 @@ describe("anonymous accounts", () => {
     expect(state.json.data.accounts.map((a) => a.id)).toEqual([res.json.data.account.id]);
     const revealed = await call<{ token: string }>(meToken, { method: "GET", cookie: res.cookie });
     expect(revealed.json.data.token).toBe(res.json.data.token);
+  });
+
+  it("counts the items that expire within a day for the nav badge", async () => {
+    const res = await createAnon();
+    const accountId = res.json.data.account.id;
+    const root = await prisma.node.findFirstOrThrow({ where: { accountId, parentId: null } });
+    const now = Date.now();
+    const folder = (name: string, expAt: Date | null) => ({ id: `exp${runId}${name}`.toLowerCase(), accountId, parentId: root.id, name, type: "FOLDER" as const, linkId: `L${runId}${name}`, expAt });
+    await prisma.node.createMany({
+      data: [folder("soon", new Date(now + MS.hour)), folder("later", new Date(now + 2 * MS.day)), folder("past", new Date(now - MS.hour)), folder("never", null)],
+    });
+    const state = await call<SessionState>(session, { method: "GET", cookie: res.cookie });
+    expect(state.json.data.usage?.expiringLinks).toBe(1);
   });
 
   it("requires a session to reveal a token", async () => {

@@ -1,4 +1,8 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import type { FolderView } from "@/contracts/nodes";
@@ -232,3 +236,50 @@ test("plays pictures as a slideshow that stops at the end", async ({ page }) => 
   await page.waitForTimeout(5_000);
   await expect(second).toBeVisible();
 });
+
+/** A 30-second AVI (MPEG-4 Part 2 video, MP3 sound): a container browsers cannot play. */
+function aviClip(): Buffer {
+  const dir = mkdtempSync(join(tmpdir(), "relay-e2e-"));
+  try {
+    const path = join(dir, "clip.avi");
+    execFileSync(process.env.FFMPEG_PATH || "ffmpeg", ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=30:size=320x180:rate=10", "-f", "lavfi", "-i", "sine=duration=30", "-c:v", "mpeg4", "-c:a", "mp3", path]);
+    return readFileSync(path);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+for (const player of ["the browser's own HLS", "hls.js"] as const) {
+  test(`seeks anywhere in a converted video (${player})`, async ({ page }) => {
+    // Without native HLS (Firefox, older Chrome) the viewer loads hls.js.
+    if (player === "hls.js") await page.addInitScript(() => {
+      const original = HTMLMediaElement.prototype.canPlayType;
+      HTMLMediaElement.prototype.canPlayType = function (type: string) {
+        return type.includes("mpegurl") ? "" : original.call(this, type);
+      };
+    });
+    await openFiles(page);
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload", exact: true }).click();
+    await (await chooser).setFiles([{ name: "clip.avi", mimeType: "video/x-msvideo", buffer: aviClip() }]);
+    await expect(page.locator('[data-item="clip.avi"]')).toBeVisible();
+    await page.getByRole("region", { name: "Transfers" }).getByRole("button", { name: "Close transfers" }).click();
+
+    const segments: string[] = [];
+    page.on("request", (request) => {
+      const match = /\/hls\/(\d+)\.ts/.exec(request.url());
+      if (match) segments.push(match[1]!);
+    });
+    await page.locator('[data-item="clip.avi"]').getByRole("button", { name: "Preview" }).click();
+    const video = page.getByRole("dialog", { name: "clip.avi" }).locator("video");
+    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+    await video.evaluate((element: HTMLVideoElement) => {
+      element.pause();
+      element.currentTime = 22;
+    });
+    // The part at 22 s is converted when the player asks for it (segment 5 of 4-second segments).
+    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => [element.readyState >= 2, Math.round(element.currentTime)]), { timeout: 30_000 }).toEqual([true, 22]);
+    expect(segments).toContain("5");
+  });
+}
+

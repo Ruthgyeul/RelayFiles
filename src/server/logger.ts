@@ -7,10 +7,14 @@ import { LOGS } from "@/config/policy";
 /** Keys whose values must never reach the logs (CLAUDE.md: no tokens, passwords or real IPs). */
 const SENSITIVE_KEY = /token|password|secret|authorization|cookie|^ip$|ipaddress|x-forwarded-for|x-real-ip|cf-connecting-ip|true-client-ip/i;
 const REDACTED = "[redacted]";
+/** Nesting the redaction walks; anything deeper is dropped rather than logged unchecked. */
+const REDACT_MAX_DEPTH = 6;
+const TRUNCATED = "[truncated]";
 
 /** Returns a copy of `value` with sensitive fields replaced. Exported for tests. */
 export function redact(value: unknown, depth = 0): unknown {
-  if (depth > 6 || value === null || typeof value !== "object") return value;
+  if (value === null || typeof value !== "object") return value;
+  if (depth > REDACT_MAX_DEPTH) return TRUNCATED;
   if (Array.isArray(value)) return value.map((item) => redact(item, depth + 1));
   if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
   return Object.fromEntries(
@@ -61,4 +65,4 @@ const globalForLogger = globalThis as unknown as { relayLogger?: winston.Logger 
 
 /** Process-wide structured logger: `{ level, message, timestamp, ...meta }`. */
 export const logger: winston.Logger = globalForLogger.relayLogger ?? createLogger();
-if (process.env.NODE_ENV !== "production") globalForLogger.relayLogger = logger;
+if (getAppEnv().NODE_ENV !== "production") globalForLogger.relayLogger = logger;

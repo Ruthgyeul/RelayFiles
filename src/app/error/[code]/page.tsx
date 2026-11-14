@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { ERROR_PAGE } from "@/config/policy";
 import { ERROR_PAGE_CODES, type ErrorPageCode } from "@/contracts/errors";
 import { safeReturnPath } from "@/domain/redirect";
 import { ErrorScreen } from "@/features/errors/ErrorScreen";
@@ -10,9 +11,6 @@ import { ButtonLink } from "@/shared/ui/ButtonLink";
 /** Explicit error screens the app redirects to (ERROR_PRESETS in features/errors/presets.ts). */
 const ROUTED_CODES = ["400", "403", "410", "429", "503", "storage-offline"] as const satisfies readonly ErrorPageCode[];
 type RoutedCode = (typeof ROUTED_CODES)[number];
-
-/** Wait shown when the redirect did not include a Retry-After value. */
-const DEFAULT_RETRY_SECONDS = 30;
 
 const isRoutedCode = (value: string): value is RoutedCode => (ROUTED_CODES as readonly string[]).includes(value);
 
@@ -40,7 +38,7 @@ export default async function ErrorCodePage({ params, searchParams }: PageProps<
 
   if (code === "429") {
     const requested = Number(Array.isArray(query.retry) ? query.retry[0] : query.retry);
-    const seconds = Number.isFinite(requested) ? Math.min(3_600, Math.max(0, requested)) : DEFAULT_RETRY_SECONDS;
+    const seconds = Number.isFinite(requested) ? Math.min(ERROR_PAGE.maxRetrySec, Math.max(0, requested)) : ERROR_PAGE.defaultRetrySec;
     return <ErrorScreen preset={preset} description={<RetryCountdown seconds={seconds} retryHref={safeReturnPath(query.from)} />} />;
   }
 

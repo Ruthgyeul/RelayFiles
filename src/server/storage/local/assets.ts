@@ -3,8 +3,7 @@ import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { Readable } from "node:stream";
-import { ASSET_DIRS, DIR_MODE, FILE_MODE, type VolumeLayout } from "../layout";
+import { ASSET_DIRS, DIR_MODE, FILE_MODE, inUploadArea, type VolumeLayout } from "../layout";
 import type { AssetKind, AssetRef, ByteSource } from "../driver";
 
 // Generated files (thumbnails, stripped copies, previews, conversions) under system/<dir>/<accountId>/<nodeId>.
@@ -37,7 +36,7 @@ export async function stagingPath(layout: VolumeLayout): Promise<string> {
 }
 
 export async function adoptAsset(layout: VolumeLayout, { kind, accountId, nodeId }: AssetRef, tempPath: string): Promise<void> {
-  if (!tempPath.startsWith(layout.uploads)) throw new Error("Generated files must come from the volume's upload area.");
+  if (!inUploadArea(layout, tempPath)) throw new Error("Generated files must come from the volume's upload area.");
   const target = assetPath(layout, kind, accountId, nodeId);
   await mkdir(dirname(target), { recursive: true, mode: DIR_MODE });
   await rename(tempPath, target);
@@ -59,17 +58,6 @@ export async function assetSource(layout: VolumeLayout, { kind, accountId, nodeI
     throw error;
   }
   return { size, open: async (range) => (await openAsset()).createReadStream({ ...range, autoClose: true }) };
-}
-
-export async function readAsset(layout: VolumeLayout, { kind, accountId, nodeId }: AssetRef): Promise<{ stream: Readable; size: number } | null> {
-  try {
-    const handle = await open(assetPath(layout, kind, accountId, nodeId), constants.O_RDONLY | constants.O_NOFOLLOW);
-    const info = await handle.stat();
-    return { stream: handle.createReadStream({ autoClose: true }), size: info.size };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
 }
 
 export async function removeAssets(layout: VolumeLayout, accountId: string, nodeIds: readonly string[]): Promise<void> {

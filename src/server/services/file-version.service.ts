@@ -1,6 +1,6 @@
 import "server-only";
 import { getEnv } from "@/config/env";
-import { MS } from "@/config/policy";
+import { MS, STORAGE } from "@/config/policy";
 import type { FileVersionDto } from "@/contracts/nodes";
 import { newFileVersionId, newLinkId, newNodeId } from "@/domain/ids";
 import { kindFromMime } from "@/domain/upload";
@@ -23,9 +23,6 @@ import { locationOf } from "./node-location";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
 type Owner = Pick<AccountRow, "id" | "volumeId" | "isAdmin" | "quotaBytes">;
-
-/** Expired versions removed per round of the daily cleanup. */
-const PURGE_BATCH = 500;
 
 /** Days an earlier version is kept (FILE_VERSIONS_DAYS); 0 keeps none. */
 export function fileVersionsDays(): number {
@@ -208,7 +205,7 @@ export async function purgeExpiredVersions(now: Date): Promise<number> {
   const before = new Date(now.getTime() - fileVersionsDays() * MS.day);
   let removed = 0;
   for (;;) {
-    const batch = await expiredFileVersions(db(), before, PURGE_BATCH);
+    const batch = await expiredFileVersions(db(), before, STORAGE.fileVersionsPurgeBatch);
     if (batch.length === 0) return removed;
     const done: string[] = [];
     const drivers = new Map<string, StorageDriver | null>();

@@ -96,13 +96,11 @@ export interface StorageDriver {
   stageCopy(from: StorageLocation, entries: readonly CopyEntry[]): Promise<string>;
   /** Removes a staged copy or upload from the temp area (missing is fine). */
   discardStaged(tempPath: string): Promise<void>;
-  rename(from: StorageLocation, to: StorageLocation): Promise<void>;
   /**
    * Renames a file only if nothing exists at `to` (a plain rename replaces it). Throws
    * {@link StorageTargetExistsError} when the name is taken, leaving both files untouched.
    */
   renameNoReplace(from: StorageLocation, to: StorageLocation): Promise<void>;
-  copy(from: StorageLocation, to: StorageLocation): Promise<void>;
   /** Moves an item (or a whole account root when segments is empty) to the trash area. */
   moveToTrash(location: StorageLocation): Promise<string>;
   /**
@@ -122,8 +120,6 @@ export interface StorageDriver {
   adoptAsset(asset: AssetRef, tempPath: string): Promise<void>;
   /** A path in the temp area for a generated file that is too large to hold in memory. */
   stagingPath(): Promise<string>;
-  /** Reads a generated file, or null when it does not exist. */
-  readAsset(asset: AssetRef): Promise<{ stream: Readable; size: number } | null>;
   /** A generated file as a ranged source (nothing stays open until it is read), or null when missing. */
   assetSource(asset: AssetRef): Promise<ByteSource | null>;
   /** Moves the file at `location` aside as an earlier version (a rename on the volume). */

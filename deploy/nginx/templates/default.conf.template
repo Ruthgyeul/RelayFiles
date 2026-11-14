@@ -85,6 +85,8 @@ limit_req_zone $relay_auth_limit zone=relay_auth:10m rate=${NGINX_AUTH_RATE_PER_
 limit_req_zone $relay_upload_limit zone=relay_uploads:10m rate=${NGINX_UPLOAD_RATE_PER_MIN}r/m;
 limit_req_zone $relay_tus_limit zone=relay_tus:10m rate=${NGINX_TUS_RATE_PER_MIN}r/m;
 limit_req_zone $relay_api_limit zone=relay_api:10m rate=${NGINX_API_RATE_PER_MIN}r/m;
+# WebDAV signs in with an API token on every request (argon2 for a known id): limited per address first.
+limit_req_zone $relay_client_ip zone=relay_dav:10m rate=${NGINX_DAV_RATE_PER_MIN}r/m;
 
 # No client addresses in Nginx logs (same rule as the app's logs).
 log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';

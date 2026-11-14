@@ -141,3 +141,19 @@ test("shows live server measurements", async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+test("the File Manager link counts items that expire within a day", async ({ page }) => {
+  await signInAsAdmin(page);
+  await page.goto("/files");
+  const created = await page.request.post("/api/folders", { data: { parentId: "root", name: "Soon gone" } });
+  expect(created.status()).toBe(201);
+  const { id } = ((await created.json()) as { data: { folder: { id: string } } }).data.folder;
+  const saved = await page.request.put(`/api/nodes/${id}/settings`, {
+    data: { visibility: "public", expiry: "1 hour", burn: false, downloadLimit: null, access: "both", note: "", applyDown: false },
+  });
+  expect(saved.status()).toBe(200);
+
+  await page.reload();
+  if (page.viewportSize()!.width < 1024) await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await expect(page.getByRole("link", { name: "File Manager 1" }).getByTitle("Links expiring within 24 hours")).toHaveText("1");
+});

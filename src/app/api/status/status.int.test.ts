@@ -46,13 +46,13 @@ describe("health probes", () => {
     await recordProbe({ probe: { ...healthy, redis: false }, ms: 50 }, new Date(base.getTime() + 2 * MS.minute));
 
     const hourly = await prisma.healthHourly.findMany({ where: { hour: base } });
-    expect(hourly.find((row) => row.component === "website")).toMatchObject({ okCount: 3, failCount: 0, avgMs: 50 });
+    expect(hourly.find((row) => row.component === "website")).toMatchObject({ okCount: 3, failCount: 0, avgMs: 50, p95Ms: null });
     expect(hourly.find((row) => row.component === "uploads")).toMatchObject({ okCount: 2, failCount: 1, avgMs: null });
 
     const daily = await prisma.healthDaily.findMany({ where: { day: new Date("2001-01-10T00:00:00Z") } });
     expect(daily).toHaveLength(6);
-    expect(daily.find((row) => row.component === "shares")).toMatchObject({ okCount: 2, failCount: 1, level: "DOWN" });
-    expect(daily.find((row) => row.component === "storage")).toMatchObject({ okCount: 3, failCount: 0, level: "OK" });
+    expect(daily.find((row) => row.component === "shares")).toMatchObject({ okCount: 2, failCount: 1, level: null });
+    expect(daily.find((row) => row.component === "storage")).toMatchObject({ okCount: 3, failCount: 0, level: null });
   });
 
   it("reports an unreachable app as down", async () => {

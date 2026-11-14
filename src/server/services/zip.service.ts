@@ -1,5 +1,5 @@
 import "server-only";
-import { Readable } from "node:stream";
+import { pipeline, Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { zipEntryName } from "@/domain/archive";
 import { contentDisposition, zipName } from "@/domain/serving";
@@ -7,6 +7,7 @@ import { subtreePaths } from "@/domain/subtree";
 import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
 import { LazyReadable } from "../http/lazy-readable";
+import { Throttle } from "../http/throttle";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import type { AccountRow } from "../repositories/account.repo";
@@ -25,8 +26,9 @@ export type ZipEntry = { name: string; folder: true } | { name: string; folder?:
  * Streams entries as one zip (store mode: media is already compressed). Entries are appended
  * one at a time, after the previous one is written: archiver pipes every appended stream
  * right away, so appending them all up front would open every file of the selection at once.
+ * With `bytesPerSecond` the zip goes out no faster (a busy share link, as single downloads).
  */
-export function zipResponse(entries: readonly ZipEntry[], fileName: string): Response {
+export function zipResponse(entries: readonly ZipEntry[], fileName: string, { bytesPerSecond }: { bytesPerSecond?: number } = {}): Response {
   const archive = new ZipArchive({ store: true });
   let current: LazyReadable | null = null;
   let next = 0;
@@ -51,7 +53,9 @@ export function zipResponse(entries: readonly ZipEntry[], fileName: string): Res
   // A cancelled download destroys the archive but not the entry it was reading: close that file.
   archive.once("close", () => current?.destroy());
   appendNext();
-  return new Response(Readable.toWeb(archive) as ReadableStream, {
+  // A cancelled download destroys the throttle, and pipeline then destroys the archive too.
+  const body = bytesPerSecond === undefined ? archive : pipeline(archive, new Throttle(bytesPerSecond), () => undefined);
+  return new Response(Readable.toWeb(body) as ReadableStream, {
     headers: {
       "content-type": "application/zip",
       "content-disposition": contentDisposition("attachment", fileName),
@@ -78,6 +82,7 @@ export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
   );
 
   const entries: ZipEntry[] = [];
+  const missing: string[] = [];
   let bytes = 0n;
   for (const { row: item, chain } of selected) {
     const base = segmentsBelowRoot(chain);
@@ -89,10 +94,24 @@ export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
         entries.push({ name, folder: true });
         continue;
       }
+      // storage:fsck found it gone from the disk: reading it would cut the zip off halfway.
+      if (row.missing) {
+        missing.push(name);
+        continue;
+      }
       bytes += row.size;
       entries.push({ name, open: () => driver.createReadStream({ accountId: owner.id, segments }) });
     }
   }
+  if (missing.length > 0) entries.push({ name: "Not included.txt", open: async () => Readable.from([Buffer.from(missingNote(missing))]) });
   addTraffic(db(), owner.id, bytes, new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
   return zipResponse(entries, zipName(items.map((item) => ({ name: item.name, folder: item.type === "FOLDER" })), parent?.name ?? "root"));
 }
+
+/** "Not included.txt" of an owner's zip: files that are missing from the disk. */
+export function missingNote(names: readonly string[]): string {
+  return `These files are not included:\n\n${names.map((name) => `${name}  (${MISSING_REASON})`).join("\n")}\n`;
+}
+
+/** Why a file is left out of a zip when storage:fsck found it gone from the disk. */
+export const MISSING_REASON = "Missing on the server's disk";

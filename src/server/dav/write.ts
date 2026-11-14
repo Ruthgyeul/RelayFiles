@@ -76,14 +76,32 @@ export async function remove(owner: Owner, segments: string[]): Promise<Response
   return davEmpty(204);
 }
 
-/** Replaces what is at the destination: a file moved over a file keeps the old one as a version. */
-async function moveOver(owner: Owner, source: NodeRow, existing: NodeRow): Promise<boolean> {
-  if (source.type === "FILE" && existing.type === "FILE") {
-    await moveOverFile(owner, source, existing);
-    return true;
+/** A name no client chooses, for an item while it waits to replace another (`.relayfiles-replacing-<id>`). */
+const replacingName = () => `.relayfiles-replacing-${randomUUID().slice(0, DAV.replacingIdLength)}`;
+
+/**
+ * Puts an item in place of `existing` (Overwrite: T) without losing it when that fails: `place`
+ * first puts the new item next to it under a temporary name and returns its id, then the old item
+ * goes (to Recently deleted, as any delete) and the new one takes its name. A copy refused on the
+ * quota, the item limit or a busy volume leaves the destination untouched.
+ */
+async function replaceWith(owner: Owner, existing: NodeRow, name: string, place: (temporary: string) => Promise<string>): Promise<void> {
+  const id = await place(replacingName());
+  try {
+    await deleteItems(owner, [existing.id]);
+  } catch (error) {
+    // The old item stays: take the new one away again, so nothing is left under the temporary name.
+    await deleteItems(owner, [id], { recoverable: false }).catch(() => undefined);
+    throw error;
   }
-  await deleteItems(owner, [existing.id]);
-  return false;
+  await renameNode(owner, id, name);
+}
+
+/** The id of what a move or copy just put into `parentId` as `name`. */
+async function placedId(owner: Owner, parentId: string, name: string): Promise<string> {
+  const row = await findChildByName(db(), parentId, name);
+  if (!row || row.accountId !== owner.id) throw new ApiError("CONFLICT", "The item changed meanwhile. Try again.");
+  return row.id;
 }
 
 /**
@@ -108,15 +126,28 @@ export async function transfer(req: Request, owner: Owner, segments: string[], m
   const status = existing ? 204 : 201;
 
   if (mode === "move") {
-    if (existing && (await moveOver(owner, source, existing))) return davEmpty(status);
-    if (source.parentId === parent.id) await renameNode(owner, source.id, name);
-    else await moveNodes(owner, [source.id], parent.id, { names: new Map([[source.id, name]]) });
+    // A file moved over a file keeps the old one as a version.
+    if (existing?.type === "FILE" && source.type === "FILE") {
+      await moveOverFile(owner, source, existing);
+      return davEmpty(status);
+    }
+    const moveTo = async (to: string) => {
+      if (source.parentId === parent.id) await renameNode(owner, source.id, to);
+      else await moveNodes(owner, [source.id], parent.id, { names: new Map([[source.id, to]]) });
+      return source.id;
+    };
+    if (existing) await replaceWith(owner, existing, name, moveTo);
+    else await moveTo(name);
     return davEmpty(status);
   }
-  if (existing) await deleteItems(owner, [existing.id]);
-  // Depth 0 copies a folder without what is inside.
-  if (source.type === "FOLDER" && davDepth(req.headers.get("depth")) === "0") await createFolder(owner, parent.id, name);
-  else await copyNodes(owner, [source.id], parent.id, { names: new Map([[source.id, name]]) });
+  const copyTo = async (to: string) => {
+    // Depth 0 copies a folder without what is inside.
+    if (source.type === "FOLDER" && davDepth(req.headers.get("depth")) === "0") return (await createFolder(owner, parent.id, to)).folder.id;
+    await copyNodes(owner, [source.id], parent.id, { names: new Map([[source.id, to]]) });
+    return placedId(owner, parent.id, to);
+  };
+  if (existing) await replaceWith(owner, existing, name, copyTo);
+  else await copyTo(name);
   return davEmpty(status);
 }
 

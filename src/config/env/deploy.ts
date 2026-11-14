@@ -1,6 +1,6 @@
 /** Environment group schemas: deployment files (Nginx, compose, systemd, k3s), the offsite backup and owner notifications. Assembled in src/config/env.ts. */
 import { z } from "zod";
-import { K3S, NGINX, OFFSITE, REDIS_SERVER, SHUTDOWN } from "../policy";
+import { K3S, MEDIA, NGINX, OFFSITE, REDIS_SERVER, SHUTDOWN } from "../policy";
 import { NOTIFY_FORMATS, bool, cpus, memorySize, port, positiveInt, webhookUrl } from "./fields";
 
 /** An IPv4 address or a host name the cluster nodes resolve (the NFS server of the media workers). */
@@ -14,7 +14,7 @@ export const deployEnv = z
     NGINX_LISTEN_HOST: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/).default("0.0.0.0"),
     NGINX_LISTEN_PORT: port.default(80),
     /** Nginx request limits (both templates): body size in MB, and per-minute rates with bursts. */
-    NGINX_MAX_BODY_MB: positiveInt.max(1_024).default(NGINX.maxBodyMb),
+    NGINX_MAX_BODY_MB: positiveInt.max(NGINX.maxBodyLimitMb).default(NGINX.maxBodyMb),
     NGINX_AUTH_RATE_PER_MIN: positiveInt.default(NGINX.authRatePerMin),
     NGINX_AUTH_BURST: positiveInt.default(NGINX.authBurst),
     NGINX_UPLOAD_RATE_PER_MIN: positiveInt.default(NGINX.uploadRatePerMin),
@@ -24,6 +24,9 @@ export const deployEnv = z
     /** Personal API token requests (/api/v1/, /metrics) per client address per minute, and the burst. */
     NGINX_API_RATE_PER_MIN: positiveInt.default(NGINX.apiRatePerMin),
     NGINX_API_BURST: positiveInt.default(NGINX.apiBurst),
+    /** WebDAV requests (/dav/) per client address per minute, and the burst. */
+    NGINX_DAV_RATE_PER_MIN: positiveInt.default(NGINX.davRatePerMin),
+    NGINX_DAV_BURST: positiveInt.default(NGINX.davBurst),
     CLOUDFLARE_TUNNEL_TOKEN: z.string().optional(),
     /**
      * Memory Redis may use, in MB (compose and k3s `--maxmemory`, with `noeviction`: when full,
@@ -72,7 +75,7 @@ export const deployEnv = z
     K3S_MEDIA_REPLICAS: z.coerce.number().int().min(0).max(K3S.maxMediaReplicas).default(0),
     K3S_MEDIA_NFS_SERVER: hostName.optional(),
     K3S_MEDIA_NFS_PATH: z.string().startsWith("/").optional(),
-    K3S_MEDIA_CONCURRENCY: positiveInt.max(16).default(K3S.mediaConcurrency),
+    K3S_MEDIA_CONCURRENCY: positiveInt.max(MEDIA.maxConcurrency).default(K3S.mediaConcurrency),
     K3S_MEDIA_MEMORY_MAX: memorySize.default("1G"),
     K3S_MEDIA_CPUS: cpus.default(2),
     K3S_STORAGE_NODE_MEDIA: bool.default(true),

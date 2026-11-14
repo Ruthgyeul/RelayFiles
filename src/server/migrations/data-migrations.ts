@@ -2,6 +2,7 @@ import "server-only";
 import { MIGRATION, MS } from "@/config/policy";
 import type { DbClient, PrismaClient } from "../db/client";
 import { tryRunLock, waitForRunLock } from "../repositories/advisory-lock.repo";
+import { dataMigrationRecord, finishDataMigration, saveDataMigrationCursor, startDataMigration } from "../repositories/data-migration.repo";
 
 /**
  * Data migrations: backfills and value conversions that run after the SQL migrations
@@ -45,21 +46,19 @@ export async function runDataMigrations(db: PrismaClient, steps: readonly DataMi
 async function runSteps(db: DbClient, steps: readonly DataMigrationStep[], log: (message: string) => void): Promise<DataMigrationReport> {
   const report: DataMigrationReport = { ran: [], skipped: [] };
   for (const step of steps) {
-    const existing = await db.dataMigration.findUnique({ where: { id: step.id } });
+    const existing = await dataMigrationRecord(db, step.id);
     if (existing?.finishedAt) {
       report.skipped.push(step.id);
       continue;
     }
-    if (!existing) await db.dataMigration.create({ data: { id: step.id } });
+    if (!existing) await startDataMigration(db, step.id);
     log(`${step.id}: ${step.description}${existing?.cursor ? ` (resuming after ${existing.cursor})` : ""}`);
     await step.run({
       db,
       cursor: existing?.cursor ?? null,
-      save: async (cursor) => {
-        await db.dataMigration.update({ where: { id: step.id }, data: { cursor } });
-      },
+      save: (cursor) => saveDataMigrationCursor(db, step.id, cursor),
     });
-    await db.dataMigration.update({ where: { id: step.id }, data: { finishedAt: new Date() } });
+    await finishDataMigration(db, step.id, new Date());
     report.ran.push(step.id);
   }
   return report;

@@ -5,8 +5,12 @@
 
 const MASK = "•••";
 
+/** "::ffff:211.36.12.7" (an IPv4 client seen by a dual-stack listener) → "211.36.12.7". */
+const unmapped = (ip: string) => /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip)?.[1] ?? ip;
+
 /** "211.36.12.7" → "211.36.•••.•••"; IPv6 keeps the first two groups. */
-export function maskIp(ip: string): string {
+export function maskIp(address: string): string {
+  const ip = unmapped(address);
   const v4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(ip);
   if (v4) return `${v4[1]}.${v4[2]}.${MASK}.${MASK}`;
   if (ip.includes(":")) {
@@ -16,12 +20,13 @@ export function maskIp(ip: string): string {
   return MASK;
 }
 
-/** True for loopback and RFC 1918 / unique-local addresses (shown as "Local network"). */
-export function isPrivateIp(ip: string): boolean {
-  if (ip === "::1" || ip.startsWith("127.") || ip.startsWith("10.") || ip.startsWith("192.168.")) return true;
+/** True for loopback, RFC 1918, link-local and unique-local addresses (shown as "Local network"). */
+export function isPrivateIp(address: string): boolean {
+  const ip = unmapped(address);
+  if (ip === "::1" || ip.startsWith("127.") || ip.startsWith("10.") || ip.startsWith("192.168.") || ip.startsWith("169.254.")) return true;
   const v4 = /^172\.(\d{1,3})\./.exec(ip);
   if (v4 && Number(v4[1]) >= 16 && Number(v4[1]) <= 31) return true;
-  return /^f[cd][0-9a-f]{2}:/i.test(ip);
+  return /^(f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/i.test(ip);
 }
 
 function ipv4ToInt(ip: string): number | null {

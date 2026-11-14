@@ -27,6 +27,24 @@ export const METRICS = {
   linkCacheSec: 300,
 } as const;
 
+/** Live file lists: pages follow changes made elsewhere (another device, WebDAV, the CLI, the worker). */
+export const LIVE = {
+  /** At most one "changed" event per account stream this often; changes in between are merged. */
+  coalesceMs: 1_000,
+  /** A comment line this often keeps proxies and tunnels from closing an idle stream. */
+  heartbeatMs: 25_000,
+  /** A stream re-reads its session this often and ends when it was signed out. */
+  sessionCheckMs: 60_000,
+  /** A stream ends after this long; the browser's EventSource reconnects (and is checked again). */
+  maxLifetimeMs: 60 * 60 * 1_000,
+  /** Streams one account may hold open at once in one app process (one per open tab). */
+  maxPerAccount: 10,
+  /** The page refreshes this long after the last event, so a burst of changes is one refresh. */
+  clientDebounceMs: 500,
+  /** After a stream was refused or dropped for good, the page tries again after this long. */
+  clientRetryMs: 30_000,
+} as const;
+
 /** Status page: browser checks, history ranges and the rating thresholds. */
 export const STATUS = {
   /** /api/health gives up on PostgreSQL, Redis or the volume after this long and reports it down. */
@@ -104,6 +122,14 @@ export const JOBS = {
  * its samples read that host's network and disks.
  */
 export const WORKER_ROLES = ["media", "maintenance", "notify"] as const;
+
+/** The 429 error screen's countdown (Retry-After passed in `?retry=`). */
+export const ERROR_PAGE = {
+  /** Wait shown when the redirect did not include a Retry-After value. */
+  defaultRetrySec: 30,
+  /** Longest wait shown, whatever the link asks for. */
+  maxRetrySec: 3_600,
+} as const;
 
 /** Production log files (LOG_DIR): rotated by size so a busy server cannot fill the disk. */
 export const LOGS = {
