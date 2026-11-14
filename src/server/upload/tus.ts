@@ -140,13 +140,27 @@ function createServer(volumeId: string, mountPath: string): Server {
       if (req.method === "PATCH") void markActive("upload", uploadId);
     },
     async onUploadFinish(req, upload) {
-      const { batchId, slot } = await slotOf(upload);
-      const batch = await loadBatch(batchId);
-      if (!batch) throw tusError("NOT_FOUND", "This upload has expired. Start it again.");
-      const { owner, request } = await senderOf(req, batch, false);
-      const { requestId } = batch;
+      // Recorded when the upload was created: what it holds is released even when its batch, link
+      // or token is gone by now (the checks below refuse it before anything is placed).
+      const [ownerId, requestId] = await Promise.all([uploadOwner(upload.id), uploadRequest(upload.id)]);
       let placed = false;
       try {
+        let sender: Awaited<ReturnType<typeof senderOf>>;
+        let target: { batch: UploadBatch; slot: number };
+        try {
+          const { batchId, slot } = await slotOf(upload);
+          const batch = await loadBatch(batchId);
+          if (!batch) throw tusError("NOT_FOUND", "This upload has expired. Start it again.");
+          sender = await senderOf(req, batch, false);
+          target = { batch, slot };
+        } catch (error) {
+          // Complete but refused for good (a retry cannot finish it again): its bytes go now, not
+          // after UPLOAD_TMP_TTL_HOURS.
+          await datastore.remove(upload.id).catch(() => undefined);
+          throw error;
+        }
+        const { owner, request } = sender;
+        const { batch, slot } = target;
         // A newer upload of the same file took the slot: this one places nothing.
         if (!(await beginPlacing(upload.id))) {
           await datastore.remove(upload.id).catch(() => undefined);
@@ -169,7 +183,7 @@ function createServer(volumeId: string, mountPath: string): Server {
         // A placed file keeps its slot (the batch cannot place it twice); a refused one frees it for a retry.
         await (placed ? settleSlot(upload.id) : releaseSlot(upload.id)).catch((error: unknown) => logger.warn("upload slot not released", { error }));
         // Placed (its bytes now count as used) or refused (its chunks are removed): either way no longer pending.
-        await releaseSpace(upload.id, owner.id, volumeId).catch((error: unknown) => logger.warn("upload reservation not released", { error }));
+        if (ownerId) await releaseSpace(upload.id, ownerId, volumeId).catch((error: unknown) => logger.warn("upload reservation not released", { error }));
         if (requestId) await releaseRequestRoom(requestId, upload.id).catch((error: unknown) => logger.warn("upload reservation not released", { error }));
       }
     },

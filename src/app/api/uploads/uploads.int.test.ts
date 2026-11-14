@@ -352,6 +352,24 @@ describe("uploads", () => {
     expect((await upload(s, "root", [{ rel: "c.txt", content: "1" }])).status).toBe(507);
   });
 
+  it("gives everything back at once when an upload's batch is gone before it finishes", async () => {
+    const s = await member();
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "late.txt", size: 5 }], fallbackName: "Upload" } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+    const meta = `batch ${b64(plan.batchId)},index ${b64("0")},filename ${b64("late.txt")}`;
+    const created = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "5", "upload-metadata": meta });
+    const id = created.headers.get("location")!.split("/").pop()!;
+    expect(await reservedBytes({ kind: "account", id: s.id })).toBe(5n);
+    // The batch expired (or its link was deleted) while the file was on its way.
+    await redis().del(`upload:batch:${plan.batchId}`);
+    const done = await tusCall("PATCH", `${plan.endpoint}/${id}`, s.cookie, { "upload-offset": "0", "content-type": "application/offset+octet-stream" }, Buffer.from("hello"));
+    expect(done.status).toBe(404);
+    // Its reservation and received bytes go now, not after UPLOAD_TMP_TTL_HOURS.
+    expect(await reservedBytes({ kind: "account", id: s.id })).toBe(0n);
+    expect((await readdir(layoutOf(configuredVolumeRoot()).uploads)).filter((name) => name.startsWith(id))).toEqual([]);
+  });
+
   it("places one file per batch slot: once it is placed, later uploads for the slot are refused", async () => {
     const s = await member();
     const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "empty.txt", size: 0 }] } });
