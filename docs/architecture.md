@@ -212,6 +212,13 @@ File Manager 툴바의 공유 아이콘(`/files/shared`)이 밖에서 열 수 �
   - 정렬은 `Recently added`(기본, 서버 순서 = 즐겨찾기에 넣은 최신순)와 파일 관리자의 정렬 키(이름·생성일·크기·유형, `domain/favorites.ts` `sortFavorites`). 정리용 폴더는 항상 항목 위에 이름순이고 "Name Z → A"일 때만 거꾸로다(`visibleFavoriteFolders`). 유형 필터는 All·Folders에서만 정리용 폴더를 보여 준다.
   - 그리드에서는 정리용 폴더도 카드(`FavoriteFolderCard`)로 보인다. 보기·정렬은 기기별로 파일 관리자와 따로 기억한다(`relay.favoritesView`, `useViewPrefs`).
 
+### 사진 타임라인 (Photos)
+
+`/files/photos`(File Manager 도구 막대의 그림 아이콘)는 계정의 사진·영상을 찍은 날짜 최신순으로 달별로 보여 준다. 날짜는 워커가 EXIF·영상 메타데이터에서 읽은 `Node.takenAt`, 없으면 파일 날짜(`modifiedAt`, 업로드 때 브라우저가 알려 준 값), 그것도 없으면 올린 시각이다(순번 정리와 같은 규칙, `domain/renumber.ts`). 달 경계는 보는 사람의 시간대로 나눈다(`domain/timeline.ts` `groupByMonth`).
+
+- 쿼리(`repositories/timeline.repo.ts`): `COALESCE(takenAt, modifiedAt, createdAt) DESC, id DESC`의 keyset 페이지. cursor는 앞 페이지 마지막 항목의 `(날짜, id)`라 몇 번째 페이지든 비용이 같다. `@@index([accountId, kind])`가 계정의 미디어만 고르고, 정렬은 그 행들에서 한다. 미디어가 수십만 개로 늘면 정렬 키를 저장 열로 두고 `(accountId, 그 열, id)` 인덱스를 거는 것이 다음 단계다(COALESCE 식 인덱스는 Prisma 스키마로 표현되지 않아 CI drift 검사에 걸린다).
+- 화면(`features/photos`): 첫 페이지는 서버가 그린다. 나머지는 "Load more"로 이어 붙인다. 격자와 카드는 File Manager 격자와 같은 값(`minmax(160px)`, `gap-3`, `aspect-[4/3]`, `content-visibility:auto`)을 쓰고, 그림은 `MediaPreview`, 뷰어는 `useFileMedia`(지금까지 불러온 항목 순서로 넘김)를 그대로 쓴다. 각 카드의 폴더 아이콘이 그 파일이 있는 폴더로 간다.
+
 ### 순번 정리 (Renumber files)
 
 폴더 메뉴의 "Renumber files"는 `scripts/sortNumbered.sh`처럼 폴더 바로 아래 파일 이름을 `01, 02, 03…`(확장자 유지)으로 바꾼다(`domain/renumber.ts` 계획, `services/renumber.service.ts` 실행).

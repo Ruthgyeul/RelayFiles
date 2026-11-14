@@ -97,6 +97,14 @@ export const UPLOAD = {
   lockRetryMs: 250,
 } as const;
 
+/** "Photos": every photo and video of the account by the date it was taken (/files/photos). */
+export const TIMELINE = {
+  /** Items in one page (the first is rendered on the server, the rest load as the list grows). */
+  pageSize: 120,
+  /** Most items one request may ask for. */
+  listLimit: 500,
+} as const;
+
 /** Upload-only links (file requests, /r/<id>; docs/api.md "파일 요청"). */
 export const FILE_REQUEST = {
   /** Open requests one account may hold. */

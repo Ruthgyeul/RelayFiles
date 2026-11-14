@@ -6,6 +6,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Added
 
+- Photos (`/files/photos`, from the File Manager toolbar): every photo and video of the account by month, newest first by the date it was taken (else its file date), opened in the viewer and linked back to its folder
 - Favorites: a folder at the top of the root that lists favorite files and folders where they are, with its own organizing folders, search, tag search, sort, filters and a grid view
 - Earlier versions of replaced files are kept and can be downloaded or restored (version history dialog)
 - Recently deleted: deleted items can be restored with their share links and settings; the retention is configurable (`TRASH_RETENTION_HOURS`)

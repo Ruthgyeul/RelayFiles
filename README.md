@@ -10,6 +10,7 @@ Fast and easy file sharing system. A private file drop for sharing and streaming
 - Shared by me: everything anyone with a link can open, filtered by password, limits, expiry or paused downloads, made private one by one or all at once
 - A command-line client (`cli/`): login, ls, download with resume, resumable uploads, share settings, versions, favorites
 - Export the whole account as one tar with a manifest of tags, notes and favorites (`storage:import -- --with-metadata` brings it back)
+- Photos: every photo and video of the account by month, by the date it was taken (else its file date), opened in the viewer and linked back to its folder
 - A Storage page: what each top folder holds, the largest files, old files nobody opened through a share link, and the trash
 - Shift-click to select a range, and rename many items at once (find and replace, prefix and suffix with numbers, letter case) with every new name checked first
 - Favorites: a folder at the top of the root that lists favorite files and folders where they are (no copies), with its own organizing folders

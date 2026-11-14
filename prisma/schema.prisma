@@ -237,6 +237,8 @@ model Node {
   @@index([tags], type: Gin)
   /// Largest files of an account (Storage page).
   @@index([accountId, size])
+  /// Photos and videos of an account (the "Photos" timeline).
+  @@index([accountId, kind])
   /// Name search (case-insensitive "contains", ILIKE '%text%'): a trigram index, so a search does not
   /// read every item of the account. Needs the pg_trgm extension (created by its migration).
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
