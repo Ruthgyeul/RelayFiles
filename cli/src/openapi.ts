@@ -1966,7 +1966,7 @@ export interface components {
             /** @description Message safe to show */
             error: string;
             /** @enum {unknown} */
-            code: "BAD_REQUEST" | "UNAUTHORIZED" | "INVALID_TOKEN" | "INVALID_INVITE" | "SIGNUP_CLOSED" | "FORBIDDEN" | "REAUTH_REQUIRED" | "NOT_FOUND" | "CONFLICT" | "ALREADY_SIGNED_IN" | "GONE" | "PAYLOAD_TOO_LARGE" | "UNSUPPORTED_MEDIA" | "RATE_LIMITED" | "INTERNAL" | "MAINTENANCE" | "STORAGE_OFFLINE" | "SCAN_PENDING" | "FILE_BLOCKED" | "MEDIA_NOT_READY" | "STORAGE_BUSY" | "INSUFFICIENT_STORAGE";
+            code: "BAD_REQUEST" | "UNAUTHORIZED" | "INVALID_TOKEN" | "INVALID_INVITE" | "SIGNUP_CLOSED" | "FORBIDDEN" | "REAUTH_REQUIRED" | "NOT_FOUND" | "CONFLICT" | "ALREADY_SIGNED_IN" | "GONE" | "PAYLOAD_TOO_LARGE" | "UNSUPPORTED_MEDIA" | "RATE_LIMITED" | "INTERNAL" | "MAINTENANCE" | "STORAGE_OFFLINE" | "SCAN_PENDING" | "FILE_BLOCKED" | "MEDIA_NOT_READY" | "VIDEO_CONVERTING" | "STORAGE_BUSY" | "INSUFFICIENT_STORAGE";
             /** @description Messages per invalid field */
             fields?: {
                 [key: string]: string;
