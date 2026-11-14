@@ -17,7 +17,7 @@ test("long folders render lazily and stay usable", async ({ page }) => {
   await expect(rows).toHaveCount(COUNT);
   await expect.poll(() => rows.first().evaluate((row) => getComputedStyle(row).contentVisibility)).toBe("auto");
 
-  const last = page.locator(`[data-item="${names.at(-1)}"]`);
+  const last = page.getByRole("main").locator(`[data-item="${names.at(-1)}"]`);
   await last.scrollIntoViewIfNeeded();
   await last.getByRole("button", { name: `Actions for ${names.at(-1)}` }).click();
   const rename = page.getByRole("menuitem", { name: "Rename" });
