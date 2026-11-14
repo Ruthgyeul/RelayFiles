@@ -141,7 +141,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   const range = effectiveRange(req.headers.get("range"), req.headers.get("if-range"), etag, size);
 
   // A visitor past the link's or the account's traffic for the day gets 429 before anything is counted.
-  if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, link.root, now);
+  if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, file.capped, now);
   let newVisitor: string | null = null;
   if (mode === "download") {
     const granted = !link.isOwner && range !== null && range !== "unsatisfiable" && range.start > 0 && (await hasDownloadGrant(row.id, viewer.visitorId));
@@ -174,7 +174,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
     onServe: (bytes) => {
       if (req.method === "HEAD" || bytes === 0) return;
       addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
-      if (!link.isOwner) countLinkTraffic(link.root.id, BigInt(bytes));
+      if (!link.isOwner) countLinkTraffic(file.capped, BigInt(bytes));
     },
   });
   return newVisitor ? setVisitorCookie(response, newVisitor) : response;
@@ -219,7 +219,7 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
   if (row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
   // loadLink read the owner already (the storage volume and the metadata setting).
   const { owner } = link;
-  if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, link.root, now);
+  if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, file.capped, now);
   const driver = await driverForAccount(owner);
   // A file under a download limit or delete-after-download: converted playback counts like
   // playback of the original. Only where the request starts matters, so the converted
@@ -303,7 +303,7 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   const tree = await sharedFolderTree(shared, now);
   // loadLink read the owner already (the storage volume and the metadata setting).
   const { owner } = link;
-  if (!link.isOwner) await assertShareTraffic(owner, link.root, now);
+  if (!link.isOwner) await assertShareTraffic(owner, shared.capped, now);
   const driver = await driverForAccount(owner);
   const base = segmentsBelowRoot(shared.chain);
 
@@ -351,7 +351,7 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   }
   if (skipped.length > 0) entries.push({ name: `${folder.name}/Not included.txt`, open: async () => Readable.from([Buffer.from(skippedNote(skipped))]) });
   addTraffic(db(), owner.id, bytes, new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
-  if (!link.isOwner) countLinkTraffic(link.root.id, bytes, now);
+  if (!link.isOwner) countLinkTraffic(shared.capped, bytes, now);
   return zipResponse(entries, zipName([{ name: folder.name, folder: true }], folder.name));
 }
 

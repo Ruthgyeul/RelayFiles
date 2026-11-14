@@ -19,6 +19,7 @@ import { findByLinkId, publicChildren, publicChildStats, publicTree, publicTreeS
 import { busyLevels } from "./busy";
 import { addUnlock, isUnlocked, unlocksWith, type Unlocks } from "./unlock-cookie";
 import { countUnlockGuess, refundUnlockGuess } from "./unlock-limit";
+import { cappedOn, type CappedItem } from "./traffic-cap";
 import { limitingIds } from "@/domain/share-limits";
 import { scanBlock } from "@/domain/scan";
 
@@ -296,6 +297,8 @@ export interface SharedFile {
   /** One of them limits downloads, so playback is counted too (`limitedStreamDecision`). */
   limited: boolean;
   busy: Busy;
+  /** Items from the account root down to the file with their own daily traffic limit. */
+  capped: CappedItem[];
 }
 
 
@@ -337,7 +340,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
         break;
     }
   }
-  return { link, row, path, segments: segmentsBelowRoot(chain), counted, limited: guarded.length > 0, busy };
+  return { link, row, path, segments: segmentsBelowRoot(chain), counted, limited: guarded.length > 0, busy, capped: cappedOn(chain) };
 }
 
 /**
@@ -361,7 +364,7 @@ export async function resolveSharedFolder(linkId: string, folderId: string, view
   // Counted for a "Download all" like a single download: the folder, the link and every item
   // on the way that limits downloads (the files inside are counted one by one).
   const counted = [...new Set([folder.id, link.root.id, ...limitingIds(link.chain), ...limitingIds(trail)])];
-  return { link, folder, chain, aboveFolder, path, counted, busy };
+  return { link, folder, chain, aboveFolder, path, counted, busy, capped: cappedOn(chain) };
 }
 
 export type SharedFolder = Awaited<ReturnType<typeof resolveSharedFolder>>;

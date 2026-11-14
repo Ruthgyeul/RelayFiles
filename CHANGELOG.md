@@ -54,6 +54,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Security
 
+- A folder's daily traffic limit also covers the links of files and folders inside it (another link no longer gets around it), and a private link that expired or ran out looks like a missing link to visitors
 - WebDAV requests are rate limited per address in Nginx (`NGINX_DAV_RATE_PER_MIN`, `NGINX_DAV_BURST`) before the token check
 - IPv4 addresses written in IPv6 form (`::ffff:a.b.c.d`) are masked like other IPv4 addresses
 - Log redaction drops values nested too deep to check instead of logging them

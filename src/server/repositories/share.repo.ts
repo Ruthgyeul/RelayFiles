@@ -97,6 +97,8 @@ export type ChainRow = SharedRow & {
   linkId: string;
   expAt: Date | null;
   passwordHash: string | null;
+  /** The item's own daily traffic limit in bytes (null: none). */
+  dailyBytesCap: bigint | null;
 };
 
 /**
@@ -110,7 +112,7 @@ export async function sharedChain(db: DbClient, nodeId: string): Promise<ChainRo
       UNION ALL
       SELECT n.id, n."parentId", c.depth + 1 FROM "Node" n JOIN chain c ON n.id = c."parentId"
     )
-    SELECT ${SHARED_COLUMNS}, n.visibility::text AS visibility, n."linkId", n."expAt", n."passwordHash"
+    SELECT ${SHARED_COLUMNS}, n.visibility::text AS visibility, n."linkId", n."expAt", n."passwordHash", n."dailyBytesCap"
     FROM chain JOIN "Node" n ON n.id = chain.id
     ORDER BY chain.depth DESC`;
 }

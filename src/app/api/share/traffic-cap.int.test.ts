@@ -58,6 +58,22 @@ describe("daily traffic limits", () => {
     expect((await download(linkId, file, m)).status).toBe(200);
   });
 
+  it("counts a folder's limit for the links of the files inside it", async () => {
+    const { folderId, linkId, file } = await sharedFolder(15n);
+    // The file's own link (no limit of its own) reaches it below the limited folder.
+    const fileLink = (await prisma.node.update({ where: { id: file }, data: { visibility: "PUBLIC" }, select: { linkId: true } })).linkId;
+    for (let sent = 0; sent < 2; sent++) {
+      const res = await download(fileLink, file);
+      expect(res.status).toBe(200);
+      await res.arrayBuffer();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // 20 bytes went out through the file's link: the folder's 15 bytes are used up for both links.
+    expect((await download(fileLink, file)).status).toBe(429);
+    expect((await download(linkId, file)).status).toBe(429);
+    expect((await visit(shareZip, `/api/share/${linkId}/zip?folder=${folderId}`, { linkId })).status).toBe(429);
+  });
+
   it("applies SHARE_DAILY_BYTES_CAP_GB to all links of an account", async () => {
     const policy = getEnv("policy") as { SHARE_DAILY_BYTES_CAP_GB?: number };
     const { m, linkId, file } = await sharedFolder();
