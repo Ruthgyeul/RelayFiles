@@ -40,6 +40,7 @@ npm run lint         # eslint (경고 0개 허용)
 npm run test         # 단위 테스트 (외부 서비스 없음)
 npm run test:watch   # 단위 테스트 watch 모드
 npm run test:integration  # PostgreSQL·Redis가 필요한 통합 테스트 (.env 사용)
+npm run test:coverage     # 단위+통합 테스트의 서버·도메인 코드 커버리지 (coverage/, PostgreSQL·Redis 필요)
 npm run db:migrate   # prisma migrate dev (개발: 스키마 변경 → 마이그레이션 생성)
 npm run db:deploy    # prisma migrate deploy (운영)
 npm run db:generate  # prisma generate (postinstall이 실행함, 스키마만 바꿨을 때 수동으로)
