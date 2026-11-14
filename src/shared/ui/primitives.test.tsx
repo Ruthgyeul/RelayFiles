@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BottomSheet } from "./BottomSheet";
 import { Button } from "./Button";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Menu, MenuItem } from "./Menu";
@@ -100,6 +101,36 @@ describe("Modal", () => {
     expect(screen.getByRole("dialog", { name: "Manage" })).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Manage" })).toBeNull();
+  });
+});
+
+describe("BottomSheet", () => {
+  function SheetHarness() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>more</button>
+        <BottomSheet open={open} onClose={() => setOpen(false)} label="Actions">
+          <button role="menuitem">Rename</button>
+          <button role="menuitem">Delete</button>
+        </BottomSheet>
+      </>
+    );
+  }
+
+  it("moves focus in, keeps Tab inside, closes on Escape and gives focus back", () => {
+    render(<SheetHarness />);
+    const trigger = screen.getByText("more");
+    trigger.focus();
+    fireEvent.click(trigger);
+    const [rename, remove] = screen.getAllByRole("menuitem");
+    expect(document.activeElement).toBe(rename);
+    remove!.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(rename);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });
 

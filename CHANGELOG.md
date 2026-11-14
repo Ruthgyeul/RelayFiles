@@ -35,6 +35,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 - Dialogs keep focus in the field being typed in while the page updates (an upload in progress moved it to Close), return focus to the button that opened them, and Escape closes only the top dialog
 - An open item menu keeps keyboard focus while the page updates
+- The navigation drawer and bottom sheets keep keyboard focus inside while open, give it back to their button when closed, and take Escape only when they are on top
 - The Delete key deletes the selected items, as the shortcuts list says
 - The failed-upload toast gives the right count
 - Items with names close to the 255-byte limit can be deleted
