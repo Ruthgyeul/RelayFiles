@@ -166,6 +166,22 @@ describe("move and copy", () => {
     expect(moved.status).toBe(200);
   });
 
+  it("reads the link activity of a folder with more items than PostgreSQL takes parameters", async () => {
+    const s = await member();
+    const big = await folder(s, "root", "Big");
+    // 70,000 items below it: more than the 65,535 parameters one statement may have.
+    await prisma.$executeRaw`
+      INSERT INTO "Node" (id, "accountId", "parentId", type, name, "linkId", "updatedAt")
+      SELECT md5(random()::text || g::text), ${s.id}, ${big.id}, 'FILE', 'f' || g, md5(random()::text || g::text || 'l'), now()
+      FROM generate_series(1, 70000) AS g`;
+    const inside = await prisma.node.findFirstOrThrow({ where: { parentId: big.id, name: "f42" } });
+    await prisma.linkEvent.create({ data: { nodeId: inside.id, kind: "DOWNLOAD", fileName: "f42" } });
+    const log = await callRoute<LinkEventDto[], { id: string }>(activity, { cookie: s.cookie, params: { id: big.id } });
+    expect(log.status).toBe(200);
+    expect(log.json.data.map((event) => [event.kind, event.fileName])).toEqual([["download", "f42"]]);
+    await prisma.node.deleteMany({ where: { parentId: big.id } });
+  });
+
   it("refuses to create more items than an account may hold", async () => {
     const s = await member();
     const rootId = (await list(s)).folder.id;

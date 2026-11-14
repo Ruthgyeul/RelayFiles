@@ -9,9 +9,9 @@ import { normalizeTag } from "@/domain/tags";
 import { gbToBytes } from "@/domain/traffic";
 import { db, type Prisma } from "../db/client";
 import { ApiError } from "../http/api-error";
-import { addLinkEvent, listLinkEvents } from "../repositories/link-event.repo";
+import { addLinkEvent, listLinkEventsBelow } from "../repositories/link-event.repo";
 import { findNodes, updateNode } from "../repositories/node.repo";
-import { descendantIds, inheritVisibilityBelow } from "../repositories/node-tree.repo";
+import { inheritVisibilityBelow } from "../repositories/node-tree.repo";
 import { requireNode, type NodeOwner } from "./node-ops.service";
 import { toNodeItem } from "./node.service";
 
@@ -88,8 +88,7 @@ export async function linkActivityCsv(owner: NodeOwner, nodeId: string): Promise
 
 async function activityOf(owner: NodeOwner, nodeId: string, limit: number): Promise<{ name: string; events: LinkEventDto[] }> {
   const row = await requireNode(owner.id, nodeId);
-  const ids = row.type === "FOLDER" ? [row.id, ...(await descendantIds(db(), row.id))] : [row.id];
-  const events = await listLinkEvents(db(), ids, limit);
+  const events = await listLinkEventsBelow(db(), row.id, limit);
   return { name: row.name, events: events.map((event) => ({ ...event, kind: event.kind.toLowerCase() as LinkEventDto["kind"], at: event.at.toISOString() })) };
 }
 
