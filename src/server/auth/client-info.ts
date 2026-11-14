@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { parseUserAgent } from "@/domain/device";
 import { clientIp, isPrivateIp, maskIp, rateLimitNetwork, rateLimitSubject } from "@/domain/network";
 import { getEnv } from "@/config/env";
+import { SECURITY_LOG } from "@/config/policy";
 
 /** What the server records about the device making a request. The raw IP never leaves this module. */
 export interface ClientInfo {
@@ -40,9 +41,9 @@ function headerText(headers: Headers, name: string): string | null {
   if (!value) return null;
   try {
     // Cloudflare sends city names percent-encoded when they contain non-ASCII characters.
-    return decodeURIComponent(value).slice(0, 80);
+    return decodeURIComponent(value).slice(0, SECURITY_LOG.placeTextMax);
   } catch {
-    return value.slice(0, 80);
+    return value.slice(0, SECURITY_LOG.placeTextMax);
   }
 }
 

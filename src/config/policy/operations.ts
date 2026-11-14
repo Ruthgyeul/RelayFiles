@@ -123,6 +123,14 @@ export const JOBS = {
  */
 export const WORKER_ROLES = ["media", "maintenance", "notify"] as const;
 
+/** The 429 error screen's countdown (Retry-After passed in `?retry=`). */
+export const ERROR_PAGE = {
+  /** Wait shown when the redirect did not include a Retry-After value. */
+  defaultRetrySec: 30,
+  /** Longest wait shown, whatever the link asks for. */
+  maxRetrySec: 3_600,
+} as const;
+
 /** Production log files (LOG_DIR): rotated by size so a busy server cannot fill the disk. */
 export const LOGS = {
   maxFileBytes: 20 * 1024 * 1024,

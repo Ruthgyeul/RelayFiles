@@ -1,6 +1,6 @@
 /** Environment group schemas: account policy, background jobs and logs. Assembled in src/config/env.ts. */
 import { z } from "zod";
-import { ACCOUNT, AUTH, DUPLICATES, JOBS, LOGIN, MEDIA, RENUMBER, TRANSCODE, WORKER_ROLES } from "../policy";
+import { ACCOUNT, AUTH, DUPLICATES, JOBS, LOGIN, MEDIA, RENUMBER, SCAN, TRANSCODE, WORKER_ROLES } from "../policy";
 import { port, positiveInt, secondsList, wordList } from "./fields";
 
 export const policyEnv = z.object({
@@ -26,7 +26,7 @@ export const jobsEnv = z.object({
   HEALTH_PROBE_INTERVAL_SEC: positiveInt.default(JOBS.healthProbeIntervalSec),
   /** Where the worker reaches the app for Status page probes; defaults to this host's APP_PORT. */
   HEALTH_PROBE_URL: z.url().optional(),
-  MEDIA_WORKER_CONCURRENCY: positiveInt.max(16).default(MEDIA.workerConcurrency),
+  MEDIA_WORKER_CONCURRENCY: positiveInt.max(MEDIA.maxConcurrency).default(MEDIA.workerConcurrency),
   /**
    * What this worker process runs (comma-separated, WORKER_ROLES in the policy): media,
    * maintenance, notify. Every role must run somewhere; maintenance in exactly one process.
@@ -34,7 +34,7 @@ export const jobsEnv = z.object({
   WORKER_ROLES: wordList(WORKER_ROLES).default([...WORKER_ROLES]),
   FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   /** Video conversions for unplayable containers running at once in the app (0 = off). */
-  VIDEO_TRANSCODE_MAX: z.coerce.number().int().min(0).max(16).default(TRANSCODE.maxConcurrent),
+  VIDEO_TRANSCODE_MAX: z.coerce.number().int().min(0).max(MEDIA.maxConcurrency).default(TRANSCODE.maxConcurrent),
   /**
    * Metadata removed from photos and videos sent through share links (originals are never
    * changed): sensitive = location, serial numbers, names and comments (capture time and camera
@@ -45,7 +45,7 @@ export const jobsEnv = z.object({
   CLAMAV_HOST: z.string().min(1).optional(),
   CLAMAV_PORT: port.default(3310),
   /** Time a scan may take before it counts as failed and is tried again (more for large files, SCAN.msPerGb). */
-  CLAMAV_TIMEOUT_MS: positiveInt.default(60_000),
+  CLAMAV_TIMEOUT_MS: positiveInt.default(SCAN.timeoutMs),
 });
 
 export const observabilityEnv = z.object({

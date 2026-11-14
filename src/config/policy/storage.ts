@@ -6,11 +6,29 @@ export const DB_WRITE = {
   uniqueRetryAttempts: 3,
 } as const;
 
+/** Quota banners and the sidebar meter (design: percent of the account's storage limit). */
+export const QUOTA = {
+  /** "Storage almost full" banner. */
+  warnPercent: 80,
+  /** "Storage is full" banner. */
+  fullPercent: 95,
+  /** Meter turns red, then amber, from these. */
+  meterDangerPercent: 90,
+  meterWarnPercent: 70,
+  /** Width of the meter for unlimited accounts, and the smallest visible width. */
+  unlimitedMeterPercent: 2,
+  minMeterPercent: 1,
+} as const;
+
 export const STORAGE = {
   /** Directory layout version written to the volume marker (docs/runbook.md "스토리지 레이아웃"). */
   layoutVersion: 1,
   /** Free space kept on each volume; uploads are refused below it. */
   reservePercent: 5,
+  /** Upper bound of STORAGE_RESERVE_PERCENT. */
+  reserveMaxPercent: 50,
+  /** Default owner (STORAGE_UID / STORAGE_GID) of files on the volume: the image's app user; deploy/docker-compose.yml repeats it. */
+  defaultUid: 10_001,
   /** How often the volume marker file is checked, in seconds. */
   volumeWatchIntervalSec: 30,
   /**
@@ -26,6 +44,8 @@ export const STORAGE = {
    * through fileVersionsDays()); 0 keeps none. Kept versions count toward the account's storage.
    */
   fileVersionsDays: 7,
+  /** Expired versions removed per round of the daily cleanup. */
+  fileVersionsPurgeBatch: 500,
   /** Longest FILE_VERSIONS_DAYS. */
   fileVersionsMaxDays: 365,
   /** Most items "Recently deleted" lists (newest first). */

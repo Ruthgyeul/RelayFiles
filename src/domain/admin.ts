@@ -1,13 +1,10 @@
-import { MS } from "@/config/policy";
+import { ACCOUNT, MS } from "@/config/policy";
 import { BYTES_PER_GB } from "./quota";
 
 /**
  * Admin "Accounts" rules from the design: account status badges and filters, and the
  * Manage dialog (role, deletion date, storage limit) with its preview text.
  */
-
-/** Accounts deleted within this many days are "Expiring soon" (design: 7). */
-export const EXPIRING_SOON_DAYS = 7;
 
 export type AccountStatus = "admin" | "active" | "soon" | "expired";
 export type AdminFilter = "all" | "active" | "soon" | "expired";
@@ -37,7 +34,7 @@ export function accountStatus(account: AdminLifecycle, ttlDays: number, now: num
   if (account.isAdmin) return { status: "admin", left: Infinity };
   if (account.neverExpire) return { status: "active", left: Infinity };
   const left = Math.ceil((scheduledDeletion(account, ttlDays) - now) / MS.day);
-  return { status: left <= 0 ? "expired" : left <= EXPIRING_SOON_DAYS ? "soon" : "active", left };
+  return { status: left <= 0 ? "expired" : left <= ACCOUNT.expiringSoonDays ? "soon" : "active", left };
 }
 
 export function matchesFilter(status: AccountStatus, filter: AdminFilter): boolean {

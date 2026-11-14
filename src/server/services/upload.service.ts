@@ -2,7 +2,7 @@ import "server-only";
 import { createReadStream } from "node:fs";
 import { rm, stat, unlink } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
-import { STORAGE } from "@/config/policy";
+import { STORAGE, UPLOAD } from "@/config/policy";
 import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
 import { randomString, ID_ALPHABET, newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
@@ -34,7 +34,6 @@ import { scanningEnabled } from "../scan/clamd";
 
 type Owner = SpaceOwner;
 
-const BATCH_ID_LENGTH = 24;
 /** Folder depth of the folder a Home upload creates: the account root, then the upload folder. */
 const HOME_UPLOAD_DEPTH = 2;
 
@@ -106,7 +105,7 @@ export async function prepareUpload(owner: Owner, input: PrepareUploadInput, { a
     folder = target;
   }
 
-  const batchId = randomString(BATCH_ID_LENGTH, ID_ALPHABET);
+  const batchId = randomString(UPLOAD.batchIdLength, ID_ALPHABET);
   const batch: UploadBatch = { accountId: owner.id, volumeId: volume.id, folderId: folder.id, fromHome, dup: input.dup ?? "keep", files: files.map(({ rel, size }) => ({ rel, size })), ...(apiTokenId ? { apiTokenId } : {}) };
   await saveBatch(batchId, batch);
   return {

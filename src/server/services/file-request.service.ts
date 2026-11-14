@@ -1,7 +1,7 @@
 import "server-only";
 import { hash, verify } from "@node-rs/argon2";
 import { getAppEnv, getEnv } from "@/config/env";
-import { FILE_REQUEST, MS } from "@/config/policy";
+import { FILE_REQUEST, MS, UPLOAD } from "@/config/policy";
 import type { CreateFileRequestInput, FileRequestDto, FileRequestView, RequestUploadInput, RequestUploadPlan } from "@/contracts/file-requests";
 import { isExpired } from "@/domain/account";
 import { fileRequestStatus, requestBatchError, requestRoom, type FileRequestStatus } from "@/domain/file-request";
@@ -29,7 +29,6 @@ import { assertSpace } from "./space.service";
 import { assertAccountWritable } from "./volume.service";
 
 /** Same length as an upload batch of the web app. */
-const BATCH_ID_LENGTH = 24;
 const HOUR_SEC = MS.hour / MS.second;
 
 export const fileRequestUrl = (id: string) => `${getAppEnv().PUBLIC_URL}/r/${id}`;
@@ -160,7 +159,7 @@ export async function prepareRequestUpload(id: string, input: RequestUploadInput
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
   await assertSpace(owner, input.files.reduce((sum, file) => sum + file.size, 0), { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
 
-  const batchId = randomString(BATCH_ID_LENGTH, ID_ALPHABET);
+  const batchId = randomString(UPLOAD.batchIdLength, ID_ALPHABET);
   await saveBatch(batchId, { accountId: owner.id, volumeId: volume.id, folderId: folder.id, fromHome: false, dup: "keep", files: input.files.map((file) => ({ rel: file.name, size: file.size })), requestId: id });
   return { batchId, endpoint: `/api/uploads/tus/${volume.id}` };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MS, SHARE } from "@/config/policy";
+import { MS, SECONDS, SHARE } from "@/config/policy";
 import { encodeSigned } from "../auth/signed-cookie";
 import { addUnlock, decodeUnlocks, isUnlocked, type Unlocks } from "./unlock-cookie";
 
@@ -12,7 +12,7 @@ describe("unlock cookie", () => {
   it("round-trips unlocks for the password they were made with", () => {
     const raw = addUnlock(none, "abcDEF1234", "$argon2id$hash-one", secret, now);
     const unlocks = decodeUnlocks(raw, [secret], now);
-    expect(unlocks.get("abcDEF1234")?.until).toBe(now / MS.second + SHARE.unlockHours * 3_600);
+    expect(unlocks.get("abcDEF1234")?.until).toBe(now / MS.second + SHARE.unlockHours * SECONDS.hour);
     expect(isUnlocked(unlocks, "abcDEF1234", "$argon2id$hash-one", [secret])).toBe(true);
     expect(isUnlocked(unlocks, "abcDEF1234", "$argon2id$hash-two", [secret])).toBe(false);
     expect(isUnlocked(unlocks, "otherLink1", "$argon2id$hash-one", [secret])).toBe(false);

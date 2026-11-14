@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getEnv } from "@/config/env";
 import { DUPLICATE_POLICIES } from "@/contracts/uploads";
 import { redis } from "../redis";
+import { SECONDS } from "@/config/policy";
 
 /**
  * An upload batch prepared by POST /api/uploads and consumed by the tus server. It lives in
@@ -24,8 +25,7 @@ const batchSchema = z.object({
 
 export type UploadBatch = z.infer<typeof batchSchema>;
 
-const HOUR_SECONDS = 3_600;
-const ttl = () => getEnv("uploads").UPLOAD_TMP_TTL_HOURS * HOUR_SECONDS;
+const ttl = () => getEnv("uploads").UPLOAD_TMP_TTL_HOURS * SECONDS.hour;
 const batchKey = (batchId: string) => `upload:batch:${batchId}`;
 const ownerKey = (uploadId: string) => `upload:owner:${uploadId}`;
 const requestKey = (uploadId: string) => `upload:request:${uploadId}`;

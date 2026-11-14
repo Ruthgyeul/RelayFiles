@@ -1,22 +1,19 @@
 import { roundDecimals } from "./format";
+import { MS, SECONDS } from "@/config/policy";
 
 /**
  * Server page rules: uptime, the cleanup schedule label, hourly bandwidth
  * and disk rates, and the network link label. Values come from real measurements, never generated.
  */
 
-const MINUTE = 60;
-const HOUR = 3_600;
-const DAY = 86_400;
-const MS_PER_SECOND = 1_000;
 /** /proc/diskstats counts 512-byte sectors whatever the device's own sector size. */
 const DISKSTATS_SECTOR_BYTES = 512;
 
 /** "23d 4h", "4h 12m" or "12m" (design UPTIME tile). */
 export function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / DAY);
-  const hours = Math.floor((seconds % DAY) / HOUR);
-  const minutes = Math.floor((seconds % HOUR) / MINUTE);
+  const days = Math.floor(seconds / SECONDS.day);
+  const hours = Math.floor((seconds % SECONDS.day) / SECONDS.hour);
+  const minutes = Math.floor((seconds % SECONDS.hour) / SECONDS.minute);
   if (days) return `${days}d ${hours}h`;
   if (hours) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
@@ -63,7 +60,7 @@ export function rateStats(samples: readonly number[], secondsPerSample: number):
  * without samples is null. Samples outside the window are ignored.
  */
 export function rateSeries(samples: readonly RateSample[], now: number, hours: number, secondsPerSample: number): RateSeries {
-  const hourMs = HOUR * MS_PER_SECOND;
+  const hourMs = MS.hour;
   const first = (Math.floor(now / hourMs) - (hours - 1)) * hourMs;
   const buckets = Array.from({ length: hours }, () => ({ sum: 0, count: 0, peak: 0 }));
   const inWindow: number[] = [];

@@ -85,6 +85,10 @@ export const UPLOAD = {
   resumeCandidates: 3,
   /** tus chunk size; stays below Cloudflare's 100 MB request limit. */
   chunkSizeMb: 50,
+  /** Upper bound of UPLOAD_CHUNK_SIZE_MB: a chunk plus tus headers must fit NGINX.maxBodyMb. */
+  chunkSizeMaxMb: 95,
+  /** Length of an upload batch id (uploads and upload-link drops). */
+  batchIdLength: 24,
   /** Incomplete upload chunks older than this are removed. */
   tmpTtlHours: 6,
   /**

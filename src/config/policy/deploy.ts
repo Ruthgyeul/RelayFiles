@@ -21,6 +21,8 @@ export const REDIS_SERVER = {
 export const NGINX = {
   /** Largest request body; tus chunks (UPLOAD_CHUNK_SIZE_MB, at most 95) must fit. */
   maxBodyMb: 100,
+  /** Upper bound of NGINX_MAX_BODY_MB: a larger request body only means a typo. */
+  maxBodyLimitMb: 1_024,
   /** Sign-in and account requests per client address per minute, and the burst allowed above it. */
   authRatePerMin: 20,
   authBurst: 20,

@@ -50,6 +50,8 @@ export const MEDIA = {
    */
   cacheMaxAgeSec: 365 * 24 * 60 * 60,
   workerConcurrency: 2,
+  /** Upper bound of MEDIA_WORKER_CONCURRENCY, VIDEO_TRANSCODE_MAX and K3S_MEDIA_CONCURRENCY: past it a box runs out of CPU and memory. */
+  maxConcurrency: 16,
   /**
    * A job that fails for a reason outside the file (storage I/O error, volume offline, all
    * conversion slots busy, a timeout) is tried again with exponential backoff from jobBackoffMs:
@@ -168,6 +170,8 @@ export const SCAN = {
   maxReplyBytes: 4096,
   /** A scan waits for clamd this long per GB on top of CLAMAV_TIMEOUT_MS. */
   msPerGb: 120_000,
+  /** Default of CLAMAV_TIMEOUT_MS: how long a scan may take before it counts as failed and is tried again. */
+  timeoutMs: 60_000,
   /** Visitors asking for a file still being scanned are told to come back after this long. */
   pendingRetrySec: 30,
 } as const;

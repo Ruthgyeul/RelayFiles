@@ -65,4 +65,4 @@ const globalForLogger = globalThis as unknown as { relayLogger?: winston.Logger 
 
 /** Process-wide structured logger: `{ level, message, timestamp, ...meta }`. */
 export const logger: winston.Logger = globalForLogger.relayLogger ?? createLogger();
-if (process.env.NODE_ENV !== "production") globalForLogger.relayLogger = logger;
+if (getAppEnv().NODE_ENV !== "production") globalForLogger.relayLogger = logger;

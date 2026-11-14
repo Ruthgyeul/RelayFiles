@@ -1,6 +1,6 @@
 import "server-only";
 import type { NextResponse } from "next/server";
-import { AUTH } from "@/config/policy";
+import { AUTH, MS } from "@/config/policy";
 import { getEnv } from "@/config/env";
 import type { SessionAccount, SessionState, SignupMode } from "@/contracts/auth";
 import { deletionDate, isExpired } from "@/domain/account";
@@ -53,7 +53,7 @@ export async function loadDeviceSession(rawCookie: string | undefined, adminNetw
   const active = accounts.find((item) => item.sessionId === cookie.activeSessionId) ?? accounts.at(-1) ?? null;
   const next: SessionCookie = { sessionIds: accounts.map((item) => item.sessionId), activeSessionId: active?.sessionId ?? null };
 
-  const touchBefore = now.getTime() - AUTH.touchIntervalSec * 1_000;
+  const touchBefore = now.getTime() - AUTH.touchIntervalSec * MS.second;
   await touchSessions(
     db(),
     rows.filter((row) => row.lastSeenAt.getTime() < touchBefore).map((row) => row.id),
