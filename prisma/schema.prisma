@@ -230,13 +230,13 @@ model Node {
 
   @@unique([parentId, name])
   @@index([accountId, parentId])
-  @@index([accountId, type])
   /// Finds a file with the same content in the account (deduplication of re-uploads).
   @@index([accountId, sha256])
   @@index([expAt])
   @@index([tags], type: Gin)
-  /// Largest files of an account (Storage page).
-  @@index([accountId, size])
+  /// Storage used by an account (summed from the index alone, on every page) and its largest files
+  /// (Storage page); also serves every lookup by account and type.
+  @@index([accountId, type, size])
   /// Photos and videos of an account (the "Photos" timeline).
   @@index([accountId, kind])
   /// Name search (case-insensitive "contains", ILIKE '%text%'): a trigram index, so a search does not
