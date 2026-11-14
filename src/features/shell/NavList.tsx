@@ -23,7 +23,8 @@ export function NavList({ variant, isAdmin, collapsed = false, expiringCount = 0
     <nav aria-label="Main" className="flex flex-col gap-1 p-3">
       {navItemsFor(isAdmin).map((item) => {
         const active = item === current;
-        const badge = item.id === "files" && expiringCount > 0;
+        // The collapsed rail has room for the icon only.
+        const badge = item.id === "files" && expiringCount > 0 && !collapsed;
         return (
           <Link
             key={item.id}

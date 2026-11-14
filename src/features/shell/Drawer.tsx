@@ -33,7 +33,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
           RelayFiles
         </div>
         <AccountList variant="drawer" onNavigate={onClose} />
-        <NavList variant="drawer" isAdmin={activeAccount?.isAdmin ?? false} onNavigate={onClose} />
+        <NavList variant="drawer" isAdmin={activeAccount?.isAdmin ?? false} expiringCount={session.usage?.expiringLinks ?? 0} onNavigate={onClose} />
         <div className="flex-1" />
         <StorageMeter account={activeAccount} usage={session.usage} />
       </div>

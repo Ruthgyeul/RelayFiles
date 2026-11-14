@@ -1,6 +1,8 @@
 /** Share links. Part of the product policy (src/config/policy.ts). */
 
 export const SHARE = {
+  /** Items whose expiry is this close are counted in the File Manager's orange nav badge (design: 24 hours). */
+  expiringSoonHours: 24,
   /** Items "Shared by me" reads at most (newest first); the page says when there are more. */
   sharedListMax: 1000,
   /** "Daily traffic limit" choices of the sharing settings, in GB (null: none). */

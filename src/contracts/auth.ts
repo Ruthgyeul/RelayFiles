@@ -25,6 +25,8 @@ export interface AccountUsage {
   rootItems: number;
   /** Changes are paused while the files move to new storage (reads keep working). */
   storageBusy: boolean;
+  /** Items whose expiry comes within SHARE.expiringSoonHours (the File Manager nav badge). */
+  expiringLinks: number;
 }
 
 /** Accounts signed in on this device and which one is active. */

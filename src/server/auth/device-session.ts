@@ -1,6 +1,6 @@
 import "server-only";
 import type { NextResponse } from "next/server";
-import { AUTH, MS } from "@/config/policy";
+import { AUTH, MS, SHARE } from "@/config/policy";
 import { getEnv } from "@/config/env";
 import type { SessionAccount, SessionState, SignupMode } from "@/contracts/auth";
 import { deletionDate, isExpired } from "@/domain/account";
@@ -8,7 +8,7 @@ import { hasRecentAuth, isSessionOver } from "@/domain/session";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { storageBusyOf, type AccountRow } from "../repositories/account.repo";
-import { accountUsage } from "../repositories/node.repo";
+import { accountUsage, countExpiring } from "../repositories/node.repo";
 import { findLiveSessions, revokeSessions, touchSessions } from "../repositories/session.repo";
 import { cookieSecrets } from "./keys";
 import { decodeSessionCookie, encodeSessionCookie, MAX_SESSIONS_PER_DEVICE, SESSION_COOKIE, SESSION_COOKIE_MAX_AGE, type SessionCookie } from "./session-cookie";
@@ -109,12 +109,15 @@ export function toSessionAccount(account: AccountRow): SessionAccount {
 /** Session state for the client, including the active account's storage use. */
 export async function toSessionState(device: { accounts: readonly Pick<DeviceAccount, "account">[]; active: Pick<DeviceAccount, "account"> | null }, signupMode: SignupMode): Promise<SessionState> {
   const id = device.active?.account.id;
-  const [usage, storageBusy] = id ? await Promise.all([accountUsage(db(), id), storageBusyOf(db(), id)]) : [null, null];
+  const now = new Date();
+  const [usage, storageBusy, expiringLinks] = id
+    ? await Promise.all([accountUsage(db(), id), storageBusyOf(db(), id), countExpiring(db(), id, now, new Date(now.getTime() + SHARE.expiringSoonHours * MS.hour))])
+    : [null, null, 0];
   return {
     accounts: device.accounts.map((item) => toSessionAccount(item.account)),
     activeAccountId: device.active?.account.id ?? null,
     signupMode,
-    usage: usage && { usedBytes: usage.usedBytes.toString(), rootItems: usage.rootItems, storageBusy: storageBusy === true },
+    usage: usage && { usedBytes: usage.usedBytes.toString(), rootItems: usage.rootItems, storageBusy: storageBusy === true, expiringLinks },
   };
 }
 

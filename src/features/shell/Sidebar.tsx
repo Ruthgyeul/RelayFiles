@@ -23,7 +23,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         {!collapsed && "RelayFiles"}
       </div>
       <AccountList variant="sidebar" collapsed={collapsed} />
-      <NavList variant="sidebar" isAdmin={activeAccount?.isAdmin ?? false} collapsed={collapsed} />
+      <NavList variant="sidebar" isAdmin={activeAccount?.isAdmin ?? false} collapsed={collapsed} expiringCount={session.usage?.expiringLinks ?? 0} />
       <div className="flex-1" />
       {!collapsed && <StorageMeter account={activeAccount} usage={session.usage} />}
     </aside>

@@ -18,6 +18,11 @@ export async function accountUsage(db: DbClient, accountId: string): Promise<{ u
   return { usedBytes: sum._sum.size ?? 0n, rootItems };
 }
 
+/** Items of an account that expire (and lose their link) after `from` and by `until`. */
+export function countExpiring(db: DbClient, accountId: string, from: Date, until: Date): Promise<number> {
+  return db.node.count({ where: { accountId, expAt: { gt: from, lte: until } } });
+}
+
 /** Files and folders of an account, its root folder included. */
 export function countItems(db: DbClient, accountId: string): Promise<number> {
   return db.node.count({ where: { accountId } });

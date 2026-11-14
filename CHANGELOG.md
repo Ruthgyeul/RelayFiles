@@ -6,6 +6,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Added
 
+- The File Manager link shows how many items expire within the next 24 hours (orange badge)
 - File lists follow changes made elsewhere (another device, WebDAV, the CLI, an import, thumbnails and virus scans finishing) without a reload (`GET /api/events`)
 - Photos (`/files/photos`, from the File Manager toolbar): every photo and video of the account by month, newest first by the date it was taken (else its file date), opened in the viewer and linked back to its folder
 - Favorites: a folder at the top of the root that lists favorite files and folders where they are, with its own organizing folders, search, tag search, sort, filters and a grid view
