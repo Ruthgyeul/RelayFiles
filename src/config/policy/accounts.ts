@@ -112,6 +112,8 @@ export const DAV = {
   lockTimeoutSeconds: 3600,
   /** macOS "._name" and ".DS_Store" files are accepted and dropped instead of stored. */
   skipMacMetadata: true,
+  /** Random characters in the temporary name of an item waiting to replace another (COPY/MOVE with Overwrite). */
+  replacingIdLength: 12,
 } as const;
 
 /** "Export account": the whole account as one tar with a manifest of its settings. */
