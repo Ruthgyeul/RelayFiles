@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getAppEnv, getEnv } from "@/config/env";
 import { MS, STATUS } from "@/config/policy";
 import { healthSchema } from "@/contracts/health";
-import { COMPONENTS, componentChecks, dayKeyIn, dayLevel, type ProbeResult } from "@/domain/status";
+import { COMPONENTS, componentChecks, dayKeyIn, type ProbeResult } from "@/domain/status";
 import { invalidate, cacheKey } from "../cache/cached";
 import { getJson } from "../http/get-json";
 import { db } from "../db/client";
@@ -39,8 +39,6 @@ export async function probeApp(url: string = probeUrl()): Promise<ProbeOutcome> 
   }
 }
 
-const LEVEL = { ok: "OK", warn: "WARN", down: "DOWN" } as const;
-
 /**
  * Records one probe for every Status page component, then refreshes the hourly and daily
  * rollups it touched and drops samples past their retention.
@@ -57,10 +55,7 @@ export async function recordProbe(outcome: ProbeOutcome, now: Date): Promise<voi
   const timeZone = getEnv("jobs").JOBS_TIMEZONE;
   // Yesterday is re-counted too, so a probe just after midnight completes it.
   const yesterday = dayKeyIn(new Date(now.getTime() - MS.day), timeZone);
-  await rollUpDays(db(), timeZone, yesterday, new Date(now.getTime() - 2 * MS.day - MS.hour), (ok, fail) => {
-    const level = dayLevel(ok, fail);
-    return level === "nodata" ? "OK" : LEVEL[level];
-  });
+  await rollUpDays(db(), timeZone, yesterday, new Date(now.getTime() - 2 * MS.day - MS.hour));
   await pruneHealth(db(), new Date(now.getTime() - STATUS.sampleRetentionHours * MS.hour), new Date(now.getTime() - STATUS.hourlyRetentionDays * MS.day));
   await invalidate([cacheKey.status()]);
 }

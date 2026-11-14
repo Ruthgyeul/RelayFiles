@@ -398,6 +398,7 @@ model HealthHourly {
   okCount   Int      @default(0)
   failCount Int      @default(0)
   avgMs     Int?
+  /// No longer written (nothing reads it); dropped in the next release.
   p95Ms     Int?
 
   @@id([component, hour])
@@ -412,7 +413,8 @@ enum HealthLevel {
 model HealthDaily {
   component String
   day       DateTime    @db.Date
-  level     HealthLevel
+  /// No longer written (the Status page counts the day itself); dropped in the next release.
+  level     HealthLevel?
   okCount   Int         @default(0)
   failCount Int         @default(0)
 

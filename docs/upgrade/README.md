@@ -8,6 +8,14 @@
 
 노트가 없는 릴리스는 `git pull` 뒤 릴리스 스크립트만 실행하면 된다.
 
+## 예정된 contract
+
+expand 단계를 마치고 다음 릴리스에서 지울 것. 지우는 마이그레이션에는 `-- relayfiles: contract <이유>`를 적는다.
+
+| 대상 | expand 릴리스 | 다음 릴리스에서 |
+|---|---|---|
+| `HealthHourly.p95Ms`, `HealthDaily.level`, enum `HealthLevel` | Unreleased (`20261114*_health_unused_columns_nullable`): 아무도 쓰거나 읽지 않음, `level`은 NULL 허용 | `DROP COLUMN` 두 개와 `DROP TYPE "HealthLevel"` |
+
 ## 언제 쓰나
 
 아래 중 하나라도 해당하는 릴리스는 노트를 쓴다.
