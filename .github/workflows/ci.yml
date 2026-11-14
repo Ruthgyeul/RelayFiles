@@ -137,6 +137,8 @@ jobs:
           for _ in $(seq 1 20); do docker exec redis redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG && break; sleep 1; done
       - run: npx prisma migrate deploy
       - run: npm run volume:init
+      - name: Install ffmpeg (video transcoding test fixture)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
 
