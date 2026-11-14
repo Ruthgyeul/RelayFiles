@@ -50,6 +50,16 @@ export function findAccountByLookups(db: DbClient, lookups: string[]) {
   return db.account.findFirst({ where: { tokenLookup: { in: lookups } }, select: { ...ACCOUNT_SELECT, tokenLookup: true, tokenEnc: true } });
 }
 
+/** Stored tokens of the accounts after `afterId` in id order, `limit` at a time (key rotation). */
+export function accountTokensPage(db: DbClient, afterId: string | undefined, limit: number) {
+  return db.account.findMany({
+    orderBy: { id: "asc" },
+    take: limit,
+    ...(afterId ? { cursor: { id: afterId }, skip: 1 } : {}),
+    select: { id: true, tokenLookup: true, tokenEnc: true },
+  });
+}
+
 export function findAccountToken(db: DbClient, accountId: string) {
   return db.account.findUnique({ where: { id: accountId }, select: { tokenEnc: true } });
 }

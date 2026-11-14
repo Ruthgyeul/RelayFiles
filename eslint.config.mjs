@@ -1,7 +1,13 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import { readFileSync } from "node:fs";
 import boundaries from "eslint-plugin-boundaries";
+
+/** Prisma model delegates (`db.account`, `tx.node`), read from the schema so new models are covered. */
+const PRISMA_MODELS = [...readFileSync(new URL("prisma/schema.prisma", import.meta.url), "utf8").matchAll(/^model (\w+)/gm)].map(([, name]) => name[0].toLowerCase() + name.slice(1));
+/** Prisma Client model operations. */
+const PRISMA_OPERATIONS = ["findUnique", "findUniqueOrThrow", "findFirst", "findFirstOrThrow", "findMany", "create", "createMany", "createManyAndReturn", "update", "updateMany", "updateManyAndReturn", "upsert", "delete", "deleteMany", "count", "aggregate", "groupBy"];
 
 /**
  * Architectural layers (see docs/architecture.md).
@@ -84,6 +90,11 @@ const eslintConfig = defineConfig([
         "error",
         {
           selector: "MemberExpression[object.type='CallExpression'][object.callee.name='db'][property.name=/^[a-z]/]",
+          message: "Query the database through a function in src/server/repositories.",
+        },
+        {
+          // The same through a DbClient or transaction passed in (`db.account.findMany`, `tx.node.update`).
+          selector: `MemberExpression[object.type='MemberExpression'][object.property.name=/^(${PRISMA_MODELS.join("|")})$/][property.name=/^(${PRISMA_OPERATIONS.join("|")})$/]`,
           message: "Query the database through a function in src/server/repositories.",
         },
       ],

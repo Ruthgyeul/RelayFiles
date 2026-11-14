@@ -1,7 +1,7 @@
 import "server-only";
 import { MIGRATION } from "@/config/policy";
 import type { DbClient } from "../db/client";
-import { restoreAccountTokenIf } from "../repositories/account.repo";
+import { accountTokensPage, restoreAccountTokenIf } from "../repositories/account.repo";
 import { decryptToken, encryptToken, needsReencryption, tokenLookups, type TokenKeys } from "./token-crypto";
 
 export interface RotationResult {
@@ -20,12 +20,7 @@ export async function rotateAccountKeys(db: DbClient, keys: TokenKeys, onBatch?:
   let cursor: string | undefined;
   const result: RotationResult = { checked: 0, updated: 0, unreadable: [] };
   for (;;) {
-    const rows = await db.account.findMany({
-      orderBy: { id: "asc" },
-      take: MIGRATION.batchSize,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      select: { id: true, tokenLookup: true, tokenEnc: true },
-    });
+    const rows = await accountTokensPage(db, cursor, MIGRATION.batchSize);
     if (rows.length === 0) return result;
     for (const row of rows) {
       result.checked += 1;
