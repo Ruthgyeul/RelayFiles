@@ -34,6 +34,7 @@ jobs:
       - run: npm run check:changelog
       - run: npm run test
       - run: npm run build
+      - run: npm run check:bundle
 
   cli:
     name: CLI (types from OpenAPI · test · build)

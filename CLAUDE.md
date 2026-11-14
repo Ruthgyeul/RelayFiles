@@ -55,7 +55,8 @@ npm run check:ci-images  # CI의 PostgreSQL·Redis 이미지가 deploy/docker-co
 npm run openapi      # docs/openapi.json 다시 생성 (API v1 계약을 바꾼 뒤)
 npm run check:openapi    # docs/openapi.json이 코드와 같은지 검사
 npm run check:changelog  # package.json 버전의 항목이 CHANGELOG.md에 있는지 검사
-npm run check        # typecheck · lint · emoji · cycles · migrations · ci-images · openapi · changelog · test · build 전체
+npm run check:bundle     # 빌드 뒤 페이지별 첫 로드 JS(gzip)가 scripts/bundle-budget.json 안인지, 지연 로드할 라이브러리가 첫 로드에 없는지 검사
+npm run check        # typecheck · lint · emoji · cycles · migrations · ci-images · openapi · changelog · test · build · bundle 전체
 npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). WORKER_ROLES로 맡을 일(media·maintenance·notify)을 고른다. ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
 npm run dav          # WebDAV 서버(/dav/, API 토큰 Basic 인증, 쓰기는 files:write). Next가 PROPFIND를 못 받아 별도 프로세스
 npm run media:backfill  # 썸네일 없는 이미지·영상을 다시 큐에 넣기 (-- --previews: 큰 이미지의 뷰어 미리보기)

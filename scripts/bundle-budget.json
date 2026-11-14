@@ -1,0 +1,13 @@
+{
+  "$comment": "Limits for npm run check:bundle (scripts/check-bundle.mjs). maxRouteKb: the JavaScript a page loads before it can run, gzip, per route (2026-11-14: at most 365 kB, the File Manager). lazyOnly: libraries that are loaded when used and must never be part of a page's first load, each found by a string only its code contains.",
+  "maxRouteKb": 380,
+  "lazyOnly": {
+    "pdfjs-dist": "GlobalWorkerOptions",
+    "mammoth": "convertToHtml",
+    "highlight.js": "highlightAuto",
+    "read-excel-file": "sharedStrings",
+    "react-markdown": "remarkRehypeOptions",
+    "tus-js-client": "Upload-Offset",
+    "qrcode-generator": "getModuleCount"
+  }
+}

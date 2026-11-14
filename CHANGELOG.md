@@ -29,6 +29,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Changed
 
+- Pages load less JavaScript up front (14–21 kB gzip on every app page): the upload client and the QR encoder load when first used. `npm run check:bundle` keeps every page within its budget
 - Name search uses a trigram index (`pg_trgm`, created by its migration) instead of reading every item of the account. Building it locks writes to the items table for a moment during the release
 - Bulk operations, folder views and share pages run a constant number of queries
 
