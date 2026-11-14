@@ -46,7 +46,7 @@ import {
   type ShareViewer,
 } from "./share.service";
 import { driverForAccount } from "../services/volume.service";
-import { zipResponse, type ZipEntry } from "../services/zip.service";
+import { MISSING_REASON, zipResponse, type ZipEntry } from "../services/zip.service";
 import { markActive } from "../metrics/activity";
 import { scanBlock } from "@/domain/scan";
 
@@ -251,7 +251,7 @@ async function liveTranscode(req: Request, driver: StorageDriver, accountId: str
 }
 
 /** Why a file is left out of "Download all", as written in "Not included.txt". */
-type ZipSkip = DownloadBlock | "location" | "not-ready" | "scanning" | "blocked";
+type ZipSkip = DownloadBlock | "location" | "not-ready" | "scanning" | "blocked" | "missing";
 
 const SKIP_REASONS: Record<ZipSkip, string> = {
   "stream-only": "Stream only",
@@ -261,6 +261,7 @@ const SKIP_REASONS: Record<ZipSkip, string> = {
   "not-ready": "Photo or video still being prepared for sharing, try again in a moment",
   scanning: "Still being checked for viruses, try again in a moment",
   blocked: "Couldn't be checked for viruses",
+  missing: MISSING_REASON,
 };
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
@@ -279,7 +280,8 @@ function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolde
     // A folder inside with its own download limit counts for the files below it, as when they
     // are downloaded one by one: once it has none left, its files stay out.
     const innerBlock = (inner.get(row.id) ?? []).some(downloadsUsedUp) ? "limit" : null;
-    const skip = link.isOwner ? imageBlock : (scanBlock(row.scanState) ?? downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? innerBlock ?? imageBlock);
+    // A file storage:fsck found gone from the disk would cut the zip off halfway.
+    const skip = row.missing ? "missing" : link.isOwner ? imageBlock : (scanBlock(row.scanState) ?? downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? innerBlock ?? imageBlock);
     files.push({ row, name, segments, skip });
   }
   return { files, folders };
@@ -352,7 +354,9 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   if (skipped.length > 0) entries.push({ name: `${folder.name}/Not included.txt`, open: async () => Readable.from([Buffer.from(skippedNote(skipped))]) });
   addTraffic(db(), owner.id, bytes, new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
   if (!link.isOwner) countLinkTraffic(shared.capped, bytes, now);
-  return zipResponse(entries, zipName([{ name: folder.name, folder: true }], folder.name));
+  // A busy folder, or a busy file going into the zip, slows it down like a single download.
+  const throttled = shared.busy.level === 1 || plan.files.some((file) => file.skip === null && busy.get(file.row.id)?.level === 1);
+  return zipResponse(entries, zipName([{ name: folder.name, folder: true }], folder.name), { bytesPerSecond: throttled ? SHARE.throttledBytesPerSec : undefined });
 }
 
 /** HEAD for "Download all": the same checks as the zip (its size too), without building or counting it. */

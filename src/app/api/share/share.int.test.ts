@@ -23,6 +23,7 @@ import { closeQueues } from "@/server/jobs/queue";
 import { processMedia } from "@/server/media/process";
 import { runningTranscodes } from "@/server/media/transcode";
 import { getFolderView } from "@/server/services/node.service";
+import { zipItems } from "@/server/services/zip.service";
 import { retiredSharePage, sharePage } from "@/server/share/share.service";
 import { purgeExpired } from "@/server/services/profile.service";
 import { findAccountById } from "@/server/repositories/account.repo";
@@ -765,6 +766,24 @@ describe("share downloads", () => {
     for (const text of ["only once", "stream me", "on hold"]) expect(body.includes(Buffer.from(text)), text).toBe(false);
     const counts = await prisma.node.findMany({ where: { id: { in: [a, b, once] } }, select: { id: true, downloads: true } });
     expect(Object.fromEntries(counts.map((row) => [row.id, row.downloads]))).toEqual({ [a]: 1, [b]: 1, [once]: 1 });
+  });
+
+  it("leaves files missing on the disk out of zips and lists them, for visitors and the owner", async () => {
+    const { m, trip, a } = await sharedTrip();
+    // storage:fsck --fix marked it missing: the bytes are gone from the disk.
+    await prisma.node.update({ where: { id: a }, data: { missing: true } });
+    await rm(join(layoutOf(configuredVolumeRoot()).root, "users", m.id, "Trip", "a.txt"));
+    const res = await visit(shareZip, `/api/share/${trip.linkId}/zip?folder=${trip.id}`, { linkId: trip.linkId });
+    expect(res.status).toBe(200);
+    const body = Buffer.from(await res.arrayBuffer());
+    for (const text of ["bravo", "Not included.txt", "Trip/a.txt  (Missing on the server's disk)"]) expect(body.includes(Buffer.from(text)), text).toBe(true);
+    // A complete zip: its end-of-central-directory record is there.
+    expect(body.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06]))).toBe(true);
+
+    const owner = (await findAccountById(prisma, m.id))!;
+    const own = Buffer.from(await (await zipItems(owner, [trip.id])).arrayBuffer());
+    for (const text of ["bravo", "Not included.txt", "Trip/a.txt  (Missing on the server's disk)"]) expect(own.includes(Buffer.from(text)), text).toBe(true);
+    expect(own.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06]))).toBe(true);
   });
 
   it("applies the download limit of a folder inside the zipped one, like single downloads", async () => {
