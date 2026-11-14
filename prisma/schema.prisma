@@ -237,6 +237,8 @@ model Node {
   /// Storage used by an account (summed from the index alone, on every page) and its largest files
   /// (Storage page); also serves every lookup by account and type.
   @@index([accountId, type, size])
+  /// Newest files of an account (Ctrl/⌘ K before anything is typed), read from the index in order.
+  @@index([accountId, type, createdAt, id])
   /// Photos and videos of an account (the "Photos" timeline).
   @@index([accountId, kind])
   /// Name search (case-insensitive "contains", ILIKE '%text%'): a trigram index, so a search does not

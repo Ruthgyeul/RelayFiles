@@ -164,10 +164,10 @@ export function setScanState(db: DbClient, nodeId: string, scanState: "PENDING" 
 
 /** The newest files of an account. */
 export function recentFiles(db: DbClient, accountId: string, limit: number) {
-  return db.node.findMany({ where: { accountId, type: "FILE" }, orderBy: { createdAt: "desc" }, select: NODE_SELECT, take: limit });
+  return db.node.findMany({ where: { accountId, type: "FILE" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: NODE_SELECT, take: limit });
 }
 
-/** Every folder of an account (id, name, parent) to build paths. */
+/** Every folder of an account (id, name, parent): the move/copy picker. */
 export function listFolders(db: DbClient, accountId: string) {
   return db.node.findMany({ where: { accountId, type: "FOLDER" }, select: { id: true, name: true, parentId: true, visibility: true } });
 }
