@@ -180,6 +180,24 @@ describe("LocalVolumeDriver", () => {
     expect(await readdir(layoutOf(root).uploads)).toEqual([]);
   });
 
+  it("keeps the state of an upload that is still arriving through the daily cleanup", async () => {
+    const driver = new LocalVolumeDriver("vol-1", root);
+    const uploads = layoutOf(root).uploads;
+    await mkdir(uploads, { recursive: true });
+    const longAgo = new Date(Date.now() - 10 * 3_600_000);
+    // Started ten hours ago (its state file is that old), last chunk a minute ago.
+    for (const id of ["slow", "stale"]) {
+      await writeFile(join(uploads, `${id}.json`), "{}");
+      await utimes(join(uploads, `${id}.json`), longAgo, longAgo);
+      await writeFile(join(uploads, id), "bytes");
+    }
+    await utimes(join(uploads, "stale"), longAgo, longAgo);
+    const now = new Date();
+    const purged = await driver.purgeSystem(now, new Date(now.getTime() - 6 * 3_600_000), now);
+    expect(purged.uploads).toBe(2);
+    expect((await readdir(uploads)).sort()).toEqual(["slow", "slow.json"]);
+  });
+
   it("keeps a staged copy of an old file through the daily cleanup", async () => {
     const driver = new LocalVolumeDriver("vol-1", root);
     await driver.ensureUserRoot(ACCOUNT);

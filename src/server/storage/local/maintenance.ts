@@ -8,6 +8,9 @@ import { trashTime } from "./trash";
 
 // The daily purge of system/ and the volume's health (writable, free space).
 
+/** The state file @tus/file-store keeps next to an upload's data file. */
+const TUS_STATE_SUFFIX = ".json";
+
 export async function purgeSystem(layout: VolumeLayout, trashBefore: Date, uploadsBefore: Date, transcodedBefore: Date): Promise<{ trash: number; uploads: number; transcoded: number }> {
   const entries = async (dir: string) => readdir(dir).catch(() => [] as string[]);
   let trash = 0;
@@ -25,6 +28,12 @@ export async function purgeSystem(layout: VolumeLayout, trashBefore: Date, uploa
     // (never the time of the files inside it: hard links keep the original's).
     const info = await lstat(path).catch(() => null);
     if (!info || info.mtime >= uploadsBefore) continue;
+    // tus writes an upload's state (<id>.json) only when it starts, while every chunk touches the
+    // data file (<id>): an upload still arriving after the cut-off keeps its state too.
+    if (name.endsWith(TUS_STATE_SUFFIX)) {
+      const data = await lstat(join(layout.uploads, name.slice(0, -TUS_STATE_SUFFIX.length))).catch(() => null);
+      if (data && data.mtime >= uploadsBefore) continue;
+    }
     await rm(path, { recursive: true, force: true });
     uploads++;
   }
