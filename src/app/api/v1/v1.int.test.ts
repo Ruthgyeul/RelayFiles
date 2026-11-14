@@ -171,6 +171,18 @@ describe("API v1", () => {
     expect((await v1(download, { token, params: { id: file.nodeId } })).status).toBe(404);
   });
 
+  it("keeps every one of several uploads of one name that finish together", async () => {
+    const m = await member();
+    const { token } = await tokenFor(m, ["files:read", "files:write"]);
+    const sent = await Promise.all(
+      Array.from({ length: 5 }, (_, index) => v1(upload, { method: "POST", token, query: "?folder=root&name=race.txt", body: Buffer.from(`copy ${index}`) })),
+    );
+    expect(sent.map((res) => res.status)).toEqual([201, 201, 201, 201, 201]);
+    const names = await Promise.all(sent.map(async (res) => (await data<ApiV1UploadedFile>(res)).name));
+    expect(new Set(names).size).toBe(5);
+    expect(names).toContain("race.txt");
+  });
+
   it("refuses a body longer than its Content-Length, a bad name and another account's folder", async () => {
     const m = await member();
     const other = await member();

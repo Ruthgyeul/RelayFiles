@@ -44,6 +44,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 - A counted share download is kept when its resume grant cannot be stored (a delete-after-download file was used up without being received)
 - The daily cleanup goes on with the other volumes when one fails; an alert that could not be queued no longer holds back the next one
 - Zips leave out files missing from the disk and list them in "Not included.txt" (such a zip used to hang); "Download all" of a busy share link is slowed down like single downloads
+- Several uploads of one name into one folder that finish together are all kept ("name (2)", …) instead of failing with a 500 and losing the bytes
 - Moving favorites answers 404 for another account's items
 - An upload-only link's size limit is bounded (a huge value gave a 500)
 - Security log "Load more" no longer appends an old page after a reload

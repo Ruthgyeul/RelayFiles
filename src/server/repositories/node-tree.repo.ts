@@ -139,6 +139,14 @@ export async function subtreeRowsOf(db: DbClient, topIds: readonly string[]): Pr
 }
 
 /** "Apply to all subfolders and files": everything inside follows the folder again. */
+/**
+ * Locks one folder's row FOR UPDATE inside a transaction: writers that choose a name in it
+ * (uploads finishing together) take turns, so each one sees the names the others placed.
+ */
+export async function lockFolderForNames(tx: DbClient, folderId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM "Node" WHERE id = ${folderId} FOR UPDATE`;
+}
+
 /** How many levels lie below the deepest of these items (0: files or empty folders only). */
 export async function subtreeHeight(db: DbClient, topIds: readonly string[]): Promise<number> {
   if (topIds.length === 0) return 0;
