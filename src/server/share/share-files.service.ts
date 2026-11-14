@@ -6,7 +6,6 @@ import { isSubtitleName } from "@/domain/subtitles";
 import { subtreePaths } from "@/domain/subtree";
 import { effectiveRange, parseRange, zipName } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadBlock, type DownloadDecision } from "@/domain/share-access";
-import type { NodeKind } from "@/domain/tree";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { countInWindow } from "../redis";
@@ -24,7 +23,7 @@ import { canStripType } from "../media/process";
 import { copySatisfies, shareStripMode } from "../media/strip-mode";
 import { transcodeResponse } from "../media/transcode";
 import { notePlay, sendStoredTranscode } from "../media/transcode-cache";
-import { findAccountById, type AccountRow } from "../repositories/account.repo";
+import type { AccountRow } from "../repositories/account.repo";
 import { claimDownload, claimEachDownload, type SharedRow } from "../repositories/share.repo";
 import { addTraffic } from "../repositories/traffic.repo";
 import { assertShareTraffic, countLinkTraffic } from "./traffic-cap";
@@ -36,27 +35,21 @@ import type { ByteSource, StorageDriver, StorageLocation } from "../storage/driv
 import {
   assertSharedFolderZippable,
   downloadBlockOf,
+  kindOf,
   pausedOn,
   resolveSharedFile,
   resolveSharedFolder,
   sharedFolderTree,
-  type LoadedLink,
   type SharedFile,
   type SharedFolder,
   type SharedFolderTree,
   type ShareViewer,
 } from "./share.service";
 import { driverForAccount } from "../services/volume.service";
-import { zipResponse, type ZipEntry } from "../services/zip.service";
+import { MISSING_REASON, zipResponse, type ZipEntry } from "../services/zip.service";
 import { markActive } from "../metrics/activity";
 import { scanBlock } from "@/domain/scan";
 
-/** The link owner's account (for the storage volume and the metadata setting). */
-async function ownerOf(link: LoadedLink): Promise<AccountRow> {
-  const owner = await findAccountById(db(), link.root.accountId);
-  if (!owner) throw new ApiError("NOT_FOUND");
-  return owner;
-}
 
 /** Whether visitors get this photo or video as the worker's copy without metadata (SHARE_METADATA_STRIP and the owner's setting). */
 const stripsMedia = (owner: AccountRow, row: Pick<SharedRow, "kind">) => owner.stripMetadataOnShare && shareStripMode() !== "none" && (row.kind === "IMAGE" || row.kind === "VIDEO");
@@ -97,7 +90,6 @@ async function publicImage(driver: StorageDriver, location: StorageLocation, row
   return asset;
 }
 
-const kindOf = (row: Pick<SharedRow, "kind">) => (row.kind ? (row.kind.toLowerCase() as NodeKind) : null);
 
 /**
  * Counts a visitor's download start on the file, the link and every item on the way that
@@ -110,7 +102,9 @@ async function countSharedDownload(file: SharedFile, viewer: ShareViewer, client
   if (!claimed) throw new ApiError("FORBIDDEN", "Download limit reached");
   noteUsedUp(file.link.root.accountId, claimed.usedUp);
   const visitorId = viewer.visitorId ?? newVisitorId();
-  await grantDownload(row.id, visitorId);
+  // Already counted: a Redis hiccup only costs the visitor resuming, never the download itself
+  // (a delete-after-download file would otherwise be used up without anyone receiving it).
+  await grantDownload(row.id, visitorId).catch((error: unknown) => logger.warn("download grant not stored", { error }));
   await recordDownload(file.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
   void logLinkEvent(row, "DOWNLOAD", client);
   return visitorId;
@@ -135,7 +129,8 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   const now = Date.now();
   const file = await resolveSharedFile(linkId, nodeId, viewer, mode, now);
   const { link, row } = file;
-  const owner = await ownerOf(link);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
   const driver = await driverForAccount(owner);
   const location = { accountId: owner.id, segments: file.segments };
   const body = stripsMedia(owner, row) ? await publicImage(driver, location, row) : undefined;
@@ -146,7 +141,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   const range = effectiveRange(req.headers.get("range"), req.headers.get("if-range"), etag, size);
 
   // A visitor past the link's or the account's traffic for the day gets 429 before anything is counted.
-  if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, link.root, now);
+  if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, file.capped, now);
   let newVisitor: string | null = null;
   if (mode === "download") {
     const granted = !link.isOwner && range !== null && range !== "unsatisfiable" && range.start > 0 && (await hasDownloadGrant(row.id, viewer.visitorId));
@@ -176,11 +171,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
     mode,
     body,
     rateLimit: file.busy.level === 1 ? SHARE.throttledBytesPerSec : undefined,
-    onServe: (bytes) => {
-      if (req.method === "HEAD" || bytes === 0) return;
-      addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
-      if (!link.isOwner) countLinkTraffic(link.root.id, BigInt(bytes));
-    },
+    onServe: trafficOf(req, owner, file),
   });
   return newVisitor ? setVisitorCookie(response, newVisitor) : response;
 }
@@ -193,7 +184,8 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
 export async function serveSharedThumb(req: Request, linkId: string, nodeId: string, viewer: ShareViewer): Promise<Response> {
   const { link, row } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
   if (!row.hasThumb) throw new ApiError("NOT_FOUND");
-  const owner = await ownerOf(link);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
   return sendThumb(req, await driverForAccount(owner), owner.id, row);
 }
 
@@ -204,7 +196,8 @@ export async function serveSharedThumb(req: Request, linkId: string, nodeId: str
  */
 export async function serveSharedPreview(req: Request, linkId: string, nodeId: string, viewer: ShareViewer, client: ClientInfo): Promise<Response> {
   const { link, row, limited } = await resolveSharedFile(linkId, nodeId, viewer, "stream", Date.now());
-  const owner = await ownerOf(link);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
   // A file under a download limit or delete-after-download goes through playback, which counts it.
   const preview = row.kind === "IMAGE" && !limited ? await sendAsset(req, await driverForAccount(owner), owner.id, row, "preview") : null;
   if (!preview) return serveSharedFile(req, linkId, nodeId, "stream", viewer, client);
@@ -220,8 +213,9 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
   const file = await resolveSharedFile(linkId, nodeId, viewer, "stream", now);
   const { link, row } = file;
   if (row.kind !== "VIDEO") throw new ApiError("NOT_FOUND");
-  const owner = await ownerOf(link);
-  if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, link.root, now);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
+  if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, file.capped, now);
   const driver = await driverForAccount(owner);
   // A file under a download limit or delete-after-download: converted playback counts like
   // playback of the original. Only where the request starts matters, so the converted
@@ -238,22 +232,33 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
     if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
     void markActive("stream", `${row.id}:${client.ipKey}`);
   }
-  const response = (await sendStoredTranscode(req, driver, owner.id, row)) ?? (await liveTranscode(req, driver, owner.id, file, row.id, link.isOwner ? `account:${owner.id}` : `visitor:${client.ipKey}`));
+  // Converted playback counts toward the account's and the link's daily traffic like the original.
+  const onServe = trafficOf(req, owner, file);
+  const response = (await sendStoredTranscode(req, driver, owner.id, row, onServe)) ?? (await liveTranscode(req, driver, owner.id, file, row.id, link.isOwner ? `account:${owner.id}` : `visitor:${client.ipKey}`, onServe));
   return newVisitor ? setVisitorCookie(response, newVisitor) : response;
 }
 
 /** Length passed to parseRange when only the start of a request matters. */
 const UNKNOWN_LENGTH = Number.MAX_SAFE_INTEGER;
 
-async function liveTranscode(req: Request, driver: StorageDriver, accountId: string, file: SharedFile, nodeId: string, requester: string): Promise<Response> {
+async function liveTranscode(req: Request, driver: StorageDriver, accountId: string, file: SharedFile, nodeId: string, requester: string, onServe: (bytes: number) => void): Promise<Response> {
   const path = await driver.localPath({ accountId, segments: file.segments });
   if (!path) throw new ApiError("NOT_FOUND");
   if (req.method === "GET") void notePlay(nodeId);
-  return transcodeResponse(req, path, requester);
+  return transcodeResponse(req, path, requester, { onServe });
+}
+
+/** Counts bytes sent to a share visitor: the owner's account traffic, and every limited item on the way. */
+function trafficOf(req: Request, owner: AccountRow, file: SharedFile): (bytes: number) => void {
+  return (bytes) => {
+    if (req.method === "HEAD" || bytes === 0) return;
+    addTraffic(db(), owner.id, BigInt(bytes), new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
+    if (!file.link.isOwner) countLinkTraffic(file.capped, BigInt(bytes));
+  };
 }
 
 /** Why a file is left out of "Download all", as written in "Not included.txt". */
-type ZipSkip = DownloadBlock | "location" | "not-ready" | "scanning" | "blocked";
+type ZipSkip = DownloadBlock | "location" | "not-ready" | "scanning" | "blocked" | "missing";
 
 const SKIP_REASONS: Record<ZipSkip, string> = {
   "stream-only": "Stream only",
@@ -263,6 +268,7 @@ const SKIP_REASONS: Record<ZipSkip, string> = {
   "not-ready": "Photo or video still being prepared for sharing, try again in a moment",
   scanning: "Still being checked for viruses, try again in a moment",
   blocked: "Couldn't be checked for viruses",
+  missing: MISSING_REASON,
 };
 
 /** The files of a shared folder, with what keeps each one out of the zip (null = included). */
@@ -281,7 +287,8 @@ function zipPlan({ link, folder }: SharedFolder, { rows, wayAbove }: SharedFolde
     // A folder inside with its own download limit counts for the files below it, as when they
     // are downloaded one by one: once it has none left, its files stay out.
     const innerBlock = (inner.get(row.id) ?? []).some(downloadsUsedUp) ? "limit" : null;
-    const skip = link.isOwner ? imageBlock : (scanBlock(row.scanState) ?? downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? innerBlock ?? imageBlock);
+    // A file storage:fsck found gone from the disk would cut the zip off halfway.
+    const skip = row.missing ? "missing" : link.isOwner ? imageBlock : (scanBlock(row.scanState) ?? downloadBlockOf(row, wayAbove(row), busy.get(row.id)) ?? innerBlock ?? imageBlock);
     files.push({ row, name, segments, skip });
   }
   return { files, folders };
@@ -303,8 +310,9 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   const shared = await resolveSharedFolder(linkId, folderId, viewer, now);
   const { link, folder } = shared;
   const tree = await sharedFolderTree(shared, now);
-  const owner = await ownerOf(link);
-  if (!link.isOwner) await assertShareTraffic(owner, link.root, now);
+  // loadLink read the owner already (the storage volume and the metadata setting).
+  const { owner } = link;
+  if (!link.isOwner) await assertShareTraffic(owner, shared.capped, now);
   const driver = await driverForAccount(owner);
   const base = segmentsBelowRoot(shared.chain);
 
@@ -352,8 +360,10 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
   }
   if (skipped.length > 0) entries.push({ name: `${folder.name}/Not included.txt`, open: async () => Readable.from([Buffer.from(skippedNote(skipped))]) });
   addTraffic(db(), owner.id, bytes, new Date()).catch((error: unknown) => logger.warn("traffic not recorded", { error }));
-  if (!link.isOwner) countLinkTraffic(link.root.id, bytes, now);
-  return zipResponse(entries, zipName([{ name: folder.name, folder: true }], folder.name));
+  if (!link.isOwner) countLinkTraffic(shared.capped, bytes, now);
+  // A busy folder, or a busy file going into the zip, slows it down like a single download.
+  const throttled = shared.busy.level === 1 || plan.files.some((file) => file.skip === null && busy.get(file.row.id)?.level === 1);
+  return zipResponse(entries, zipName([{ name: folder.name, folder: true }], folder.name), { bytesPerSecond: throttled ? SHARE.throttledBytesPerSec : undefined });
 }
 
 /** HEAD for "Download all": the same checks as the zip (its size too), without building or counting it. */

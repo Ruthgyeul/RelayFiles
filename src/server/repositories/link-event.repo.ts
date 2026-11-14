@@ -1,16 +1,41 @@
 import "server-only";
 import type { DbClient, Prisma } from "../db/client";
 
+// The ids go in as one array parameter (= ANY): Prisma cannot split an IN list it groups or
+// sorts, and PostgreSQL refuses more than 65,535 parameters (an account holds up to 100,000 items).
+
 /** When each item's share link was last used (items without events are absent). */
 export async function lastLinkEventAt(db: DbClient, nodeIds: readonly string[]): Promise<Map<string, Date>> {
   if (nodeIds.length === 0) return new Map();
-  const rows = await db.linkEvent.groupBy({ by: ["nodeId"], where: { nodeId: { in: [...nodeIds] } }, _max: { at: true } });
-  return new Map(rows.flatMap((row) => (row._max.at ? [[row.nodeId, row._max.at] as const] : [])));
+  const rows = await db.$queryRaw<{ nodeId: string; at: Date }[]>`
+    SELECT "nodeId", MAX(at) AS at FROM "LinkEvent" WHERE "nodeId" = ANY(${[...nodeIds]}) GROUP BY "nodeId"`;
+  return new Map(rows.map((row) => [row.nodeId, row.at] as const));
 }
 
-/** Newest link events of nodes (a folder's log includes everything inside it). */
-export function listLinkEvents(db: DbClient, nodeIds: string[], limit: number) {
-  return db.linkEvent.findMany({ where: { nodeId: { in: nodeIds } }, orderBy: { at: "desc" }, take: limit, select: { kind: true, fileName: true, device: true, ipMasked: true, country: true, at: true } });
+export interface LinkEventRow {
+  kind: Prisma.LinkEventGetPayload<object>["kind"];
+  fileName: string;
+  device: string;
+  ipMasked: string;
+  country: string;
+  at: Date;
+}
+
+/**
+ * Newest link events of an item; a folder's log includes everything inside it (walked in the same
+ * query, so a folder of any size is one statement).
+ */
+export function listLinkEventsBelow(db: DbClient, nodeId: string, limit: number): Promise<LinkEventRow[]> {
+  return db.$queryRaw<LinkEventRow[]>`
+    WITH RECURSIVE sub AS (
+      SELECT id FROM "Node" WHERE id = ${nodeId}
+      UNION ALL
+      SELECT n.id FROM "Node" n JOIN sub s ON n."parentId" = s.id
+    )
+    SELECT e.kind::text AS kind, e."fileName", e.device, e."ipMasked", e.country, e.at
+    FROM "LinkEvent" e JOIN sub ON e."nodeId" = sub.id
+    ORDER BY e.at DESC, e.id DESC
+    LIMIT ${limit}`;
 }
 
 export async function addLinkEvent(db: DbClient, data: Prisma.LinkEventUncheckedCreateInput): Promise<void> {

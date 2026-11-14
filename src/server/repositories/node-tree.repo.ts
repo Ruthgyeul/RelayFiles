@@ -139,6 +139,27 @@ export async function subtreeRowsOf(db: DbClient, topIds: readonly string[]): Pr
 }
 
 /** "Apply to all subfolders and files": everything inside follows the folder again. */
+/**
+ * Locks one folder's row FOR UPDATE inside a transaction: writers that choose a name in it
+ * (uploads finishing together) take turns, so each one sees the names the others placed.
+ */
+export async function lockFolderForNames(tx: DbClient, folderId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM "Node" WHERE id = ${folderId} FOR UPDATE`;
+}
+
+/** How many levels lie below the deepest of these items (0: files or empty folders only). */
+export async function subtreeHeight(db: DbClient, topIds: readonly string[]): Promise<number> {
+  if (topIds.length === 0) return 0;
+  const [row] = await db.$queryRaw<{ height: number | null }[]>`
+    WITH RECURSIVE sub AS (
+      SELECT id, 0 AS depth FROM "Node" WHERE id = ANY(${[...new Set(topIds)]})
+      UNION ALL
+      SELECT n.id, s.depth + 1 FROM "Node" n JOIN sub s ON n."parentId" = s.id
+    )
+    SELECT MAX(depth)::int AS height FROM sub`;
+  return row?.height ?? 0;
+}
+
 export async function inheritVisibilityBelow(db: DbClient, folderId: string): Promise<void> {
   const ids = await descendantIds(db, folderId);
   if (ids.length) await db.node.updateMany({ where: { id: { in: ids } }, data: { visibility: "INHERIT" } });

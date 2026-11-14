@@ -11,7 +11,19 @@ import { trafficOfAccountOn } from "../repositories/traffic.repo";
 /** A link's counter outlives its day by this much, so a late write never starts a counter that never expires. */
 const COUNTER_GRACE_SEC = MS.hour / MS.second;
 
-const linkKey = (rootId: string, now: number) => `traffic:link:${rootId}:${utcDay(now)}`;
+const linkKey = (nodeId: string, now: number) => `traffic:link:${nodeId}:${utcDay(now)}`;
+
+/** An item with its own daily limit (null: none). */
+export interface CappedItem {
+  id: string;
+  dailyBytesCap: bigint | null;
+}
+
+/**
+ * The items whose own daily limit covers a response: every limited item from the account root
+ * down to what is sent. A folder's limit then also holds for the links of files inside it.
+ */
+export const cappedOn = (chain: readonly CappedItem[]): CappedItem[] => chain.filter((row) => row.dailyBytesCap !== null);
 
 /** The account limit, SHARE_DAILY_BYTES_CAP_GB, in bytes (null: none). */
 function accountCap(): bigint | null {
@@ -20,37 +32,39 @@ function accountCap(): bigint | null {
 }
 
 /**
- * Refuses a visitor's new download, playback or zip with 429 once the link (the shared item's own
- * daily limit) or the owner's account (SHARE_DAILY_BYTES_CAP_GB) has sent its bytes for the UTC
- * day; Retry-After is the time left until midnight UTC. Checked before sending, so the response
- * that crosses a limit still finishes.
+ * Refuses a visitor's new download, playback or zip with 429 once a limited item on the way
+ * (`capped`, see {@link cappedOn}) or the owner's account (SHARE_DAILY_BYTES_CAP_GB) has sent its
+ * bytes for the UTC day; Retry-After is the time left until midnight UTC. Checked before sending,
+ * so the response that crosses a limit still finishes.
  */
-export async function assertShareTraffic(owner: { id: string }, root: { id: string; dailyBytesCap: bigint | null }, now: number = Date.now()): Promise<void> {
+export async function assertShareTraffic(owner: { id: string }, capped: readonly CappedItem[], now: number): Promise<void> {
   const account = accountCap();
-  if (root.dailyBytesCap === null && account === null) return;
-  const [linkUsed, accountUsed] = await Promise.all([
-    root.dailyBytesCap === null
-      ? Promise.resolve(0n)
+  if (capped.length === 0 && account === null) return;
+  const [itemsUsed, accountUsed] = await Promise.all([
+    capped.length === 0
+      ? Promise.resolve([] as bigint[])
       : redis()
-          .get(linkKey(root.id, now))
-          .then((value) => BigInt(value ?? "0")),
+          .mget(...capped.map((item) => linkKey(item.id, now)))
+          .then((values) => values.map((value) => BigInt(value ?? "0"))),
     account === null ? Promise.resolve(0n) : trafficOfAccountOn(db(), owner.id, new Date(now)),
   ]);
-  const reached = capReached({ used: linkUsed, cap: root.dailyBytesCap }, { used: accountUsed, cap: account });
+  const reached = capReached(
+    capped.map((item, index) => ({ used: itemsUsed[index] ?? 0n, cap: item.dailyBytesCap })),
+    { used: accountUsed, cap: account },
+  );
   if (reached === null) return;
   const message =
     reached === "link" ? "This link has used up today's traffic. Try again after midnight UTC." : "This server's daily sharing limit for this account is used up. Try again after midnight UTC.";
   throw new ApiError("RATE_LIMITED", message, { retryAfter: secondsUntilUtcMidnight(now) });
 }
 
-/** Adds bytes a visitor was sent through a link to the link's counter for the day (fire and forget). */
-export function countLinkTraffic(rootId: string, bytes: bigint, now: number = Date.now()): void {
-  if (bytes <= 0n) return;
-  const key = linkKey(rootId, now);
-  redis()
-    .multi()
-    .incrby(key, bytes.toString())
-    .expire(key, secondsUntilUtcMidnight(now) + COUNTER_GRACE_SEC)
-    .exec()
-    .catch((error: unknown) => logger.warn("link traffic not counted", { error }));
+/** Adds bytes a visitor was sent to the day's counter of every limited item on the way (fire and forget). */
+export function countLinkTraffic(capped: readonly CappedItem[], bytes: bigint, now: number = Date.now()): void {
+  if (bytes <= 0n || capped.length === 0) return;
+  const multi = redis().multi();
+  for (const item of capped) {
+    const key = linkKey(item.id, now);
+    multi.incrby(key, bytes.toString()).expire(key, secondsUntilUtcMidnight(now) + COUNTER_GRACE_SEC);
+  }
+  multi.exec().catch((error: unknown) => logger.warn("link traffic not counted", { error }));
 }

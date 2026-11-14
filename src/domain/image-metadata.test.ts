@@ -122,6 +122,12 @@ describe("stripImageMetadata · WebP", () => {
     expect(out[20]).toBe(0x10); // only the alpha flag is left
   });
 
+  it("refuses a chunk that claims more bytes than the file holds", () => {
+    const body = [...text("WEBP"), ...riffChunk("VP8 ", [9, 9, 9]), ...text("VP8L"), 200, 0, 0, 0, 1, 2, 3];
+    const webp = Uint8Array.from([...text("RIFF"), body.length & 0xff, body.length >> 8, 0, 0, ...body]);
+    expect(stripImageMetadata(webp, "image/webp")).toBeNull();
+  });
+
   it("returns null for other types", () => {
     expect(stripImageMetadata(Uint8Array.from([1, 2, 3]), "image/gif")).toBeNull();
   });

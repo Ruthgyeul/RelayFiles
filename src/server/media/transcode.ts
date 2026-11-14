@@ -44,7 +44,8 @@ export function storedTranscodeArgs(path: string, output: string): string[] {
 
 /** Passes bytes through, fails once more than `limit` went by, and remembers when bytes last moved. */
 class OutputLimit extends Transform {
-  private sent = 0;
+  /** Bytes passed on to the reader so far. */
+  sent = 0;
   /** When output last passed through (a stalled reader stops the flow through backpressure). */
   lastFlowAt = Date.now();
 
@@ -82,6 +83,18 @@ function releaseAll(held: readonly SemaphoreSlot[]): void {
   for (const slot of held) slot.release().catch((error: unknown) => logger.warn("conversion slot not released", { error }));
 }
 
+/** The requester's own slot, then a shared one: [shared, own]. Throws 429 when either is taken. */
+async function takeSlots(requester: string, max: number): Promise<[SemaphoreSlot, SemaphoreSlot]> {
+  const own = await slotOf(`transcode:by:${requester}`, TRANSCODE.maxPerRequester);
+  if (!own) throw ownBusy();
+  const slot = await sharedSlot(max);
+  if (!slot) {
+    releaseAll([own]);
+    throw busy();
+  }
+  return [slot, own];
+}
+
 /**
  * Plays a video the browser cannot decode by converting it while it streams. At most
  * VIDEO_TRANSCODE_MAX conversions run at once across every app process (Redis slots), and at
@@ -90,22 +103,25 @@ function releaseAll(held: readonly SemaphoreSlot[]): void {
  * reached, nobody reads its output for TRANSCODE.idleTimeoutMs, it ran TRANSCODE.maxRunMs or
  * its shared slot is lost, and is always reaped (`close`).
  */
-export async function transcodeResponse(req: Request, path: string, requester: string): Promise<Response> {
+export async function transcodeResponse(req: Request, path: string, requester: string, { onServe }: { onServe?: (bytes: number) => void } = {}): Promise<Response> {
   // A finished conversion is kept by the browser: watching again costs no CPU.
   const headers = new Headers({ "content-type": "video/mp4", "cache-control": IMMUTABLE_CACHE, "x-content-type-options": "nosniff", "x-accel-buffering": "no" });
   const { FFMPEG_PATH, VIDEO_TRANSCODE_MAX } = getEnv("jobs");
   if (VIDEO_TRANSCODE_MAX === 0) throw new ApiError("NOT_FOUND");
   if (req.method === "HEAD") return new Response(null, { headers });
   if (slots.running >= VIDEO_TRANSCODE_MAX) throw busy();
-  const own = await slotOf(`transcode:by:${requester}`, TRANSCODE.maxPerRequester);
-  if (!own) throw ownBusy();
-  const slot = await sharedSlot(VIDEO_TRANSCODE_MAX);
-  if (!slot) {
-    releaseAll([own]);
-    throw busy();
-  }
-
+  // Taken before the Redis round trips below: while Redis is down this count is the only limit,
+  // and requests waiting on Redis at the same time must not all pass the check above.
   slots.running++;
+  let held: [SemaphoreSlot, SemaphoreSlot];
+  try {
+    held = await takeSlots(requester, VIDEO_TRANSCODE_MAX);
+  } catch (error) {
+    slots.running--;
+    throw error;
+  }
+  const [slot, own] = held;
+
   void countOne("transcodes_started");
   const started = Date.now();
   const child = spawn(FFMPEG_PATH, transcodeArgs(path), { stdio: ["ignore", "pipe", "ignore"], shell: false });
@@ -151,8 +167,12 @@ export async function transcodeResponse(req: Request, path: string, requester: s
     child.once("close", () => held.signal.removeEventListener("abort", lost));
   }
 
-  // The viewer closed, seeked away or the limit was hit: stop converting right away.
+  // The viewer closed, seeked away or the limit was hit: stop converting right away. What was
+  // sent counts as traffic once the stream ends (the length is not known before).
   pipeline(child.stdout, output, () => stop());
-  output.once("close", stop);
+  output.once("close", () => {
+    stop();
+    if (output.sent > 0) onServe?.(output.sent);
+  });
   return new Response(Readable.toWeb(output) as ReadableStream, { headers });
 }

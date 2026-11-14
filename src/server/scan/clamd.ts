@@ -1,5 +1,6 @@
 import "server-only";
 import { createReadStream } from "node:fs";
+import { once } from "node:events";
 import { connect, type Socket } from "node:net";
 import { getEnv } from "@/config/env";
 import { SCAN } from "@/config/policy";
@@ -40,6 +41,15 @@ function readReply(socket: Socket): Promise<string> {
 }
 
 /**
+ * Waits until the socket can take more data. clamd closes the connection when it refuses the
+ * stream (size limit, error), so a closed socket ends the wait instead of a drain that never comes.
+ */
+async function writable(socket: Socket): Promise<void> {
+  await Promise.race([once(socket, "drain"), once(socket, "close")]);
+  if (socket.destroyed) throw new Error("clamd closed the connection");
+}
+
+/**
  * Sends a file to clamd (zINSTREAM: 4-byte big-endian chunk lengths, a zero length to end) and
  * returns its verdict. Throws when clamd cannot be reached or times out, so the job is tried again.
  */
@@ -48,13 +58,18 @@ export async function scanFile(path: string, size: number): Promise<ScanVerdict>
   const socket = await clamdSocket(timeoutMs);
   try {
     const reply = readReply(socket);
+    // Handled now: a socket that fails while the file is still streaming must not leave an
+    // unhandled rejection (it would end the worker process). The reply is still awaited below.
+    reply.catch(() => undefined);
     socket.write("zINSTREAM\0");
     for await (const chunk of createReadStream(path, { highWaterMark: SCAN.chunkBytes }) as AsyncIterable<Buffer>) {
+      // clamd may answer early (stream size limit) and close: stop sending, read its reply.
+      if (socket.destroyed || socket.writableEnded) break;
       const length = Buffer.alloc(4);
       length.writeUInt32BE(chunk.length);
-      if (!socket.write(Buffer.concat([length, chunk]))) await new Promise((resolve) => socket.once("drain", resolve));
+      if (!socket.write(Buffer.concat([length, chunk]))) await writable(socket);
     }
-    socket.write(Buffer.alloc(4));
+    if (!socket.destroyed) socket.write(Buffer.alloc(4));
     return parseClamdReply(await reply);
   } finally {
     socket.destroy();

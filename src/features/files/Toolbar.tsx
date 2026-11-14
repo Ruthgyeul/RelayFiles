@@ -95,6 +95,9 @@ export function Toolbar<S extends string>(props: ToolbarProps<S>) {
       </button>
       {links && (
         <>
+          <Link href="/files/photos" title="Photos" aria-label="Photos" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
+            <Icon name="image" size={20} />
+          </Link>
           <Link href="/files/shared" title="Shared by me" aria-label="Shared by me" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
             <Icon name="share-network" size={20} />
           </Link>

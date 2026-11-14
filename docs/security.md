@@ -39,6 +39,11 @@
 - 내용 주입: 이름의 제어 문자(줄바꿈 등)는 공백으로 바꾼다. Discord는 `allowed_mentions: { parse: [] }`로 `@everyone` 같은 이름이 아무도 부르지 않게 하고, Telegram은 `parse_mode` 없이 평문으로 보낸다. ntfy 헤더(제목·우선순위)에는 고정 문구만 넣는다.
 - 양: 업로드 링크 알림은 링크마다 60초에 한 번으로 묶이고(방문자가 파일 1만 개를 올려도 메시지는 몇 개), 볼륨 경보는 종류·볼륨마다 반복 제한이 있다.
 
+## 실시간 갱신 스트림
+
+- `GET /api/events`는 로그인한 계정의 것만 열리고(`auth: "active"`), 세션을 `LIVE.sessionCheckMs`마다 다시 확인해 로그아웃되면 끝난다. 이벤트는 `changed` 한 단어라 파일 이름이나 경로가 실리지 않는다. 받은 페이지는 평소의 요청(권한 검사, 다른 계정은 404)으로 다시 읽는다.
+- 한 계정이 한 앱 프로세스에 여는 스트림은 `LIVE.maxPerAccount`(10)개까지다. Redis 채널 이름에 `REDIS_KEY_PREFIX`가 붙어 Redis를 함께 쓰는 다른 설치와 섞이지 않는다(tus 잠금 해제 채널도 같다).
+
 ## API
 
 - 예상하지 못한 예외는 응답에 내용을 싣지 않는다(`apiHandler`). 요청 id로 로그를 찾는다.
@@ -165,7 +170,7 @@ k3s에서 미디어 워커를 Pi 노드로 나누면(`K3S_MEDIA_REPLICAS` ≥ 1,
 - 링크 비밀번호는 argon2 해시로 저장한다. 맞히면 서명한 `rf_sh` 쿠키(v2)로 12시간(`SHARE.unlockHours`) 열린다. 쿠키 항목은 `[linkId, until, pwTag]`이고 `pwTag`는 `HMAC(COOKIE_SECRET, passwordHash)` 앞 8바이트다. 비밀번호를 바꾸면 기존 기기는 다시 입력해야 한다(v1 쿠키는 무시). 틀린 비밀번호는 아직 필요한 비밀번호를 가진 항목마다 세 가지 예산으로 센다(`share/unlock-limit.ts`, `countInWindow`, INCR+EXPIRE 원자 실행): 주소마다 600초에 10회(`SHARE.unlockMaxAttempts`), 그 주소의 네트워크(IPv4 /24, IPv6 /48, `rateLimitNetwork`)마다 600초에 30회(`unlockNetworkMaxAttempts`), 모든 곳을 합쳐 1시간에 200회(`unlockSubjectMaxAttempts`). 하나라도 넘으면 argon2를 돌리기 전에 429. IPv6 대역이나 봇넷으로 주소를 바꿔 가며 추측해도 예산이 끝난다. 대신 전체 예산이 끝나면 그 링크의 정상 방문자도 최대 1시간 동안 비밀번호를 입력하지 못한다(의도한 트레이드오프). 어느 링크로 시도해도 같은 항목의 횟수에 쌓이므로, 잠긴 폴더 아래 여러 링크를 번갈아 써도 시도 횟수가 늘지 않는다. 맞힌 비밀번호는 그것이 연 항목에서 이번 시도 하나만(세 예산 모두) 돌려받는다(로그인과 같다). 아는 비밀번호로 다른 비밀번호의 실패 기록을 지울 수 없다. 업로드 전용 링크도 같다.
 - 혼잡도: 10분에 다운로드 5회부터 속도를 제한하고, 10회부터 멈춘다(429 + `Retry-After`).
 - **일일 트래픽 한도**(`share/traffic-cap.ts`): 방문자의 다운로드·재생·변환 재생·zip은 시작할 때 두 가지를 확인한다. 하나라도 넘었으면 429 + `Retry-After`(UTC 자정까지)로 거부한다.
-  - 링크 한도: 공유한 항목의 "Daily traffic limit"(`Node.dailyBytesCap`, 1·5·10·50 GB). Redis `traffic:link:<항목 id>:<UTC 날짜>`에 센다.
+  - 항목 한도: 항목의 "Daily traffic limit"(`Node.dailyBytesCap`, 1·5·10·50 GB). 계정 루트부터 보내는 파일(zip은 그 폴더)까지 경로 위에 한도가 걸린 항목을 모두 확인하고 모두에 센다. 그래서 폴더의 한도는 그 안 파일·하위 폴더의 링크로 받은 트래픽에도 적용된다(다른 링크로 돌아가 한도를 피할 수 없다). Redis `traffic:link:<항목 id>:<UTC 날짜>`에 센다.
   - 계정 한도: 계정의 모든 링크를 합한 `SHARE_DAILY_BYTES_CAP_GB`(비어 있으면 없음). `TrafficDaily`로 센다.
   - 응답을 시작하기 전에 확인하므로, 한도를 넘기는 응답 하나는 끝까지 보낸다. 소유자 본인의 요청은 세지만 막지 않는다. 미리보기 이미지와 목록 썸네일은 세지 않는다.
 - **경로 전체의 설정**(`domain/share.ts` `strictestGuard`, `share.service.ts`): 링크로 연 항목은 계정 루트에서 그 항목까지 위에 있는 모든 폴더(계정 루트 폴더 자신 포함)의 설정을 함께 따른다. 위 폴더가 만료됐거나 첫 다운로드 후 삭제가 이미 쓰였으면 만료, 위 폴더에 비밀번호가 있으면 그것까지 입력해야 열린다(비밀번호를 하나 맞히면 그 비밀번호를 가진 항목들이 열리고, 남은 것이 있으면 다시 묻는다). 소유자 계정이 삭제일에 닿아도 정리 작업 전에 링크가 닫힌다.
@@ -201,6 +206,7 @@ k3s에서 미디어 워커를 Pi 노드로 나누면(`K3S_MEDIA_REPLICAS` ≥ 1,
   - `POST /api/auth/*`·`POST /api/share/*/unlock`·`POST /api/r/*/unlock`·`POST /api/csp-report`: 분당 20회(버스트 20, `NGINX_AUTH_RATE_PER_MIN`·`NGINX_AUTH_BURST`).
   - `POST /api/uploads`·`POST /api/r/*/uploads`(배치 만들기): 분당 60회(버스트 30, `NGINX_UPLOAD_RATE_PER_MIN`·`NGINX_UPLOAD_BURST`).
   - `POST /api/uploads/tus/*`(파일 하나의 새 업로드): 분당 600회(버스트 120, `NGINX_TUS_RATE_PER_MIN`·`NGINX_TUS_BURST`). 작은 파일이 많은 폴더도 연달아 보내므로 넉넉하게 두고, 브라우저는 429를 받으면 잠시 뒤 다시 보낸다. 청크(PATCH)는 세지 않는다.
+  - WebDAV `/dav/*`: 분당 600회(버스트 300, `NGINX_DAV_RATE_PER_MIN`·`NGINX_DAV_BURST`). 매 요청이 API 토큰으로 로그인하므로, 있는 토큰 id에 틀린 비밀값을 보내면 토큰별 제한 전에 argon2가 돈다.
   - 개인 API 토큰 요청 `/api/v1/*`·`/metrics`와 공유 페이지 `/d/*`: 분당 120회(버스트 60, `NGINX_API_RATE_PER_MIN`·`NGINX_API_BURST`). 있는 토큰 id에 틀린 비밀값을 보내면 앱의 토큰별 제한 전에 argon2가 돌고, `/d/*`는 링크 id 추측을 앱보다 먼저 막는다.
   - 공통: 한도를 넘으면 API 형식 JSON 429와 `Retry-After: 60`. 요청 본문은 `NGINX_MAX_BODY_MB`(100)까지.
 - 호스트 이름(DNS 리바인딩): Nginx는 `SERVER_NAME`(공백으로 여러 개)과 `127.0.0.1`(릴리스 스크립트의 헬스 체크)로 온 요청만 앱에 넘기고, 다른 `Host`는 응답 없이 연결을 끊는다(444). Docker·k3s 템플릿은 `default_server`가 이 일을 하고(`SERVER_NAME=_`이면 모든 이름을 받는다), systemd는 `install.sh`가 다른 기본 사이트가 없을 때 `relayfiles-catchall.conf`를 넣는다.

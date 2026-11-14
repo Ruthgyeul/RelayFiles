@@ -21,7 +21,7 @@ export const createFileRequestSchema = z.object({
     .nullable(),
   maxFiles: z.number().int().positive().max(FILE_REQUEST.maxFilesLimit).nullable(),
   /** Total size of everything received, in MB; null = only the account quota applies. */
-  maxMb: z.number().int().positive().nullable(),
+  maxMb: z.number().int().positive().max(FILE_REQUEST.maxMbLimit).nullable(),
 });
 export type CreateFileRequestInput = z.infer<typeof createFileRequestSchema>;
 

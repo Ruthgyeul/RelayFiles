@@ -1,5 +1,5 @@
 import "server-only";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 /**
  * Directory layout of a storage volume (docs/architecture.md "스토리지"), layout version 1:
@@ -42,3 +42,11 @@ export const ASSET_DIRS = { thumb: "thumbs", derived: "derived", preview: "previ
 /** Owner-only permissions: other users and services on the host cannot read user files. */
 export const DIR_MODE = 0o700;
 export const FILE_MODE = 0o600;
+
+/**
+ * Whether a path lies inside the volume's upload area. Both sides are resolved first, so
+ * "uploads/../../users/x" or a sibling such as "uploads2/x" never passes.
+ */
+export function inUploadArea(layout: Pick<VolumeLayout, "uploads">, path: string): boolean {
+  return resolve(path).startsWith(resolve(layout.uploads) + sep);
+}

@@ -93,6 +93,16 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 - 자막: 영상을 열면 같은 폴더 목록에서 이름이 같은 `.vtt`·`.srt`(`movie.vtt`, `movie.mp4.srt`, 언어 태그 `movie.en.srt` → "English")를 찾는다(`domain/subtitles.ts` `subtitlesFor`, 뷰어 `withSubtitles`). 파일은 텍스트 미리보기와 같은 `stream` URL을 Range 요청 하나(`VIEWER.subtitleMaxBytes` = 텍스트 미리보기 한도 1MB, 공유 링크의 `streamReach` 텍스트 한도 안)로 읽고, `.srt`는 브라우저에서 WebVTT로 바꿔(`srtToVtt`: 시간의 `,`→`.`, `<font>` 제거, `&`·`<` 이스케이프) `blob:` URL의 `<track kind="subtitles">`로 붙인다. CSP는 `media-src 'self' blob:`이라 다른 출처는 여전히 막힌다. 한도를 넘거나 바이너리인 파일은 건너뛴다. 뷰어는 자막을 읽을 때 `?subtitle=1`(`SUBTITLE_PARAM`)을 붙인다. 공유 링크는 이 표시가 있고 이름이 자막 파일이면 그 읽기를 `VIEW`로 기록하지 않는다. 다운로드 한도가 걸린 자막 파일은 표시가 있어도 재생처럼 센다(표시만으로 한도를 피할 수 없다).
 - 슬라이드쇼: 그림을 보고 있고 그림이 둘 이상이면 머리글에 재생 버튼이 생긴다(Space도 같다). `VIEWER.slideshowIntervalMs`(4초)마다 목록 순서로 다음 그림을 열고(`domain/slideshow.ts`, 그림이 아닌 파일은 건너뜀), 마지막 그림에서 멈춘다. 사용자가 앞뒤로 넘기거나(버튼·화살표·N/P) 뷰어를 닫으면 멈춘다. 그림은 페이드인하지만 `prefers-reduced-motion: reduce`이면 전환 효과가 없다(`motion-safe:`). 공유 페이지의 폴더 뷰어도 같은 뷰어라 그대로 쓴다.
 
+### 실시간 갱신 (다른 곳에서 바꾼 파일)
+
+다른 기기, WebDAV, CLI, `storage:import`, 워커(썸네일·바이러스 검사 결과)가 계정의 파일을 바꾸면 열려 있는 페이지가 새로고침 없이 따라온다.
+
+- 알림(`server/events/account-events.ts`): 바꾼 프로세스가 Redis 채널 `<REDIS_KEY_PREFIX>events:account:<계정 id>`에 `changed`만 보낸다(ioredis의 `keyPrefix`는 채널에 붙지 않아 `channelName()`이 붙인다). 내용은 싣지 않는다: 받은 페이지는 평소의 권한 검사를 거치는 요청으로 다시 읽는다.
+- 보내는 곳: 로그인한 요청 중 GET·HEAD·OPTIONS가 아니고 성공한 것(`apiHandler`·`apiV1Handler`의 `noteAccountWrite`), WebDAV 쓰기, tus 업로드 완료(업로드 전용 링크로 받은 파일 포함), `storage:import`, 워커의 미디어·찍은 날짜·바이러스 검사 작업. 서비스 함수마다 넣지 않고 이 입구에서 보낸다.
+- 받는 곳(`GET /api/events`, `server/http/sse.ts`): 앱 프로세스마다 구독 연결 하나를 모든 스트림이 나눠 쓴다. 변경이 몰려 오면 `LIVE.coalesceMs`마다 하나로 보낸다. Server 페이지 지표 스트림과 같은 제한(계정당 개수, 세션 재확인, 최대 수명)을 `sseResponse()` 하나로 쓴다.
+- 브라우저(`features/shell/useLiveRefresh.ts`): 셸이 탭마다 `EventSource` 하나를 열고, 이벤트가 그친 뒤 `LIVE.clientDebounceMs`가 지나면 `router.refresh()`한다. 숨겨진 탭은 다시 보일 때 한 번 새로 읽는다. 서버가 거절한 스트림(로그아웃, 탭이 너무 많음)은 `LIVE.clientRetryMs` 뒤에 다시 연다. 목록을 자기 상태로 들고 있는 페이지(Recently deleted)는 새로 받은 목록으로 바꾼다.
+- Nginx: `location /`가 이미 `proxy_read_timeout 1h`이고 앱이 `X-Accel-Buffering: no`를 보내 스트림이 버퍼링되지 않는다. CSP `connect-src 'self'`가 같은 출처의 EventSource를 허용한다.
+
 ### 전송 패널 (파일별 진행률·취소)
 
 - 2개 이상인 배치(`TRANSFERS.fileListMin`)는 카드의 "Show files"로 파일 목록을 연다. 파일마다 진행 막대(`Meter`), 받은/보낸 바이트, 속도 스파크라인(`LineChart`, 1초 간격 최근 30개), 취소 버튼.
@@ -115,7 +125,7 @@ route handler (src/app/api/**/route.ts): 인증(apiHandler({ auth: "active" | "a
 
 | 인터페이스 | 현재 구현 | 확장 |
 |---|---|---|
-| `StorageDriver` | `LocalVolumeDriver` (외장 SSD, 볼륨 여러 개) | `S3Driver` (MinIO/R2) |
+| `StorageDriver` | `LocalVolumeDriver` (외장 SSD, 볼륨 여러 개) | `S3Driver` (MinIO/R2). 예약만 되어 있고 구현은 없다: DB enum에 `S3` 값이 있지만 그 값으로 볼륨을 등록하는 경로가 없고(`volume:init`은 `LOCAL`만 만든다), 그런 행이 있으면 `driverFor()`가 거부한다 |
 
 `LocalVolumeDriver`(`storage/local-volume.ts`)는 볼륨 레이아웃을 묶는 조립만 한다. 실제 작업은 `storage/local/`에 영역별로 있다: `locations.ts`(계정 트리 안의 경로 확인·읽기·이름 변경·복사), `staging.ts`(업로드 영역에서 준비한 바이트를 제자리로, 복사 준비), `trash.ts`(휴지통), `assets.ts`(썸네일·제거본·미리보기·변환본), `maintenance.ts`(매일 정리, 쓰기 확인, 여유 공간), `listing.ts`(fsck용 디스크 목록), 공용 `copy.ts`(하드 링크·reflink·복사)와 `fs-errors.ts`. 메서드는 클래스 프로토타입에 남아 있어 테스트가 그대로 바꿔 끼울 수 있다.
 
@@ -211,6 +221,13 @@ File Manager 툴바의 공유 아이콘(`/files/shared`)이 밖에서 열 수 �
   - 이름 검색은 지금 단계의 즐겨찾기와 정리용 폴더만 거른다. `#tag` 검색은 정리용 폴더와 상관없이 즐겨찾기 전체에서 찾는다(`GET /api/favorites/tags`, 결과는 `FILES.maxFavorites`까지라 잘리지 않는다). 태그 검색 중에는 정리용 폴더를 숨긴다.
   - 정렬은 `Recently added`(기본, 서버 순서 = 즐겨찾기에 넣은 최신순)와 파일 관리자의 정렬 키(이름·생성일·크기·유형, `domain/favorites.ts` `sortFavorites`). 정리용 폴더는 항상 항목 위에 이름순이고 "Name Z → A"일 때만 거꾸로다(`visibleFavoriteFolders`). 유형 필터는 All·Folders에서만 정리용 폴더를 보여 준다.
   - 그리드에서는 정리용 폴더도 카드(`FavoriteFolderCard`)로 보인다. 보기·정렬은 기기별로 파일 관리자와 따로 기억한다(`relay.favoritesView`, `useViewPrefs`).
+
+### 사진 타임라인 (Photos)
+
+`/files/photos`(File Manager 도구 막대의 그림 아이콘)는 계정의 사진·영상을 찍은 날짜 최신순으로 달별로 보여 준다. 날짜는 워커가 EXIF·영상 메타데이터에서 읽은 `Node.takenAt`, 없으면 파일 날짜(`modifiedAt`, 업로드 때 브라우저가 알려 준 값), 그것도 없으면 올린 시각이다(순번 정리와 같은 규칙, `domain/renumber.ts`). 달 경계는 보는 사람의 시간대로 나눈다(`domain/timeline.ts` `groupByMonth`).
+
+- 쿼리(`repositories/timeline.repo.ts`): `COALESCE(takenAt, modifiedAt, createdAt) DESC, id DESC`의 keyset 페이지. cursor는 앞 페이지 마지막 항목의 `(날짜, id)`라 몇 번째 페이지든 비용이 같다. `@@index([accountId, kind])`가 계정의 미디어만 고르고, 정렬은 그 행들에서 한다. 미디어가 수십만 개로 늘면 정렬 키를 저장 열로 두고 `(accountId, 그 열, id)` 인덱스를 거는 것이 다음 단계다(COALESCE 식 인덱스는 Prisma 스키마로 표현되지 않아 CI drift 검사에 걸린다).
+- 화면(`features/photos`): 첫 페이지는 서버가 그린다. 나머지는 "Load more"로 이어 붙인다. 격자와 카드는 File Manager 격자와 같은 값(`minmax(160px)`, `gap-3`, `aspect-[4/3]`, `content-visibility:auto`)을 쓰고, 그림은 `MediaPreview`, 뷰어는 `useFileMedia`(지금까지 불러온 항목 순서로 넘김)를 그대로 쓴다. 각 카드의 폴더 아이콘이 그 파일이 있는 폴더로 간다.
 
 ### 순번 정리 (Renumber files)
 

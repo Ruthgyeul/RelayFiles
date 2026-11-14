@@ -9,7 +9,7 @@ process.env.LOG_SERVICE ||= "dav";
 await import("./lib/bootstrap.mjs");
 
 const { createServer } = await import("node:http");
-const { Readable } = await import("node:stream");
+const { pipeline, Readable } = await import("node:stream");
 const { getAppEnv } = await import("../src/config/env");
 const { davHandler } = await import("../src/server/dav/handler");
 const { logger } = await import("../src/server/logger");
@@ -38,7 +38,12 @@ const server = createServer((incoming, outgoing) => {
     .then((response) => {
       outgoing.writeHead(response.status, Object.fromEntries(response.headers));
       if (!response.body || method === "HEAD") outgoing.end();
-      else Readable.fromWeb(response.body as import("node:stream/web").ReadableStream).pipe(outgoing);
+      // pipeline, not pipe: a client that goes away mid-download closes the file, and a read
+      // error ends this response instead of the whole DAV server (no error listener with pipe).
+      else
+        pipeline(Readable.fromWeb(response.body as import("node:stream/web").ReadableStream), outgoing, (error) => {
+          if (error && error.code !== "ERR_STREAM_PREMATURE_CLOSE") logger.warn("dav response stopped", { error });
+        });
     })
     .catch((error: unknown) => {
       logger.error("dav response failed", { error });

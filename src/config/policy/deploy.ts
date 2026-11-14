@@ -1,5 +1,5 @@
 /** Deployment defaults (Nginx, Redis, k3s) and response headers. Part of the product policy (src/config/policy.ts). */
-import { API } from "./accounts";
+import { API, DAV } from "./accounts";
 
 /** k3s deployment (deploy/scripts/k3s/deploy.sh). */
 export const K3S = {
@@ -36,6 +36,13 @@ export const NGINX = {
    */
   apiRatePerMin: API.requestsPerMinute,
   apiBurst: 60,
+  /**
+   * WebDAV requests (/dav/) per client address per minute, and the burst: one token's own limit
+   * (DAV.requestsPerMinute), enforced before argon2 checks the token like the API zone. File
+   * managers list many folders at once when a drive is opened, hence the larger burst.
+   */
+  davRatePerMin: DAV.requestsPerMinute,
+  davBurst: 300,
 } as const;
 
 export const HEADERS = {

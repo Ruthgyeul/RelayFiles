@@ -29,7 +29,7 @@ import { sharedSlot, storedTranscodeArgs } from "./transcode";
 const playsKey = (nodeId: string) => `transcode:plays:${nodeId}`;
 
 /** The stored conversion of a video as a ranged playback response, or null when there is none yet. */
-export async function sendStoredTranscode(req: Request, driver: StorageDriver, accountId: string, row: { id: string; name: string; sha256: string | null }): Promise<Response | null> {
+export async function sendStoredTranscode(req: Request, driver: StorageDriver, accountId: string, row: { id: string; name: string; sha256: string | null }, onServe?: (bytes: number) => void): Promise<Response | null> {
   const source = await driver.assetSource({ kind: "transcode", accountId, nodeId: row.id });
   if (!source) return null;
   if (req.method === "GET") void countOne("transcode_cache_hits");
@@ -42,6 +42,7 @@ export async function sendStoredTranscode(req: Request, driver: StorageDriver, a
     etag: `${row.sha256 ?? row.id}-mp4`,
     mode: "stream",
     body: source,
+    onServe,
   });
 }
 

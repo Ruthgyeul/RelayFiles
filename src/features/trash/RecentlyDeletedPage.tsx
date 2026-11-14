@@ -34,6 +34,13 @@ export function RecentlyDeletedPage({ initial }: { initial: DeletedItemDto[] }) 
   const { notify, config } = useShell();
   const RETENTION = retentionText(config.trashRetentionHours);
   const [items, setItems] = useState(initial);
+  // A refresh (after an action, or a change made elsewhere) brings a new list from the server:
+  // it replaces the one held here, which only bridges the moment until it arrives.
+  const [listed, setListed] = useState(initial);
+  if (listed !== initial) {
+    setListed(initial);
+    setItems(initial);
+  }
   const [busy, setBusy] = useState<string | null>(null);
   const [forever, setForever] = useState<DeletedItemDto | null>(null);
   const now = useNow(true, CLOCK_TICK_MS);

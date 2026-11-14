@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { useDialogFocus } from "@/shared/hooks/useDialogFocus";
 import { Logo } from "@/shared/ui/Display";
 import { AccountList } from "./AccountList";
 import { NavList } from "./NavList";
@@ -12,13 +13,8 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
   const { session, activeAccount } = useShell();
   const panel = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    panel.current?.focus();
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  // Focus stays inside while it is open and goes back to the menu button when it closes.
+  useDialogFocus(panel, { open, onClose, initialFocus: "panel" });
 
   if (!open) return null;
   return (

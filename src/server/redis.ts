@@ -23,6 +23,14 @@ export function redis(): Redis {
   return globalForRedis.relayRedis;
 }
 
+/**
+ * A pub/sub channel name with REDIS_KEY_PREFIX: ioredis prefixes keys but not channels, and two
+ * installs (or two prefix versions) sharing one Redis must not hear each other.
+ */
+export function channelName(name: string): string {
+  return `${getEnv("redis").REDIS_KEY_PREFIX}${name}`;
+}
+
 /** Closes the shared connection if one was opened (scripts, so the process can exit). */
 export function closeRedis(): void {
   globalForRedis.relayRedis?.disconnect();

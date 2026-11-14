@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { STORAGE } from "@/config/policy";
 import type { TransferResult } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { uniqName } from "@/domain/names";
@@ -8,10 +9,10 @@ import { segmentsBelowRoot } from "@/domain/tree";
 import { db, Prisma } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import { enqueueMedia } from "../jobs/queue";
+import { enqueueMedia, enqueueScan } from "../jobs/queue";
 import { logger } from "../logger";
 import { insertNodes, listSiblingNames, moveIntoFolder } from "../repositories/node.repo";
-import { ancestorChain, subtreeRowsOf } from "../repositories/node-tree.repo";
+import { ancestorChain, subtreeHeight, subtreeRowsOf } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { StorageEntryMissingError, type CopyEntry } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
@@ -35,6 +36,16 @@ export interface TransferOptions {
 }
 
 /**
+ * Refuses a move or copy that would put something deeper than folders may be nested: the storage
+ * layer refuses such paths, so every item below the limit would answer 500 until moved back up.
+ */
+async function assertDepthFits(targetChain: readonly { name: string }[], topIds: readonly string[]): Promise<void> {
+  // The target's own segments, one for the item itself, then everything below it.
+  const deepest = segmentsBelowRoot(targetChain).length + 1 + (await subtreeHeight(db(), topIds));
+  if (deepest > STORAGE.maxFolderDepth) throw new ApiError("BAD_REQUEST", `Folders can be nested at most ${STORAGE.maxFolderDepth} levels deep.`);
+}
+
+/**
  * Moves items into a folder: items already there, the target itself and
  * anything that would land inside itself are skipped; clashing names get "Name (2)".
  */
@@ -44,6 +55,10 @@ export async function moveNodes(owner: NodeOwner, ids: string[], targetRef: stri
   const targetIds = targetChain.map((row) => row.id);
   const items = (await topLevel(owner.id, ids)).filter(({ row }) => row.id !== target.id && row.parentId !== target.id && !isInside(targetIds, row.id));
   if (items.length === 0) throw new ApiError("BAD_REQUEST", "Can't move there");
+  await assertDepthFits(
+    targetChain,
+    items.map(({ row }) => row.id),
+  );
 
   const driver = await driverForAccount(owner, "write");
   const targetSegments = segmentsBelowRoot(targetChain);
@@ -102,6 +117,10 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
   const targetChain = await ancestorChain(db(), target.id);
   const items = (await topLevel(owner.id, ids)).filter(({ row }) => !isInside(targetChain.map((ancestor) => ancestor.id), row.id));
   if (items.length === 0) throw new ApiError("BAD_REQUEST", "Can't copy there");
+  await assertDepthFits(
+    targetChain,
+    items.map(({ row }) => row.id),
+  );
 
   // Every selected tree in one walk.
   const byTop = await subtreeRowsOf(
@@ -128,6 +147,9 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
     let renamed = 0;
     const now = new Date();
     const media: string[] = [];
+    // A copy of a file still waiting for its virus scan gets a new id: the scan job of the
+    // original never covers it, so it is queued again (and its thumbnails wait for the result).
+    const unscanned: string[] = [];
     await withStorageTransaction(db(), async (tx, undo) => {
       // Staging can take long: the account may have started moving to another volume meanwhile.
       await lockAccountForWrite(tx, owner.id, driver.volumeId);
@@ -167,11 +189,13 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
         undo.push("remove copy", async () => {
           await driver.moveToTrash(to);
         });
-        media.push(...rows.filter((copy) => copy.type === "FILE" && (copy.kind === "IMAGE" || copy.kind === "VIDEO")).map((copy) => copy.id));
+        media.push(...rows.filter((copy) => copy.type === "FILE" && copy.scanState !== "PENDING" && (copy.kind === "IMAGE" || copy.kind === "VIDEO")).map((copy) => copy.id));
+        unscanned.push(...rows.filter((copy) => copy.type === "FILE" && copy.scanState === "PENDING").map((copy) => copy.id));
       }
     });
     // Assets are keyed by node id, so copies get their own (rebuilt by the worker).
     void enqueueMedia(media);
+    void enqueueScan(unscanned);
     return { done: items.length, renamed, targetName: target.name };
   } catch (caught) {
     if (caught instanceof StorageEntryMissingError) throw new ApiError("CONFLICT", CHANGED_MESSAGE);

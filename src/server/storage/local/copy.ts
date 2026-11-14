@@ -1,9 +1,7 @@
 import "server-only";
 import { constants } from "node:fs";
-import { copyFile, link, lstat, mkdir, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, link } from "node:fs/promises";
 import { getEnv } from "@/config/env";
-import { DIR_MODE } from "../layout";
 import { errorCode, NO_HARD_LINK } from "./fs-errors";
 
 /**
@@ -25,14 +23,4 @@ export async function copyFileEntry(source: string, target: string): Promise<voi
   }
   // Reflink when the filesystem supports it (instant copy), otherwise a normal copy.
   await copyFile(source, target, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
-}
-
-/** Copies a file or a folder tree to a path that must not exist yet (folders are new, files as {@link copyFileEntry}). */
-export async function copyEntry(source: string, target: string): Promise<void> {
-  const info = await lstat(source);
-  if (info.isFile()) return copyFileEntry(source, target);
-  // A user folder holds only folders and files; anything else (a planted link) is not followed.
-  if (!info.isDirectory()) throw new Error("Only files and folders can be copied.");
-  await mkdir(target, { mode: DIR_MODE });
-  for (const entry of await readdir(source)) await copyEntry(join(source, entry), join(target, entry));
 }

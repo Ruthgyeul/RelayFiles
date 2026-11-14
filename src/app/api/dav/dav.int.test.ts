@@ -185,6 +185,30 @@ describe("webdav writes", () => {
     expect((await dav("DELETE", "/dav/missing.txt", token)).status).toBe(404);
   });
 
+  it("replaces a destination with Overwrite only once the copy is in place", async () => {
+    const m = await member();
+    await tree(m);
+    const token = await tokenFor(m, ["files:read", "files:write"]);
+    await addFile(m, m.rootId, [], "Backup", "old backup", "text/plain");
+    // A copy refused on the quota leaves the destination as it was.
+    const used = (await prisma.node.aggregate({ where: { accountId: m.id, type: "FILE" }, _sum: { size: true } }))._sum.size ?? 0n;
+    await prisma.account.update({ where: { id: m.id }, data: { quotaBytes: used + 1n } });
+    const refused = await dav("COPY", "/dav/Docs/", token, { destination: "/dav/Backup", overwrite: "T" });
+    expect(refused.status).toBeGreaterThanOrEqual(400);
+    expect(await (await dav("GET", "/dav/Backup", token)).text()).toBe("old backup");
+    expect(await prisma.node.count({ where: { accountId: m.id, name: { startsWith: ".relayfiles-replacing-" } } })).toBe(0);
+
+    // With room, the copy takes the destination's place and the old item goes to Recently deleted.
+    await prisma.account.update({ where: { id: m.id }, data: { quotaBytes: null } });
+    expect((await dav("COPY", "/dav/Docs/", token, { destination: "/dav/Backup", overwrite: "T" })).status).toBe(204);
+    expect(await (await dav("GET", "/dav/Backup/a%20b.txt", token)).text()).toBe("inside");
+    expect(await prisma.deletedItem.count({ where: { accountId: m.id } })).toBe(1);
+    expect(await prisma.node.count({ where: { accountId: m.id, name: { startsWith: ".relayfiles-replacing-" } } })).toBe(0);
+    // A folder moved over a file the same way.
+    expect((await dav("MOVE", "/dav/Docs/", token, { destination: "/dav/notes.txt", overwrite: "T" })).status).toBe(204);
+    expect(await (await dav("GET", "/dav/notes.txt/a%20b.txt", token)).text()).toBe("inside");
+  });
+
   it("hands out advisory locks and accepts property updates", async () => {
     const m = await member();
     await tree(m);

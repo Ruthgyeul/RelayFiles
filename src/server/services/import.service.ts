@@ -1,4 +1,5 @@
 import "server-only";
+import { publishAccountChange } from "../events/account-events";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, stat, unlink } from "node:fs/promises";
@@ -63,7 +64,10 @@ export async function importFile(target: ImportTarget, rel: string, size: number
     await pipeline(source, createWriteStream(tempPath, { flags: "wx", mode: FILE_MODE }));
     if ((await stat(tempPath)).size !== size) throw new Error(`Short read for ${rel}`);
     const batch: UploadBatch = { accountId: target.owner.id, volumeId: volume.id, folderId: target.rootId, fromHome: false, dup: "keep", files: [{ rel, size }] };
-    return { status: "imported", file: await finalizeUpload(target.owner, batch, 0, uploadId, modifiedAt) };
+    const file = await finalizeUpload(target.owner, batch, 0, uploadId, modifiedAt);
+    // Open pages of the account follow the import (one event per second at most per page).
+    publishAccountChange(target.owner.id);
+    return { status: "imported", file };
   } catch (error) {
     await unlink(tempPath).catch(() => undefined);
     throw error;

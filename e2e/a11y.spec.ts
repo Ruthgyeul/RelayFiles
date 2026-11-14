@@ -29,6 +29,7 @@ test("app pages have no serious accessibility problems", async ({ page }) => {
     ["/settings", "My Profile"],
     ["/status", "Status"],
     ["/files/storage", "Storage"],
+    ["/files/photos", "Photos"],
     ["/files/shared", "Shared by me"],
   ] as const) {
     await page.goto(path);

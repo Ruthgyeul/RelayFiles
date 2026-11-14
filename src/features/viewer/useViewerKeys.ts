@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { isTypingTarget } from "@/features/shortcuts/shortcuts";
 
 const SEEK = { short: 5, long: 10 } as const;
 const VOLUME_STEP = 0.1;
@@ -33,6 +34,9 @@ export function useViewerKeys(open: boolean, actions: ViewerKeyActions) {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
+      // Shortcuts with modifiers belong to others (Ctrl/⌘ K opens the search, which would also
+      // play or pause), and letters typed into a field (the search over the viewer) are text.
+      if (event.ctrlKey || event.metaKey || event.altKey || isTypingTarget(event.target)) return;
       const { step, close, small, notify, slideshow } = latest.current;
       const media = document.querySelector<HTMLMediaElement>("[data-viewer-media]");
       const key = event.key.toLowerCase();

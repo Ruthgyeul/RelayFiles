@@ -7,12 +7,17 @@ describe("maskIp", () => {
     expect(maskIp("2001:db8:85a3::8a2e:370:7334")).toBe("2001:db8:•••");
     expect(maskIp("unknown")).toBe("•••");
   });
+
+  it("masks an IPv4 address written in IPv6 form like any IPv4 address", () => {
+    expect(maskIp("::ffff:211.36.12.7")).toBe("211.36.•••.•••");
+    expect(maskIp("::FFFF:211.36.12.7")).toBe("211.36.•••.•••");
+  });
 });
 
 describe("isPrivateIp", () => {
   it("detects LAN and loopback addresses", () => {
-    for (const ip of ["127.0.0.1", "10.1.2.3", "192.168.0.100", "172.16.0.1", "172.31.255.1", "::1", "fd12:3456::1"]) expect(isPrivateIp(ip), ip).toBe(true);
-    for (const ip of ["172.32.0.1", "8.8.8.8", "211.36.12.7", "2001:db8::1"]) expect(isPrivateIp(ip), ip).toBe(false);
+    for (const ip of ["127.0.0.1", "10.1.2.3", "192.168.0.100", "172.16.0.1", "172.31.255.1", "::1", "fd12:3456::1", "169.254.1.2", "fe80::1", "::ffff:192.168.0.5"]) expect(isPrivateIp(ip), ip).toBe(true);
+    for (const ip of ["172.32.0.1", "8.8.8.8", "211.36.12.7", "2001:db8::1", "::ffff:8.8.8.8", "fec0::1"]) expect(isPrivateIp(ip), ip).toBe(false);
   });
 });
 

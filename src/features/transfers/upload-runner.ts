@@ -1,4 +1,4 @@
-import { defaultOptions, DetailedError, Upload, type UploadOptions } from "tus-js-client";
+import type { Upload, UploadOptions } from "tus-js-client";
 import { UPLOAD } from "@/config/policy";
 import { UPLOAD_METADATA } from "@/contracts/uploads";
 import { resumeCandidates } from "./resume-candidates";
@@ -40,6 +40,17 @@ export interface RunnerOptions {
   resume?: ResumeOptions;
 }
 
+/**
+ * tus-js-client, loaded with the first upload instead of with every page (the transfers panel is
+ * part of the app shell). Null until then.
+ */
+let tus: typeof import("tus-js-client") | null = null;
+let loading: Promise<typeof import("tus-js-client")> | null = null;
+function loadTus(): Promise<typeof import("tus-js-client")> {
+  loading ??= import("tus-js-client").then((module) => (tus = module));
+  return loading;
+}
+
 /** Waits before retrying a failed chunk (connection drops); 4xx answers are not retried. */
 const RETRY_DELAYS_MS = [0, 1_000, 3_000, 5_000, 10_000];
 const HTTP_CLIENT_ERROR = 400;
@@ -48,12 +59,12 @@ const HTTP_SERVER_ERROR = 500;
 const RETRYABLE_CLIENT_STATUSES = new Set([409, 423, 429]);
 
 function statusOf(error: Error): number | null {
-  return error instanceof DetailedError ? (error.originalResponse?.getStatus() ?? null) : null;
+  return tus && error instanceof tus.DetailedError ? (error.originalResponse?.getStatus() ?? null) : null;
 }
 
 /** Client-safe message from a tus error (the server answers with a plain message body). */
 function messageOf(error: Error): string {
-  if (error instanceof DetailedError) {
+  if (tus && error instanceof tus.DetailedError) {
     const status = error.originalResponse?.getStatus() ?? 0;
     const body = error.originalResponse?.getBody()?.trim();
     if (status >= HTTP_CLIENT_ERROR && body && body.length < 300 && !body.startsWith("<")) return body;
@@ -91,7 +102,12 @@ export class BatchUploader {
 
   start(): void {
     this.paused = false;
-    this.next();
+    // The first file starts once tus-js-client is loaded; pause, resume and cancel meanwhile only
+    // change the flags that next() reads.
+    loadTus().then(
+      () => this.next(),
+      () => this.events.onError("Uploads could not start. Reload the page and try again."),
+    );
   }
 
   pause(): void {
@@ -136,7 +152,8 @@ export class BatchUploader {
   }
 
   private next(): void {
-    if (this.paused || this.cancelled) return;
+    // Not loaded yet: start() calls this again once it is.
+    if (!tus || this.paused || this.cancelled) return;
     while (this.skipped.has(this.index)) this.index += 1;
     const file = this.files[this.index];
     if (!file) {
@@ -145,7 +162,7 @@ export class BatchUploader {
     }
     const slot = this.index;
     this.events.onFileStart?.(slot);
-    const upload = new Upload(file, {
+    const upload = new tus.Upload(file, {
       endpoint: this.plan.endpoint,
       chunkSize: this.chunkSize,
       retryDelays: RETRY_DELAYS_MS,
@@ -196,7 +213,9 @@ export class BatchUploader {
   private fingerprintOption(): Pick<UploadOptions, "fingerprint"> {
     const scope = this.options.resume?.scope;
     if (!scope) return {};
-    return { fingerprint: async (file, options) => `${await defaultOptions.fingerprint(file, options)}-${scope}` };
+    const fingerprint = tus?.defaultOptions.fingerprint;
+    if (!fingerprint) return {};
+    return { fingerprint: async (file, options) => `${await fingerprint(file, options)}-${scope}` };
   }
 
   /**
@@ -216,7 +235,7 @@ export class BatchUploader {
             upload.resumeFromPreviousUpload(candidate.stored);
             break;
           }
-          await defaultOptions.urlStorage.removeUpload(candidate.stored.urlStorageKey);
+          await tus?.defaultOptions.urlStorage.removeUpload(candidate.stored.urlStorageKey);
         }
       } catch {
         // Storage blocked or the server unreachable: send the file from the start.

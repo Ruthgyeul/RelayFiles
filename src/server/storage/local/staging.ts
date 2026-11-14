@@ -1,8 +1,8 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { link, lstat, mkdir, rm } from "node:fs/promises";
-import { dirname, join, sep } from "node:path";
-import { DIR_MODE, type VolumeLayout } from "../layout";
+import { dirname, join } from "node:path";
+import { DIR_MODE, inUploadArea, type VolumeLayout } from "../layout";
 import { StorageEntryMissingError, type CopyEntry, type StorageLocation } from "../driver";
 import { resolveInsideUserRoot } from "../safe-path";
 import { copyFileEntry, dedupe } from "./copy";
@@ -15,7 +15,7 @@ import { pathOf, renameNoReplacePath } from "./locations";
 const STAGED_ITEM = "item";
 
 export async function moveIntoPlace(layout: VolumeLayout, tempPath: string, location: StorageLocation): Promise<void> {
-  if (!tempPath.startsWith(layout.uploads)) throw new Error("Uploads must come from the volume's upload area.");
+  if (!inUploadArea(layout, tempPath)) throw new Error("Uploads must come from the volume's upload area.");
   // The folder must still exist: creating it again here would bring back a folder renamed or
   // deleted while the upload finished, outside the database. Something already at the name
   // (on the disk only) is never replaced: StorageTargetExistsError.
@@ -31,8 +31,9 @@ export async function linkExisting(layout: VolumeLayout, from: StorageLocation, 
     await link(source, await pathOf(layout, to));
     return true;
   } catch (error) {
-    // Gone meanwhile, or no hard links here: the caller places its own bytes.
-    if (errorCode(error) === "ENOENT" || NO_HARD_LINK.has(errorCode(error))) return false;
+    // Gone meanwhile, or no hard links here: the caller places its own bytes. Something already
+    // at the target (on the disk only): the caller's own placing reports it as a 409, not a 500.
+    if (errorCode(error) === "ENOENT" || errorCode(error) === "EEXIST" || NO_HARD_LINK.has(errorCode(error))) return false;
     throw error;
   }
 }
@@ -67,7 +68,7 @@ export async function stageCopy(layout: VolumeLayout, from: StorageLocation, ent
 }
 
 export async function discardStaged(layout: VolumeLayout, tempPath: string): Promise<void> {
-  if (!tempPath.startsWith(layout.uploads + sep)) throw new Error("Only the volume's upload area holds staged files.");
+  if (!inUploadArea(layout, tempPath)) throw new Error("Only the volume's upload area holds staged files.");
   // A staged copy sits in its own folder (copy-<id>/item): that folder goes with it.
   const parent = dirname(tempPath);
   const own = parent !== layout.uploads && dirname(parent) === layout.uploads;

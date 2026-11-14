@@ -21,6 +21,13 @@ describe("redact", () => {
     });
   });
 
+  it("drops what is nested too deep to check instead of logging it", () => {
+    let deep: Record<string, unknown> = { token: "AbCd1234" };
+    for (let level = 0; level < 10; level++) deep = { next: deep };
+    expect(JSON.stringify(redact(deep))).not.toContain("AbCd1234");
+    expect(JSON.stringify(redact(deep))).toContain("[truncated]");
+  });
+
   it("keeps errors readable and leaves primitives alone", () => {
     const error = new Error("boom");
     expect(redact(error)).toMatchObject({ name: "Error", message: "boom" });

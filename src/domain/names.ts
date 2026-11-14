@@ -30,6 +30,23 @@ export function nameError(name: string): string {
 }
 
 /** Splits "movie.mp4" into ["movie", ".mp4"]; folders and dotfiles keep the whole name as base. */
+/**
+ * The longest start of `text` that fits in `maxBytes` of UTF-8, never cutting a character (or a
+ * surrogate pair) in half.
+ */
+export function utf8Prefix(text: string, maxBytes: number): string {
+  if (maxBytes <= 0) return "";
+  let bytes = 0;
+  let end = 0;
+  for (const char of text) {
+    const size = new TextEncoder().encode(char).length;
+    if (bytes + size > maxBytes) break;
+    bytes += size;
+    end += char.length;
+  }
+  return text.slice(0, end);
+}
+
 export function splitExtension(name: string, isFile: boolean): [string, string] {
   if (!isFile) return [name, ""];
   const match = /^(.+?)(\.[^.]+)?$/.exec(name);
@@ -39,14 +56,17 @@ export function splitExtension(name: string, isFile: boolean): [string, string] 
 /**
  * Returns `name` if it is free among `siblings`, otherwise the first free variant
  * "name (2).ext", "name (3).ext", … (an existing " (n)" suffix is replaced, not stacked).
+ * The base is shortened when needed so a variant never goes past {@link MAX_NAME_BYTES}.
  */
 export function uniqName(siblings: Iterable<string>, name: string, isFile: boolean): string {
   const taken = new Set(siblings);
   if (!taken.has(name)) return name;
   const [rawBase, ext] = splitExtension(name, isFile);
   const base = rawBase.replace(/ \(\d+\)$/, "");
+  const encoder = new TextEncoder();
   for (let i = 2; ; i++) {
-    const candidate = `${base} (${i})${ext}`;
+    const suffix = ` (${i})${ext}`;
+    const candidate = `${utf8Prefix(base, MAX_NAME_BYTES - encoder.encode(suffix).length)}${suffix}`;
     if (!taken.has(candidate)) return candidate;
   }
 }

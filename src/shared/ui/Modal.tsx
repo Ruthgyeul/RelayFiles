@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useRef, type ReactNode } from "react";
+import { createContext, useContext, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/shared/lib/cn";
+import { useDialogFocus } from "@/shared/hooks/useDialogFocus";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { Icon, type IconName } from "./icon/Icon";
 import { IconButton } from "./IconButton";
@@ -25,8 +26,6 @@ export type ModalLayer = keyof typeof LAYER;
 
 /** Lets ModalHeader label its dialog without the caller wiring ids. */
 const TitleIdContext = createContext<string | undefined>(undefined);
-
-const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 export interface ModalProps {
   open: boolean;
@@ -64,41 +63,8 @@ export function Modal({
 }: ModalProps) {
   const mounted = useMounted();
   const panel = useRef<HTMLDivElement>(null);
-  const titleId = useId();
+  const titleId = useDialogFocus(panel, { open, onClose, dismissible });
   const [backdropZ, panelZ] = LAYER[layer];
-
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const node = panel.current;
-    const first = node?.querySelector<HTMLElement>("[autofocus]") ?? node?.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? node)?.focus();
-
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape" && dismissible) {
-        event.stopPropagation();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !node) return;
-      const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (items.length === 0) return;
-      const head = items[0];
-      const tail = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === head) {
-        event.preventDefault();
-        tail?.focus();
-      } else if (!event.shiftKey && document.activeElement === tail) {
-        event.preventDefault();
-        head?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
-    };
-  }, [open, dismissible, onClose]);
 
   if (!open || !mounted) return null;
   return createPortal(

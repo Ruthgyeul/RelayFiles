@@ -64,6 +64,11 @@ jobs:
         target: [app, tools]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A version tag publishes "vX.Y.Z" and "latest": it must name the version the code carries
+      # and that version must have its CHANGELOG.md section (docs/runbook.md "릴리스 만들기").
+      - name: Check the tag against package.json and CHANGELOG.md
+        if: github.ref_type == 'tag'
+        run: node scripts/check-changelog.mjs --tag "$GITHUB_REF_NAME"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64

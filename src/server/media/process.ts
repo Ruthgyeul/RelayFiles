@@ -1,4 +1,5 @@
 import "server-only";
+import { publishAccountChange } from "../events/account-events";
 import { access, constants, readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { MEDIA } from "@/config/policy";
@@ -66,12 +67,14 @@ async function storageReadable(path: string, volumeId: string): Promise<boolean>
  * Runs one step. A file that cannot be decoded is logged and skipped (not retried). A storage
  * or system failure (I/O error, full disk, volume offline, a timeout, or a decoder error while
  * the original or its volume is unreadable) is thrown, so BullMQ tries the whole job again
- * with backoff and nothing is recorded for good.
+ * with backoff and nothing is recorded for good. So is a step stopped because the worker is
+ * shutting down (`signal`): the job runs again after the restart.
  */
-async function attempt<T>(step: string, nodeId: string, run: () => Promise<T>, source: { path: string; volumeId: string }): Promise<T | null> {
+async function attempt<T>(step: string, nodeId: string, run: () => Promise<T>, source: { path: string; volumeId: string }, signal?: AbortSignal): Promise<T | null> {
   try {
     return await run();
   } catch (error) {
+    if (signal?.aborted) throw error;
     if (isTransientMediaError(error) || !(await storageReadable(source.path, source.volumeId))) {
       logger.warn("media step failed; retrying later", { step, nodeId, error });
       throw error;
@@ -84,9 +87,10 @@ async function attempt<T>(step: string, nodeId: string, run: () => Promise<T>, s
 /**
  * Builds the thumbnail and the metadata-stripped copy for share links (images and videos, in
  * the SHARE_METADATA_STRIP mode; none with "none") of a file. Idempotent: reruns overwrite the
- * assets. Returns null when there is nothing to do.
+ * assets. Returns null when there is nothing to do. `signal` (the worker stopping) ends the long
+ * step, a video's metadata-stripped copy, at once; the job is then tried again.
  */
-export async function processMedia(nodeId: string): Promise<MediaResult | null> {
+export async function processMedia(nodeId: string, signal?: AbortSignal): Promise<MediaResult | null> {
   const row = await findNodeForJob(db(), nodeId);
   if (!row || row.type !== "FILE" || (row.kind !== "IMAGE" && row.kind !== "VIDEO")) return null;
   const account = await findAccountById(db(), row.accountId);
@@ -110,7 +114,7 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
       derivedMode = copy.mode;
     }
   } else if (stripMode !== "none" && row.kind === "VIDEO") {
-    const made = await attempt("strip video metadata", row.id, () => writeVideoStrippedCopy(driver, asset, { path, mime, size, volumeId: account.volumeId }, stripMode), source);
+    const made = await attempt("strip video metadata", row.id, () => writeVideoStrippedCopy(driver, asset, { path, mime, size, volumeId: account.volumeId }, stripMode, signal), source, signal);
     if (made) derivedMode = stripMode;
   }
   const derived = derivedMode !== null;
@@ -140,6 +144,8 @@ export async function processMedia(nodeId: string): Promise<MediaResult | null> 
     stripFailed,
     ...(takenAt ? { takenAt } : {}),
   });
+  // Open pages of the owner show the new thumbnail.
+  publishAccountChange(row.accountId);
   return result;
 }
 
@@ -156,6 +162,10 @@ export async function recordDateTaken(nodeId: string): Promise<boolean> {
   const path = await driver.localPath(await locationOf(row.accountId, row.id));
   if (!path) throw new Error("Media processing needs a local volume.");
   const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"), { path, volumeId: account.volumeId });
-  if (takenAt) await setFileFacts(db(), row.id, { takenAt });
+  if (takenAt) {
+    await setFileFacts(db(), row.id, { takenAt });
+    // Photos places it by the date it was taken now.
+    publishAccountChange(row.accountId);
+  }
   return takenAt !== null;
 }

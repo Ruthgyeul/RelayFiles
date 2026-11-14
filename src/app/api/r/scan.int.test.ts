@@ -9,11 +9,13 @@ import { GET as shareDownload } from "@/app/api/share/[linkId]/files/[id]/downlo
 import { GET as trashList } from "@/app/api/trash/route";
 import { POST as restore } from "@/app/api/trash/[id]/restore/route";
 import * as tus from "@/app/api/uploads/tus/[...path]/route";
+import { POST as transfer } from "@/app/api/nodes/transfer/route";
 import { getEnv } from "@/config/env";
 import { SCAN } from "@/config/policy";
 import type { FileRequestDto, RequestUploadPlan } from "@/contracts/file-requests";
 import type { DeletedItemDto } from "@/contracts/trash";
-import { closeQueues } from "@/server/jobs/queue";
+import { Queue } from "bullmq";
+import { closeQueues, MEDIA_QUEUE, queueConnection } from "@/server/jobs/queue";
 import { runScan } from "@/server/services/scan.service";
 import { checkHealth } from "@/server/services/health.service";
 import { callRoute } from "../../../../test/route-call";
@@ -108,6 +110,25 @@ describe("virus scans of upload-link files", () => {
     const after = await visitorGet(id);
     expect([after.status, await after.text()]).toEqual([200, "quarterly numbers"]);
     expect((await checkHealth()).components.scanner).toBe("ok");
+  });
+
+  it("scans a copy of a file that is still waiting for its scan, and makes no thumbnails before", async () => {
+    const m = await member();
+    const id = await receive(m, "waiting.jpg", "not really a picture");
+    await prisma.node.update({ where: { id }, data: { kind: "IMAGE" } });
+    const copied = await callRoute(transfer, { method: "POST", cookie: m.cookie, body: { ids: [id], targetId: "root", mode: "copy" } });
+    expect(copied.status).toBe(200);
+    const copy = await prisma.node.findFirstOrThrow({ where: { accountId: m.id, name: "waiting (2).jpg" } });
+    expect(copy.scanState).toBe("PENDING");
+    const queue = new Queue(MEDIA_QUEUE, queueConnection("producer"));
+    try {
+      // Its own scan job (the original's job never covers the new id), and no media job yet.
+      expect((await queue.getJob(`scan-${copy.id}`))?.data).toEqual({ nodeId: copy.id, task: "scan" });
+      expect(await queue.getJob(copy.id)).toBeUndefined();
+    } finally {
+      await queue.close();
+    }
+    expect(await runScan(copy.id)).toBe("clean");
   });
 
   it("moves infected files to the trash for good and lists why", async () => {

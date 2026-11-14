@@ -4,18 +4,28 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { ApiError, readJson, type Client } from "./client.ts";
 
-/** "a.txt" from `attachment; filename*=UTF-8''a.txt` or `filename="a.txt"`, else null. */
+/**
+ * "a.txt" from `attachment; filename*=UTF-8''a.txt` or `filename="a.txt"`, else null. Only a
+ * plain file name is taken: the name comes from the server (or anything between it and the
+ * client), so a name with a folder part ("../.bashrc") would write outside the current folder.
+ */
 export function fileNameOf(disposition: string | null): string | null {
   if (!disposition) return null;
   const star = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  let name: string | null;
   if (star?.[1]) {
     try {
-      return decodeURIComponent(star[1]);
+      name = decodeURIComponent(star[1]);
     } catch {
       return null;
     }
-  }
-  return /filename="([^"]+)"/i.exec(disposition)?.[1] ?? null;
+  } else name = /filename="([^"]+)"/i.exec(disposition)?.[1] ?? null;
+  return name !== null && plainFileName(name) ? name : null;
+}
+
+/** A name that stays in the current folder: no separators, not "." or "..", no NUL. */
+function plainFileName(name: string): boolean {
+  return name !== "" && name !== "." && name !== ".." && !/[/\\\0]/.test(name);
 }
 
 /** The Range header to continue a partial download of `have` bytes (none for an empty start). */
@@ -41,10 +51,12 @@ export async function downloadFile(client: Client, id: string, target: string | 
     (info) => info.size,
     () => 0,
   );
-  const range = have < total ? resumeRange(have) : null;
+  // Resume only when the server names the content (ETag, sent back as If-Range): without it a
+  // file replaced since the first run would be continued with the other version's bytes.
+  const range = etag && have < total ? resumeRange(have) : null;
 
   onStart(name, total);
-  const res = await client.raw("GET", `/api/v1/files/${encodeURIComponent(id)}`, { headers: { ...(range ? { range } : {}), ...(range && etag ? { "if-range": etag } : {}) } });
+  const res = await client.raw("GET", `/api/v1/files/${encodeURIComponent(id)}`, { headers: { ...(range && etag ? { range, "if-range": etag } : {}) } });
   if (!res.ok || !res.body) throw new ApiError(`HTTP ${res.status}`, res.status, null);
   // 206: the rest of the same file; 200: the file changed (or no Range), start over.
   const append = res.status === 206;

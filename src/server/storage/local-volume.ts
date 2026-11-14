@@ -49,16 +49,8 @@ export class LocalVolumeDriver implements StorageDriver {
     return locations.createFolder(this.layout, location);
   }
 
-  rename(from: StorageLocation, to: StorageLocation): Promise<void> {
-    return locations.renameLocation(this.layout, from, to);
-  }
-
   renameNoReplace(from: StorageLocation, to: StorageLocation): Promise<void> {
     return locations.renameNoReplace(this.layout, from, to);
-  }
-
-  copy(from: StorageLocation, to: StorageLocation): Promise<void> {
-    return locations.copyLocation(this.layout, from, to);
   }
 
   moveIntoPlace(tempPath: string, location: StorageLocation): Promise<void> {

@@ -97,6 +97,14 @@ export const UPLOAD = {
   lockRetryMs: 250,
 } as const;
 
+/** "Photos": every photo and video of the account by the date it was taken (/files/photos). */
+export const TIMELINE = {
+  /** Items in one page (the first is rendered on the server, the rest load as the list grows). */
+  pageSize: 120,
+  /** Most items one request may ask for. */
+  listLimit: 500,
+} as const;
+
 /** Upload-only links (file requests, /r/<id>; docs/api.md "파일 요청"). */
 export const FILE_REQUEST = {
   /** Open requests one account may hold. */
@@ -107,6 +115,8 @@ export const FILE_REQUEST = {
   expiryDays: [1, 7, 30],
   /** Largest "at most N files" limit the owner can set. */
   maxFilesLimit: 10_000,
+  /** Largest "at most N MB" limit the owner can set (10 TB: above any disk, below the bigint column). */
+  maxMbLimit: 10_000_000,
   /** Files one visitor upload may contain (one drop or pick). */
   maxFilesPerBatch: 100,
   /** Upload batches one address may start per hour on one request. */
