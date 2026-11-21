@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ApiTokenDto, CreateApiTokenInput, CreatedApiToken } from "@/contracts/api-tokens";
 import { tokenHealth, tokenHealthText, type TokenUse } from "@/domain/api-token";
 import { formatDateTime, formatLongDate, formatSeen } from "@/domain/format";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { useNow } from "@/shared/hooks/useNow";
 import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
@@ -71,7 +71,6 @@ function TokenRow({ token, now, busy, onRevoke }: { token: ApiTokenDto; now: num
   );
 }
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 /** "API tokens": personal tokens for scripts and apps (/api/v1), with create and revoke. */
 export function ApiTokensCard({ tokens, isAdmin, notify, refresh }: ApiTokensCardProps) {
@@ -88,7 +87,7 @@ export function ApiTokensCard({ tokens, isAdmin, notify, refresh }: ApiTokensCar
       setCreated(await profileApi.createApiToken(input));
       refresh();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }
@@ -101,7 +100,7 @@ export function ApiTokensCard({ tokens, isAdmin, notify, refresh }: ApiTokensCar
       notify(`Revoked ${token.name}`);
       refresh();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
       setRevoking(null);

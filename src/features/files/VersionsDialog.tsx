@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { FileVersionDto } from "@/contracts/nodes";
 import { formatDateTime, formatSize } from "@/domain/format";
 import { useShell } from "@/features/shell/ShellProvider";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { fileUrls, filesApi } from "@/shared/lib/files-api";
 import { Button, buttonClassName } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -16,7 +16,6 @@ export interface VersionsRequest {
   name: string;
 }
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 const days = (count: number) => `${count} ${count === 1 ? "day" : "days"}`;
 
 /**
@@ -37,7 +36,7 @@ export function VersionsDialog({ request, onClose, onDone }: { request: Versions
     filesApi
       .versions(request.nodeId)
       .then((list) => !cancelled && setLoaded({ nodeId: request.nodeId, versions: list }))
-      .catch((caught: unknown) => !cancelled && setError(errorText(caught)));
+      .catch((caught: unknown) => !cancelled && setError(errorMessage(caught)));
     return () => {
       cancelled = true;
     };
@@ -64,7 +63,7 @@ export function VersionsDialog({ request, onClose, onDone }: { request: Versions
         setConfirm(null);
       }
     } catch (caught) {
-      setError(errorText(caught));
+      setError(errorMessage(caught));
     } finally {
       setBusy(null);
     }

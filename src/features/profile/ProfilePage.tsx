@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { DeviceDto, ProfileData } from "@/contracts/profile";
 import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { AccessCard } from "./AccessCard";
 import { ApiTokensCard } from "./ApiTokensCard";
@@ -20,7 +20,6 @@ import { UsageCards } from "./UsageCards";
 
 type Confirm = { kind: "token" } | { kind: "others" } | { kind: "delete" } | null;
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 /** My Profile (`/settings`): profile, usage, access, API tokens, devices, security log, preferences and account deletion. */
 export function ProfilePage({ data }: { data: ProfileData }) {
@@ -46,7 +45,7 @@ export function ProfilePage({ data }: { data: ProfileData }) {
       if (message) notify(message);
       refresh();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
       setConfirm(null);

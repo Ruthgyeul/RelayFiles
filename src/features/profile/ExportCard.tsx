@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatShortDate } from "@/domain/format";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { profileApi } from "./api";
 import { SectionTitle } from "./Section";
@@ -18,7 +18,7 @@ export function ExportCard({ deletesAt, notify }: { deletesAt: string | null; no
       window.location.assign(profileApi.exportUrl);
       notify("Your export is downloading");
     } catch (caught) {
-      notify(caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }

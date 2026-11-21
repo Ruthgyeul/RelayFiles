@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { setReauthHandler } from "@/shared/lib/api-client";
+import { errorMessage, setReauthHandler } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { TextInput } from "@/shared/ui/Field";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -36,7 +36,7 @@ export function ReauthDialog({ open, onConfirmed, onCancel, api = accountApi }: 
       await api.reauthenticate(token.trim());
       close(true);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+      setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }

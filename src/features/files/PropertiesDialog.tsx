@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { NodeProperties } from "@/contracts/nodes";
 import { formatCount, formatDateTime, formatLeft, formatSize } from "@/domain/format";
 import { useNow } from "@/shared/hooks/useNow";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { IconButton } from "@/shared/ui/IconButton";
@@ -65,7 +65,7 @@ export function PropertiesDialog({ nodeId, onClose, linkOf, onCopyLink, onEditTa
     filesApi
       .getProperties(nodeId)
       .then((props) => !cancelled && setData({ id: nodeId, props }))
-      .catch((caught) => !cancelled && setError(caught instanceof ApiClientError ? caught.message : "Something went wrong."));
+      .catch((caught) => !cancelled && setError(errorMessage(caught)));
     return () => {
       cancelled = true;
     };

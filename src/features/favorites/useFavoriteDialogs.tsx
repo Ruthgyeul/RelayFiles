@@ -7,14 +7,13 @@ import type { NodeItem } from "@/contracts/nodes";
 import { nameError } from "@/domain/names";
 import { deleteText } from "@/features/files/useFileDialogs";
 import { useShell } from "@/features/shell/ShellProvider";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { favoritesApi } from "@/shared/lib/favorites-api";
 import { filesApi } from "@/shared/lib/files-api";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { MoveInFavoritesDialog, type MoveInFavoritesRequest } from "./MoveInFavoritesDialog";
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 interface Options {
@@ -46,8 +45,8 @@ export function useFavoriteDialogs({ view, onChanged }: Options) {
       onChanged();
       router.refresh();
     } catch (caught) {
-      if (onError) onError(errorText(caught));
-      else notify(errorText(caught));
+      if (onError) onError(errorMessage(caught));
+      else notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }
@@ -62,7 +61,7 @@ export function useFavoriteDialogs({ view, onChanged }: Options) {
       try {
         setDeleting({ folder, inside: (await favoritesApi.favoritesInside(folder.id)).favorites });
       } catch (caught) {
-        notify(errorText(caught));
+        notify(errorMessage(caught));
       }
     },
   };

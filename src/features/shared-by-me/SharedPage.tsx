@@ -7,7 +7,7 @@ import { matchesSharedFilter, SHARED_FILTER_LABEL, SHARED_FILTERS, type SharedFi
 import { useCopyLink } from "@/features/files/useCopyLink";
 import { useShell } from "@/features/shell/ShellProvider";
 import { usePageTitle } from "@/features/shell/usePageTitle";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useNow } from "@/shared/hooks/useNow";
 import { Button } from "@/shared/ui/Button";
@@ -56,7 +56,7 @@ export function SharedPage({ data }: { data: SharedView }) {
       setSelected(new Set());
       router.refresh();
     } catch (caught) {
-      notify(caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
       setConfirming(null);

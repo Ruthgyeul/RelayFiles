@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CreateFileRequestInput, FileRequestDto } from "@/contracts/file-requests";
 import { formatLongDate, formatSize } from "@/domain/format";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -22,7 +22,6 @@ export interface FileRequestsRequest {
   name: string;
 }
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 function received(request: FileRequestDto): string {
   const files = `${request.filesReceived}${request.maxFiles === null ? "" : ` of ${request.maxFiles}`} ${request.maxFiles === 1 ? "file" : "files"}`;
@@ -73,7 +72,7 @@ export function FileRequestsDialog({ request, notify, onClose }: { request: File
     fileRequestsApi
       .list(request.folderId)
       .then((list) => !cancelled && setItems(list))
-      .catch((caught: unknown) => !cancelled && notify(errorText(caught)));
+      .catch((caught: unknown) => !cancelled && notify(errorMessage(caught)));
     return () => {
       cancelled = true;
     };
@@ -85,7 +84,7 @@ export function FileRequestsDialog({ request, notify, onClose }: { request: File
       notify(await action());
       setVersion((current) => current + 1);
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }
@@ -96,7 +95,7 @@ export function FileRequestsDialog({ request, notify, onClose }: { request: File
       const created = await fileRequestsApi.create(input);
       const copied = await copyText(created.url);
       setCreating(false);
-      return copied ? "Upload link created and copied" : "Upload link created";
+      return copied ? "Upload link created and copied" : `Upload link created · ${COPY_FAILED}`;
     });
 
   const copy = (url: string) => {

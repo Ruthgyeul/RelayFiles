@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { DEFAULT_PATTERN, planBatchRename, renameChanges, type NameCase, type RenameItem, type RenamePattern } from "@/domain/batch-rename";
 import { formatCount } from "@/domain/format";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { filesApi } from "@/shared/lib/files-api";
 import { Button } from "@/shared/ui/Button";
@@ -54,7 +54,7 @@ export function BatchRenameDialog({ request, onClose, onDone }: { request: Batch
       onDone(`Renamed ${items(renamed)}`);
       close();
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+      setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }

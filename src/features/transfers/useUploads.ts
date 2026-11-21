@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 import type { DuplicatePolicy, PrepareUploadResult } from "@/contracts/uploads";
 import { nameError } from "@/domain/names";
 import { uploadFallbackName } from "@/domain/upload";
-import { ApiClientError, apiFetch } from "@/shared/lib/api-client";
+import { apiFetch, errorMessage } from "@/shared/lib/api-client";
 import { claimUpload } from "./api";
 import type { DuplicateRequest } from "./DuplicateDialog";
 import { uploadTransfer } from "./new-transfer";
@@ -14,7 +14,6 @@ import type { UploadOptions, UploadTarget } from "./transfers-context";
 import { BatchUploader } from "./upload-runner";
 import type { TransferList } from "./useTransferList";
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 interface UploadSettings {
   notify: (message: string) => void;
@@ -70,7 +69,7 @@ export function useUploads({ add, fileEvents, finish, fail, update }: TransferLi
           runner.start();
           options?.onStart?.({ id: plan.folder.id, name: plan.folder.name });
         } catch (caught) {
-          notify(errorText(caught));
+          notify(errorMessage(caught));
           options?.onRefused?.();
         }
       })();

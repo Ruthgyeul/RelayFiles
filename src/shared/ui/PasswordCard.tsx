@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { Button } from "./Button";
 import { Icon } from "./icon/Icon";
 import { StateCard } from "./StateCard";
@@ -27,7 +27,7 @@ export function PasswordCard({ title, description, onUnlock }: PasswordCardProps
       await onUnlock(password);
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+      setError(errorMessage(caught));
       setBusy(false);
     }
   };

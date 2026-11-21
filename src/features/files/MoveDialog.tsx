@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FolderNode } from "@/contracts/nodes";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -83,7 +83,7 @@ export function MoveDialog({ request, onClose, onDone }: { request: MoveRequest 
       onDone(`${copy ? "Copied" : "Moved"} ${items} to ${result.targetName}${result.renamed ? ` · renamed ${result.renamed} to avoid duplicates` : ""}`);
       close();
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+      setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }

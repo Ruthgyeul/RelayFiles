@@ -10,7 +10,7 @@ import { deleteText } from "@/features/files/useFileDialogs";
 import { useShell } from "@/features/shell/ShellProvider";
 import { METER_COLOR } from "@/features/shell/StorageMeter";
 import { usePageTitle } from "@/features/shell/usePageTitle";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { filesApi } from "@/shared/lib/files-api";
 import { folderHref } from "@/shared/lib/routes";
 import { Button } from "@/shared/ui/Button";
@@ -64,7 +64,7 @@ export function StoragePage({ data }: { data: StorageOverview }) {
       setSelected(new Set());
       router.refresh();
     } catch (caught) {
-      notify(caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
       setConfirming(false);

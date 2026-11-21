@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import type { CreatedAccount, SessionState, SignupMode } from "@/contracts/auth";
 import { formatCountdown } from "@/domain/format";
 import { useNow } from "@/shared/hooks/useNow";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { ApiClientError, errorMessage } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { TextInput } from "@/shared/ui/Field";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -43,7 +43,7 @@ export function SignInDialog({ open, onClose, signupMode, onSignedIn, onCreated,
       setError("");
       return;
     }
-    setError(caught instanceof Error ? caught.message : "Something went wrong.");
+    setError(errorMessage(caught));
   };
 
   const signIn = async (event: FormEvent) => {

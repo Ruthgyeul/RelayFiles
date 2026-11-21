@@ -2,7 +2,7 @@ import { CONVERSION } from "@/contracts/api";
 import { ERRORS } from "@/contracts/errors";
 import { filesApi } from "@/shared/lib/files-api";
 import { withVisibility } from "@/features/files/settings";
-import { ApiClientError, apiFetch } from "@/shared/lib/api-client";
+import { apiFetch, GENERIC_ERROR } from "@/shared/lib/api-client";
 
 const base = (linkId: string) => `/api/share/${encodeURIComponent(linkId)}`;
 
@@ -39,7 +39,7 @@ export const shareApi = {
   download: async (url: string): Promise<string | null> => {
     const check = await fetch(url, { method: "HEAD" }).catch(() => null);
     if (!check) return "Connection lost";
-    if (!check.ok) return HEAD_PROBLEMS[check.status] ?? "Something went wrong.";
+    if (!check.ok) return HEAD_PROBLEMS[check.status] ?? GENERIC_ERROR;
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "";
@@ -48,4 +48,3 @@ export const shareApi = {
   },
 };
 
-export const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");

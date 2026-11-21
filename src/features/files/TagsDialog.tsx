@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { normalizeTag } from "@/domain/tags";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { Modal, ModalHeader } from "@/shared/ui/Modal";
@@ -49,7 +49,7 @@ export function TagsDialog({ request, onClose }: { request: TagsRequest | null; 
       await filesApi.tags(request.ids, add, remove);
     } catch (caught) {
       setTags(previous);
-      setError(caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+      setError(errorMessage(caught));
     }
   };
   const add = (raw: string) => {

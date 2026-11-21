@@ -8,7 +8,7 @@ import { retentionText } from "@/domain/trash";
 import { useShell } from "@/features/shell/ShellProvider";
 import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useNow } from "@/shared/hooks/useNow";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { ApiClientError, errorMessage } from "@/shared/lib/api-client";
 import { folderHref } from "@/shared/lib/routes";
 import { ListCard } from "@/shared/ui/Card";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
@@ -20,7 +20,6 @@ import { DeletedItemRow } from "./DeletedItemRow";
 /** Re-render interval for "Deletes in N hours". */
 const CLOCK_TICK_MS = 60_000;
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 /** Toast after a restore: where the item went and under which name. */
 function restoredText(result: RestoredItem): string {
@@ -53,7 +52,7 @@ export function RecentlyDeletedPage({ initial }: { initial: DeletedItemDto[] }) 
       setItems((current) => current.filter((entry) => entry.id !== item.id));
       router.refresh();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
       // Gone meanwhile (restored on another device, emptied by the cleanup): show what is left.
       if (caught instanceof ApiClientError && (caught.status === 404 || caught.status === 410)) setItems(await trashApi.list().catch(() => items));
     } finally {

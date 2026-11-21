@@ -6,7 +6,7 @@ import type { DuplicateFile, DuplicatesResult } from "@/contracts/nodes";
 import { defaultDuplicateSelection, fullySelectedGroups } from "@/domain/duplicates";
 import { formatCount, formatSize } from "@/domain/format";
 import { retentionText } from "@/domain/trash";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { filesApi } from "@/shared/lib/files-api";
 import { Button } from "@/shared/ui/Button";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
@@ -21,7 +21,6 @@ export interface DuplicatesRequest {
   name: string;
 }
 
-const errorOf = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 const files = (count: number) => `${formatCount(count)} ${count === 1 ? "file" : "files"}`;
 /** The groups as the selection helpers read them (sizes as numbers). */
 const asCandidates = (result: DuplicatesResult) =>
@@ -62,7 +61,7 @@ export function DuplicatesDialog({ request, onClose, onDone, onReveal }: { reque
         setLoaded({ key, result: found });
         setSelected(new Set(defaultDuplicateSelection(asCandidates(found))));
       })
-      .catch((caught: unknown) => !cancelled && setError(errorOf(caught)));
+      .catch((caught: unknown) => !cancelled && setError(errorMessage(caught)));
     return () => {
       cancelled = true;
     };
@@ -95,7 +94,7 @@ export function DuplicatesDialog({ request, onClose, onDone, onReveal }: { reque
       close();
     } catch (caught) {
       setConfirming(false);
-      setError(errorOf(caught));
+      setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }
