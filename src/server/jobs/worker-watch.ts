@@ -18,18 +18,23 @@ function heartbeatLifetimeMs(): number {
 /**
  * One check: reads the heartbeat, swaps the stored state in one command (SET … GET), and alerts
  * when the state changed. With several app processes only the one whose swap saw the old state
- * sends the alert. Returns the change, if any.
+ * sends the alert. When the alert cannot be delivered, the old state is put back, so the next
+ * check sees the same change and tries again. Returns the change, if any.
  */
 export async function checkWorker(now: Date = new Date()): Promise<WorkerChange | null> {
   const alive = await workerAlive();
   const state: WorkerState = alive ? "up" : "down";
   const previous = await redis().set(STATE_KEY, state, "GET");
   const change = workerChange(isWorkerState(previous) ? previous : null, alive);
+  if (!change) return null;
   if (change === "down") logger.error("worker stopped sending heartbeats");
   if (change === "back") logger.info("worker sends heartbeats again");
-  if (change) {
-    const silentMinutes = Math.ceil(heartbeatLifetimeMs() / MS.minute);
+  const silentMinutes = Math.ceil(heartbeatLifetimeMs() / MS.minute);
+  try {
     await deliverNotification(change === "down" ? { kind: "worker-down", silentMinutes } : { kind: "worker-back" }, now);
+  } catch (error) {
+    await (isWorkerState(previous) ? redis().set(STATE_KEY, previous) : redis().del(STATE_KEY));
+    throw error;
   }
   return change;
 }
