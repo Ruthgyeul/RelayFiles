@@ -88,8 +88,18 @@ limit_req_zone $relay_api_limit zone=relay_api:10m rate=${NGINX_API_RATE_PER_MIN
 # WebDAV signs in with an API token on every request (argon2 for a known id): limited per address first.
 limit_req_zone $relay_client_ip zone=relay_dav:10m rate=${NGINX_DAV_RATE_PER_MIN}r/m;
 
-# No client addresses in Nginx logs (same rule as the app's logs).
-log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
+# Share links (/d/<id>, /api/share/<id>) and upload links (/r/<id>, /api/r/<id>) work for
+# anyone who has the id, and WebDAV paths are folder and file names: the access log keeps the
+# route but not them, and never the query string (docs/security.md "로그").
+# The request as the client sent it ($uri can be the internal X-Accel path to the file by then).
+map $request_uri $relay_log_path {
+    ~^(?<relay_log_route>/d|/r|/api/share|/api/r)/[^/?]+(?<relay_log_rest>[^?]*) "$relay_log_route/:id$relay_log_rest";
+    ~^/dav/ "/dav/:path";
+    ~^(?<relay_log_plain>[^?]*) "$relay_log_plain";
+    default "-";
+}
+# No client addresses either (same rule as the app's logs).
+log_format relayfiles '[$time_local] "$request_method $relay_log_path $server_protocol" $status $body_bytes_sent $request_time';
 
 # Host names. SERVER_NAME, and 127.0.0.1 (the release script's health check through this Nginx),
 # reach the site through the first server. Any other Host header lands on the default server: with

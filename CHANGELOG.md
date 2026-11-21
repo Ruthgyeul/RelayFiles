@@ -80,6 +80,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Security
 
+- Nginx access logs (all three deployments) no longer record share and upload link ids, WebDAV paths or query strings: those parts are logged as `:id` and `/dav/:path`
 - `minimatch` under `archiver` (zip downloads) is held at 11.0.9 or later, past its pattern denial-of-service advisory
 - Next.js 16.4.6: fixes the advisories for 16.4.4 and earlier (cache disclosure across root params and `use cache` arguments, the image optimizer's SVG check, response injection in self-hosted apps that forward fetched responses)
 - `effect` (pulled in by Prisma's config loader) is held at 3.22.4 or later, past the ReDoS advisory in its template literal schemas

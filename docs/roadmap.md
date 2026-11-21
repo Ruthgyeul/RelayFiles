@@ -82,7 +82,7 @@
 - **변경 3**: `docs/deploy-k3s.md:84`의 cron 한 줄을 스크립트 호출로 바꾼다.
 - **검증**: shellcheck, `docs/runbook.md`의 복구 절차와 대조한다.
 
-### PR 1-6 `fix(deploy): run systemd workers from the release bundle`
+### PR 1-6 `fix(deploy): run systemd workers from the release bundle` — [#149](https://github.com/Ruthgyeul/RelayFiles/pull/149)
 - **문제**: worker와 dav가 체크아웃에서 직접 돈다. `git pull`·`npm ci`가 실행 중인 코드와 `node_modules`를 바로 바꾼다.
 - **변경 1**: `deploy/scripts/systemd/release.sh`가 `src`, `scripts`, `prisma`, `node_modules`, `package.json`을 `.app/<release>/tools`로 복사(가능하면 `cp -al` hardlink)한다.
 - **변경 2**: `relayfiles-worker.service.template`과 `relayfiles-dav.service.template`의 `WorkingDirectory`와 `ExecStart`를 `.app/current/tools`로 바꾼다. 세 유닛에 `Environment=NODE_ENV=production`을 넣는다.

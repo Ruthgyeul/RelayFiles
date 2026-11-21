@@ -60,8 +60,18 @@ limit_req_zone $relayfiles_api_limit zone=relayfiles_api:10m rate=${NGINX_API_RA
 # WebDAV signs in with an API token on every request (argon2 for a known id): limited per address first.
 limit_req_zone $binary_remote_addr zone=relayfiles_dav:10m rate=${NGINX_DAV_RATE_PER_MIN}r/m;
 
-# No client addresses in the access log (same rule as the app's logs).
-log_format relayfiles '[$time_local] "$request" $status $body_bytes_sent $request_time';
+# Share links (/d/<id>, /api/share/<id>) and upload links (/r/<id>, /api/r/<id>) work for
+# anyone who has the id, and WebDAV paths are folder and file names: the access log keeps the
+# route but not them, and never the query string (docs/security.md "로그").
+# The request as the client sent it ($uri can be the internal X-Accel path to the file by then).
+map $request_uri $relayfiles_log_path {
+    ~^(?<relayfiles_log_route>/d|/r|/api/share|/api/r)/[^/?]+(?<relayfiles_log_rest>[^?]*) "$relayfiles_log_route/:id$relayfiles_log_rest";
+    ~^/dav/ "/dav/:path";
+    ~^(?<relayfiles_log_plain>[^?]*) "$relayfiles_log_plain";
+    default "-";
+}
+# No client addresses either (same rule as the app's logs).
+log_format relayfiles '[$time_local] "$request_method $relayfiles_log_path $server_protocol" $status $body_bytes_sent $request_time';
 
 # Requests naming any other host go to the port's default server: relayfiles-catchall.conf
 # (closes them, 444) when install.sh found no other default site, so a page on another domain
