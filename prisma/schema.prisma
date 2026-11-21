@@ -518,7 +518,7 @@ model BackupCheck {
 }
 
 /// Personal API token for scripts and uploaders (Authorization: Bearer on /api/v1). Shown once;
-/// only its SHA-256 is stored (256 random bits need no key, so key rotation never breaks it).
+/// only an argon2id hash is stored (secretHash), so key rotation never breaks it.
 /// Revoking deletes the row.
 model ApiToken {
   id         String    @id

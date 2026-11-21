@@ -13,7 +13,7 @@ const bytes = z.string().regex(/^\d+$/).describe("Bytes as a decimal string (may
 const visibility = z.enum(["inherit", "private", "public"]);
 const effectiveVisibility = z.enum(["private", "public"]);
 
-export const nodeSettingsSchema = z.object({
+const nodeSettingsSchema = z.object({
   visibility,
   expiry: z.string().describe('Expiry label ("Never", "7 days", …); set by admins only'),
   expAt: isoTime.nullable(),
@@ -26,7 +26,7 @@ export const nodeSettingsSchema = z.object({
   dlPaused: z.boolean(),
 });
 
-export const busyBadgeSchema = z.object({ level: z.union([z.literal(1), z.literal(2)]), label: z.string(), tip: z.string() });
+const busyBadgeSchema = z.object({ level: z.union([z.literal(1), z.literal(2)]), label: z.string(), tip: z.string() });
 
 export const nodeItemSchema = z.object({
   id: z.string(),

@@ -8,7 +8,7 @@ export type DuplicatePolicy = (typeof DUPLICATE_POLICIES)[number];
 /** Longest relative path accepted from a folder upload ("Photos/2024/a.jpg"). */
 const MAX_REL_PATH = 4_096;
 /** Files one upload batch may contain. */
-export const MAX_FILES_PER_BATCH = 10_000;
+const MAX_FILES_PER_BATCH = 10_000;
 
 export const prepareUploadSchema = z.object({
   /** "home" creates a new folder at the root for this upload; otherwise a folder id or "root". */

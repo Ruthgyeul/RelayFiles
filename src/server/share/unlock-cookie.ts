@@ -31,7 +31,7 @@ export interface Unlock {
 export type Unlocks = Map<string, Unlock>;
 
 /** Tag of a link's password hash (empty for links without a password). */
-export function passwordTag(passwordHash: string | null, secret: string): string {
+function passwordTag(passwordHash: string | null, secret: string): string {
   return createHmac("sha256", secret)
     .update(`share-password:${passwordHash ?? ""}`)
     .digest()

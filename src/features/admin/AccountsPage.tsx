@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AdminAccounts, ManageInput } from "@/contracts/admin";
+import { daysText } from "@/domain/account";
 import { accountStatus, ADMIN_FILTERS, matchesFilter, type AdminFilter } from "@/domain/admin";
 import { formatSize } from "@/domain/format";
 import { usePageTitle } from "@/features/shell/usePageTitle";
@@ -93,7 +94,7 @@ export function AccountsPage({ data }: { data: AdminAccounts }) {
       <div className="flex flex-wrap items-center gap-2.5 rounded-[14px] border border-card-line bg-card px-3.5 py-3 text-[13px] leading-[1.5] text-pretty text-t2">
         <Icon name="info" size={18} className="text-accent-icon" />
         <span className="min-w-[220px] flex-1">
-          Member accounts are deleted with all of their files 14 days after they are created, regardless of activity. Admins are exempt. Extend or exempt an account from Manage. File contents are private to each account and are not shown here.
+          Member accounts are deleted with all of their files {daysText(data.ttlDays)} after they are created, regardless of activity. Admins are exempt. Extend or exempt an account from Manage. File contents are private to each account and are not shown here.
         </span>
         <button
           type="button"

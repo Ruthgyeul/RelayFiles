@@ -121,7 +121,7 @@ export function rateLimitNetwork(ip: string): string {
 const MAX_IP_LENGTH = 64;
 
 /** Header Nginx adds with PROXY_SHARED_SECRET, so the app can tell its own proxy from anyone else. */
-export const PROXY_SECRET_HEADER = "x-relay-proxy";
+const PROXY_SECRET_HEADER = "x-relay-proxy";
 
 /** Compares two strings in time that depends only on their length (no early exit on the first difference). */
 function sameText(a: string, b: string): boolean {

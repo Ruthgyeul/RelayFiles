@@ -26,7 +26,7 @@ interface Row {
 }
 
 /** Folder tree rows in display order; folders being moved and everything inside are blocked. */
-export function folderRows(folders: FolderNode[], request: MoveRequest): Row[] {
+function folderRows(folders: FolderNode[], request: MoveRequest): Row[] {
   const children = new Map<string | null, FolderNode[]>();
   for (const folder of folders) children.set(folder.parentId, [...(children.get(folder.parentId) ?? []), folder]);
   for (const list of children.values()) list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));

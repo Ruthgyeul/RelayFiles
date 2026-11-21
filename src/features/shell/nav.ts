@@ -17,7 +17,7 @@ export interface NavItem {
  * Sidebar and drawer navigation in the design's order. `/files` is an
  * optional catch-all route, which the typed-route check only accepts with `as Route`.
  */
-export const NAV_ITEMS: readonly NavItem[] = [
+const NAV_ITEMS: readonly NavItem[] = [
   { id: "home", href: "/", label: "Home", icon: "house", title: "Home" },
   { id: "files", href: "/files" as Route, label: "File Manager", icon: "folder-simple", title: "root" },
   { id: "accounts", href: "/admin/accounts", label: "Accounts", icon: "users-three", title: "Accounts", adminOnly: true },

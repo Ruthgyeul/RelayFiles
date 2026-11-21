@@ -194,8 +194,8 @@ services:
       redis: { condition: service_healthy }
 
   dav:
-    # WebDAV (optional): docker compose --profile dav up -d dav. Read-only network drive for
-    # personal API tokens (files:read); Nginx forwards /dav/ to it (docs/deploy-ubuntu.md).
+    # WebDAV (optional): docker compose --profile dav up -d dav. Network drive for personal
+    # API tokens (reads with files:read, changes with files:write); Nginx forwards /dav/ to it (docs/deploy-ubuntu.md).
     <<: [*app-env, *hardening]
     image: relayfiles-tools:${RELEASE_TAG:-latest}
     profiles: [dav]

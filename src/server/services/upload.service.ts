@@ -55,17 +55,17 @@ export async function tusVolume(volumeId: string | undefined) {
   return volume && volume.status !== "OFFLINE" ? volume : null;
 }
 
-/**
- * Plans an upload: validates names, reports duplicates for the
- * dialog, checks quota and disk space, creates the Home upload folder, and stores the batch
- * the tus server will accept files for.
- */
 /** Space for a batch, not counting twice the unfinished uploads it may resume (`resumableUploads`). */
 async function assertBatchSpace(owner: Owner, files: readonly { rel: string; size: number }[], space: Parameters<typeof assertSpace>[2], volume: Parameters<typeof resumableUploads>[1]): Promise<void> {
   const covering = await resumableUploads(owner, volume, files);
   await assertSpace(owner, files.reduce((sum, file) => sum + file.size, 0), space, { covering });
 }
 
+/**
+ * Plans an upload: validates names, reports duplicates for the
+ * dialog, checks quota and disk space, creates the Home upload folder, and stores the batch
+ * the tus server will accept files for.
+ */
 export async function prepareUpload(owner: Owner, input: PrepareUploadInput, { apiTokenId }: { apiTokenId?: string } = {}): Promise<PrepareUploadResult> {
   input.files.forEach((file) => checkRelPath(file.rel));
   await assertAccountWritable(owner.id);

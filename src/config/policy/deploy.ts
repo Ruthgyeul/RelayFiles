@@ -11,13 +11,13 @@ export const K3S = {
   mediaConcurrency: 1,
 } as const;
 
-/** Defaults of the Nginx request limits (deploy env NGINX_*; both Nginx templates use them). */
 /** Redis as the deployment files start it (docker compose, k3s). */
 export const REDIS_SERVER = {
   /** Default for REDIS_MAXMEMORY_MB: queues, limits and reservations take a few MB on this server. */
   maxMemoryMb: 256,
 } as const;
 
+/** Defaults of the Nginx request limits (deploy env NGINX_*; both Nginx templates use them). */
 export const NGINX = {
   /** Largest request body; tus chunks (UPLOAD_CHUNK_SIZE_MB, at most 95) must fit. */
   maxBodyMb: 100,

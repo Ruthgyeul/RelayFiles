@@ -109,7 +109,7 @@ export async function zipItems(owner: Owner, ids: string[]): Promise<Response> {
 }
 
 /** "Not included.txt" of an owner's zip: files that are missing from the disk. */
-export function missingNote(names: readonly string[]): string {
+function missingNote(names: readonly string[]): string {
   return `These files are not included:\n\n${names.map((name) => `${name}  (${MISSING_REASON})`).join("\n")}\n`;
 }
 

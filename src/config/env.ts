@@ -16,9 +16,9 @@ import type { Source } from "./env/fields";
  */
 
 // Field schemas and the groups are split under src/config/env/; this file assembles and reads them.
-export { isLanHost, NOTIFY_FORMATS } from "./env/fields";
+export { isLanHost } from "./env/fields";
 
-export const ENV_GROUPS = {
+const ENV_GROUPS = {
   app: appEnv,
   database: databaseEnv,
   redis: redisEnv,

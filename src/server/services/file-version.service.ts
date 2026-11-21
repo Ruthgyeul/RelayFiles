@@ -25,12 +25,12 @@ import { driverForAccount, lockAccountForWrite } from "./volume.service";
 type Owner = Pick<AccountRow, "id" | "volumeId" | "isAdmin" | "quotaBytes">;
 
 /** Days an earlier version is kept (FILE_VERSIONS_DAYS); 0 keeps none. */
-export function fileVersionsDays(): number {
+function fileVersionsDays(): number {
   return getEnv("storage").FILE_VERSIONS_DAYS;
 }
 
 /** A name no upload can have (names are validated), held by a replaced row until it is deleted. */
-export const replacedName = (nodeId: string) => `replaced/${nodeId}`;
+const replacedName = (nodeId: string) => `replaced/${nodeId}`;
 
 /** What {@link setAside} did with the replaced bytes, to record once the new row exists. */
 export interface SetAside {

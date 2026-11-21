@@ -101,7 +101,7 @@ export async function descendantCounts(db: DbClient, folderId: string): Promise<
 }
 
 /** Ids of every node below a folder (not including it). */
-export async function descendantIds(db: DbClient, folderId: string): Promise<string[]> {
+async function descendantIds(db: DbClient, folderId: string): Promise<string[]> {
   const rows = await db.$queryRaw<{ id: string }[]>`
     WITH RECURSIVE sub AS (
       SELECT id FROM "Node" WHERE "parentId" = ${folderId}
@@ -138,7 +138,6 @@ export async function subtreeRowsOf(db: DbClient, topIds: readonly string[]): Pr
   return trees;
 }
 
-/** "Apply to all subfolders and files": everything inside follows the folder again. */
 /**
  * Locks one folder's row FOR UPDATE inside a transaction: writers that choose a name in it
  * (uploads finishing together) take turns, so each one sees the names the others placed.
@@ -160,6 +159,7 @@ export async function subtreeHeight(db: DbClient, topIds: readonly string[]): Pr
   return row?.height ?? 0;
 }
 
+/** "Apply to all subfolders and files": everything inside follows the folder again. */
 export async function inheritVisibilityBelow(db: DbClient, folderId: string): Promise<void> {
   const ids = await descendantIds(db, folderId);
   if (ids.length) await db.node.updateMany({ where: { id: { in: ids } }, data: { visibility: "INHERIT" } });

@@ -237,7 +237,7 @@ File Manager 툴바의 공유 아이콘(`/files/shared`)이 밖에서 열 수 �
 
 ### 순번 정리 (Renumber files)
 
-폴더 메뉴의 "Renumber files"는 `scripts/sortNumbered.sh`처럼 폴더 바로 아래 파일 이름을 `01, 02, 03…`(확장자 유지)으로 바꾼다(`domain/renumber.ts` 계획, `services/renumber.service.ts` 실행).
+폴더 메뉴의 "Renumber files"는 폴더 바로 아래 파일 이름을 `01, 02, 03…`(확장자 유지)으로 바꾼다(`domain/renumber.ts` 계획, `services/renumber.service.ts` 실행).
 
 - 정렬: 이름(자연 정렬), 생성일(`createdAt`), 수정일(`modifiedAt`), 촬영일(`takenAt`), 오름·내림차순. 같은 값은 이름 → id 순이라 계획이 매번 같다.
 - **촬영일**(`Node.takenAt`): 워커가 미디어 자체의 메타데이터에서 읽는다(`domain/media-date.ts`, `server/media/date-taken.ts`).

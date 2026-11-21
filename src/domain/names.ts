@@ -29,7 +29,6 @@ export function nameError(name: string): string {
   return "";
 }
 
-/** Splits "movie.mp4" into ["movie", ".mp4"]; folders and dotfiles keep the whole name as base. */
 /**
  * The longest start of `text` that fits in `maxBytes` of UTF-8, never cutting a character (or a
  * surrogate pair) in half.
@@ -47,6 +46,7 @@ export function utf8Prefix(text: string, maxBytes: number): string {
   return text.slice(0, end);
 }
 
+/** Splits "movie.mp4" into ["movie", ".mp4"]; folders and dotfiles keep the whole name as base. */
 export function splitExtension(name: string, isFile: boolean): [string, string] {
   if (!isFile) return [name, ""];
   const match = /^(.+?)(\.[^.]+)?$/.exec(name);

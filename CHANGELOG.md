@@ -41,6 +41,8 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Fixed
 
+- A tag search in the File Manager (`#tag`) updates after deleting, renaming, moving or retagging its results instead of showing them as they were
+- The account deletion notices (admin Accounts page, Manage dialog, My Profile) give the server's `ACCOUNT_TTL_DAYS` instead of always 14 days
 - Dialogs keep focus in the field being typed in while the page updates (an upload in progress moved it to Close), return focus to the button that opened them, and Escape closes only the top dialog
 - An open item menu keeps keyboard focus while the page updates
 - A file's tags in the list are buttons, so searching by a tag works from the keyboard
@@ -72,6 +74,8 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Security
 
+- Next.js 16.4.6: fixes the advisories for 16.4.4 and earlier (cache disclosure across root params and `use cache` arguments, the image optimizer's SVG check, response injection in self-hosted apps that forward fetched responses)
+- `effect` (pulled in by Prisma's config loader) is held at 3.22.4 or later, past the ReDoS advisory in its template literal schemas
 - Converted video playback (live or stored conversions) counts toward the link's and the account's daily traffic limits like the original; it went uncounted
 - A folder's daily traffic limit also covers the links of files and folders inside it (another link no longer gets around it), and a private link that expired or ran out looks like a missing link to visitors
 - Stopping an account export halfway through a file no longer crashes the app server (an uncaught error ended the process), and a WebDAV download that the client drops or that fails to read no longer leaves the file open or stops the DAV server

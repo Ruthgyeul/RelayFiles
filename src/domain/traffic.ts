@@ -4,14 +4,14 @@
  * its links together). Days are UTC calendar days.
  */
 
-const DAY_MS = 86_400_000;
-const MS_PER_SECOND = 1_000;
+import { MS } from "@/config/policy";
+
 const BYTES_PER_GB = 1_000_000_000n;
 
 /** Seconds until the next UTC midnight (at least 1), when the day's counters start over. */
 export function secondsUntilUtcMidnight(now: number): number {
-  const next = Math.floor(now / DAY_MS) * DAY_MS + DAY_MS;
-  return Math.max(1, Math.ceil((next - now) / MS_PER_SECOND));
+  const next = Math.floor(now / MS.day) * MS.day + MS.day;
+  return Math.max(1, Math.ceil((next - now) / MS.second));
 }
 
 /** "2026-11-12": the UTC day a byte is counted on. */

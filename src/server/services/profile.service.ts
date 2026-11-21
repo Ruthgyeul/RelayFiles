@@ -61,6 +61,7 @@ export async function profileOf(account: AccountRow, currentSessionId: string, n
       createdAt: account.createdAt.toISOString(),
       lastLoginAt: (lastLoginAt ?? now).toISOString(),
       deletesAt: deletionDate(account, ttlDays)?.toISOString() ?? null,
+      ttlDays,
       quotaBytes: account.quotaBytes?.toString() ?? null,
       stripMetadataOnShare: account.stripMetadataOnShare,
       notifyLinkEvents: notifyLinkEvents ?? false,
@@ -101,10 +102,6 @@ export async function purgeExpired(owner: AccountRow, now: Date): Promise<{ dele
 }
 
 /**
- * Deletes the account with its token, sessions and every file. The account folder goes to
- * the volume's trash (purged later), so a failed database delete can be undone.
- */
-/**
  * "Delete account" on My Profile. The last admin cannot delete itself: the instance would be
  * left without anyone able to manage accounts, sign-ups or storage.
  */
@@ -117,7 +114,11 @@ export async function deleteOwnAccount(owner: AccountRow): Promise<void> {
   });
 }
 
-/** Deletes an account with its files; `guard` runs first in the same transaction and may refuse. */
+/**
+ * Deletes the account with its token, sessions and every file; `guard` runs first in the same
+ * transaction and may refuse. The account folder goes to the volume's trash (purged later), so
+ * a failed database delete can be undone.
+ */
 export async function deleteAccount(owner: AccountRow, guard?: (tx: DbClient) => Promise<void>): Promise<void> {
   const driver = await driverForAccount(owner, "write");
   await withStorageTransaction(db(), async (tx, undo) => {

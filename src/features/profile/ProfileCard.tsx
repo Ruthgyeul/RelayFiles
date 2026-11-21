@@ -74,7 +74,7 @@ export function ProfileCard({ account }: { account: ProfileData["account"] }) {
         <span className="flex size-[26px] shrink-0 items-center justify-center rounded-[7px] bg-warn-bg-soft">
           <Icon name="key" className="text-warn-strong" />
         </span>
-        {retentionText(account, mounted && account.deletesAt ? formatLongDate(account.deletesAt) : "")}
+        {retentionText(account, mounted && account.deletesAt ? formatLongDate(account.deletesAt) : "", account.ttlDays)}
       </div>
     </>
   );

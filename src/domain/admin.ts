@@ -65,7 +65,7 @@ export const QUOTA_CHOICES: readonly { value: number | null; label: string }[] =
 export interface ManageDraft {
   isAdmin: boolean;
   days: DaysChoice;
-  /** "Restart 14 days from today". */
+  /** "Restart <ACCOUNT_TTL_DAYS> days from today". */
   reset: boolean;
 }
 

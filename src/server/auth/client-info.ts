@@ -32,7 +32,7 @@ export function ipKeyOf(ip: string): string {
   return keyOf(`ip:${rateLimitSubject(ip) || "unknown"}`);
 }
 
-export function networkKeyOf(ip: string): string {
+function networkKeyOf(ip: string): string {
   return keyOf(`net:${rateLimitNetwork(ip) || "unknown"}`);
 }
 

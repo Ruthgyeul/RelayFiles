@@ -31,7 +31,7 @@ import { assertAccountWritable } from "./volume.service";
 /** Same length as an upload batch of the web app. */
 const HOUR_SEC = MS.hour / MS.second;
 
-export const fileRequestUrl = (id: string) => `${getAppEnv().PUBLIC_URL}/r/${id}`;
+const fileRequestUrl = (id: string) => `${getAppEnv().PUBLIC_URL}/r/${id}`;
 /** Its entry in the share unlock cookie (`rf_sh`), apart from share link ids. */
 export const requestUnlockKey = (id: string) => `req:${id}`;
 
@@ -91,7 +91,7 @@ export async function removeFileRequest(accountId: string, id: string): Promise<
 }
 
 /** A request a visitor may use: its row, state, and whether this device entered its password. */
-export async function visitRequest(id: string, unlocks: Unlocks, now: number) {
+async function visitRequest(id: string, unlocks: Unlocks, now: number) {
   const row = await findFileRequest(db(), id);
   if (!row) throw new ApiError("NOT_FOUND");
   const unlocked = row.passwordHash === null || isUnlocked(unlocks, requestUnlockKey(id), row.passwordHash, cookieSecrets());

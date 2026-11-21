@@ -133,6 +133,9 @@ async function fillTar(pack: Pack, driver: StorageDriver, owner: Owner, plan: Ex
  * `.relayfiles/manifest.json` with tags, notes, share settings (no links or passwords) and
  * Favorites. One export at a time per account, and one start per EXPORT.repeatAfterMinutes.
  */
+/** The slot lease runs out by itself (EXPORT.slotLeaseMs) when Redis drops the release. */
+const releaseFailed = (error: unknown) => logger.warn("account export slot release failed", { error });
+
 export async function exportAccount(owner: Owner, now: Date = new Date()): Promise<Response> {
   await takeTurn(owner.id);
   const slot: SemaphoreSlot | null = await acquireSlot(`export:${owner.id}`, 1, EXPORT.slotLeaseMs);
@@ -142,7 +145,8 @@ export async function exportAccount(owner: Owner, now: Date = new Date()): Promi
   try {
     [plan, driver] = await Promise.all([planExport(owner, now), driverForAccount(owner)]);
   } catch (error) {
-    await slot.release();
+    // A failed release must not hide why the export failed; the lease runs out on its own.
+    await slot.release().catch(releaseFailed);
     throw error;
   }
   const pack = tarPack();
@@ -155,7 +159,7 @@ export async function exportAccount(owner: Owner, now: Date = new Date()): Promi
       else logger.error("account export failed", { error });
       pack.destroy();
     })
-    .finally(() => void slot.release());
+    .finally(() => slot.release().catch(releaseFailed));
   return new Response(Readable.toWeb(Readable.from(pack)) as ReadableStream, {
     headers: {
       "content-type": "application/x-tar",

@@ -7,9 +7,9 @@
 /** Lowercase base32 without look-alike characters (no i, l, o, 0, 1). */
 export const ID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 /** Mixed-case token alphabet without look-alikes. */
-export const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 /** Upper-case invite code alphabet. */
-export const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export const ID_LENGTH = { account: 12, node: 12, link: 16, legacyLink: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12, fileRequest: 12, deletedItem: 12, fileVersion: 16 } as const;
 
@@ -17,7 +17,7 @@ export const ID_LENGTH = { account: 12, node: 12, link: 16, legacyLink: 10, toke
  * Personal API tokens are `rfp_<token id>_<43 random characters>`: the prefix tells them apart
  * from account tokens (and lets secret scanners find them), the id finds the row to check.
  */
-export const API_TOKEN_PREFIX = "rfp_";
+const API_TOKEN_PREFIX = "rfp_";
 
 type RandomSource = (bytes: Uint8Array) => Uint8Array;
 const webRandom: RandomSource = (bytes) => crypto.getRandomValues(bytes);

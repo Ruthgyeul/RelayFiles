@@ -21,7 +21,7 @@ const REALM = 'Basic realm="RelayFiles", charset="UTF-8"';
  * The API token a client sent: the password of Basic auth (the user name is ignored, so a file
  * manager can save "relayfiles" and the token) or a Bearer token.
  */
-export function davToken(authorization: string | null): string | null {
+function davToken(authorization: string | null): string | null {
   if (!authorization) return null;
   const [scheme, value] = authorization.split(" ", 2);
   if (scheme?.toLowerCase() === "bearer") return value?.trim() || null;

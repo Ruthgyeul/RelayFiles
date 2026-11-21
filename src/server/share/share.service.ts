@@ -45,7 +45,7 @@ export const shareUrl = (linkId: string) => `${getAppEnv().PUBLIC_URL}/d/${linkI
  * password closes or locks this link too, and so does the owner's account reaching its
  * deletion date.
  */
-export async function loadLink(linkId: string, viewer: ShareViewer, now: number) {
+async function loadLink(linkId: string, viewer: ShareViewer, now: number) {
   const root = await findByLinkId(db(), linkId);
   if (!root) return null;
   const [chain, owner] = await Promise.all([sharedChain(db(), root.id), findAccountById(db(), root.accountId)]);

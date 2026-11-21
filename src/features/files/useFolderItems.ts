@@ -15,7 +15,8 @@ export type ListedItem = NodeItem & { parentPath?: string };
  */
 export function useFolderItems(children: NodeItem[], filter: FilterKey, query: string, sort: SortKey) {
   const q = query.trim().toLowerCase();
-  const { tagMode, wanted, results } = useTagSearch(query);
+  // A new `children` (the page data after a change) runs the tag search again.
+  const { tagMode, wanted, results } = useTagSearch(query, undefined, children);
   const counts = useMemo(
     () => Object.fromEntries(FILTER_KEYS.map((key) => [key, children.filter((child) => matchesFilter(child, key)).length])) as Record<FilterKey, number>,
     [children],

@@ -40,7 +40,7 @@ function encodeArgs(path: string, inputOptions: readonly string[] = []): string[
 }
 
 /** Live conversion: fragmented MP4 on stdout, so the browser starts playing the first fragments while the rest converts. */
-export function transcodeArgs(path: string): string[] {
+function transcodeArgs(path: string): string[] {
   return [...encodeArgs(path), ...["-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1"]];
 }
 

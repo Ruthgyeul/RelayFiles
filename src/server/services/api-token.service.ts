@@ -104,11 +104,6 @@ export async function revokeApiToken(accountId: string, id: string): Promise<{ n
   return { name };
 }
 
-/**
- * The caller of a /api/v1 request: a valid `Authorization: Bearer` token (401 otherwise) of a
- * live account, holding `scope` when one is named (403), under its per-minute request limit (429). Cookies are
- * never read here, so these routes cannot be driven by another site through a browser.
- */
 /** A per-minute request budget of a token: API v1 (API.requestsPerMinute) or another client such as WebDAV. */
 export interface RequestBudget {
   key: string;
@@ -117,6 +112,11 @@ export interface RequestBudget {
 
 const API_BUDGET: RequestBudget = { key: "api", perMinute: API.requestsPerMinute };
 
+/**
+ * The caller of a /api/v1 request: a valid `Authorization: Bearer` token (401 otherwise) of a
+ * live account, holding `scope` when one is named (403), under its per-minute request limit (429). Cookies are
+ * never read here, so these routes cannot be driven by another site through a browser.
+ */
 export async function requireApiCaller(headers: Headers, scope: ApiScope | null, now: Date = new Date(), budget: RequestBudget = API_BUDGET): Promise<ApiCaller> {
   const token = bearerToken(headers.get("authorization"));
   const id = token ? apiTokenIdOf(token) : null;
