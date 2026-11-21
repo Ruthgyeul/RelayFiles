@@ -72,6 +72,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Security
 
+- Next.js 16.4.6: fixes the advisories for 16.4.4 and earlier (cache disclosure across root params and `use cache` arguments, the image optimizer's SVG check, response injection in self-hosted apps that forward fetched responses)
 - Converted video playback (live or stored conversions) counts toward the link's and the account's daily traffic limits like the original; it went uncounted
 - A folder's daily traffic limit also covers the links of files and folders inside it (another link no longer gets around it), and a private link that expired or ran out looks like a missing link to visitors
 - Stopping an account export halfway through a file no longer crashes the app server (an uncaught error ended the process), and a WebDAV download that the client drops or that fails to read no longer leaves the file open or stops the DAV server
