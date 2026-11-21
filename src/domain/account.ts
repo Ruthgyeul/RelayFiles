@@ -27,6 +27,11 @@ export function deletionDate(account: Lifecycle, ttlDays: number): Date | null {
   return account.expiresAt ?? new Date(account.createdAt.getTime() + ttlDays * MS.day);
 }
 
+/** "1 day", "14 days": a retention length in the account notices. */
+export function daysText(days: number): string {
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
 /** Whole days from `now` until `at` (rounded up, never negative). */
 export function daysLeftUntil(at: number, now: number): number {
   return Math.max(0, Math.ceil((at - now) / MS.day));
@@ -45,12 +50,12 @@ export function maskToken(token: string): string {
   return `${token.slice(0, TOKEN_MASK.shown)}${"•".repeat(TOKEN_MASK.dots)}${token.slice(-TOKEN_MASK.shown)}`;
 }
 
-/** The retention notice under the profile card; `deletesOn` is already formatted. */
-export function retentionText(account: { isAdmin: boolean; neverExpire: boolean; extended: boolean }, deletesOn: string): string {
+/** The retention notice under the profile card; `deletesOn` is already formatted, `ttlDays` is ACCOUNT_TTL_DAYS. */
+export function retentionText(account: { isAdmin: boolean; neverExpire: boolean; extended: boolean }, deletesOn: string, ttlDays: number): string {
   if (account.isAdmin) return "Admin account. It is never deleted automatically. The token below is the only way back in.";
   if (account.neverExpire) return "An admin has exempted this account from automatic deletion. The token below is the only way back in.";
   return `Anonymous account with its own private root folder. It is deleted together with all of its files on ${deletesOn}${
-    account.extended ? " (extended by the admin)" : ", 14 days after it was created"
+    account.extended ? " (extended by the admin)" : `, ${daysText(ttlDays)} after it was created`
   }, whether or not you sign in. Only the admin can extend it. The token below is the only way back in.`;
 }
 

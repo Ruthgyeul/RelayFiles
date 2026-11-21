@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { AdminAccount, ManageInput } from "@/contracts/admin";
+import { daysText } from "@/domain/account";
 import { DAYS_CHOICES, managePreview, QUOTA_CHOICES, quotaNote, type DaysChoice } from "@/domain/admin";
 import { formatLongDate, formatSize } from "@/domain/format";
 import { BYTES_PER_GB } from "@/domain/quota";
@@ -112,7 +113,7 @@ export function ManageDialog({ account, ttlDays, now, lastAdmin, busy, onSave, o
           <span className={note}>{quotaNote(Number(account.usedBytes), quota, formatSize)}</span>
         </div>
         <CheckRow checked={reset} onCheckedChange={setReset}>
-          Restart 14 days from today
+          Restart {daysText(ttlDays)} from today
         </CheckRow>
         <div className="flex gap-2.5 rounded-xl border border-ctrl bg-elev px-3.5 py-3 text-[13px] text-t2">
           <Icon name="calendar-check" size={18} className="shrink-0 text-accent-icon" />

@@ -28,6 +28,8 @@ export interface ProfileData {
     createdAt: string;
     lastLoginAt: string;
     deletesAt: string | null;
+    /** Days after creation that member accounts are deleted (ACCOUNT_TTL_DAYS). */
+    ttlDays: number;
     quotaBytes: string | null;
     stripMetadataOnShare: boolean;
     /** Owner notifications about its share links (opened, downloads used up). */

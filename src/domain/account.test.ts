@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACCOUNT_COLORS, accountColor, dailySeries, daysLeftUntil, deletionDate, deviceLocation, isExpired, maskToken, retentionText } from "./account";
+import { ACCOUNT_COLORS, accountColor, dailySeries, daysLeftUntil, daysText, deletionDate, deviceLocation, isExpired, maskToken, retentionText } from "./account";
 
 const DAY = 86_400_000;
 const created = new Date("2026-10-01T00:00:00Z");
@@ -46,10 +46,16 @@ describe("profile helpers", () => {
   });
 
   it("explains retention per account type", () => {
-    expect(retentionText({ isAdmin: true, neverExpire: true, extended: false }, "")).toMatch(/^Admin account\./);
-    expect(retentionText({ isAdmin: false, neverExpire: true, extended: false }, "")).toMatch(/^An admin has exempted/);
-    expect(retentionText({ isAdmin: false, neverExpire: false, extended: false }, "Oct 20, 2026")).toContain("on Oct 20, 2026, 14 days after it was created, whether");
-    expect(retentionText({ isAdmin: false, neverExpire: false, extended: true }, "Nov 1, 2026")).toContain("on Nov 1, 2026 (extended by the admin), whether");
+    expect(retentionText({ isAdmin: true, neverExpire: true, extended: false }, "", 14)).toMatch(/^Admin account\./);
+    expect(retentionText({ isAdmin: false, neverExpire: true, extended: false }, "", 14)).toMatch(/^An admin has exempted/);
+    expect(retentionText({ isAdmin: false, neverExpire: false, extended: false }, "Oct 20, 2026", 14)).toContain("on Oct 20, 2026, 14 days after it was created, whether");
+    expect(retentionText({ isAdmin: false, neverExpire: false, extended: true }, "Nov 1, 2026", 14)).toContain("on Nov 1, 2026 (extended by the admin), whether");
+    expect(retentionText({ isAdmin: false, neverExpire: false, extended: false }, "Oct 7, 2026", 1)).toContain("on Oct 7, 2026, 1 day after it was created");
+  });
+
+  it("writes retention lengths in days", () => {
+    expect(daysText(1)).toBe("1 day");
+    expect(daysText(30)).toBe("30 days");
   });
 
   it("fills days without traffic with zero, oldest first", () => {
