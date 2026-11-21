@@ -6,7 +6,8 @@ import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
 import { PasswordCard } from "@/shared/ui/PasswordCard";
 import { StateCard } from "@/shared/ui/StateCard";
-import { errorText, shareApi } from "./api";
+import { shareApi } from "./api";
+import { errorMessage } from "@/shared/lib/api-client";
 
 const description = "text-[14px] leading-[1.5] text-pretty text-t3";
 
@@ -37,7 +38,7 @@ export function PrivateCard({ ownerNodeId, notify }: { ownerNodeId: string | nul
       notify("Now public");
       router.refresh();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }

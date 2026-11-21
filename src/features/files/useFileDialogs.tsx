@@ -7,7 +7,7 @@ import { formatSize } from "@/domain/format";
 import { retentionText } from "@/domain/trash";
 import { nameError, splitExtension } from "@/domain/names";
 import { useShell } from "@/features/shell/ShellProvider";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { ActivityDialog, type ActivityRequest } from "./ActivityDialog";
@@ -27,7 +27,6 @@ interface Context {
   onChanged: () => void;
 }
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 const labelOf = (items: NodeItem[]) => (items.length === 1 ? `"${items[0]!.name}"` : `${items.length} items`);
 
@@ -87,7 +86,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
         await (add ? favoritesApi.add(ids) : favoritesApi.remove(ids));
         changed(add ? "Added to favorites" : "Removed from favorites");
       } catch (caught) {
-        notify(errorText(caught));
+        notify(errorMessage(caught));
       }
     },
     rescan: async (item: NodeItem) => {
@@ -95,7 +94,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
         await filesApi.rescan(item.id);
         changed("Scanning again");
       } catch (caught) {
-        notify(errorText(caught));
+        notify(errorMessage(caught));
       }
     },
     togglePause: async (item: NodeItem) => {
@@ -103,7 +102,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
         await filesApi.setPaused(item.id, !item.settings.dlPaused);
         changed(item.settings.dlPaused ? "Downloads resumed" : "Downloads paused");
       } catch (caught) {
-        notify(errorText(caught));
+        notify(errorMessage(caught));
       }
     },
   };
@@ -114,7 +113,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
       await action();
       close();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }
@@ -145,7 +144,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
                 setRename(null);
                 changed("Renamed");
               })
-              .catch((caught: unknown) => setRename({ item: rename.item, error: errorText(caught) }));
+              .catch((caught: unknown) => setRename({ item: rename.item, error: errorMessage(caught) }));
           }}
         />
       )}

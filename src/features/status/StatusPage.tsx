@@ -6,7 +6,7 @@ import type { IncidentDto, IncidentInput, StatusData } from "@/contracts/status"
 import { connectionLevel, connectionStats } from "@/domain/status";
 import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { statusApi } from "./api";
 import { IncidentDialog } from "./IncidentDialog";
@@ -16,7 +16,6 @@ import { ServicesCard } from "./ServicesCard";
 import { ConnectionCard, OverallCard } from "./StatusCards";
 import { usePing } from "./usePing";
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 /** Public Status page. */
 export function StatusPage({ initial }: { initial: StatusData }) {
@@ -48,7 +47,7 @@ export function StatusPage({ initial }: { initial: StatusData }) {
       done();
       await refresh();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }

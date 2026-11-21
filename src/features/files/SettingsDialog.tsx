@@ -5,7 +5,7 @@ import { SHARE } from "@/config/policy";
 import { formatLongDate } from "@/domain/format";
 import type { NodeItem, SettingsInput, Visibility } from "@/contracts/nodes";
 import { EXPIRY_OPTIONS, isExpiryOption } from "@/domain/share";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { Field, FieldGroup, TextArea, TextInput } from "@/shared/ui/Field";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
@@ -82,7 +82,7 @@ export function SettingsDialog({ request, isAdmin, accountDeletesAt, onClose, on
       await filesApi.saveSettings(item.id, input);
       onSaved(input.applyDown ? "Saved · applied to everything inside" : "Settings saved");
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : "Something went wrong.");
+      setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }

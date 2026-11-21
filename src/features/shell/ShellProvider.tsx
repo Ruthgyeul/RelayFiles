@@ -9,6 +9,7 @@ import { useNotice } from "@/shared/hooks/useNotice";
 import { autoAccountStore } from "./auto-account";
 import { useLiveRefresh } from "./useLiveRefresh";
 import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
+import { errorMessage } from "@/shared/lib/api-client";
 
 /** Account switch toast duration from the design. */
 const ACCOUNT_TOAST_MS = 3_200;
@@ -137,7 +138,7 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
       try {
         await action();
       } catch (error) {
-        notify(error instanceof Error ? error.message : "Something went wrong.");
+        notify(errorMessage(error));
       }
     },
     [notify],

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { uniqName } from "@/domain/names";
 import { useShell } from "@/features/shell/ShellProvider";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { filesApi } from "@/shared/lib/files-api";
 
@@ -21,7 +21,7 @@ export function useNewFolder(parentRef: string, siblingNames: string[]) {
       if (created.renamed) notify(`"${created.requestedName}" already exists · created "${created.folder.name}"`);
       router.refresh();
     } catch (caught) {
-      setState((current) => current && { ...current, error: caught instanceof ApiClientError ? caught.message : "Something went wrong." });
+      setState((current) => current && { ...current, error: errorMessage(caught) });
     }
   };
 

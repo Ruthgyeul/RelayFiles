@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { RenumberPreview } from "@/contracts/nodes";
 import { formatCount } from "@/domain/format";
 import { renumberChanges, type RenumberOrder, type RenumberSort } from "@/domain/renumber";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { ApiClientError, errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { filesApi } from "@/shared/lib/files-api";
 import { Button } from "@/shared/ui/Button";
@@ -27,10 +27,8 @@ const ORDER_LABEL: Record<RenumberSort, Record<RenumberOrder, string>> = {
 };
 const files = (count: number) => `${formatCount(count)} ${count === 1 ? "file" : "files"}`;
 /** A refused request (400 with field errors) gets a message that says what to do next. */
-const errorOf = (caught: unknown) => {
-  if (!(caught instanceof ApiClientError)) return "Something went wrong.";
-  return caught.code === "BAD_REQUEST" && caught.fields ? "Couldn't renumber: the request was refused. Reload the page and try again." : caught.message;
-};
+const errorOf = (caught: unknown) =>
+  caught instanceof ApiClientError && caught.code === "BAD_REQUEST" && caught.fields ? "Couldn't renumber: the request was refused. Reload the page and try again." : errorMessage(caught);
 
 /** Summary under the list: "12 files · 2 already numbered · 1 hidden kept". */
 function summaryOf(preview: RenumberPreview): string {

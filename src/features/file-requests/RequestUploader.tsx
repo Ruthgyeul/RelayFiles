@@ -6,7 +6,7 @@ import type { FileRequestView } from "@/contracts/file-requests";
 import { formatSize } from "@/domain/format";
 import { BatchUploader } from "@/features/transfers/upload-runner";
 import { useLeaveGuard } from "@/shared/hooks/useLeaveGuard";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
 import { Meter } from "@/shared/ui/Display";
@@ -25,7 +25,6 @@ interface Sending {
 
 const PERCENT = 100;
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 function limitsText(view: FileRequestView): string | null {
   const parts = [view.filesLeft === null ? null : `${view.filesLeft} more ${view.filesLeft === 1 ? "file" : "files"}`, view.bytesLeft === null ? null : `${formatSize(Number(view.bytesLeft))} more`];
@@ -60,7 +59,7 @@ export function RequestUploader({ view, chunkBytes }: { view: FileRequestView; c
         onError: (message) => update(key, { state: "failed", message }),
       }).start();
     } catch (caught) {
-      update(key, { state: "failed", message: errorText(caught) });
+      update(key, { state: "failed", message: errorMessage(caught) });
     }
   };
 

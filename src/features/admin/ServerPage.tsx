@@ -6,7 +6,7 @@ import type { ServerSnapshot } from "@/contracts/server-metrics";
 import type { ServerSettings } from "@/contracts/server-settings";
 import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { AnnouncementCard } from "./AnnouncementCard";
 import { AuditCard } from "./AuditCard";
 import { ServerMetrics } from "./ServerMetrics";
@@ -15,7 +15,6 @@ import { SignupCard } from "./SignupCard";
 import { ThemeCard } from "./ThemeCard";
 import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 /** Admin "Server" page: announcement, live metrics, services, new accounts, theme and the audit log. */
 export function ServerPage({ settings, snapshot }: { settings: ServerSettings; snapshot: ServerSnapshot }) {
@@ -34,7 +33,7 @@ export function ServerPage({ settings, snapshot }: { settings: ServerSettings; s
       setChanges((count) => count + 1);
       router.refresh();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }

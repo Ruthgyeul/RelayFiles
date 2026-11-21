@@ -10,7 +10,7 @@ import { usePageTitle } from "@/features/shell/usePageTitle";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { useNow } from "@/shared/hooks/useNow";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { cn } from "@/shared/lib/cn";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
@@ -23,7 +23,6 @@ import { UsageReportCard } from "./UsageReportCard";
 /** Rows rendered at a time; filters and search still cover every account. */
 const PAGE_SIZE = 50;
 
-const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
 function StatCard({ icon, box, color, label, value }: { icon: IconName; box: string; color: string; label: string; value: string }) {
   return (
@@ -72,7 +71,7 @@ export function AccountsPage({ data }: { data: AdminAccounts }) {
       notify(await action());
       router.refresh();
     } catch (caught) {
-      notify(errorText(caught));
+      notify(errorMessage(caught));
     } finally {
       setBusy(false);
     }

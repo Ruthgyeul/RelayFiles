@@ -1,5 +1,5 @@
 import type { ApiResponse } from "@/contracts/api";
-import { isErrorCode, type ErrorCode } from "@/contracts/errors";
+import { ERRORS, isErrorCode, type ErrorCode } from "@/contracts/errors";
 
 /** A failed API call with the server's client-safe message and error code. */
 export class ApiClientError extends Error {
@@ -13,6 +13,17 @@ export class ApiClientError extends Error {
     super(message);
     this.name = "ApiClientError";
   }
+}
+
+/** Shown for a failure that has no message safe for users (a bug, a browser exception). */
+export const GENERIC_ERROR = ERRORS.INTERNAL.message;
+
+/**
+ * What to tell the user about a failed call: the server's message (safe by contract), or
+ * {@link GENERIC_ERROR} for anything else, so browser exception text never reaches the page.
+ */
+export function errorMessage(caught: unknown): string {
+  return caught instanceof ApiClientError ? caught.message : GENERIC_ERROR;
 }
 
 const NETWORK_ERROR = "Can't reach the server. Check your connection and try again.";

@@ -6,7 +6,7 @@ import { itemCount } from "@/domain/tree";
 import { useShell } from "@/features/shell/ShellProvider";
 import { entriesFromDrop } from "@/features/transfers/read-drop";
 import { useTransfers, type UploadTarget } from "@/features/transfers/transfers-context";
-import { ApiClientError } from "@/shared/lib/api-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { filesApi } from "@/shared/lib/files-api";
 import { useDragMove } from "./useDragMove";
 
@@ -27,7 +27,7 @@ export function useFolderDrop(folder: NodeItem, uploadTarget: UploadTarget, item
         onMoved();
         router.refresh();
       })
-      .catch((caught: unknown) => notify(caught instanceof ApiClientError ? caught.message : "Something went wrong."));
+      .catch((caught: unknown) => notify(errorMessage(caught)));
   const dropFiles = async (folderId: string, transfer: DataTransfer) => {
     const target = folderId === folder.id ? uploadTarget : { ref: folderId, name: items.find((item) => item.id === folderId)?.name ?? folder.name };
     transfers.upload(await entriesFromDrop(transfer), target);
