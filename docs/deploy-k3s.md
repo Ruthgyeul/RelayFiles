@@ -55,7 +55,7 @@ Docker Compose([deploy-ubuntu.md](deploy-ubuntu.md))·systemd([deploy-systemd.md
 ```bash
 git pull
 deploy/scripts/k3s/deploy.sh            # 지금 체크아웃한 커밋의 sha-<12자> 이미지
-deploy/scripts/k3s/deploy.sh v1.4.0     # 버전 태그
+deploy/scripts/k3s/deploy.sh v1.5.0     # 버전 태그
 ```
 
 `deploy.sh`는 태그를 먼저 digest로 바꿔(`image@sha256:…`, `docker buildx`·`crane`·`skopeo` 중 설치된 것) 클러스터가 확인한 그 이미지만 돌게 한다(태그는 옮겨질 수 있다). GitHub CLI(`gh`, 로그인 필요)가 있으면 그 digest의 서명된 build provenance(`images.yml`)를 `gh attestation verify`로 확인하고, 맞지 않으면 배포하지 않는다. 도구가 없으면 경고하고 태그로 배포한다.

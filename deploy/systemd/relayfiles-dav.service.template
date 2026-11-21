@@ -1,5 +1,5 @@
-# RelayFiles WebDAV server (optional): the files of an account as a network drive, read-only,
-# signed in with a personal API token. Nginx forwards /dav/ to DAV_HOST:DAV_PORT.
+# RelayFiles WebDAV server (optional): the files of an account as a network drive,
+# signed in with a personal API token (reads with files:read, changes with files:write). Nginx forwards /dav/ to DAV_HOST:DAV_PORT.
 # Rendered by deploy/scripts/systemd/install.sh; enable it with: sudo systemctl enable --now relayfiles-dav
 [Unit]
 Description=RelayFiles WebDAV
