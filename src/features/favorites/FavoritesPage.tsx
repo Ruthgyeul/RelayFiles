@@ -1,29 +1,22 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FavoritesView } from "@/contracts/favorites";
 import type { TaggedItem } from "@/contracts/nodes";
 import { FAVORITE_SORT_KEYS, FAVORITE_SORT_OPTION_LABEL, FAVORITE_SORT_SHORT_LABEL, type FavoriteSortKey } from "@/domain/favorites";
+import { itemsLabel } from "@/domain/trash";
 import { emptyTitle, itemCount } from "@/domain/tree";
 import { ActionMenu, anchorOf, type AnchorRect } from "@/features/files/ActionMenu";
 import { FileList } from "@/features/files/FileList";
-import { FilterBar } from "@/features/files/FilterBar";
+import { ListChrome } from "@/features/files/ListChrome";
 import type { ItemProps } from "@/features/files/item-props";
 import { PathBar } from "@/features/files/PathBar";
 import { PropertiesDialog } from "@/features/files/PropertiesDialog";
-import { SearchBox, TagModeBar } from "@/features/files/SearchBox";
 import { ToolButton, Toolbar, type SortOptions } from "@/features/files/Toolbar";
-import { useCopyLink } from "@/features/files/useCopyLink";
-import { useFileDialogs } from "@/features/files/useFileDialogs";
-import { useFileMedia } from "@/features/files/useFileMedia";
 import { useFileSearch } from "@/features/files/useFileSearch";
 import { useFileShortcuts } from "@/features/files/useFileShortcuts";
+import { useListPage } from "@/features/files/useListPage";
 import { useViewPrefs, type ViewPrefs } from "@/features/files/usePrefs";
-import { useSelection } from "@/features/files/useSelection";
-import { useShell } from "@/features/shell/ShellProvider";
-import { usePageTitle } from "@/features/shell/usePageTitle";
-import { useNow } from "@/shared/hooks/useNow";
 import { favoriteFolderHref, favoritesHref, folderHref, sharePageHref } from "@/shared/lib/routes";
 import { favoriteFolderMenu, favoriteItemMenu } from "./favorite-menu";
 import { FavoriteFolderCard } from "./FavoriteFolderCard";
@@ -31,7 +24,6 @@ import { FavoriteFolderRow } from "./FavoriteFolderRow";
 import { useFavoriteDialogs } from "./useFavoriteDialogs";
 import { useFavoriteItems } from "./useFavoriteItems";
 
-const CLOCK_TICK_MS = 30_000;
 /** View and sort of Favorites, remembered apart from the File Manager's. */
 const PREFS_KEY = "relay.favoritesView";
 const DEFAULT_PREFS: ViewPrefs<FavoriteSortKey> = { view: "list", sort: "added" };
@@ -52,23 +44,14 @@ type Menu = { kind: "item" | "folder"; id: string; anchor: AnchorRect };
  * sort and grid or list work as in the File Manager; tag search covers every organizing folder.
  */
 export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) {
-  const router = useRouter();
-  const { notify, activeAccount } = useShell();
   const [prefs, setPrefs] = useViewPrefs(PREFS_KEY, FAVORITE_SORT_KEYS, DEFAULT_PREFS);
   const search = useFileSearch();
-  const now = useNow(true, CLOCK_TICK_MS);
   const [menu, setMenu] = useState<Menu | null>(null);
-  const [propertiesFor, setPropertiesFor] = useState<string | null>(null);
   const title = view.folder?.name ?? "Favorites";
-  usePageTitle(title);
 
   const { items, folders, counts, tagMode, wanted, q, searchError } = useFavoriteItems(view, search.filter, search.query, prefs.sort);
-  const selection = useSelection(items);
-  const linkOf = (linkId: string) => `${publicUrl}/d/${linkId}`;
-  const media = useFileMedia(items, title, initialView);
-  const files = useFileDialogs({ isAdmin, accountDeletesAt: activeAccount?.deletesAt ?? null, linkOf, onChanged: selection.clear });
+  const { router, now, selection, linkOf, media, files, copyText, copyLink, propertiesFor, setPropertiesFor, refresh } = useListPage({ items, title, isAdmin, publicUrl, initialView });
   const favorites = useFavoriteDialogs({ view, onChanged: selection.clear });
-  const { copyText, copyLink } = useCopyLink();
   const byId = new Map(items.map((item) => [item.id, item]));
   const withListed = (run: (item: TaggedItem) => void) => (listed: { id: string }) => {
     const item = byId.get(listed.id);
@@ -90,7 +73,7 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
       preview: media.preview,
       download: media.download,
       showInFolder: (target) => router.push(folderHref(target.parentId, target.parentIsRoot)),
-      moveInFavorites: (target) => favorites.open.move({ nodeIds: [target.id], folderIds: [], label: `"${target.name}"` }),
+      moveInFavorites: (target) => favorites.open.move({ nodeIds: [target.id], folderIds: [], label: itemsLabel([target]) }),
       unfavorite: (target) => void files.open.toggleFavorite([target], false),
       share: (target) => router.push(sharePageHref(target.linkId)),
       tags: (target) => files.open.tags([target]),
@@ -136,7 +119,7 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
         onToggleAll={selection.toggleAll}
         selectionActions={
           <>
-            <ToolButton icon="arrow-bend-up-right" label="Move" title="Move in favorites" onClick={() => favorites.open.move({ nodeIds: selected.map((item) => item.id), folderIds: [], label: `${selected.length} items` })} />
+            <ToolButton icon="arrow-bend-up-right" label="Move" title="Move in favorites" onClick={() => favorites.open.move({ nodeIds: selected.map((item) => item.id), folderIds: [], label: itemsLabel(selected) })} />
             <ToolButton icon="star" label="Remove" title="Remove from favorites" onClick={() => void files.open.toggleFavorite(selected, false)} />
             <ToolButton icon="trash" label="Delete" danger onClick={() => favorites.open.remove(selected)} />
           </>
@@ -150,14 +133,20 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
         sortOptions={SORT_OPTIONS}
         onSort={changed((sort: FavoriteSortKey) => setPrefs({ sort }))}
         links={false}
-        onRefresh={() => {
-          router.refresh();
-          notify("Up to date");
-        }}
+        onRefresh={refresh}
       />
-      {count > 0 && <FilterBar counts={counts} value={search.filter} onChange={changed(search.setFilter)} />}
-      {search.searchOpen && <SearchBox value={search.query} onChange={search.setQuery} label="Search in Favorites" placeholder="Search in Favorites · #tag1 #tag2 for favorites with all tags" />}
-      {tagMode && <TagModeBar label={wanted.length ? wanted.map((tag) => `#${tag}`).join(" + ") : "Type a tag after #"} count={itemCount(items.length)} scope="in Favorites" onClear={search.clear} />}
+      <ListChrome
+        search={search}
+        counts={counts}
+        showFilters={count > 0}
+        onFilter={changed(search.setFilter)}
+        tagMode={tagMode}
+        wanted={wanted}
+        matched={items.length}
+        label="Search in Favorites"
+        placeholder="Search in Favorites · #tag1 #tag2 for favorites with all tags"
+        scope="in Favorites"
+      />
       <FileList
         items={items}
         view={prefs.view}
@@ -180,7 +169,7 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
               : favoriteFolderMenu(menuFolder!, {
                   open: (folder) => router.push(favoritesHref(folder.id)),
                   rename: favorites.open.rename,
-                  move: (folder) => favorites.open.move({ nodeIds: [], folderIds: [folder.id], label: `"${folder.name}"` }),
+                  move: (folder) => favorites.open.move({ nodeIds: [], folderIds: [folder.id], label: itemsLabel([folder]) }),
                   remove: (folder) => void favorites.open.deleteFolder(folder),
                 })
           }
