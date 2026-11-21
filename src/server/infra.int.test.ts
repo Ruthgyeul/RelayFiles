@@ -4,6 +4,7 @@ import { db } from "./db/client";
 import { cached, invalidate } from "./cache/cached";
 import { redis } from "./redis";
 import { STATUS } from "@/config/policy";
+import { recordSample } from "./metrics/history";
 import { checkHealth, sharedHealth } from "./services/health.service";
 
 const prisma = db();
@@ -79,6 +80,16 @@ describe("health", () => {
     expect(health.components.database).toBe("ok");
     expect(health.components.redis).toBe("ok");
     expect(["ok", "degraded"]).toContain(health.status);
+  });
+
+  it("reports the worker heartbeat without counting it toward the overall status", async () => {
+    await redis().del("jobs:heartbeat");
+    const stopped = await checkHealth();
+    expect(stopped.components.worker).toBe("down");
+    const served = Object.entries(stopped.components).filter(([name]) => name !== "worker");
+    expect(stopped.status).toBe(served.every(([, status]) => status === "ok") ? "ok" : "degraded");
+    await recordSample({ outPerSec: 0, disks: [] }, new Date());
+    expect((await checkHealth()).components.worker).toBe("ok");
   });
 
   it("does not tell the app version, and requests close together share one check", async () => {

@@ -167,6 +167,15 @@ services:
     stop_grace_period: ${WORKER_STOP_GRACE_SEC:-90}s
     user: "${STORAGE_UID:-10001}:${STORAGE_GID:-10001}"
     command: *worker-command
+    # Unhealthy once the heartbeat it refreshes every METRICS_SAMPLE_INTERVAL_SEC has expired
+    # (scripts/worker-health.mts). Compose does not restart an unhealthy container: `docker
+    # compose ps` shows it, and the app sends the "worker stopped" notification.
+    healthcheck:
+      test: ["CMD", "node", "--import", "tsx", "--conditions=react-server", "scripts/worker-health.mts"]
+      interval: 60s
+      timeout: 20s
+      start_period: 240s
+      retries: 3
     volumes: *storage
     # relay: the health probe calls the app and notifications leave for the webhook; data: PostgreSQL and Redis.
     networks: [relay, data, scan]

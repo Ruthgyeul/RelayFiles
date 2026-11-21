@@ -51,7 +51,7 @@
 - **함께 처리**: Nginx 이미지를 1.30 stable로 되돌리고 주석을 정리한다(`deploy/docker-compose.yml:216`, k3s 템플릿의 nginx 이미지, `check:ci-images` 대상 확인).
 - **검증**: `deploy:error-pages`와 템플릿 render 테스트(`scripts/*.test.ts`), e2e `downloads.spec.ts`
 
-### PR 1-3 `ci(images): publish only after ci passes on main`
+### PR 1-3 `ci(images): publish only after ci passes on main` — [#146](https://github.com/Ruthgyeul/RelayFiles/pull/146)
 - **문제**: main push 때 CI 결과와 상관없이 GHCR에 이미지를 올린다. 연속으로 merge하면 앞 커밋의 publish가 취소된다.
 - **`.github/workflows/images.yml`**:
   - publish 경로를 `workflow_run`(workflows: CI, types: completed, `conclusion == 'success'`, branch main)과 tags push로 바꾼다.
