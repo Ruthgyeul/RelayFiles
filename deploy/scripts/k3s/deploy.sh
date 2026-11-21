@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploys a release published to GHCR (.github/workflows/images.yml) to k3s
 # (docs/deploy-k3s.md): .env becomes the relayfiles-env Secret, the Nginx templates and error
-# pages become ConfigMaps, then PostgreSQL and Redis → migrations (a Job with the new tools
+# pages become ConfigMaps, then PostgreSQL and Redis → a database backup (k3s/backup.sh, into
+# DATA_DIR/backups here) → migrations (a Job with the new tools
 # image) → app, worker and Nginx, all on the node labelled relayfiles/storage=true, and the media
 # workers on the nodes labelled relayfiles/media=true when K3S_MEDIA_REPLICAS is 1 or more (they
 # mount STORAGE_ROOT from the storage node over NFS). Run from a repository checkout (npm ci done)
@@ -129,6 +130,24 @@ done
 log "PostgreSQL and Redis"
 render data | apply
 for name in statefulset/relayfiles-postgres statefulset/relayfiles-redis; do kubectl -n "$NS" rollout status "$name" --timeout="$TIMEOUT"; done
+
+# db_initialized → false only when PostgreSQL answers that no migration ever ran (a new, empty
+# database); a database copied from another deployment, or an answer that could not be read,
+# counts as data to back up.
+db_initialized() {
+  local answer
+  # shellcheck disable=SC2016 # expanded by the pod's shell, from its own environment
+  answer="$(kubectl -n "$NS" exec statefulset/relayfiles-postgres -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = \$\$_prisma_migrations\$\$)"' 2> /dev/null || true)"
+  [ "$answer" != f ]
+}
+
+# A dump of the database before the new release migrates it, like the Compose and systemd
+# releases take (also on a first k3s deploy onto a database moved from Compose). Only a new,
+# empty database is not backed up. K3S_SKIP_BACKUP=1 skips it (e.g. a backup was just taken).
+if [ "${K3S_SKIP_BACKUP:-0}" != 1 ] && db_initialized; then
+  log "Backup"
+  "$ROOT/deploy/scripts/k3s/backup.sh" || { echo "No backup, so no migration: fix it (or run with K3S_SKIP_BACKUP=1); the running release is unchanged." >&2; exit 1; }
+fi
 
 log "Migrations (schema, data, storage layout) with $TOOLS_IMAGE"
 JOB="job/relayfiles-migrate-$RELEASE_ID"

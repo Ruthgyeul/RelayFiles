@@ -60,7 +60,7 @@
 - **e2e job**: `if: failure()`일 때 `actions/upload-artifact`(SHA 고정)로 `playwright-report/`와 `test-results/`를 올린다.
 - **검증**: actionlint(CI `scripts` job). 병합 후 main에서 CI → Images 순서로 실행되는지 확인한다.
 
-### PR 1-4 `feat(status): report the worker in health and alert when it stops`
+### PR 1-4 `feat(status): report the worker in health and alert when it stops` — [#147](https://github.com/Ruthgyeul/RelayFiles/pull/147)
 - **재사용**:
   - `workerAlive()`(`src/server/metrics/history.ts:64`, heartbeat 키 `jobs:heartbeat`)
   - `checkHealth`(`src/server/services/health.service.ts`)
