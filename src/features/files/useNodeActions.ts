@@ -4,7 +4,7 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import type { FolderView } from "@/contracts/nodes";
 import { folderHref, sharePageHref } from "@/shared/lib/routes";
-import type { NodeActions } from "./node-menu";
+import type { ActionHandlers } from "./item-actions";
 import type { useFileDialogs } from "./useFileDialogs";
 import type { ListedItem } from "./useFolderItems";
 import type { useFileMedia } from "./useFileMedia";
@@ -28,7 +28,7 @@ interface Options {
  * handled like its own item: it moves within its parent and shares with the parent's visibility.
  * A tag search hit from another folder moves within, and inherits from, the folder it is in.
  */
-export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, linkOf, copyLink, onProperties, folderHref: hrefOf = (id) => folderHref(id) }: Options): (item: ListedItem) => NodeActions {
+export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, linkOf, copyLink, onProperties, folderHref: hrefOf = (id) => folderHref(id) }: Options): (item: ListedItem) => ActionHandlers {
   const router = useRouter();
   const { folder, path, isRoot } = view;
   const parentOfCurrent = path.at(-2);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { documentPreviewOf, extensionOf, fileFormatOf, FORMAT_ICONS } from "./file-format";
+import { documentPreviewOf, extensionOf, fileFormatOf, FORMAT_ICONS, hasPreview } from "./file-format";
 
 describe("extensionOf", () => {
   it("returns the lowercase extension", () => {
@@ -72,5 +72,19 @@ describe("documentPreviewOf", () => {
     expect(documentPreviewOf("logo.svg", "image")?.preview).toBe("svg");
     expect(documentPreviewOf("index.ts", "other")?.language).toBe("typescript");
     expect(documentPreviewOf("notes.txt", null)?.preview).toBe("text");
+  });
+});
+
+describe("hasPreview", () => {
+  it("is true for media, documents and unknown types the viewer sniffs", () => {
+    expect(hasPreview("a.mp4", "video")).toBe(true);
+    expect(hasPreview("a.heic", "image")).toBe(true);
+    expect(hasPreview("report.pdf", "other")).toBe(true);
+    expect(hasPreview("notes", "other")).toBe(true);
+  });
+
+  it("is false for formats shown only as a download", () => {
+    expect(hasPreview("backup.zip", "other")).toBe(false);
+    expect(hasPreview("slides.pptx", null)).toBe(false);
   });
 });

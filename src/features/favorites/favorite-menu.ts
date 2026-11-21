@@ -1,6 +1,7 @@
 import type { FavoriteFolderDto } from "@/contracts/favorites";
 import type { TaggedItem } from "@/contracts/nodes";
 import type { MenuEntry } from "@/features/files/ActionMenu";
+import { buildMenu, FAVORITE_MENU } from "@/features/files/item-actions";
 
 /** What the Favorites page does with a favorite (it acts on the item itself, where it is). */
 export interface FavoriteItemActions {
@@ -26,22 +27,27 @@ export interface FavoriteFolderActions {
   remove: (folder: FavoriteFolderDto) => void;
 }
 
-/** The menu of a favorite: folders open (and share), files preview. */
+/** The menu of a favorite (see `FAVORITE_MENU`): folders open and share, files preview. */
 export function favoriteItemMenu(item: TaggedItem, run: FavoriteItemActions): MenuEntry[] {
-  const folder = item.type === "folder";
-  return [
-    folder ? { label: "Open", icon: "folder-open", onSelect: () => run.open(item) } : { label: "Preview", icon: "eye", onSelect: () => run.preview(item) },
-    { label: "Download", icon: "download-simple", onSelect: () => run.download(item) },
-    { label: "Show in folder", icon: "arrow-up-right", onSelect: () => run.showInFolder(item) },
-    { label: "Move in favorites", icon: "arrow-bend-up-right", separator: true, onSelect: () => run.moveInFavorites(item) },
-    { label: "Remove from favorites", icon: "star", onSelect: () => run.unfavorite(item) },
-    ...(folder ? [{ label: "Share", icon: "share-network", separator: true, onSelect: () => run.share(item) } satisfies MenuEntry] : []),
-    { label: "Tags", icon: "tag", separator: !folder, onSelect: () => run.tags(item) },
-    { label: "Link activity", icon: "chart-line-up", onSelect: () => run.activity(item) },
-    { label: "Rename", icon: "pencil-simple", separator: true, onSelect: () => run.rename(item) },
-    { label: "Delete", icon: "trash", danger: true, onSelect: () => run.remove(item) },
-    { label: "Properties", icon: "info", separator: true, onSelect: () => run.properties(item) },
-  ];
+  return buildMenu(
+    FAVORITE_MENU,
+    item,
+    { isRoot: false, isAdmin: false },
+    {
+      open: () => run.open(item),
+      preview: () => run.preview(item),
+      download: () => run.download(item),
+      showInFolder: () => run.showInFolder(item),
+      moveInFavorites: () => run.moveInFavorites(item),
+      toggleFavorite: () => run.unfavorite(item),
+      share: () => run.share(item),
+      tags: () => run.tags(item),
+      activity: () => run.activity(item),
+      rename: () => run.rename(item),
+      delete: () => run.remove(item),
+      properties: () => run.properties(item),
+    },
+  );
 }
 
 /** The menu of an organizing folder. */

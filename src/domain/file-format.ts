@@ -291,6 +291,16 @@ export function fileFormatOf(name: string): FileFormat {
 }
 
 /**
+ * Whether the viewer shows something for the file beyond "No preview": its media player, or a
+ * document preview (an unknown type counts, as the viewer shows it when its bytes are text).
+ */
+export function hasPreview(name: string, kind: NodeKind | null): boolean {
+  if (kind === "video" || kind === "audio" || kind === "image") return true;
+  const format = fileFormatOf(name);
+  return format.preview !== null || format.sniff === true;
+}
+
+/**
  * The viewer's document preview of a file, or null when it is media (images, videos and
  * audio have their own players; SVG images are the exception, shown from their source).
  */

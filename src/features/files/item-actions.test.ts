@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { NodeItem } from "@/contracts/nodes";
-import { buildNodeMenu, type NodeActions } from "./node-menu";
+import { buildMenu, FAVORITE_MENU, NODE_MENU, SELECTION_TOOLBAR, toolbarButtons, type ActionHandlers, type ActionId, type ActionItem } from "./item-actions";
 
 const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, dailyCapGb: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
 const noop = () => undefined;
-const all: Required<NodeActions> = Object.fromEntries(
-  ["open", "preview", "download", "downloadZip", "toggleFavorite", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rescan", "rename", "copy", "move", "delete", "renumber", "duplicates", "versions", "properties"].map((key) => [key, noop]),
-) as Required<NodeActions>;
+const ids: ActionId[] = ["open", "preview", "download", "downloadZip", "toggleFavorite", "showInFolder", "moveInFavorites", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rescan", "rename", "copy", "move", "delete", "renumber", "duplicates", "versions", "properties"];
+const all: Required<ActionHandlers> = Object.fromEntries(ids.map((key) => [key, noop])) as Required<ActionHandlers>;
+const buildNodeMenu = (item: ActionItem, isRoot: boolean, isAdmin: boolean, actions: ActionHandlers) => buildMenu(NODE_MENU, item, { isRoot, isAdmin }, actions);
 
-const folder: Pick<NodeItem, "type" | "kind" | "settings" | "favorite" | "scan"> = { type: "folder", kind: null, settings };
-const video: Pick<NodeItem, "type" | "kind" | "settings" | "favorite" | "scan"> = { type: "file", kind: "video", settings };
+const folder: ActionItem = { type: "folder", kind: null, name: "Trips", settings };
+const video: ActionItem = { type: "file", kind: "video", name: "trip.mp4", settings };
 
 const labels = (entries: ReturnType<typeof buildNodeMenu>) => entries.map((entry) => `${entry.separator ? "| " : ""}${entry.label}`);
 
-describe("buildNodeMenu (design nodeMenu)", () => {
+describe("NODE_MENU (design nodeMenu)", () => {
   it("builds the folder menu in its groups, folder tools before properties", () => {
     expect(labels(buildNodeMenu(folder, false, false, all))).toEqual([
       "Open",
@@ -67,7 +66,41 @@ describe("buildNodeMenu (design nodeMenu)", () => {
   it("hides root-only exclusions, other-file preview and missing actions", () => {
     expect(labels(buildNodeMenu(folder, true, false, all))).not.toContain("Open");
     expect(labels(buildNodeMenu(folder, true, false, all))).not.toContain("Delete");
-    expect(labels(buildNodeMenu({ ...video, kind: "other" }, false, false, all))).not.toContain("Preview");
+    expect(labels(buildNodeMenu({ ...video, kind: "other", name: "backup.zip" }, false, false, all))).not.toContain("Preview");
+    expect(labels(buildNodeMenu({ ...video, kind: "other", name: "report.pdf" }, false, false, all))).toContain("Preview");
     expect(labels(buildNodeMenu(folder, false, false, { open: noop, properties: noop }))).toEqual(["Open", "| Properties"]);
+  });
+});
+
+describe("FAVORITE_MENU", () => {
+  const favoriteMenu = (item: ActionItem) => labels(buildMenu(FAVORITE_MENU, { ...item, favorite: true }, { isRoot: false, isAdmin: false }, all));
+
+  it("acts on the item where it is, in the design's groups", () => {
+    expect(favoriteMenu(folder)).toEqual(["Open", "Download", "Show in folder", "| Move in favorites", "Remove from favorites", "| Share", "Tags", "Link activity", "| Rename", "Delete", "| Properties"]);
+    expect(favoriteMenu(video)).toEqual(["Preview", "Download", "Show in folder", "| Move in favorites", "Remove from favorites", "| Tags", "Link activity", "| Rename", "Delete", "| Properties"]);
+  });
+
+  it("follows the same preview rule as the File Manager", () => {
+    expect(favoriteMenu({ ...video, kind: "other", name: "backup.zip" })).not.toContain("Preview");
+  });
+});
+
+describe("SELECTION_TOOLBAR", () => {
+  it("uses the toolbar's short labels and tooltips", () => {
+    expect(toolbarButtons(SELECTION_TOOLBAR).map(({ label, title }) => (label === title ? label : `${label} (${title})`))).toEqual([
+      "Download",
+      "Zip (Download as zip)",
+      "Tags",
+      "Favorite (Add to favorites)",
+      "Copy",
+      "Move",
+      "Rename (Rename the selected items)",
+      "Delete",
+    ]);
+    expect(toolbarButtons(["delete"])[0]?.danger).toBe(true);
+  });
+
+  it("refuses an action without a toolbar look", () => {
+    expect(() => toolbarButtons(["properties"])).toThrow();
   });
 });

@@ -13,7 +13,7 @@ import { ActionMenu } from "./ActionMenu";
 import { FavoritesEntry } from "./FavoritesEntry";
 import { FilterBar } from "./FilterBar";
 import { FolderHeader } from "./FolderHeader";
-import { buildNodeMenu } from "./node-menu";
+import { buildMenu, NODE_MENU } from "./item-actions";
 import type { ItemProps } from "./item-props";
 import { FileList } from "./FileList";
 import { PathBar } from "./PathBar";
@@ -128,14 +128,16 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
     upload: () => transfers.pickFiles(uploadTarget),
     uploadFolder: () => transfers.pickFolder(uploadTarget),
     newFolder: newFolder.open,
-    download: () => (media.downloadEach(selectedItems), clearSelection()),
-    zip: () => (media.zip(selectedItems), clearSelection()),
-    tags: () => open.tags(selectedItems),
-    favorite: () => void open.toggleFavorite(selectedItems, true),
-    copy: () => open.move(selectedItems, "copy", folder.id),
-    move: () => open.move(selectedItems, "move", folder.id),
-    rename: () => folderTools.open.rename(selectedItems, tagMode ? null : children.map((child) => child.name)),
-    remove: () => open.remove(selectedItems),
+    selection: {
+      download: () => (media.downloadEach(selectedItems), clearSelection()),
+      downloadZip: () => (media.zip(selectedItems), clearSelection()),
+      tags: () => open.tags(selectedItems),
+      toggleFavorite: () => void open.toggleFavorite(selectedItems, true),
+      copy: () => open.move(selectedItems, "copy", folder.id),
+      move: () => open.move(selectedItems, "move", folder.id),
+      rename: () => folderTools.open.rename(selectedItems, tagMode ? null : children.map((child) => child.name)),
+      delete: () => open.remove(selectedItems),
+    },
   });
 
   return (
@@ -199,7 +201,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
         <ActionMenu
           anchor={menu.menu.anchor}
           label={`Actions for ${menuItem.name}`}
-          entries={buildNodeMenu(menuItem, menuItem.id === folder.id && isRoot, isAdmin, actionsFor(menuItem))}
+          entries={buildMenu(NODE_MENU, menuItem, { isRoot: menuItem.id === folder.id && isRoot, isAdmin }, actionsFor(menuItem))}
           onClose={menu.close}
         />
       )}
