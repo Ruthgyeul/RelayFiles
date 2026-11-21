@@ -1,3 +1,5 @@
 # Findings gitleaks reports that are not secrets (fingerprint: commit:file:rule:line).
 # A sample WebDAV lock token (a UUID) in a test, replaced by a placeholder in the next commit.
 daa88caa7d683b9567a5b518693399ac75b5a749:src/domain/dav.test.ts:generic-api-key:109
+# The mixed-case token alphabet (letters and digits without look-alikes), not a key: the line changed when its export was dropped.
+b73e3cbc273883f760f34fb9a00b13075dec591f:src/domain/ids.ts:generic-api-key:10
