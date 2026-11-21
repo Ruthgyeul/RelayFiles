@@ -5,8 +5,8 @@
 #   deploy/scripts/systemd/rollback.sh <bundle>   a bundle from `ls .app`
 # After a failed release.sh (maintenance stays on) the previous bundle is the one that was live.
 # Only the app bundle changes. If the release also migrated the database, restore the
-# backup taken before it (docs/runbook.md "롤백"); the worker runs from the checkout, so
-# `git checkout <commit> && npm ci` before restarting it when its code must go back too.
+# backup taken before it (docs/runbook.md "롤백"); the worker and WebDAV run from the checkout,
+# so `git checkout <commit> && npm ci` before restarting them when their code must go back too.
 set -euo pipefail
 # shellcheck source=../lib.sh
 source "$(dirname "$0")/../lib.sh"

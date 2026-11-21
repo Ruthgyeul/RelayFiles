@@ -26,6 +26,14 @@ fi
 RELEASE_PROBE="release-probe"
 compose_images() { RELEASE_TAG="$RELEASE_PROBE" "${COMPOSE[@]}" --profile "*" config --images | sort -u; }
 
+# dav_container → true when the optional WebDAV container is running (docker compose --profile dav
+# up -d dav): releases and rollbacks then recreate it with the app, so it never runs older code
+# than the schema it reads.
+dav_container() { [ -n "$("${COMPOSE[@]}" --profile dav ps -q dav 2> /dev/null)" ]; }
+
+# dav_unit → true when the optional relayfiles-dav unit is enabled or running (systemd deployment).
+dav_unit() { systemctl is-enabled --quiet relayfiles-dav 2> /dev/null || systemctl is-active --quiet relayfiles-dav 2> /dev/null; }
+
 # status_ok BODY → true only when a /api/health body says the overall status is "ok". A degraded
 # app (storage or Redis missing) still answers 200, so the HTTP status alone is not enough. The
 # flat "components" object is dropped first: its entries carry their own "status"-like values.

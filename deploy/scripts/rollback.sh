@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Puts app and worker back on an earlier release's images (Docker Compose deployment) and lifts
+# Puts app and worker (and WebDAV when its container exists) back on an earlier release's images (Docker Compose deployment) and lifts
 # maintenance mode once /api/health says "ok":
 #   deploy/scripts/rollback.sh          the newest release in DATA_DIR/releases.log that is not running now
 #   deploy/scripts/rollback.sh <tag>    a tag from releases.log (autoclean keeps the newest IMAGE_KEEP)
@@ -27,18 +27,24 @@ if [ -z "$TARGET" ] && [ -f "$RELEASES" ]; then
 fi
 [ -n "$TARGET" ] || { echo "No release to roll back to; pass a tag (tail $RELEASES, docker image ls relayfiles-app)." >&2; exit 1; }
 
-mapfile -t IMAGES < <(RELEASE_TAG="$TARGET" "${COMPOSE[@]}" config --images app worker | sort -u)
+SERVICES=(app worker)
+PROFILES=()
+if dav_container; then
+  SERVICES+=(dav)
+  PROFILES=(--profile dav)
+fi
+mapfile -t IMAGES < <(RELEASE_TAG="$TARGET" "${COMPOSE[@]}" "${PROFILES[@]}" config --images "${SERVICES[@]}" | sort -u)
 for image in "${IMAGES[@]}"; do
   docker image inspect "$image" > /dev/null 2>&1 || { echo "Image $image is gone (autoclean keeps IMAGE_KEEP releases); pick another tag." >&2; exit 1; }
 done
 
-log "Rolling app and worker back: ${CURRENT:-not running} → $TARGET"
-RELEASE_TAG="$TARGET" "${COMPOSE[@]}" up -d --no-build app worker
+log "Rolling ${SERVICES[*]} back: ${CURRENT:-not running} → $TARGET"
+RELEASE_TAG="$TARGET" "${COMPOSE[@]}" "${PROFILES[@]}" up -d --no-build "${SERVICES[@]}"
 
 log "Health check"
 if ! wait_healthy "http://127.0.0.1:$PORT/api/health"; then
   echo "$TARGET did not become healthy either; maintenance mode is left as it is." >&2
-  echo "Logs: ${COMPOSE[*]} logs --tail 200 app worker" >&2
+  echo "Logs: ${COMPOSE[*]} logs --tail 200 ${SERVICES[*]}" >&2
   exit 1
 fi
 rm -f "$FLAG"

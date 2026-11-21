@@ -409,7 +409,7 @@ deploy/scripts/systemd/release.sh
 2. `npm ci`와 `npm run build`를 한다. 그동안 실행 중인 앱은 자기 번들(`.app/current`)로 계속 응답한다.
 3. 새 번들을 `.app/<시각>-<커밋>`에 복사한다(빌드가 복사해 넣은 `.env`는 지운다. 앱은 체크아웃의 `.env`를 읽는다).
 4. 점검 모드를 켜고 마이그레이션을 실행한다: `db:deploy`, `data:migrate`, `storage:migrate`.
-5. `.app/current`를 새 번들로 바꾸고 app과 worker를 재시작한다. 멈추는 서비스는 진행 중인 요청·작업을 `TimeoutStopSec` 동안 마무리한다(§5).
+5. `.app/current`를 새 번들로 바꾸고 app과 worker(`relayfiles-dav`를 켰다면 dav도)를 재시작한다. 멈추는 서비스는 진행 중인 요청·작업을 `TimeoutStopSec` 동안 마무리한다(§5).
 6. 앱 포트의 `/api/health`가 `status: "ok"`를 돌려줄 때까지 확인한 뒤(`degraded`는 실패로 본다) 점검 모드를 끄고 `DATA_DIR/releases.log`에 기록한다. 번들은 최근 3개만 남긴다.
 
 `HEALTH_TRIES`(기본 30, 2초 간격), `BUNDLE_KEEP`(기본 3), `BACKUP_KEEP`(기본 14)으로 동작을 바꿀 수 있다.

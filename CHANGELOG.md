@@ -41,6 +41,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Fixed
 
+- Releases and rollbacks restart the WebDAV server too when it runs (Docker Compose `dav` container, systemd `relayfiles-dav`), so it no longer keeps running the previous code against the new schema
 - A tag search in the File Manager (`#tag`) updates after deleting, renaming, moving or retagging its results instead of showing them as they were
 - The account deletion notices (admin Accounts page, Manage dialog, My Profile) give the server's `ACCOUNT_TTL_DAYS` instead of always 14 days
 - Dialogs keep focus in the field being typed in while the page updates (an upload in progress moved it to Close), return focus to the button that opened them, and Escape closes only the top dialog
