@@ -40,7 +40,6 @@ interface ActionMenuProps {
   children?: ReactNode;
   /** `auto` opens below the trigger, above it when there is no room, or pinned on small screens; `below` always opens below (sort menu). */
   placement?: "auto" | "below";
-  itemCount?: number;
 }
 
 /**
@@ -48,7 +47,7 @@ interface ActionMenuProps {
  * Escape, scroll and resize. Below 720px it is a bottom sheet with 44px items that stays
  * open while the page scrolls behind it.
  */
-export function ActionMenu({ anchor, label, onClose, entries, children, placement = "auto", itemCount }: ActionMenuProps) {
+export function ActionMenu({ anchor, label, onClose, entries, children, placement = "auto" }: ActionMenuProps) {
   const mounted = useMounted();
   const { small } = useViewport();
   const menu = useRef<HTMLDivElement>(null);
@@ -115,7 +114,7 @@ export function ActionMenu({ anchor, label, onClose, entries, children, placemen
   const place: Placement =
     placement === "below"
       ? { top: `${anchor.bottom + 4}px`, right: `${viewport.width - anchor.right}px`, maxHeight: `calc(100vh - ${anchor.bottom + 16}px)` }
-      : menuPlace(anchor, itemCount ?? entries?.length ?? 0, viewport);
+      : menuPlace(anchor, entries?.length ?? 0, viewport);
 
   return createPortal(
     <>

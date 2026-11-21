@@ -21,7 +21,7 @@ export interface SettingsRequest {
 }
 
 interface SettingsDialogProps {
-  request: SettingsRequest | null;
+  request: SettingsRequest;
   isAdmin: boolean;
   /** Account deletion date (members only), for the expiry note. */
   accountDeletesAt: string | null;
@@ -57,10 +57,9 @@ function initialDraft(item: NodeItem, isRoot: boolean) {
 
 /** "Folder settings · …" / "File settings · …" (480px): visibility, expiry, limits, password, access, note. */
 export function SettingsDialog({ request, isAdmin, accountDeletesAt, onClose, onSaved }: SettingsDialogProps) {
-  const [draft, setDraft] = useState(() => (request ? initialDraft(request.item, request.isRoot) : null));
+  const [draft, setDraft] = useState(() => initialDraft(request.item, request.isRoot));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  if (!request || !draft) return null;
   const { item, isRoot, parentVisibility } = request;
   const folder = item.type === "folder";
   const set = (patch: Partial<typeof draft>) => setDraft({ ...draft, ...patch });

@@ -76,7 +76,7 @@ export function findNodeForJob(db: DbClient, nodeId: string) {
   return db.node.findUnique({ where: { id: nodeId }, select: NODE_SELECT });
 }
 
-/** Images and videos still without a thumbnail, oldest first, for the backfill script. */
+/** Images and videos still without a thumbnail, in id order (a keyset cursor), for the backfill script. */
 export function mediaWithoutThumbs(db: DbClient, take: number, afterId?: string) {
   return db.node.findMany({
     where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, hasThumb: false, missing: false },
@@ -87,7 +87,7 @@ export function mediaWithoutThumbs(db: DbClient, take: number, afterId?: string)
   });
 }
 
-/** Images large enough for a viewer preview, oldest first, for `media:backfill -- --previews`. */
+/** Images large enough for a viewer preview, in id order (a keyset cursor), for `media:backfill -- --previews`. */
 export function imagesForPreview(db: DbClient, take: number, afterId?: string) {
   return db.node.findMany({
     where: { type: "FILE", kind: "IMAGE", missing: false, size: { gte: MEDIA.previewMinBytes }, mime: { in: [...MEDIA.previewTypes] } },

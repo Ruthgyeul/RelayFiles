@@ -4,7 +4,8 @@
  * traffic is counted in (TrafficDaily).
  */
 
-const DAY_MS = 86_400_000;
+import { MS } from "@/config/policy";
+
 const ISO_DAY_LENGTH = 10;
 const MONTH_LENGTH = 7;
 const MONTHS_PER_YEAR = 12;
@@ -26,9 +27,9 @@ const msOf = (day: string) => Date.parse(`${day}T00:00:00Z`);
  */
 export function reportRange(input: { from?: string; to?: string }, now: number, limits: { defaultDays: number; maxDays: number }): ReportRange | { error: string } {
   const to = input.to ?? dayOf(now);
-  const from = input.from ?? dayOf(msOf(to) - (limits.defaultDays - 1) * DAY_MS);
+  const from = input.from ?? dayOf(msOf(to) - (limits.defaultDays - 1) * MS.day);
   if (Number.isNaN(msOf(from)) || Number.isNaN(msOf(to))) return { error: "Dates are YYYY-MM-DD." };
-  const days = Math.round((msOf(to) - msOf(from)) / DAY_MS) + 1;
+  const days = Math.round((msOf(to) - msOf(from)) / MS.day) + 1;
   if (days < 1) return { error: "The range ends before it starts." };
   if (days > limits.maxDays) return { error: `A report covers at most ${limits.maxDays} days.` };
   return { from, to, days };
@@ -36,7 +37,7 @@ export function reportRange(input: { from?: string; to?: string }, now: number, 
 
 /** The range ending today that covers `days` days. */
 export function rangeEndingToday(days: number, now: number): { from: string; to: string } {
-  return { from: dayOf(now - (days - 1) * DAY_MS), to: dayOf(now) };
+  return { from: dayOf(now - (days - 1) * MS.day), to: dayOf(now) };
 }
 
 /** Every month ("YYYY-MM") the range touches, oldest first. */
