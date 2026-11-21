@@ -60,7 +60,7 @@ deploy/scripts/k3s/deploy.sh v1.5.0     # 버전 태그
 
 `deploy.sh`는 태그를 먼저 digest로 바꿔(`image@sha256:…`, `docker buildx`·`crane`·`skopeo` 중 설치된 것) 클러스터가 확인한 그 이미지만 돌게 한다(태그는 옮겨질 수 있다). GitHub CLI(`gh`, 로그인 필요)가 있으면 그 digest의 서명된 build provenance(`images.yml`)를 `gh attestation verify`로 확인하고, 맞지 않으면 배포하지 않는다. 도구가 없으면 경고하고 태그로 배포한다.
 
-순서: 네임스페이스 → Secret(`.env`)·ConfigMap → PostgreSQL·Redis(준비될 때까지 대기) → 새 tools 이미지로 마이그레이션 Job(`db:deploy` → `data:migrate` → `storage:migrate`, 실패하면 앱은 그대로 두고 로그를 보여 준 뒤 멈춘다) → app·worker·Nginx 롤링(각각 `K3S_ROLLOUT_TIMEOUT`, 기본 `10m`) → `/api/health`가 `"status":"ok"`인지 확인(2초 간격 `HEALTH_TRIES`=30번).
+순서: 네임스페이스 → Secret(`.env`)·ConfigMap → PostgreSQL·Redis(준비될 때까지 대기) → DB 백업(`k3s/backup.sh`, 이미 배포된 적이 있을 때) → 새 tools 이미지로 마이그레이션 Job(`db:deploy` → `data:migrate` → `storage:migrate`, 실패하면 앱은 그대로 두고 로그를 보여 준 뒤 멈춘다) → app·worker·Nginx 롤링(각각 `K3S_ROLLOUT_TIMEOUT`, 기본 `10m`) → `/api/health`가 `"status":"ok"`인지 확인(2초 간격 `HEALTH_TRIES`=30번).
 
 - **자동 롤백**: 롤아웃이 시간 안에 끝나지 않거나 헬스 체크가 `ok`가 아니면, 이번 실행에서 새 리비전이 된 Deployment만 `kubectl rollout undo --to-revision=<이전>`으로 되돌리고 실패로 끝난다. Secret·ConfigMap은 이번 값 그대로이고, DB 스키마도 마이그레이션된 그대로다(expand라 이전 버전이 동작한다). 원인은 `kubectl -n relayfiles describe pod -l app.kubernetes.io/name=relayfiles-app`(프로브 실패), `kubectl -n relayfiles logs deployment/relayfiles-app`로 본다.
 
@@ -78,10 +78,10 @@ deploy/scripts/k3s/deploy.sh v1.5.0     # 버전 태그
 | 일회성 명령 | `kubectl -n relayfiles exec deployment/relayfiles-worker -- npm run <스크립트> [-- 인자]` (예: `admin:create`, `storage:fsck`, `volume:list`) |
 | `.env`를 바꾼 뒤 | `deploy/scripts/k3s/deploy.sh <지금 태그>`(Secret을 갱신하고 같은 이미지로 다시 적용) 후 `kubectl -n relayfiles rollout restart deployment/relayfiles-app deployment/relayfiles-worker` |
 
-DB 백업(저장소 노드의 cron, Compose의 `backup.sh`와 같은 위치·형식):
+DB 백업: `deploy/scripts/k3s/backup.sh`가 PostgreSQL Pod 안에서 `pg_dump -Fc`를 실행해, 실행한 컴퓨터의 `DATA_DIR/backups`에 Compose의 `backup.sh`와 같은 이름·형식으로 저장한다(실패하면 덤프를 남기지 않고, 최근 `BACKUP_KEEP`=14개만 둔다). `verify-backup.sh`와 `offsite-backup.sh`가 그 폴더를 읽으므로 저장소 노드에서 실행한다. 다른 곳에서 실행한다면 `BACKUP_DIR=<폴더>`를 준다. `deploy.sh`도 마이그레이션 전에 이 스크립트를 실행하고, 실패하면 마이그레이션하지 않는다(첫 배포는 건너뛴다. `K3S_SKIP_BACKUP=1`로 끈다). 매일 백업은 저장소 노드의 cron에 둔다:
 
 ```cron
-15 3 * * * kubectl -n relayfiles exec statefulset/relayfiles-postgres -- sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > /srv/relayfiles/backups/relayfiles-$(date -u +\%Y\%m\%d-\%H\%M\%S).dump && find /srv/relayfiles/backups -name 'relayfiles-*.dump' -mtime +14 -delete
+15 3 * * * cd <checkout> && deploy/scripts/k3s/backup.sh >> /var/log/relayfiles/backup.log 2>&1
 ```
 
 오프사이트 백업(`deploy/scripts/offsite-backup.sh`)은 호스트에서 덤프와 `STORAGE_ROOT`를 읽으므로 저장소 노드에서 그대로 쓴다([runbook.md "오프사이트 백업"](runbook.md#오프사이트-백업)).

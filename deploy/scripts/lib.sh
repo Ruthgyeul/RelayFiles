@@ -83,6 +83,28 @@ keep_newest() {
   for path in "${old[@]}"; do rm -rf -- "$path"; done
 }
 
+# backup_database CMD... → runs CMD (a pg_dump -Fc that writes to stdout) into
+# BACKUP_DIR (default DATA_DIR/backups)/relayfiles-<UTC time>.dump, then keeps the newest
+# BACKUP_KEEP (default 14) dumps. The dump is written to a .partial file and renamed only when CMD
+# succeeds, so a failed run never leaves a cut-off dump for verify-backup.sh to pick.
+backup_database() {
+  local keep="${BACKUP_KEEP:-14}" dir file
+  dir="${BACKUP_DIR:-$(env_value DATA_DIR /srv/relayfiles)/backups}"
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  file="$dir/relayfiles-$(date -u +%Y%m%d-%H%M%S).dump"
+  log "Backing up the database to $file"
+  if ! "$@" > "$file.partial"; then
+    rm -f "$file.partial"
+    echo "The database backup failed; no dump was kept." >&2
+    return 1
+  fi
+  mv "$file.partial" "$file"
+  chmod 600 "$file"
+  keep_newest "$keep" "$dir"/relayfiles-*.dump
+  log "Backup done ($(du -h "$file" | cut -f1))."
+}
+
 # offsite_env → exports the restic settings of .env (docs/runbook.md "오프사이트 백업"); false when
 # RESTIC_REPOSITORY is empty, i.e. no offsite backup is set up.
 offsite_env() {

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploys a release published to GHCR (.github/workflows/images.yml) to k3s
 # (docs/deploy-k3s.md): .env becomes the relayfiles-env Secret, the Nginx templates and error
-# pages become ConfigMaps, then PostgreSQL and Redis → migrations (a Job with the new tools
+# pages become ConfigMaps, then PostgreSQL and Redis → a database backup (k3s/backup.sh, into
+# DATA_DIR/backups here) → migrations (a Job with the new tools
 # image) → app, worker and Nginx, all on the node labelled relayfiles/storage=true, and the media
 # workers on the nodes labelled relayfiles/media=true when K3S_MEDIA_REPLICAS is 1 or more (they
 # mount STORAGE_ROOT from the storage node over NFS). Run from a repository checkout (npm ci done)
@@ -129,6 +130,13 @@ done
 log "PostgreSQL and Redis"
 render data | apply
 for name in statefulset/relayfiles-postgres statefulset/relayfiles-redis; do kubectl -n "$NS" rollout status "$name" --timeout="$TIMEOUT"; done
+
+# A dump of the schema the running release uses, like the Compose and systemd releases take. The
+# first deploy has no database yet. K3S_SKIP_BACKUP=1 skips it (e.g. a backup was just taken).
+if [ "${K3S_SKIP_BACKUP:-0}" != 1 ] && kubectl -n "$NS" get deployment relayfiles-app > /dev/null 2>&1; then
+  log "Backup"
+  "$ROOT/deploy/scripts/k3s/backup.sh" || { echo "No backup, so no migration: fix it (or run with K3S_SKIP_BACKUP=1); the running release is unchanged." >&2; exit 1; }
+fi
 
 log "Migrations (schema, data, storage layout) with $TOOLS_IMAGE"
 JOB="job/relayfiles-migrate-$RELEASE_ID"
