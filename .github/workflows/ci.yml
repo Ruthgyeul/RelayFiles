@@ -8,10 +8,10 @@ on:
 permissions:
   contents: read
 
-# Pull requests drop an outdated run. On main every commit's run finishes: the image publish
-# (images.yml) waits for it to pass.
+# Pull requests drop an outdated run. On main each commit has its own group: a run is never
+# cancelled or dropped while it waits, so every commit that passes gets its image (job images).
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -264,3 +264,15 @@ jobs:
           docker compose --env-file .env -f deploy/docker-compose.yml config --quiet
           docker compose --env-file .env -f deploy/docker-compose.yml --profile tools --profile tunnel config --quiet
           docker compose --env-file .env -f deploy/docker-compose.yml -f deploy/docker-compose.volumes.example.yml --profile tools config --quiet
+
+  # A push to main publishes its images (images.yml) only once everything above has passed.
+  images:
+    name: Publish images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, cli, security, scripts, e2e, integration, docker]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/images.yml
