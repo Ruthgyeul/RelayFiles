@@ -83,7 +83,9 @@ STAGE=restart
 log "Switch to $RELEASE and restart"
 ln -sfn "$RELEASE" "$APP_BUNDLES/current.next"
 mv -T "$APP_BUNDLES/current.next" "$APP_BUNDLES/current"
-sudo systemctl restart relayfiles-app relayfiles-worker
+UNITS=(relayfiles-app relayfiles-worker)
+if dav_unit; then UNITS+=(relayfiles-dav); fi
+sudo systemctl restart "${UNITS[@]}"
 
 # Checked on the app port, past Nginx: visitors come back only once it says "ok".
 log "Health check"

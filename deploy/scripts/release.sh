@@ -67,8 +67,14 @@ log "Migrations (schema, data, storage layout)"
 "${COMPOSE[@]}" run --rm tools npm run storage:migrate
 
 STAGE=restart
-log "Restart app, worker and nginx"
-"${COMPOSE[@]}" up -d --no-build app worker nginx
+SERVICES=(app worker nginx)
+PROFILES=()
+if dav_container; then
+  SERVICES+=(dav)
+  PROFILES=(--profile dav)
+fi
+log "Restart ${SERVICES[*]}"
+"${COMPOSE[@]}" "${PROFILES[@]}" up -d --no-build "${SERVICES[@]}"
 
 # Nginx keeps /api/health reachable in maintenance: visitors come back only once it says "ok".
 log "Health check"

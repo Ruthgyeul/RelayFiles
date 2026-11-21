@@ -491,7 +491,7 @@ deploy/scripts/release.sh
 2. 이미지 빌드 (태그 = git 커밋)
 3. 점검 모드 켜기 (Nginx가 503 점검 페이지를 보여 준다)
 4. `prisma migrate deploy`, 데이터 마이그레이션(`data:migrate`), 스토리지 레이아웃(`storage:migrate`)
-5. app·worker·nginx 재시작. 멈추는 컨테이너는 진행 중인 요청·작업을 `APP_STOP_GRACE_SEC`(30초)·`WORKER_STOP_GRACE_SEC`(90초) 동안 마무리한다(tini가 Node에 SIGTERM을 넘기고, Next.js 서버는 새 연결을 받지 않고 남은 응답을 끝낸 뒤 종료한다. 워커는 실행 중인 작업이 끝나면 종료한다)
+5. app·worker·nginx(dav 컨테이너가 있으면 dav도) 재시작. 멈추는 컨테이너는 진행 중인 요청·작업을 `APP_STOP_GRACE_SEC`(30초)·`WORKER_STOP_GRACE_SEC`(90초) 동안 마무리한다(tini가 Node에 SIGTERM을 넘기고, Next.js 서버는 새 연결을 받지 않고 남은 응답을 끝낸 뒤 종료한다. 워커는 실행 중인 작업이 끝나면 종료한다)
 6. `/api/health`의 `status`가 `ok`가 될 때까지 확인한 뒤(`degraded`는 실패로 본다) 점검 모드를 끄고 `DATA_DIR/releases.log`에 기록. 점검 중에도 Nginx는 `/api/health`만 앱으로 넘긴다
 7. 새 이미지에 `latest` 태그도 붙인다. `RELEASE_TAG` 없이 실행하는 `$C run --rm tools …`가 지금 릴리스 이미지를 쓴다.
 8. `deploy/scripts/autoclean.sh`로 옛 이미지·빌드 캐시를 정리한다([runbook.md](runbook.md#디스크-정리-autoclean)). 정리가 실패해도 릴리스는 그대로 살아 있다. 건너뛰려면 `AUTOCLEAN=0 deploy/scripts/release.sh`.
