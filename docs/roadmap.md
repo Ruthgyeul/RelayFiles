@@ -90,7 +90,7 @@
 - **함께 처리**: minimatch override 시험(위 결정).
 - **검증**: shellcheck. 테스트 VM이나 N95에서 install → release → rollback을 한 번씩 돌려 본다(절차를 `docs/deploy-systemd.md`에 기록).
 
-### PR 1-7 `fix(nginx): mask share link ids in access logs`
+### PR 1-7 `fix(nginx): mask share link ids in access logs` — [#150](https://github.com/Ruthgyeul/RelayFiles/pull/150)
 - **변경**: 두 템플릿(`deploy/nginx/templates/default.conf.template:92`, `deploy/nginx/host/relayfiles.conf.template:64`)에 `map $request_uri $relay_log_uri`를 둔다. `/d/<id>`, `/api/share/<id>`, `/r/<id>`의 id를 `•`로 바꾸고 `log_format`에서 `$request` 대신 쓴다.
 - **함께 처리**: `docs/security.md`의 로그 절에 한 줄을 추가한다.
 
@@ -100,7 +100,7 @@
 
 | PR | 내용 | 재사용·대상 |
 |---|---|---|
-| 2-1 `fix(ui): report clipboard failures` | `shared/lib/clipboard.ts` `copyText(): Promise<boolean>`(실패하면 선택 fallback, 실패 토스트). 16곳을 교체한다 | 예외 처리가 있는 유일한 곳인 `features/viewer/TextDocument.tsx:79`를 기준으로 삼는다. 대상 예: `files/useCopyLink.ts`, `account/ApiTokensCard.tsx` |
+| 2-1 `fix(ui): report clipboard failures` (이 PR) | `shared/lib/clipboard.ts` `copyText(): Promise<boolean>`(실패하면 선택 fallback, 실패 토스트). 16곳을 교체한다 | 예외 처리가 있는 유일한 곳인 `features/viewer/TextDocument.tsx:79`를 기준으로 삼는다. 대상 예: `files/useCopyLink.ts`, `account/ApiTokensCard.tsx` |
 | 2-2 `refactor(ui): one error message helper` | `shared/lib/api-client.ts`에 `errorMessage(caught)`를 둔다. `errorText` 26벌을 교체하고 `ShellProvider.tsx:139`의 DOMException 노출을 막는다 | 기존 export `share/api.ts:51` |
 | 2-3 `refactor(ui): useApiQuery and useMutation` | `shared/hooks/useApiQuery(key, fetcher)` → `{status,data,error,reload}`(AbortController). 손으로 쓴 effect 19곳을 차례로 바꾼다. 검색이 에러를 "결과 없음"으로 보이던 문제도 고친다 | `files/useTagSearch.ts`, `search/useGlobalSearch.ts`, debounce는 `SEARCH.debounceMs`로 통일 |
 | 2-4 `fix(files): per-item parent visibility and drop targets` | `TaggedItem`에 effective visibility를 싣고 `useNodeActions`·Favorites가 항목별로 계산한다. `FileList`의 `onDropFiles`를 optional로 바꾼다. 모바일 `MediaViewer`에 `useDialogFocus`와 `onDownload`를 준다 | `shared/hooks/useDialogFocus.ts` |

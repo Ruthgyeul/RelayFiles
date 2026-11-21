@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { filesApi } from "@/shared/lib/files-api";
 import { folderHref } from "@/shared/lib/routes";
 import { useShell } from "@/features/shell/ShellProvider";
@@ -36,8 +37,7 @@ function TransferCard({ transfer, now }: { transfer: Transfer; now: number }) {
   const elapsed = (transfer.activeMs + (transfer.runningSince ? now - transfer.runningSince : 0)) / 1_000;
   const copyLink = async () => {
     const { item } = await filesApi.getProperties(transfer.folderId);
-    navigator.clipboard?.writeText(`${config.publicUrl}/d/${item.linkId}`).catch(() => undefined);
-    notify("Link copied · private, only you can open it");
+    notify((await copyText(`${config.publicUrl}/d/${item.linkId}`)) ? "Link copied · private, only you can open it" : COPY_FAILED);
   };
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-btn-h bg-sunk p-3">

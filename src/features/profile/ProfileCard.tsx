@@ -6,6 +6,7 @@ import { formatLongDate } from "@/domain/format";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { useNow } from "@/shared/hooks/useNow";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { Avatar } from "@/shared/ui/Avatar";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -34,8 +35,7 @@ export function ProfileCard({ account }: { account: ProfileData["account"] }) {
               type="button"
               title="Copy ID"
               onClick={() => {
-                navigator.clipboard?.writeText(account.id).catch(() => undefined);
-                notify("ID copied");
+                void copyText(account.id).then((copied) => notify(copied ? "ID copied" : COPY_FAILED));
               }}
               className="flex items-center gap-1.5 border-0 bg-transparent p-0 font-mono text-[13px] text-t3"
             >

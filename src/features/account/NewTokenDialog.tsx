@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { copyText } from "@/shared/lib/clipboard";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -13,7 +14,8 @@ export interface NewTokenDialogProps {
   /** Called after "Continue" (only possible once the user confirmed saving the token). */
   onDone: () => void;
   /** Called after the token was copied (the caller shows the "Token copied" toast). */
-  onCopied?: () => void;
+  /** After Copy, with whether the token reached the clipboard. */
+  onCopied?: (copied: boolean) => void;
 }
 
 /** Text file offered by "Save .txt" (same content as the design). */
@@ -70,8 +72,7 @@ export function NewTokenDialog({ account, onDone, onCopied }: NewTokenDialogProp
                 size={40}
                 icon="copy"
                 onClick={() => {
-                  navigator.clipboard?.writeText(account.token).catch(() => undefined);
-                  onCopied?.();
+                  void copyText(account.token).then((copied) => onCopied?.(copied));
                 }}
               >
                 Copy

@@ -9,6 +9,7 @@ import { isTypingTarget } from "@/features/shortcuts/shortcuts";
 import { GlobalSearchDialog } from "@/features/search/GlobalSearchDialog";
 import { SearchButton } from "@/features/search/SearchButton";
 import { ShortcutsDialog } from "@/features/shortcuts/ShortcutsDialog";
+import { COPY_FAILED } from "@/shared/lib/clipboard";
 import { readLocalSetting, writeLocalSetting } from "@/shared/lib/local-setting";
 import { AppFooter } from "./AppFooter";
 import { AppHeader } from "./AppHeader";
@@ -100,7 +101,7 @@ export function AppShell({ announcement, children }: { announcement: Announcemen
         }}
         onCreated={shell.accountCreated}
       />
-      <NewTokenDialog account={shell.tokenToSave} onDone={shell.finishSaveToken} onCopied={() => shell.notify("Token copied")} />
+      <NewTokenDialog account={shell.tokenToSave} onDone={shell.finishSaveToken} onCopied={(copied) => shell.notify(copied ? "Token copied" : COPY_FAILED)} />
       <ReauthGate />
       <Toasts />
     </PageTitleContext>

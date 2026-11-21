@@ -13,6 +13,7 @@ import { ServerMetrics } from "./ServerMetrics";
 import { settingsApi } from "./settings-api";
 import { SignupCard } from "./SignupCard";
 import { ThemeCard } from "./ThemeCard";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 
 const errorText = (caught: unknown) => (caught instanceof ApiClientError ? caught.message : "Something went wrong.");
 
@@ -77,8 +78,7 @@ export function ServerPage({ settings, snapshot }: { settings: ServerSettings; s
           })
         }
         onCopy={(code) => {
-          navigator.clipboard?.writeText(code).catch(() => undefined);
-          notify("Code copied");
+          void copyText(code).then((copied) => notify(copied ? "Code copied" : COPY_FAILED));
         }}
         onRevoke={(code) =>
           void run(async () => {

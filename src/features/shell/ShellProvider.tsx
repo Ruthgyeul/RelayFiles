@@ -8,6 +8,7 @@ import { accountApi } from "@/features/account/api";
 import { useNotice } from "@/shared/hooks/useNotice";
 import { autoAccountStore } from "./auto-account";
 import { useLiveRefresh } from "./useLiveRefresh";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 
 /** Account switch toast duration from the design. */
 const ACCOUNT_TOAST_MS = 3_200;
@@ -165,8 +166,7 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
       signOutAccount: (accountId) => run(async () => applySession(await accountApi.signOut(accountId))),
       copyToken: (accountId) =>
         run(async () => {
-          await navigator.clipboard?.writeText(await accountApi.revealToken(accountId));
-          notify("Token copied");
+          notify((await copyText(await accountApi.revealToken(accountId))) ? "Token copied" : COPY_FAILED);
         }),
       saveToken: (accountId) =>
         run(async () => {

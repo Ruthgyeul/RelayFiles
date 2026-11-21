@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { ShareItem, ShareView } from "@/contracts/share";
 import { formatDateTime, formatSize } from "@/domain/format";
 import { itemCount } from "@/domain/tree";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { kindOf } from "@/shared/ui/node-kind";
 import { MediaViewer } from "@/features/viewer/MediaViewer";
 import { withSubtitles } from "@/features/viewer/subtitle-tracks";
@@ -104,8 +105,7 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
               size={38}
               icon="link-simple"
               onClick={() => {
-                navigator.clipboard?.writeText(url).catch(() => undefined);
-                notify("Link copied");
+                void copyText(url).then((copied) => notify(copied ? "Link copied" : COPY_FAILED));
               }}
             >
               Copy link

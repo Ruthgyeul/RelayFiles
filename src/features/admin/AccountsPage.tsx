@@ -11,6 +11,7 @@ import { useShell } from "@/features/shell/ShellProvider";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { useNow } from "@/shared/hooks/useNow";
 import { ApiClientError } from "@/shared/lib/api-client";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { cn } from "@/shared/lib/cn";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
@@ -148,8 +149,7 @@ export function AccountsPage({ data }: { data: AdminAccounts }) {
             now={now}
             mounted={mounted}
             onCopyId={() => {
-              navigator.clipboard?.writeText(account.id).catch(() => undefined);
-              notify("ID copied");
+              void copyText(account.id).then((copied) => notify(copied ? "ID copied" : COPY_FAILED));
             }}
             onManage={() => setManageId(account.id)}
             onDelete={() => setDeleteId(account.id)}
