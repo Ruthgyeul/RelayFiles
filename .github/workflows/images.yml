@@ -1,13 +1,17 @@
 name: Images
 
 # The Raspberry Pi nodes (Pi 5 / Pi 4) run arm64 and the N95 server amd64. Building under QEMU is
-# slow, so pull requests only build arm64 when they change what goes into the images. Pushes to
-# main and version tags publish both architectures to GHCR as one multi-arch image each
+# slow, so pull requests only build arm64 when they change what goes into the images. A push to
+# main publishes once CI has passed on that commit, and a version tag (made on a main commit that
+# passed) publishes right away: both architectures go to GHCR as one multi-arch image each
 # (docs/deploy-k3s.md): ghcr.io/<owner>/relayfiles-app and ghcr.io/<owner>/relayfiles-tools.
 on:
   push:
-    branches: [main]
     tags: ["v*"]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   pull_request:
     paths:
       - Dockerfile
@@ -20,9 +24,11 @@ on:
 permissions:
   contents: read
 
+# Pull requests drop an outdated build. Publishing is never cancelled: a newer main commit waits
+# for the running one, so "main" always ends on the newest image.
 concurrency:
-  group: images-${{ github.ref }}
-  cancel-in-progress: true
+  group: images-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -49,9 +55,15 @@ jobs:
 
   publish:
     name: Publish ${{ matrix.target }} (linux/amd64 + linux/arm64)
-    if: github.event_name == 'push'
+    # A version tag, or CI that passed on a push to main (not on a pull request into it).
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      # workflow_run runs on the newest main; build the commit CI checked instead.
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     permissions:
       contents: read
       packages: write
@@ -64,6 +76,8 @@ jobs:
         target: [app, tools]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
       # A version tag publishes "vX.Y.Z" and "latest": it must name the version the code carries
       # and that version must have its CHANGELOG.md section (docs/runbook.md "릴리스 만들기").
       - name: Check the tag against package.json and CHANGELOG.md
@@ -85,7 +99,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/relayfiles-${TARGET}"
-          tags=(--tag "${image}:sha-${GITHUB_SHA::12}")
+          tags=(--tag "${image}:sha-${SOURCE_SHA::12}")
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             tags+=(--tag "${image}:${GITHUB_REF_NAME}" --tag "${image}:latest")
           else
@@ -96,7 +110,7 @@ jobs:
             --cache-from "type=gha,scope=multi-${TARGET}" \
             --cache-to "type=gha,mode=max,scope=multi-${TARGET}" \
             --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
             --provenance=mode=max --sbom=true \
             --metadata-file "$RUNNER_TEMP/metadata.json" \
             "${tags[@]}" --push .

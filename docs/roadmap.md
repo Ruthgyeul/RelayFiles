@@ -44,7 +44,7 @@
 - **함께 처리**: `deploy/scripts/lib.sh`에 `dav_enabled` 헬퍼를 둔다.
 - **검증**: shellcheck(CI `scripts` job). 개발 compose에서 `--profile dav`로 띄운 뒤 release를 dry run해서 dav가 재생성되는지 확인한다.
 
-### PR 1-2 `fix(nginx): stream zip and tar downloads without temp files`
+### PR 1-2 `fix(nginx): stream zip and tar downloads without temp files` — [#144](https://github.com/Ruthgyeul/RelayFiles/pull/144)
 - **문제**: 컨테이너 Nginx만 `proxy_max_temp_file_size 0`이 없다. zip·tar 다운로드가 tmpfs(RAM)에 최대 1GB까지 쌓인다.
 - **변경**: `deploy/nginx/templates/relayfiles-site.inc.template`의 `location /`에 `proxy_max_temp_file_size 0;`을 넣는다. host 템플릿 `deploy/nginx/host/relayfiles.conf.template:170`과 같게 만든다.
 - **이중 안전장치**: 앱 응답에도 `x-accel-buffering: no`를 붙인다. 대상은 zip(`src/server/services/zip.service.ts`, `src/server/share/share-files.service.ts`의 zip 응답)과 tar(`src/server/services/account-export.service.ts`)이고, `src/server/http/sse.ts:96`과 같은 방식으로 붙인다.

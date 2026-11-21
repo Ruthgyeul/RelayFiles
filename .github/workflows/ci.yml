@@ -8,9 +8,11 @@ on:
 permissions:
   contents: read
 
+# Pull requests drop an outdated run. On main every commit's run finishes: the image publish
+# (images.yml) waits for it to pass.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -141,6 +143,15 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      # Traces (retries) and screenshots of the failed tests (playwright.config.ts outputDir).
+      - name: Upload the test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   integration:
     name: Integration (PostgreSQL · Redis · migrations)
