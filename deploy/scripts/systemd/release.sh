@@ -68,6 +68,15 @@ cp -a .next/standalone "$APP_BUNDLES/$RELEASE.partial"
 rm -f "$APP_BUNDLES/$RELEASE.partial"/.env*
 mkdir -p "$APP_BUNDLES/$RELEASE.partial/.next/cache"
 sudo chown -R "$STORAGE_USER:$STORAGE_USER" "$APP_BUNDLES/$RELEASE.partial/.next/cache"
+# The worker and WebDAV run from the bundle too (tools/, the units' WorkingDirectory), so a later
+# git pull or npm ci never changes the files of a running worker, and a rollback takes them back
+# with the app. node_modules is hard-linked (same filesystem, no extra space): npm ci replaces
+# files, it never edits them in place. They read the checkout's .env, like the app.
+TOOLS="$APP_BUNDLES/$RELEASE.partial/tools"
+mkdir -p "$TOOLS"
+cp -a src scripts prisma package.json package-lock.json prisma.config.ts tsconfig.json "$TOOLS/"
+cp -al node_modules "$TOOLS/node_modules" 2> /dev/null || cp -a node_modules "$TOOLS/node_modules"
+ln -s "$ROOT/.env" "$TOOLS/.env"
 mv "$APP_BUNDLES/$RELEASE.partial" "$APP_BUNDLES/$RELEASE"
 
 # Visitors see the static maintenance page while the schema changes.
@@ -85,6 +94,9 @@ ln -sfn "$RELEASE" "$APP_BUNDLES/current.next"
 mv -T "$APP_BUNDLES/current.next" "$APP_BUNDLES/current"
 UNITS=(relayfiles-app relayfiles-worker)
 if dav_unit; then UNITS+=(relayfiles-dav); fi
+if [ "$(systemctl show -p WorkingDirectory --value relayfiles-worker)" != "$APP_BUNDLES/current/tools" ]; then
+  echo "Note: relayfiles-worker still runs from the checkout. Run sudo deploy/scripts/systemd/install.sh once to run it from the release bundle." >&2
+fi
 sudo systemctl restart "${UNITS[@]}"
 
 # Checked on the app port, past Nginx: visitors come back only once it says "ok".

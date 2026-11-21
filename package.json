@@ -114,7 +114,10 @@
     "mysql2": "^3.24.5",
     "deepmerge-ts": "^8.0.2",
     "eslint": "$eslint",
-    "effect": "^3.22.4"
+    "effect": "^3.22.4",
+    "readdir-glob": {
+      "minimatch": "^11.0.9"
+    }
   },
   "allowScripts": {
     "esbuild": true,
