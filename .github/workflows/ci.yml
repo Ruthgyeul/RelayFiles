@@ -8,9 +8,11 @@ on:
 permissions:
   contents: read
 
+# Pull requests drop an outdated run. On main each commit has its own group: a run is never
+# cancelled or dropped while it waits, so every commit that passes gets its image (job images).
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -141,6 +143,15 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      # Traces (retries) and screenshots of the failed tests (playwright.config.ts outputDir).
+      - name: Upload the test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   integration:
     name: Integration (PostgreSQL · Redis · migrations)
@@ -253,3 +264,15 @@ jobs:
           docker compose --env-file .env -f deploy/docker-compose.yml config --quiet
           docker compose --env-file .env -f deploy/docker-compose.yml --profile tools --profile tunnel config --quiet
           docker compose --env-file .env -f deploy/docker-compose.yml -f deploy/docker-compose.volumes.example.yml --profile tools config --quiet
+
+  # A push to main publishes its images (images.yml) only once everything above has passed.
+  images:
+    name: Publish images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, cli, security, scripts, e2e, integration, docker]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/images.yml

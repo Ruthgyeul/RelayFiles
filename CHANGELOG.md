@@ -41,6 +41,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Fixed
 
+- GHCR images for a `main` commit are published only after CI passes on it, and quick successive merges no longer cancel each other's CI or image builds (k3s deploys pin `sha-<commit>`)
 - Folder zips and account exports go through the Docker Compose and k3s Nginx without being held in its temporary files first (up to 1 GB of memory per download in Compose); Nginx is back on the 1.30 stable branch
 - Releases and rollbacks restart the WebDAV server too when it runs (Docker Compose `dav` container, systemd `relayfiles-dav`), so it no longer keeps running the previous code against the new schema
 - A tag search in the File Manager (`#tag`) updates after deleting, renaming, moving or retagging its results instead of showing them as they were

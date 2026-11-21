@@ -6,7 +6,7 @@ Docker Compose([deploy-ubuntu.md](deploy-ubuntu.md))·systemd([deploy-systemd.md
 
 | 리소스 | 내용 |
 |---|---|
-| 이미지 | `.github/workflows/images.yml`이 `main` 푸시와 `v*` 태그마다 `ghcr.io/<owner>/relayfiles-app`, `-tools`를 올린다. 태그: `sha-<커밋 12자>`(모든 푸시), `main`, 버전 태그면 `vX.Y.Z`와 `latest`. PostgreSQL·Redis·Nginx는 `docker-compose.yml`에 고정된 이미지(digest 포함)를 그대로 쓴다 |
+| 이미지 | `.github/workflows/images.yml`이 `main` 푸시(그 커밋의 CI가 통과한 뒤)와 `v*` 태그마다 `ghcr.io/<owner>/relayfiles-app`, `-tools`를 올린다. 태그: `sha-<커밋 12자>`(모든 푸시), `main`(그 커밋이 아직 main의 최신일 때만 옮긴다), 버전 태그면 `vX.Y.Z`와 `latest`. PostgreSQL·Redis·Nginx는 `docker-compose.yml`에 고정된 이미지(digest 포함)를 그대로 쓴다 |
 | 템플릿 | `deploy/k3s/data.yaml.template`(PostgreSQL·Redis), `migrate-job.yaml.template`(마이그레이션 Job), `relayfiles.yaml.template`(app·worker·Nginx), `media.yaml.template`(미디어 워커, 켰을 때만). `.env` 값으로 `scripts/render-template.mjs`가 렌더링한다 |
 | 배치 | 모든 Pod가 `relayfiles/storage=true` 라벨이 붙은 노드 하나(SSD가 연결된 노드)에서 돈다. 예외는 미디어 워커(`K3S_MEDIA_REPLICAS` ≥ 1, [§6](#6-미디어-워커-분리-pi-노드))로, `relayfiles/media=true` 노드에서 SSD를 NFS로 붙여 돈다. 파일·DB·Redis 데이터는 그 노드의 호스트 경로(`STORAGE_ROOT`, `DATA_DIR/pg`, `DATA_DIR/redis`, `LOG_DIR`)이고, Compose와 같은 디렉터리라 같은 디스크를 그대로 옮겨 쓸 수 있다 |
 | 설정 | `.env`가 Secret `relayfiles-env`가 되는데, 호스트 스크립트만 쓰는 키(오프사이트 백업 `RESTIC_*`·`OFFSITE_*`, `CLOUDFLARE_TUNNEL_TOKEN`)는 빼고 만든다(`scripts/lib/host-only-env.mjs`와 같은 목록). k3s는 Secret을 기본으로 암호화하지 않고 저장하므로 클러스터에 들어가지 않는 편이 안전하다. Nginx 템플릿·에러 페이지·추가 볼륨 설정은 ConfigMap이다 |

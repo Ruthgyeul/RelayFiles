@@ -1,12 +1,15 @@
 name: Images
 
 # The Raspberry Pi nodes (Pi 5 / Pi 4) run arm64 and the N95 server amd64. Building under QEMU is
-# slow, so pull requests only build arm64 when they change what goes into the images. Pushes to
-# main and version tags publish both architectures to GHCR as one multi-arch image each
-# (docs/deploy-k3s.md): ghcr.io/<owner>/relayfiles-app and ghcr.io/<owner>/relayfiles-tools.
+# slow, so pull requests only build arm64 when they change what goes into the images. A push to
+# main publishes from its CI run (ci.yml calls this workflow once every check has passed), and a
+# version tag (made on a main commit that passed) publishes right away: both architectures go to
+# GHCR as one multi-arch image each (docs/deploy-k3s.md): ghcr.io/<owner>/relayfiles-app and
+# ghcr.io/<owner>/relayfiles-tools. Called from CI, the run keeps CI's commit (github.sha), so the
+# tags, the revision label and the signed provenance all name the commit that was tested.
 on:
+  workflow_call:
   push:
-    branches: [main]
     tags: ["v*"]
   pull_request:
     paths:
@@ -20,14 +23,15 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: images-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
     name: Build ${{ matrix.target }} (linux/arm64)
     if: github.event_name == 'pull_request'
+    # A newer push to the pull request drops the outdated build. (No workflow-level group: called
+    # from CI, it would share CI's.)
+    concurrency:
+      group: images-pr-${{ github.ref }}-${{ matrix.target }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -49,6 +53,7 @@ jobs:
 
   publish:
     name: Publish ${{ matrix.target }} (linux/amd64 + linux/arm64)
+    # A version tag, or a push to main whose CI called this workflow after passing.
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -77,8 +82,8 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-      # sha-<12 hex> for every push (what deploy/scripts/k3s/deploy.sh pins), plus "main" or the
-      # version and "latest" for a v* tag. GHCR names must be lowercase.
+      # sha-<12 hex> for every push (what deploy/scripts/k3s/deploy.sh pins), plus the version and
+      # "latest" for a v* tag ("main" is the next step). GHCR names must be lowercase.
       - name: Build and push
         id: push
         env:
@@ -88,8 +93,6 @@ jobs:
           tags=(--tag "${image}:sha-${GITHUB_SHA::12}")
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             tags+=(--tag "${image}:${GITHUB_REF_NAME}" --tag "${image}:latest")
-          else
-            tags+=(--tag "${image}:main")
           fi
           docker buildx build --platform linux/amd64,linux/arm64 --target "$TARGET" \
             --cache-from "type=gha,scope=arm64-${TARGET}" \
@@ -106,6 +109,20 @@ jobs:
           echo "image=${image}" >> "$GITHUB_OUTPUT"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "${image}@${digest}" >> "$GITHUB_STEP_SUMMARY"
+      # Runs of successive main commits can finish in any order: "main" moves only while this
+      # commit is still the tip of main, so an older image never replaces a newer one.
+      - name: Point "main" at the image
+        if: github.ref == 'refs/heads/main'
+        env:
+          IMAGE: ${{ steps.push.outputs.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          tip="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "main has moved on to ${tip::12}; \"main\" stays where it is." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          docker buildx imagetools create --tag "${IMAGE}:main" "${IMAGE}@${DIGEST}"
       # Signed SLSA provenance stored next to the image in GHCR. Verify before deploying with
       # `gh attestation verify oci://<image>@<digest> --owner <owner>` (docs/deploy-k3s.md).
       - name: Attest build provenance
