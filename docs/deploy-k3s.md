@@ -78,7 +78,7 @@ deploy/scripts/k3s/deploy.sh v1.5.0     # 버전 태그
 | 일회성 명령 | `kubectl -n relayfiles exec deployment/relayfiles-worker -- npm run <스크립트> [-- 인자]` (예: `admin:create`, `storage:fsck`, `volume:list`) |
 | `.env`를 바꾼 뒤 | `deploy/scripts/k3s/deploy.sh <지금 태그>`(Secret을 갱신하고 같은 이미지로 다시 적용) 후 `kubectl -n relayfiles rollout restart deployment/relayfiles-app deployment/relayfiles-worker` |
 
-DB 백업: `deploy/scripts/k3s/backup.sh`가 PostgreSQL Pod 안에서 `pg_dump -Fc`를 실행해, 실행한 컴퓨터의 `DATA_DIR/backups`에 Compose의 `backup.sh`와 같은 이름·형식으로 저장한다(실패하면 덤프를 남기지 않고, 최근 `BACKUP_KEEP`=14개만 둔다). `verify-backup.sh`와 `offsite-backup.sh`가 그 폴더를 읽으므로 저장소 노드에서 실행한다. 다른 곳에서 실행한다면 `BACKUP_DIR=<폴더>`를 준다. `deploy.sh`도 마이그레이션 전에 이 스크립트를 실행하고, 실패하면 마이그레이션하지 않는다(첫 배포는 건너뛴다. `K3S_SKIP_BACKUP=1`로 끈다). 매일 백업은 저장소 노드의 cron에 둔다:
+DB 백업: `deploy/scripts/k3s/backup.sh`가 PostgreSQL Pod 안에서 `pg_dump -Fc`를 실행해, 실행한 컴퓨터의 `DATA_DIR/backups`에 Compose의 `backup.sh`와 같은 이름·형식으로 저장한다(실패하면 덤프를 남기지 않고, 최근 `BACKUP_KEEP`=14개만 둔다). `verify-backup.sh`와 `offsite-backup.sh`가 그 폴더를 읽으므로 저장소 노드(`relayfiles/storage=true`)가 아닌 곳에서는 실행을 거부한다. 다른 곳에 두려면 `BACKUP_DIR=<폴더>`를 준다. `deploy.sh`도 마이그레이션 전에 이 스크립트를 실행하고, 실패하면(저장소 노드가 아닌 곳에서 `BACKUP_DIR` 없이 실행한 경우 포함) 마이그레이션하지 않는다. 그러니 `deploy.sh`는 저장소 노드에서 실행하는 것이 가장 간단하다. 마이그레이션이 한 번도 돌지 않은 빈 DB만 건너뛴다(Compose에서 옮겨 온 DB로 처음 배포할 때도 백업한다). `K3S_SKIP_BACKUP=1`로 끈다. 매일 백업은 저장소 노드의 cron에 둔다:
 
 ```cron
 15 3 * * * cd <checkout> && deploy/scripts/k3s/backup.sh >> /var/log/relayfiles/backup.log 2>&1
