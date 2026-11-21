@@ -70,7 +70,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
 
   const { folder, children, path, isRoot } = view;
   const parentRef = isRoot ? "root" : folder.id;
-  const { items, counts, tagMode, wanted, q } = useFolderItems(children, search.filter, search.query, prefs.sort);
+  const { items, counts, tagMode, wanted, q, searchError } = useFolderItems(children, search.filter, search.query, prefs.sort);
   const linkOf = (linkId: string) => `${publicUrl}/d/${linkId}`;
   const selection = useSelection(items);
   const clearSelection = selection.clear;
@@ -188,7 +188,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
         items={items}
         view={prefs.view}
         itemProps={itemProps}
-        emptyTitle={emptyTitle({ tagMode, wanted, query: q, filter: search.filter })}
+        emptyTitle={searchError ?? emptyTitle({ tagMode, wanted, query: q, filter: search.filter })}
         emptyActions={toolbar.empty}
         onOpen={openItem}
         onDownload={media.download}

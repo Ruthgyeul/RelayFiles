@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { FolderNode } from "@/contracts/nodes";
-import { errorMessage } from "@/shared/lib/api-client";
+import { useApiQuery } from "@/shared/hooks/useApiQuery";
+import { useMutation } from "@/shared/hooks/useMutation";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -48,22 +49,13 @@ const ROW_PADDING = { base: 12, step: 18 } as const;
 
 /** "Move …" / "Copy …" dialog with the account's folder tree (440px). */
 export function MoveDialog({ request, onClose, onDone }: { request: MoveRequest | null; onClose: () => void; onDone: (message: string) => void }) {
-  const [folders, setFolders] = useState<FolderNode[] | null>(null);
+  // Every open asks again: the tree may have changed since the last move.
+  const tree = useApiQuery<FolderNode[]>(request ? "folders" : null, () => filesApi.folderTree());
+  const folders = tree.data;
   const [target, setTarget] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!request) return;
-    let cancelled = false;
-    filesApi
-      .folderTree()
-      .then((tree) => !cancelled && setFolders(tree))
-      .catch(() => !cancelled && setError("Couldn't load folders."));
-    return () => {
-      cancelled = true;
-    };
-  }, [request]);
+  const sending = useMutation();
+  const busy = sending.busy;
+  const error = sending.error || (tree.status === "error" ? "Couldn't load folders." : "");
 
   const rows = useMemo(() => (request && folders ? folderRows(folders, request) : []), [folders, request]);
   const copy = request?.mode === "copy";
@@ -71,22 +63,17 @@ export function MoveDialog({ request, onClose, onDone }: { request: MoveRequest 
 
   const close = () => {
     setTarget(null);
-    setError("");
+    sending.clearError();
     onClose();
   };
   const submit = async () => {
-    if (!request || !targetRow || busy) return;
-    setBusy(true);
-    try {
-      const result = await filesApi.transfer(request.ids, targetRow.folder.id, request.mode);
-      const items = `${result.done} ${result.done === 1 ? "item" : "items"}`;
-      onDone(`${copy ? "Copied" : "Moved"} ${items} to ${result.targetName}${result.renamed ? ` · renamed ${result.renamed} to avoid duplicates` : ""}`);
-      close();
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
+    if (!request || !targetRow) return;
+    const sent = await sending.run(() => filesApi.transfer(request.ids, targetRow.folder.id, request.mode));
+    if (!sent?.ok) return;
+    const result = sent.value;
+    const items = `${result.done} ${result.done === 1 ? "item" : "items"}`;
+    onDone(`${copy ? "Copied" : "Moved"} ${items} to ${result.targetName}${result.renamed ? ` · renamed ${result.renamed} to avoid duplicates` : ""}`);
+    close();
   };
 
   return (

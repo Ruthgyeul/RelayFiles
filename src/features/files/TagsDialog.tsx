@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { normalizeTag } from "@/domain/tags";
+import { useApiQuery } from "@/shared/hooks/useApiQuery";
 import { errorMessage } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -24,17 +25,15 @@ const MAX_SUGGESTIONS = 8;
 export function TagsDialog({ request, onClose }: { request: TagsRequest | null; onClose: () => void }) {
   const [tags, setTags] = useState<string[]>([]);
   const [input, setInput] = useState("");
-  const [used, setUsed] = useState<{ tag: string; count: number }[]>([]);
+  // Suggestions only: without them the starter tags are shown.
+  const usage = useApiQuery(request ? "usage" : null, () => filesApi.tagUsage());
+  const used = usage.data ?? [];
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!request) return;
     let cancelled = false;
     queueMicrotask(() => !cancelled && setTags(request.tags));
-    filesApi
-      .tagUsage()
-      .then((usage) => !cancelled && setUsed(usage))
-      .catch(() => undefined);
     return () => {
       cancelled = true;
     };

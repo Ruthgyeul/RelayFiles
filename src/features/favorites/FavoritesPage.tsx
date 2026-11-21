@@ -62,7 +62,7 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
   const title = view.folder?.name ?? "Favorites";
   usePageTitle(title);
 
-  const { items, folders, counts, tagMode, wanted, q } = useFavoriteItems(view, search.filter, search.query, prefs.sort);
+  const { items, folders, counts, tagMode, wanted, q, searchError } = useFavoriteItems(view, search.filter, search.query, prefs.sort);
   const selection = useSelection(items);
   const linkOf = (linkId: string) => `${publicUrl}/d/${linkId}`;
   const media = useFileMedia(items, title, initialView);
@@ -162,7 +162,7 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
         items={items}
         view={prefs.view}
         itemProps={itemProps}
-        emptyTitle={searching ? emptyTitle({ tagMode, wanted, query: q, filter: search.filter }) : view.folder ? "This folder is empty" : "No favorites yet"}
+        emptyTitle={searching ? searchError ?? emptyTitle({ tagMode, wanted, query: q, filter: search.filter }) : view.folder ? "This folder is empty" : "No favorites yet"}
         emptyActions={searching ? undefined : <span className="text-[13px] text-t4">Choose &quot;Add to favorites&quot; in an item&apos;s menu.</span>}
         onOpen={withListed(openItem)}
         onDownload={withListed(media.download)}

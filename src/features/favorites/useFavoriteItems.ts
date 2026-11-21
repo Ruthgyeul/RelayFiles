@@ -16,7 +16,7 @@ import { favoritesApi } from "@/shared/lib/favorites-api";
  */
 export function useFavoriteItems(view: FavoritesView, filter: FilterKey, query: string, sort: FavoriteSortKey) {
   const q = query.trim().toLowerCase();
-  const { tagMode, wanted, results } = useTagSearch(query, favoritesApi.searchTags, view);
+  const { tagMode, wanted, results, error: searchError } = useTagSearch(query, favoritesApi.searchTags, view);
   const counts = useMemo(() => {
     const count = (key: FilterKey) => view.items.filter((item) => matchesFilter(item, key)).length + (key === "all" || key === "folder" ? view.folders.length : 0);
     return Object.fromEntries(FILTER_KEYS.map((key) => [key, count(key)])) as Record<FilterKey, number>;
@@ -28,5 +28,5 @@ export function useFavoriteItems(view: FavoritesView, filter: FilterKey, query: 
     return sortFavorites(source.map(toSortable), sort).map((entry) => entry.item);
   }, [tagMode, results, wanted, filter, view.items, q, sort]);
   const folders = useMemo(() => visibleFavoriteFolders(view.folders, { query: q, filter, tagMode, sort }), [view.folders, q, filter, tagMode, sort]);
-  return { items, folders, counts, tagMode, wanted, q };
+  return { items, folders, counts, tagMode, wanted, q, searchError };
 }
