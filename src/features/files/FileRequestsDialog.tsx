@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CreateFileRequestInput, FileRequestDto } from "@/contracts/file-requests";
 import { formatLongDate, formatSize } from "@/domain/format";
 import { ApiClientError } from "@/shared/lib/api-client";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { IconButton } from "@/shared/ui/IconButton";
@@ -93,14 +94,13 @@ export function FileRequestsDialog({ request, notify, onClose }: { request: File
   const create = (input: CreateFileRequestInput) =>
     void act(async () => {
       const created = await fileRequestsApi.create(input);
-      await navigator.clipboard?.writeText(created.url).catch(() => undefined);
+      const copied = await copyText(created.url);
       setCreating(false);
-      return "Upload link created and copied";
+      return copied ? "Upload link created and copied" : "Upload link created";
     });
 
   const copy = (url: string) => {
-    void navigator.clipboard?.writeText(url).catch(() => undefined);
-    notify("Upload link copied");
+    void copyText(url).then((copied) => notify(copied ? "Upload link copied" : COPY_FAILED));
   };
 
   return (

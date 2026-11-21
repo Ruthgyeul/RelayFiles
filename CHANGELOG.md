@@ -42,6 +42,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Fixed
 
+- Copy buttons (links, tokens, IDs, invite codes, request references) say "Copy failed" when nothing reached the clipboard instead of "copied", and copying also works on a LAN address over http
 - systemd deployment: the worker and WebDAV run from the release bundle (`.app/current/tools`) instead of the checkout, so `git pull` and `npm ci` no longer change a running worker and `rollback.sh` takes them back with the app; all three units run with `NODE_ENV=production`. After pulling this, run `sudo deploy/scripts/systemd/install.sh` once
 - k3s deploys back up the database before migrating (`deploy/scripts/k3s/backup.sh`, also for the daily cron), like the Docker Compose and systemd releases; a failed backup run no longer leaves a cut-off dump behind in any deployment
 - GHCR images for a `main` commit are published only after CI passes on it, and quick successive merges no longer cancel each other's CI or image builds (k3s deploys pin `sha-<commit>`)

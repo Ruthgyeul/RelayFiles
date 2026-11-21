@@ -9,6 +9,7 @@ import { DocumentBar } from "./DocumentBar";
 import { FailedPreview, LoadingPreview } from "./PreviewMessage";
 import { TableView } from "./TableView";
 import { useFileText } from "./useFileText";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 
 const MarkdownView = lazy(() => import("./MarkdownView"));
 
@@ -76,10 +77,7 @@ export function TextDocument({ src, format, binary, notify }: TextDocumentProps)
           type="button"
           className={toolButton}
           onClick={() => {
-            navigator.clipboard?.writeText(file.text).then(
-              () => notify("Copied"),
-              () => notify("Copy failed"),
-            );
+            void copyText(file.text).then((copied) => notify(copied ? "Copied" : COPY_FAILED));
           }}
         >
           Copy

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { accountApi } from "@/features/account/api";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { SectionTitle } from "./Section";
 
@@ -25,8 +26,7 @@ export function AccessCard({ accountId, maskedToken, notify, onRegenerate }: Acc
   const [shown, setShown] = useState<string | null>(null);
   const reveal = async () => (shown ? setShown(null) : setShown(await accountApi.revealToken(accountId)));
   const copy = async () => {
-    await navigator.clipboard?.writeText(await accountApi.revealToken(accountId)).catch(() => undefined);
-    notify("Token copied");
+    notify((await copyText(await accountApi.revealToken(accountId))) ? "Token copied" : COPY_FAILED);
   };
   return (
     <section aria-label="Access & recovery" className="flex flex-col gap-3.5 rounded-2xl border border-card-line bg-card p-5">

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { filesApi } from "@/shared/lib/files-api";
 import { folderHref } from "@/shared/lib/routes";
 import { useShell } from "@/features/shell/ShellProvider";
@@ -39,8 +40,7 @@ export function LastUploadCard() {
         <button
           type="button"
           onClick={() => {
-            navigator.clipboard?.writeText(link.url).catch(() => undefined);
-            notify("Link copied · private, only you can open it");
+            void copyText(link.url).then((copied) => notify(copied ? "Link copied · private, only you can open it" : COPY_FAILED));
           }}
           className="flex h-10 items-center gap-1.5 rounded-[10px] border border-accent bg-accent px-4 text-[14px] font-bold text-on-accent"
         >

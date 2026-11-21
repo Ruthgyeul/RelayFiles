@@ -1,19 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { copyText } from "@/shared/lib/clipboard";
 import { Icon } from "@/shared/ui/icon/Icon";
 
 /** Shows the request id / error digest with a copy button so users can report it. */
 export function CopyRequestId({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
+  const copy = async () => setCopied(await copyText(value));
   return (
     <button
       type="button"

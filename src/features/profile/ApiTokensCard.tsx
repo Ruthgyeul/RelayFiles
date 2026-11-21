@@ -7,6 +7,7 @@ import { formatDateTime, formatLongDate, formatSeen } from "@/domain/format";
 import { ApiClientError } from "@/shared/lib/api-client";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { useNow } from "@/shared/hooks/useNow";
+import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { Button } from "@/shared/ui/Button";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -113,8 +114,7 @@ export function ApiTokensCard({ tokens, isAdmin, notify, refresh }: ApiTokensCar
   };
 
   const copy = async (token: string) => {
-    await navigator.clipboard?.writeText(token).catch(() => undefined);
-    notify("API token copied");
+    notify((await copyText(token)) ? "API token copied" : COPY_FAILED);
   };
 
   return (
