@@ -298,7 +298,7 @@ services:
 
   cloudflared:
     # Pinned: `latest` would change the tunnel client on any pull. Bump it with the other images.
-    image: cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39
+    image: cloudflare/cloudflared:2026.11.0@sha256:b94b96edf2c9c4360f8879c8580cfaa99077f19c849ec595ca2f711b27d4f344
     profiles: [tunnel]
     restart: unless-stopped
     logging: *logging
