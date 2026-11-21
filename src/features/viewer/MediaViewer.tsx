@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { documentPreviewOf } from "@/domain/file-format";
 import { formatClock } from "@/domain/format";
+import { useDialogFocus } from "@/shared/hooks/useDialogFocus";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { useViewport } from "@/shared/hooks/useViewport";
 import { cn } from "@/shared/lib/cn";
@@ -112,6 +113,9 @@ export function MediaViewer({ items, currentId, onSelect, onClose, onDownload, n
     onClose();
   };
   useViewerKeys(item !== null, { step, close, small, notify, slideshow });
+  // Full screen (below 720px) is a dialog of its own; wider screens get this from <Modal>.
+  const panel = useRef<HTMLDivElement>(null);
+  useDialogFocus(panel, { open: small && item !== null && mounted, onClose: close, initialFocus: "panel" });
 
   // The previous and next pictures load in the background, so stepping shows them at once.
   useEffect(() => {
@@ -145,7 +149,7 @@ export function MediaViewer({ items, currentId, onSelect, onClose, onDownload, n
 
   if (small) {
     return createPortal(
-      <div role="dialog" aria-modal="true" aria-label={item.name} className="fixed inset-0 z-(--z-viewer-backdrop) flex flex-col bg-black pb-[env(safe-area-inset-bottom)]">
+      <div ref={panel} role="dialog" aria-modal="true" aria-label={item.name} tabIndex={-1} className="fixed inset-0 z-(--z-viewer-backdrop) flex flex-col bg-black outline-none pb-[env(safe-area-inset-bottom)]">
         <div className="flex h-[52px] shrink-0 items-center gap-0.5 border-b border-viewer-line pr-1 pl-3">
           <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{item.name}</span>
           {buttons(false)}

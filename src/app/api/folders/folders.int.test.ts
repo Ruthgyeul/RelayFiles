@@ -124,6 +124,17 @@ describe("folders", () => {
     ]);
     expect(byName[0]).toMatchObject({ parentIsRoot: true, itemCount: 2 });
     expect(byName[1]).toMatchObject({ parentId: trips, parentIsRoot: false });
+    expect(byName.map((item) => item.parentVisibility)).toEqual(["private", "private", "private"]);
+
+    // A hit inherits from its own folder, not the one the search was made from.
+    await prisma.node.update({ where: { id: trips }, data: { visibility: "PUBLIC" } });
+    const inPublic = (await callRoute<TaggedItem[]>(search, { cookie, query: "?q=TRIP" })).json.data;
+    expect(inPublic.map((item) => [item.name, item.parentVisibility])).toEqual([
+      ["Trips", "private"],
+      ["trip notes.txt", "public"],
+      ["My trip.mp4", "public"],
+    ]);
+    await prisma.node.update({ where: { id: trips }, data: { visibility: "INHERIT" } });
 
     const tagged = (await callRoute<TaggedItem[]>(search, { cookie, query: "?q=%232024" })).json.data;
     expect(tagged.map((item) => item.name)).toEqual(["My trip.mp4"]);

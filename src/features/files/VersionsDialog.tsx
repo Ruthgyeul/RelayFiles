@@ -29,7 +29,9 @@ export function VersionsDialog({ request, onClose, onDone }: { request: Versions
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const versions = loaded.data;
+  // Deleted versions leave the list at once, even while (or if) the reload that follows fails.
+  const [deleted, setDeleted] = useState<ReadonlySet<string>>(new Set());
+  const versions = loaded.data?.filter((version) => !deleted.has(version.id)) ?? null;
   const error = actionError || loaded.error;
 
   const close = () => {
@@ -48,6 +50,7 @@ export function VersionsDialog({ request, onClose, onDone }: { request: Versions
         close();
       } else {
         await filesApi.deleteVersion(request.nodeId, versionId);
+        setDeleted((current) => new Set([...current, versionId]));
         loaded.reload();
         setConfirm(null);
       }

@@ -18,8 +18,8 @@ interface FileListProps {
   emptyActions: ReactNode;
   onOpen: (item: ListedItem) => void;
   onDownload: (item: ListedItem) => void;
-  /** Files dropped from the computer onto the list (not onto a folder row). */
-  onDropFiles: (transfer: DataTransfer) => void;
+  /** Files dropped from the computer onto the list (not onto a folder row); without it the list takes no drops. */
+  onDropFiles?: (transfer: DataTransfer) => void;
   /** Rows shown before the items (the Favorites entry, organizing folders). */
   leading?: ReactNode;
   /** Cards shown before the items in grid view (organizing folders in Favorites); `leading` is not shown then. */
@@ -28,7 +28,7 @@ interface FileListProps {
   hideEmpty?: boolean;
 }
 
-/** The items of a folder as rows or cards, and a drop zone for files from the computer. */
+/** The items of a folder as rows or cards, and (with `onDropFiles`) a drop zone for files from the computer. */
 export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onOpen, onDownload, onDropFiles, leading, leadingCards, hideEmpty = false }: FileListProps) {
   const [filesOver, setFilesOver] = useState(false);
   const lazy = items.length > FILES.lazyRenderAfter;
@@ -36,14 +36,14 @@ export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onO
   return (
     <div
       onDragOver={(event) => {
-        if (!hasFiles(event.dataTransfer)) return;
+        if (!onDropFiles || !hasFiles(event.dataTransfer)) return;
         event.preventDefault();
         setFilesOver(true);
       }}
       onDragLeave={(event) => !event.currentTarget.contains(event.relatedTarget as Node | null) && setFilesOver(false)}
       onDrop={(event) => {
         setFilesOver(false);
-        if (!hasFiles(event.dataTransfer)) return;
+        if (!onDropFiles || !hasFiles(event.dataTransfer)) return;
         event.preventDefault();
         onDropFiles(event.dataTransfer);
       }}

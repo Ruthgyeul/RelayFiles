@@ -3332,6 +3332,14 @@
                               },
                               "parentIsRoot": {
                                 "type": "boolean"
+                              },
+                              "parentVisibility": {
+                                "type": "string",
+                                "enum": [
+                                  "private",
+                                  "public"
+                                ],
+                                "description": "Visibility of the folder it is in, which a \"inherit\" setting follows"
                               }
                             },
                             "required": [
@@ -3351,7 +3359,8 @@
                               "busy",
                               "parentPath",
                               "parentId",
-                              "parentIsRoot"
+                              "parentIsRoot",
+                              "parentVisibility"
                             ],
                             "additionalProperties": false
                           },
@@ -3696,6 +3705,14 @@
                               "parentIsRoot": {
                                 "type": "boolean"
                               },
+                              "parentVisibility": {
+                                "type": "string",
+                                "enum": [
+                                  "private",
+                                  "public"
+                                ],
+                                "description": "Visibility of the folder it is in, which a \"inherit\" setting follows"
+                              },
                               "lastActivityAt": {
                                 "description": "Last open, play or download through the share link",
                                 "type": [
@@ -3722,6 +3739,7 @@
                               "parentPath",
                               "parentId",
                               "parentIsRoot",
+                              "parentVisibility",
                               "lastActivityAt"
                             ],
                             "additionalProperties": false
@@ -4057,6 +4075,14 @@
                           },
                           "parentIsRoot": {
                             "type": "boolean"
+                          },
+                          "parentVisibility": {
+                            "type": "string",
+                            "enum": [
+                              "private",
+                              "public"
+                            ],
+                            "description": "Visibility of the folder it is in, which a \"inherit\" setting follows"
                           }
                         },
                         "required": [
@@ -4076,7 +4102,8 @@
                           "busy",
                           "parentPath",
                           "parentId",
-                          "parentIsRoot"
+                          "parentIsRoot",
+                          "parentVisibility"
                         ],
                         "additionalProperties": false
                       }

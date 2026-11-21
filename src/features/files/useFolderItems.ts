@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
-import type { NodeItem } from "@/contracts/nodes";
+import type { NodeItem, TaggedItem } from "@/contracts/nodes";
 import { hasAllTags } from "@/domain/tags";
 import { FILTER_KEYS, matchesFilter, sortNodes, type FilterKey, type SortKey } from "@/domain/tree";
 import { toSortable } from "./settings";
 import { useTagSearch } from "./useTagSearch";
 
-export type ListedItem = NodeItem & { parentPath?: string };
+/** A folder child, or a tag search hit from another folder (with where it is). */
+export type ListedItem = NodeItem & Partial<Pick<TaggedItem, "parentPath" | "parentId" | "parentVisibility">>;
 
 /**
  * Items shown in the list: the folder's children filtered by type and name, or tag search

@@ -2,10 +2,11 @@
 
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import type { FolderView, NodeItem } from "@/contracts/nodes";
+import type { FolderView } from "@/contracts/nodes";
 import { folderHref, sharePageHref } from "@/shared/lib/routes";
 import type { NodeActions } from "./node-menu";
 import type { useFileDialogs } from "./useFileDialogs";
+import type { ListedItem } from "./useFolderItems";
 import type { useFileMedia } from "./useFileMedia";
 import type { useFolderTools } from "./useFolderTools";
 
@@ -25,17 +26,17 @@ interface Options {
 /**
  * What each entry of an item's action menu does. The current folder (its header menu) is
  * handled like its own item: it moves within its parent and shares with the parent's visibility.
+ * A tag search hit from another folder moves within, and inherits from, the folder it is in.
  */
-export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, linkOf, copyLink, onProperties, folderHref: hrefOf = (id) => folderHref(id) }: Options): (item: NodeItem) => NodeActions {
+export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, linkOf, copyLink, onProperties, folderHref: hrefOf = (id) => folderHref(id) }: Options): (item: ListedItem) => NodeActions {
   const router = useRouter();
   const { folder, path, isRoot } = view;
   const parentOfCurrent = path.at(-2);
-  const visibilityOf = (item: NodeItem) => (item.settings.visibility === "inherit" ? view.effectiveVisibility : item.settings.visibility);
-
   return (item) => {
     const current = item.id === folder.id;
-    const parentId = current ? (parentOfCurrent?.id ?? folder.id) : folder.id;
-    const parentVisibility = current ? view.parentVisibility : view.effectiveVisibility;
+    const parentId = current ? (parentOfCurrent?.id ?? folder.id) : (item.parentId ?? folder.id);
+    const parentVisibility = current ? view.parentVisibility : (item.parentVisibility ?? view.effectiveVisibility);
+    const visibility = item.settings.visibility === "inherit" ? parentVisibility : item.settings.visibility;
     return {
       open: item.type === "folder" && !current ? () => router.push(hrefOf(item.id)) : undefined,
       preview: item.type === "file" ? () => media.preview(item) : undefined,
@@ -45,7 +46,7 @@ export function useNodeActions({ view, isAdmin, dialogs, folderTools, media, lin
       share: item.type === "folder" ? () => router.push(sharePageHref(item.linkId)) : undefined,
       uploadLinks: item.type === "folder" ? () => dialogs.uploadLinks(item) : undefined,
       tags: () => dialogs.tags([item]),
-      directLink: () => copyLink(linkOf(item.linkId), current ? view.effectiveVisibility : visibilityOf(item)),
+      directLink: () => copyLink(linkOf(item.linkId), current ? view.effectiveVisibility : visibility),
       newLink: () => dialogs.newLink(item),
       activity: () => dialogs.activity(item),
       settings: () => dialogs.settings(item, current && isRoot, parentVisibility),
