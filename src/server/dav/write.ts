@@ -4,6 +4,7 @@ import { DAV } from "@/config/policy";
 import { davDepth, davDestination, davHref, davLockDiscovery, davLockTimeout, davLockTokenOf, davOverwrite, davProppatchResult, davWithin, isMacMetadata } from "@/domain/dav";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
+import { logger } from "../logger";
 import { findChildByName, type NodeRow } from "../repositories/node.repo";
 import type { AccountRow } from "../repositories/account.repo";
 import { uploadWholeFile } from "../services/direct-upload.service";
@@ -91,7 +92,7 @@ async function replaceWith(owner: Owner, existing: NodeRow, name: string, place:
     await deleteItems(owner, [existing.id]);
   } catch (error) {
     // The old item stays: take the new one away again, so nothing is left under the temporary name.
-    await deleteItems(owner, [id], { recoverable: false }).catch(() => undefined);
+    await deleteItems(owner, [id], { recoverable: false }).catch((cleanupError: unknown) => logger.warn("webdav replace cleanup failed", { error: cleanupError }));
     throw error;
   }
   await renameNode(owner, id, name);
