@@ -67,7 +67,7 @@ export function noteAccountWrite(req: Request, result: unknown, accountId: strin
 }
 
 /** Converts any thrown value into a client-safe failure response. Exported for tests. */
-export function toFailure(error: unknown, requestId: string): NextResponse<ApiFailure> {
+function toFailure(error: unknown, requestId: string): NextResponse<ApiFailure> {
   if (error instanceof ApiError) {
     if (error.status >= 500 && !EXPECTED_UNAVAILABLE.has(error.code)) logger.error("api error", { requestId, code: error.code, error });
     return failure(error.code, error.message, requestId, error.options);

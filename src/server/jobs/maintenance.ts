@@ -81,7 +81,7 @@ export async function runMaintenance(now: Date) {
 }
 
 /** Runs one probe by its name. */
-export async function runProbe(name: string): Promise<unknown> {
+async function runProbe(name: string): Promise<unknown> {
   if (name === "metrics") {
     // Average outbound and disk rates since the previous sample (one per interval).
     const [network, disks] = await Promise.all([networkRates(), diskRates()]);

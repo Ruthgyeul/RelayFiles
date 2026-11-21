@@ -19,7 +19,7 @@ export interface ProbeOutcome {
 const envelope = z.object({ data: healthSchema });
 
 /** The app's health endpoint as the worker reaches it. */
-export function probeUrl(): string {
+function probeUrl(): string {
   const base = getEnv("jobs").HEALTH_PROBE_URL ?? `http://127.0.0.1:${getAppEnv().APP_PORT}`;
   return new URL("/api/health", base).toString();
 }

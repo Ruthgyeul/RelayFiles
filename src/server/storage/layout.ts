@@ -14,7 +14,7 @@ import { join, resolve, sep } from "node:path";
  *   <root>/system/versions/<accountId>/ earlier versions of replaced files (by version id)
  *   <root>/system/trash/               items waiting for permanent deletion
  */
-export const MARKER_FILE = ".relayfiles-volume";
+const MARKER_FILE = ".relayfiles-volume";
 
 export const layoutOf = (root: string) => ({
   root,

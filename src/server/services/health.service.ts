@@ -24,7 +24,7 @@ async function probe(name: string, check: () => Promise<boolean>): Promise<Compo
 }
 
 /** Overall status: down if the database is down, degraded if anything else is. */
-export function overallStatus(components: Health["components"]): ComponentStatus {
+function overallStatus(components: Health["components"]): ComponentStatus {
   if (components.database === "down") return "down";
   return Object.values(components).every((status) => status === "ok") ? "ok" : "degraded";
 }

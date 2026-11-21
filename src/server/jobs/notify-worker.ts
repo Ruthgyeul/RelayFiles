@@ -40,7 +40,7 @@ async function collectGroup(group: NonNullable<NotifyJob["group"]>): Promise<Not
  * retry sends the same message), then posts it in the configured format. A receiver that refuses
  * the request (4xx other than 408/429, a redirect) is not tried again.
  */
-export async function processNotification(job: Job<NotifyJob>): Promise<"sent" | "empty" | "off"> {
+async function processNotification(job: Job<NotifyJob>): Promise<"sent" | "empty" | "off"> {
   let event = job.data.event;
   if (!event && job.data.group) {
     const collected = await collectGroup(job.data.group);

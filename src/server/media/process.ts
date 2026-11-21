@@ -31,7 +31,7 @@ export const canStripType = (mime: string, kind: "IMAGE" | "VIDEO" = "IMAGE") =>
  * for GIF/AVIF/TIFF (which keeps nothing, so it always counts as "all"). Null when the type
  * cannot be cleaned (the share page then does not serve the image publicly as is).
  */
-export async function strippedCopy(path: string, mime: string, size: number, mode: StripMode): Promise<{ bytes: Uint8Array; mode: StripMode } | null> {
+async function strippedCopy(path: string, mime: string, size: number, mode: StripMode): Promise<{ bytes: Uint8Array; mode: StripMode } | null> {
   if (size > MEDIA.maxStripBytes) return null;
   if (LOSSLESS_STRIP_TYPES.has(mime)) {
     const bytes = stripImageMetadata(await readFile(path), mime, mode);

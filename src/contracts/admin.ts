@@ -43,7 +43,7 @@ export interface CleanupResult {
   items: number;
 }
 
-export { AUDIT_ACTIONS, type AuditAction } from "@/domain/audit";
+export type { AuditAction } from "@/domain/audit";
 
 /** One audit log entry (GET /api/admin/audit). */
 export interface AuditEntry {

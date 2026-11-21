@@ -7,7 +7,7 @@ import { cn } from "@/shared/lib/cn";
 import { highlight } from "./highlight";
 
 /** Highlighted HTML of the text once highlight.js has run, or null (plain text meanwhile). */
-export function useHighlighted(text: string, language: string | undefined): string | null {
+function useHighlighted(text: string, language: string | undefined): string | null {
   const [result, setResult] = useState<{ text: string; language: string; html: string } | null>(null);
   useEffect(() => {
     if (!language || text.length > DOCUMENT_PREVIEW.highlightMaxChars) return;

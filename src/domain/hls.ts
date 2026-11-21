@@ -9,7 +9,7 @@ import { SECONDS } from "@/config/policy";
 /** What a request under `…/hls/` asks for. */
 export type HlsRequest = { kind: "playlist" } | { kind: "segment"; index: number };
 
-export const HLS_PLAYLIST = "index.m3u8";
+const HLS_PLAYLIST = "index.m3u8";
 const SEGMENT_NAME = /^(\d{1,6})\.ts$/;
 
 /** The file name of segment `index` (also the name ffmpeg writes it under). */

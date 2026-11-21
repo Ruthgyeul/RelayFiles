@@ -14,7 +14,7 @@ import { Modal } from "@/shared/ui/Modal";
 import { useGlobalSearch } from "./useGlobalSearch";
 
 /** Opens a folder, or a file's folder with the file in the viewer (`?view=`). */
-export function searchHitHref(item: TaggedItem): string {
+function searchHitHref(item: TaggedItem): string {
   if (item.type === "folder") return folderHref(item.id);
   const folder = folderHref(item.parentId, item.parentIsRoot);
   return item.kind && item.kind !== "other" ? `${folder}?view=${item.id}` : folder;

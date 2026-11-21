@@ -8,7 +8,7 @@ import type { z } from "zod";
  * The session cookie predates purposes and signs with none (an empty one), which keeps
  * existing devices signed in.
  */
-export const sign = (payload: string, secret: string, purpose: string) => createHmac("sha256", secret).update(`${purpose}${payload}`).digest("base64url");
+const sign = (payload: string, secret: string, purpose: string) => createHmac("sha256", secret).update(`${purpose}${payload}`).digest("base64url");
 
 export function encodeSigned(value: unknown, secret: string, purpose: string): string {
   const payload = Buffer.from(JSON.stringify(value)).toString("base64url");

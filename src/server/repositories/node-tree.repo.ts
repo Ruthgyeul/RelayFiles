@@ -101,7 +101,7 @@ export async function descendantCounts(db: DbClient, folderId: string): Promise<
 }
 
 /** Ids of every node below a folder (not including it). */
-export async function descendantIds(db: DbClient, folderId: string): Promise<string[]> {
+async function descendantIds(db: DbClient, folderId: string): Promise<string[]> {
   const rows = await db.$queryRaw<{ id: string }[]>`
     WITH RECURSIVE sub AS (
       SELECT id FROM "Node" WHERE "parentId" = ${folderId}

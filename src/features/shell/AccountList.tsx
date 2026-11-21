@@ -12,7 +12,7 @@ import { Menu, MenuItem } from "@/shared/ui/Menu";
 import { useShell } from "./ShellProvider";
 
 /** Second line of an account row. */
-export function accountRole(account: SessionAccount): string {
+function accountRole(account: SessionAccount): string {
   if (account.isAdmin) return "Admin · never expires";
   if (account.neverExpire || !account.deletesAt) return "Never expires";
   return `Deletes ${formatShortDate(account.deletesAt)}`;

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { INCIDENT_SEVERITIES, type ComponentKey, type DayLevel, type IncidentSeverity } from "@/domain/status";
 
 /** "2026-10-05": a calendar day in the server's JOBS_TIMEZONE. */
-export const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface IncidentDto {
   id: string;
