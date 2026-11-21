@@ -1,11 +1,11 @@
 import "server-only";
 import { UnrecoverableError, Worker, type Job } from "bullmq";
-import { getAppEnv, getEnv } from "@/config/env";
 import { NOTIFY } from "@/config/policy";
-import { webhookRequest, type ArrivedFile, type NotifyEvent } from "@/domain/notify";
-import { postWebhook, WebhookError } from "../http/webhook";
+import type { ArrivedFile, NotifyEvent } from "@/domain/notify";
+import { WebhookError } from "../http/webhook";
 import { logger } from "../logger";
 import { redis } from "../redis";
+import { deliverNotification } from "./notify-deliver";
 import { groupKeys, NOTIFY_QUEUE, type NotifyJob } from "./notify-queue";
 import { queueConnection } from "./queue";
 
@@ -49,20 +49,12 @@ async function processNotification(job: Job<NotifyJob>): Promise<"sent" | "empty
     await job.updateData({ ...job.data, event });
   }
   if (!event) return "empty";
-  const env = getEnv("notify");
-  if (!env.NOTIFY_WEBHOOK_URL) {
-    logger.warn("notification dropped: NOTIFY_WEBHOOK_URL is not set for the worker", { kind: event.kind });
-    return "off";
-  }
-  const format = env.NOTIFY_WEBHOOK_FORMAT;
-  const request = webhookRequest(event, { format, site: new URL(getAppEnv().PUBLIC_URL).origin, at: new Date(job.timestamp), maxChars: NOTIFY.maxChars[format], chatId: env.NOTIFY_TELEGRAM_CHAT_ID });
   try {
-    await postWebhook({ url: env.NOTIFY_WEBHOOK_URL, token: env.NOTIFY_WEBHOOK_TOKEN, timeoutMs: NOTIFY.requestTimeoutMs }, request);
+    return await deliverNotification(event, new Date(job.timestamp));
   } catch (error) {
     if (error instanceof WebhookError && !error.retryable) throw new UnrecoverableError(error.message);
     throw error;
   }
-  return "sent";
 }
 
 /** The worker of the notify queue (npm run worker), one call at a time. */

@@ -140,6 +140,7 @@ sudo rsync -aHAX /tmp/rf-restore/<STORAGE_ROOT>/users/ <STORAGE_ROOT>/users/
 | Backup check failed | `npm run backup:verify`가 실패 기록(["백업 검증"](#백업-검증)) | 실행마다 한 번 |
 | Share link opened | 공유 링크의 맨 위(`/d/<id>`)를 소유자 아닌 방문자가 열었다. 프로필 Preferences의 "Notify me about my share links"를 켠 계정만. 항목 이름과 Cloudflare 국가만 담고 링크·주소는 넣지 않는다 | 링크마다 `linkOpenRememberDays`(30일)에 한 번(링크를 재발급하면 새 링크로 다시) |
 | Download limit reached / Downloaded once, deleting | 방문자 다운로드(단일 파일·zip 모두)가 항목의 다운로드 한도를 채웠거나, 첫 다운로드 후 삭제 항목을 받았다. 같은 설정을 켠 계정만 | 항목·다운로드 수마다 한 번(한도를 늘려 다시 채우면 다시) |
+| Background worker stopped / running again | 워커 heartbeat가 끊겼다가 다시 들어옴(["워커 감시"](#워커-감시)). 워커가 멈추면 큐도 멈추므로 **앱이 직접** 보낸다 | 멈출 때 한 번, 돌아올 때 한 번 |
 
 볼륨 공간·쓰기 확인은 알림이 켜져 있을 때만 볼륨 확인(`VOLUME_WATCH_INTERVAL_SEC`, 30초)마다 한다. 반복 제한은 Redis 키(`notify:throttle:*`)라 Redis를 비우면 다시 한 번 온다.
 
@@ -167,6 +168,15 @@ NOTIFY_TELEGRAM_CHAT_ID=<채팅 id>
 - 호출은 `NOTIFY.requestTimeoutMs`(10초)에서 끊고, 리디렉트는 따라가지 않는다(3xx = 설정 오류, 최종 주소를 넣는다). 실패하면 `NOTIFY.jobAttempts`(6)번까지 1분부터 지수 backoff로 다시 시도한다(약 30분). 4xx(408·429 제외)는 다시 시도하지 않는다(URL·토큰이 틀림).
 - 실패는 `worker-error.log`에 `notification failed`(작업 이름, 시도 횟수, `webhook answered 401` 같은 이유)로 남는다. URL, 토큰, 응답 본문은 로그에 남지 않는다.
 - 확인: 업로드 링크를 하나 만들어 파일을 올리면 1분 안에 "File received"가 온다. 큐: `$C exec redis redis-cli -n <REDIS_DB> --scan --pattern '*q:notify:*' | head`.
+
+## 워커 감시
+
+워커(maintenance 역할)는 `METRICS_SAMPLE_INTERVAL_SEC`(60초)마다 표본을 남기며 Redis heartbeat(`jobs:heartbeat`)를 갱신한다. 표본을 `METRICS.heartbeatMisses`(3)번 놓치면 heartbeat가 사라진다.
+
+- `/api/health`의 `components.worker`가 `ok`·`down`을 보여 준다. 전체 `status`에는 넣지 않는다(릴리스가 앱과 워커를 함께 재시작하므로 첫 heartbeat 전에 `release.sh`의 헬스 체크가 실패하지 않게).
+- 앱 서버(`src/instrumentation.ts` → `src/server/jobs/worker-watch.ts`)가 시작 후 heartbeat 수명만큼 기다린 뒤 `METRICS_SAMPLE_INTERVAL_SEC`마다 heartbeat를 본다. 끊기면 `worker stopped sending heartbeats` 에러 로그와 "Background worker stopped" 알림, 돌아오면 "running again"을 **한 번씩** 보낸다(상태는 Redis `watch:worker`, 앱이 여럿이어도 한 번).
+- 컨테이너: Docker Compose worker에 `healthcheck`(`npm run worker:health`)가 있다. Compose는 unhealthy 컨테이너를 다시 시작하지 않으므로 `$C ps`로 보고 `$C restart worker`. k3s worker는 같은 검사를 `livenessProbe`로 써서 3번 실패하면 다시 시작한다. 미디어 전용 워커(maintenance 역할 없음)는 검사를 건너뛴다.
+- 멈췄을 때: `$C logs --tail 200 worker`, Redis 연결(`$C exec redis redis-cli ping`), 메모리 상한(`WORKER_MEMORY_MAX`)에 걸려 재시작을 반복하는지(`docker inspect` `OOMKilled`)를 본다.
 
 ## Prometheus·Grafana
 

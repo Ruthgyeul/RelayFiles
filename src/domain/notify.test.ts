@@ -24,6 +24,15 @@ describe("describeEvent", () => {
     expect(text.message).toContain('"evil Title: x.jpg"');
   });
 
+  it("says how long the worker has been silent, and when it is back", () => {
+    const down = describeEvent({ kind: "worker-down", silentMinutes: 3 });
+    expect(down.title).toBe("Background worker stopped");
+    expect(down.message).toContain("no heartbeat for 3 minutes");
+    expect(down.urgent).toBe(true);
+    expect(describeEvent({ kind: "worker-down", silentMinutes: 1 }).message).toContain("for 1 minute.");
+    expect(describeEvent({ kind: "worker-back" })).toEqual({ title: "Background worker running again", message: "The worker sends heartbeats again; waiting jobs continue.", urgent: false });
+  });
+
   it("describes share link events without links or addresses", () => {
     expect(describeEvent({ kind: "link-opened", owner: "anon-k3x9", item: "Trip", folder: true, country: "KR" })).toEqual({
       title: "Share link opened",

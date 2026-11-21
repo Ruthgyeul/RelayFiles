@@ -15,6 +15,11 @@ export const healthSchema = z.object({
     storage: componentStatus,
     /** clamd, when CLAMAV_HOST is set (files received through upload links wait for it). */
     scanner: componentStatus.optional(),
+    /**
+     * The background worker's heartbeat. Reported, but not part of `status`: a release restarts
+     * the worker with the app, and its first heartbeat may come after the app is ready.
+     */
+    worker: componentStatus.optional(),
   }),
 });
 export type Health = z.infer<typeof healthSchema>;

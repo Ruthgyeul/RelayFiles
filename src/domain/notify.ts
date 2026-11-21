@@ -29,7 +29,10 @@ export type NotifyEvent =
   /** A download used up a link item's downloads: its limit was reached, or it is deleted after this first download. */
   | { kind: "link-used-up"; owner: string; item: string; cause: "limit" | "burn"; downloads: number }
   /** The virus scan found malware in a file received through an upload-only link; it was moved to the trash. */
-  | { kind: "file-infected"; owner: string; item: string; signature: string };
+  | { kind: "file-infected"; owner: string; item: string; signature: string }
+  /** The worker stopped sending heartbeats (sent by the app, since the worker's notify queue stopped with it). */
+  | { kind: "worker-down"; silentMinutes: number }
+  | { kind: "worker-back" };
 
 export interface NotifyText {
   title: string;
@@ -103,6 +106,14 @@ export function describeEvent(event: NotifyEvent): NotifyText {
         message: `"${clean(event.item)}" received for ${clean(event.owner)} contains ${clean(event.signature)}. It was moved to Recently deleted and can't be restored or shared.`,
         urgent: true,
       };
+    case "worker-down":
+      return {
+        title: "Background worker stopped",
+        message: `The worker sent no heartbeat for ${plural(event.silentMinutes, "minute")}. Thumbnails, conversions, the daily cleanup, the Status page probes and other notifications wait until it runs again (docs/runbook.md).`,
+        urgent: true,
+      };
+    case "worker-back":
+      return { title: "Background worker running again", message: "The worker sends heartbeats again; waiting jobs continue.", urgent: false };
     case "backup-failed":
       return {
         title: "Backup check failed",

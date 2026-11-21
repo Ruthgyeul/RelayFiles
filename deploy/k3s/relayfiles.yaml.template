@@ -156,6 +156,13 @@ spec:
             - { name: RESTIC_PASSWORD, value: "" }
             - { name: OFFSITE_ACCESS_KEY_ID, value: "" }
             - { name: OFFSITE_SECRET_ACCESS_KEY, value: "" }
+          # Restarted when its heartbeat has expired (a stuck worker; scripts/worker-health.mts).
+          livenessProbe:
+            exec: { command: ["node", "--import", "tsx", "--conditions=react-server", "scripts/worker-health.mts"] }
+            initialDelaySeconds: 240
+            periodSeconds: 60
+            timeoutSeconds: 20
+            failureThreshold: 3
           resources:
             limits: { memory: ${WORKER_MEMORY_MAX}, cpu: "${WORKER_CPUS}" }
           securityContext: { readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

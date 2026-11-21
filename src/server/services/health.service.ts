@@ -3,6 +3,7 @@ import { STATUS } from "@/config/policy";
 import type { ComponentStatus, Health } from "@/contracts/health";
 import { db } from "../db/client";
 import { logger } from "../logger";
+import { workerAlive } from "../metrics/history";
 import { redis } from "../redis";
 import { configuredVolumeRoot } from "../storage/registry";
 import { readVolumeMarker } from "../storage/volume";
@@ -23,24 +24,32 @@ async function probe(name: string, check: () => Promise<boolean>): Promise<Compo
   }
 }
 
-/** Overall status: down if the database is down, degraded if anything else is. */
+/**
+ * Overall status: down if the database is down, degraded if anything else the app serves from
+ * is. The worker is left out (see `components.worker`): it is watched on its own (worker-watch.ts).
+ */
 function overallStatus(components: Health["components"]): ComponentStatus {
   if (components.database === "down") return "down";
-  return Object.values(components).every((status) => status === "ok") ? "ok" : "degraded";
+  const served = Object.entries(components).filter(([name]) => name !== "worker");
+  return served.every(([, status]) => status === "ok") ? "ok" : "degraded";
 }
 
-/** Checks PostgreSQL, Redis and the storage volume marker (the app version is not part of it: anyone may ask). */
+/**
+ * Checks PostgreSQL, Redis, the storage volume marker and the worker heartbeat (the app version
+ * is not part of it: anyone may ask).
+ */
 export async function checkHealth(now: Date = new Date()): Promise<Health> {
-  const [database, cache, storage, scanner] = await Promise.all([
+  const [database, cache, storage, worker, scanner] = await Promise.all([
     probe("database", async () => {
       await db().$queryRaw`SELECT 1`;
       return true;
     }),
     probe("redis", async () => (await redis().ping()) === "PONG"),
     probe("storage", async () => (await readVolumeMarker(configuredVolumeRoot())) !== null),
+    probe("worker", workerAlive),
     scanningEnabled() ? probe("scanner", () => pingClamd(STATUS.healthCheckTimeoutMs)) : Promise.resolve(null),
   ]);
-  const components = { database, redis: cache, storage, ...(scanner ? { scanner } : {}) };
+  const components = { database, redis: cache, storage, worker, ...(scanner ? { scanner } : {}) };
   return { status: overallStatus(components), time: now.toISOString(), components };
 }
 
