@@ -61,6 +61,8 @@ export function zipResponse(entries: readonly ZipEntry[], fileName: string, { by
       "content-disposition": contentDisposition("attachment", fileName),
       "x-content-type-options": "nosniff",
       "cache-control": "private, no-store",
+      // Built while it downloads: Nginx passes it on instead of spooling it to disk or memory.
+      "x-accel-buffering": "no",
     },
   });
 }

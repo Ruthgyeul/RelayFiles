@@ -53,6 +53,7 @@ describe("account export", () => {
     const res = await callRouteRaw(exportAccount, { cookie: m.cookie });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/x-tar");
+    expect(res.headers.get("x-accel-buffering")).toBe("no");
     expect(res.headers.get("content-disposition")).toMatch(/relayfiles-anon-[a-z0-9]+-\d{8}\.tar/);
 
     const entries = await readTar(res.body!);

@@ -166,6 +166,8 @@ export async function exportAccount(owner: Owner, now: Date = new Date()): Promi
       "content-disposition": contentDisposition("attachment", exportFileName(owner.name, now)),
       "x-content-type-options": "nosniff",
       "cache-control": "private, no-store",
+      // Built while it downloads: Nginx passes it on instead of spooling it to disk or memory.
+      "x-accel-buffering": "no",
     },
   });
 }

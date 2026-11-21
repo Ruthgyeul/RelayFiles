@@ -68,3 +68,7 @@ updates:
       timezone: Asia/Seoul
     cooldown:
       default-days: 7
+    ignore:
+      # Nginx stays on the stable branch (even minor); the next one is bumped by hand.
+      - dependency-name: nginxinc/nginx-unprivileged
+        update-types: [version-update:semver-minor, version-update:semver-major]

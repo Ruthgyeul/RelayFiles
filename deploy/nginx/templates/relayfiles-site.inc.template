@@ -115,6 +115,10 @@ location / {
     proxy_set_header X-Forwarded-Proto $relay_proto;
     proxy_set_header X-Forwarded-Host $host;
     proxy_set_header Connection "";
+    # Files go out through X-Accel-Redirect, but zips and account exports stream from the app:
+    # pass them through instead of spooling up to 1 GB each into /var/cache/nginx (a tmpfs
+    # in docker compose, so memory).
+    proxy_max_temp_file_size 0;
     # Streams, zips and the Server page's live updates can run long.
     proxy_read_timeout 1h;
     proxy_send_timeout 1h;
