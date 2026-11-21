@@ -437,7 +437,7 @@ deploy/scripts/systemd/rollback.sh <번들 이름>    # ls .app
 ```
 
 롤백할 때는 다음을 알아 둔다(DB 스키마 규칙은 [runbook.md "롤백"](runbook.md#롤백)).
-- 앱 번들만 바뀐다. 재시작 뒤 앱 포트의 `/api/health`가 `ok`가 되면 점검 모드를 끈다. 통과하지 못하면 점검 모드는 그대로 두고 실패한다. `release.sh`가 헬스 체크에서 실패했을 때 "바로 이전 번들"은 그 직전에 살아 있던 번들이다.
+- 앱, 워커, WebDAV가 함께 그 번들로 돌아간다(`.app/<번들>/tools`). 코드를 되돌리려고 체크아웃에서 `git checkout`이나 `npm ci`를 할 필요는 없다(서비스는 체크아웃을 읽지 않는다). 워커가 번들에서 돌기 전에 만든 번들에는 `tools/`가 없다. 그런 번들로 돌아가면 지금 번들의 `tools/`를 넣으므로 앱만 이전 코드가 되고 워커·WebDAV는 새 코드로 남는다. 재시작 뒤 앱 포트의 `/api/health`가 `ok`가 되면 점검 모드를 끈다. 통과하지 못하면 점검 모드는 그대로 두고 실패한다. `release.sh`가 헬스 체크에서 실패했을 때 "바로 이전 번들"은 그 직전에 살아 있던 번들이다.
 - 파괴적 변경이 있었다면 [runbook.md "DB 복구"](runbook.md#db-복구)대로 그 릴리스 직전 백업을 복구한다. systemd 배포에서는 `$C exec -T postgres pg_restore …` 대신 아래를 쓴다.
 
   ```bash
