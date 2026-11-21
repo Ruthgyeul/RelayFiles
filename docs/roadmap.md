@@ -36,7 +36,7 @@
 
 ## Phase 1: 운영 안전성 (배포·CI·감시)
 
-### PR 1-1 `fix(deploy): restart webdav with releases and rollbacks`
+### PR 1-1 `fix(deploy): restart webdav with releases and rollbacks` — [#142](https://github.com/Ruthgyeul/RelayFiles/pull/142)
 - **문제**: 릴리스와 롤백이 dav를 다시 시작하지 않아, 옛 코드가 새 스키마 위에서 계속 돈다.
 - **대상 파일**: `deploy/scripts/release.sh:71`(`up -d --no-build app worker nginx`), `deploy/scripts/rollback.sh`, `deploy/scripts/systemd/release.sh:86`(`systemctl restart relayfiles-app relayfiles-worker`), `deploy/scripts/systemd/rollback.sh`
 - **Compose**: dav 컨테이너가 있으면(`compose ps -q dav`) `--profile dav up -d --no-build dav`를 실행한다.

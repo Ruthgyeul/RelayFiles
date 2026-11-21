@@ -67,6 +67,7 @@ describe("zip", () => {
     const res = await zip(req, { params: Promise.resolve({}) });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/zip");
+    expect(res.headers.get("x-accel-buffering")).toBe("no");
     expect(res.headers.get("content-disposition")).toContain("filename*=UTF-8''root%20%C2%B7%202%20items.zip");
     const body = Buffer.from(await res.arrayBuffer());
     expect(body.subarray(0, 2).toString()).toBe("PK");
