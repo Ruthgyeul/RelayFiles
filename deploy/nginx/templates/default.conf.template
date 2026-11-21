@@ -92,7 +92,10 @@ limit_req_zone $relay_client_ip zone=relay_dav:10m rate=${NGINX_DAV_RATE_PER_MIN
 # anyone who has the id, and WebDAV paths are folder and file names: the access log keeps the
 # route but not them, and never the query string (docs/security.md "로그").
 # The request as the client sent it ($uri can be the internal X-Accel path to the file by then).
+# Nginx routes the normalized path (percent-decoded, slashes merged, dot segments resolved), so
+# a raw path that is not already normal (/%64/<id>, //d/<id>, /./d/<id>) is not logged at all.
 map $request_uri $relay_log_path {
+    ~^[^?]*(%|//|/\.) "/:unusual";
     ~^(?<relay_log_route>/d|/r|/api/share|/api/r)/[^/?]+(?<relay_log_rest>[^?]*) "$relay_log_route/:id$relay_log_rest";
     ~^/dav/ "/dav/:path";
     ~^(?<relay_log_plain>[^?]*) "$relay_log_plain";

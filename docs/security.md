@@ -22,7 +22,7 @@
 
 - `server/logger.ts`의 `redact()`가 `token`, `password`, `secret`, `authorization`, `cookie`, `ip`, `x-forwarded-for`, `cf-connecting-ip` 키의 값을 `[redacted]`로 바꾼다.
 - 운영 로그 레벨은 warn 이상, 파일은 `LOG_DIR`(기본 `/var/log/relayfiles`)에 쓴다.
-- Nginx 접근 로그(세 배포 모두 `log_format relayfiles`)에는 클라이언트 주소와 쿼리 문자열이 없다. 경로는 클라이언트가 보낸 요청(`$request_uri`)에서 만든다. 아는 사람은 누구나 쓸 수 있는 공유 링크·업로드 링크 id(`/d/`, `/api/share/`, `/r/`, `/api/r/`)는 `:id`로, WebDAV 경로(폴더·파일 이름)는 `/dav/:path`로 바꿔 남긴다. X-Accel로 넘어간 내부 경로(`/_protected/…`)도 남지 않는다.
+- Nginx 접근 로그(세 배포 모두 `log_format relayfiles`)에는 클라이언트 주소와 쿼리 문자열이 없다. 경로는 클라이언트가 보낸 요청(`$request_uri`)에서 만든다. 아는 사람은 누구나 쓸 수 있는 공유 링크·업로드 링크 id(`/d/`, `/api/share/`, `/r/`, `/api/r/`)는 `:id`로, WebDAV 경로(폴더·파일 이름)는 `/dav/:path`로 바꿔 남긴다. X-Accel로 넘어간 내부 경로(`/_protected/…`)도 남지 않는다. Nginx는 정규화한 경로로 라우팅하므로, 정규화되지 않은 경로(`%` 인코딩, `//`, `/.` 구간이 있는 경로)는 가리기 규칙을 비켜 가지 못하게 경로 대신 `/:unusual`로 남긴다.
 
 ## 알림 (웹훅)
 
