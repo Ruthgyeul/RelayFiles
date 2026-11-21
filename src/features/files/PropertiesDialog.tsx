@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { NodeProperties } from "@/contracts/nodes";
 import { formatCount, formatDateTime, formatLeft, formatSize } from "@/domain/format";
+import { useApiQuery } from "@/shared/hooks/useApiQuery";
 import { useNow } from "@/shared/hooks/useNow";
-import { errorMessage } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { IconButton } from "@/shared/ui/IconButton";
@@ -55,27 +55,11 @@ const rowClass = "grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-car
 
 /** Properties of a file or folder (460px), loaded when opened. */
 export function PropertiesDialog({ nodeId, onClose, linkOf, onCopyLink, onEditTags, onEditSettings, onZip }: PropertiesDialogProps) {
-  const [data, setData] = useState<{ id: string; props: NodeProperties } | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const now = useNow(nodeId !== null);
-
-  useEffect(() => {
-    if (!nodeId) return;
-    let cancelled = false;
-    filesApi
-      .getProperties(nodeId)
-      .then((props) => !cancelled && setData({ id: nodeId, props }))
-      .catch((caught) => !cancelled && setError(errorMessage(caught)));
-    return () => {
-      cancelled = true;
-    };
-  }, [nodeId]);
-
-  const props = data && data.id === nodeId ? data.props : null;
-  const close = () => {
-    setError(null);
-    onClose();
-  };
+  const loaded = useApiQuery<NodeProperties>(nodeId, (id) => filesApi.getProperties(id));
+  const props = loaded.status === "ready" ? loaded.data : null;
+  const error = loaded.error;
+  const close = onClose;
   const kind = props ? (props.isRoot ? { icon: "hard-drives" as const, color: "var(--accentIcon)" } : kindOf(props.item)) : null;
   const url = props ? linkOf(props.item.linkId) : "";
 

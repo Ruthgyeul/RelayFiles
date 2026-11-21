@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ADMIN_REPORT } from "@/config/policy";
 import type { UsageReport } from "@/contracts/admin";
 import { formatSize } from "@/domain/format";
 import { rangeEndingToday, sortUsage, USAGE_SORTS, type UsageSort } from "@/domain/usage-report";
+import { useApiQuery } from "@/shared/hooks/useApiQuery";
 import { useNow } from "@/shared/hooks/useNow";
 import { Button, buttonClassName } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -28,26 +29,13 @@ export function UsageReportCard() {
   const [days, setDays] = useState<Days>(ADMIN_REPORT.defaultDays);
   const [sort, setSort] = useState<UsageSort>("used");
   const [shown, setShown] = useState(PAGE_SIZE);
-  const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<{ key: string; report: UsageReport | null; failed: boolean }>({ key: "", report: null, failed: false });
-  const key = `${days}|${attempt}`;
   // The page time is read once, so every request of one choice asks for the same days.
   const now = useNow(false);
   const range = useMemo(() => rangeEndingToday(days, now), [days, now]);
 
-  useEffect(() => {
-    let cancelled = false;
-    adminApi
-      .usage(range)
-      .then((report) => !cancelled && setState({ key, report, failed: false }))
-      .catch(() => !cancelled && setState({ key, report: null, failed: true }));
-    return () => {
-      cancelled = true;
-    };
-  }, [key, range]);
-
-  const current = state.key === key ? state : { key, report: null, failed: false };
-  const report = current.report;
+  const loaded = useApiQuery<UsageReport>(`${range.from}|${range.to}`, () => adminApi.usage(range));
+  const report = loaded.status === "ready" ? loaded.data : null;
+  const failed = loaded.status === "error";
   const rows = useMemo(() => (report ? sortUsage(report.rows, sort) : []), [report, sort]);
   const traffic = report ? report.months.reduce((sum, entry) => sum + Number(entry.bytes), 0) : 0;
 
@@ -99,11 +87,11 @@ export function UsageReportCard() {
             ))}
           </ol>
         )}
-        {!report && !current.failed && <span className="py-6 text-center text-[13px] text-t4">Loading…</span>}
-        {current.failed && (
+        {!report && !failed && <span className="py-6 text-center text-[13px] text-t4">Loading…</span>}
+        {failed && (
           <div className="flex flex-wrap items-center justify-center gap-2.5 py-4 text-[13px] text-t4">
             Couldn&apos;t load the usage report.
-            <Button size={30} icon="arrows-clockwise" onClick={() => setAttempt((count) => count + 1)}>
+            <Button size={30} icon="arrows-clockwise" onClick={loaded.reload}>
               Retry
             </Button>
           </div>

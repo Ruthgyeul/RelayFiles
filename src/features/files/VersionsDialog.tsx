@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { FileVersionDto } from "@/contracts/nodes";
 import { formatDateTime, formatSize } from "@/domain/format";
 import { useShell } from "@/features/shell/ShellProvider";
+import { useApiQuery } from "@/shared/hooks/useApiQuery";
 import { errorMessage } from "@/shared/lib/api-client";
 import { fileUrls, filesApi } from "@/shared/lib/files-api";
 import { Button, buttonClassName } from "@/shared/ui/Button";
@@ -24,34 +25,22 @@ const days = (count: number) => `${count} ${count === 1 ? "day" : "days"}`;
  */
 export function VersionsDialog({ request, onClose, onDone }: { request: VersionsRequest | null; onClose: () => void; onDone: (message: string) => void }) {
   const { config } = useShell();
-  const [loaded, setLoaded] = useState<{ nodeId: string; versions: FileVersionDto[] } | null>(null);
-  const [error, setError] = useState("");
+  const loaded = useApiQuery<FileVersionDto[]>(request?.nodeId ?? null, (nodeId) => filesApi.versions(nodeId));
+  const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const versions = loaded && loaded.nodeId === request?.nodeId ? loaded.versions : null;
-
-  useEffect(() => {
-    if (!request) return;
-    let cancelled = false;
-    filesApi
-      .versions(request.nodeId)
-      .then((list) => !cancelled && setLoaded({ nodeId: request.nodeId, versions: list }))
-      .catch((caught: unknown) => !cancelled && setError(errorMessage(caught)));
-    return () => {
-      cancelled = true;
-    };
-  }, [request]);
+  const versions = loaded.data;
+  const error = actionError || loaded.error;
 
   const close = () => {
-    setLoaded(null);
-    setError("");
+    setActionError("");
     setConfirm(null);
     onClose();
   };
   const act = async (versionId: string, action: "restore" | "delete") => {
     if (!request || busy) return;
     setBusy(versionId);
-    setError("");
+    setActionError("");
     try {
       if (action === "restore") {
         await filesApi.restoreVersion(request.nodeId, versionId);
@@ -59,11 +48,11 @@ export function VersionsDialog({ request, onClose, onDone }: { request: Versions
         close();
       } else {
         await filesApi.deleteVersion(request.nodeId, versionId);
-        setLoaded((current) => (current ? { ...current, versions: current.versions.filter((version) => version.id !== versionId) } : current));
+        loaded.reload();
         setConfirm(null);
       }
     } catch (caught) {
-      setError(errorMessage(caught));
+      setActionError(errorMessage(caught));
     } finally {
       setBusy(null);
     }

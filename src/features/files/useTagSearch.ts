@@ -1,42 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { SEARCH } from "@/config/policy";
 import type { TaggedItem } from "@/contracts/nodes";
 import { parseTags } from "@/domain/tags";
+import { useApiQuery } from "@/shared/hooks/useApiQuery";
 import { filesApi } from "@/shared/lib/files-api";
-
-/** Delay before a tag search runs while typing. */
-const DEBOUNCE_MS = 200;
 
 /**
  * Tag mode of the folder search: a query starting with # runs `search` (by default every folder
- * of the account). `search` must be a stable (module-level) function; a new `reloadOn` value
- * (the page data after a change) runs it again, keeping the shown results until the new ones arrive.
+ * of the account). A new `reloadOn` value (the page data after a change) runs it again, keeping
+ * the shown results until the new ones arrive. `error` is set when the search failed.
  */
 export function useTagSearch(
   query: string,
   search: (tags: string[]) => Promise<TaggedItem[]> = filesApi.searchTags,
   reloadOn?: unknown,
-): { tagMode: boolean; wanted: string[]; results: TaggedItem[] } {
+): { tagMode: boolean; wanted: string[]; results: TaggedItem[]; error: string | null } {
   const q = query.trim().toLowerCase();
   const tagMode = q.startsWith("#");
   const wanted = useMemo(() => (tagMode ? parseTags(q) : []), [tagMode, q]);
   const key = wanted.join(",");
-  const [found, setFound] = useState<{ key: string; items: TaggedItem[] } | null>(null);
+  const found = useApiQuery(key || null, (tags) => search(tags.split(",")), { debounceMs: SEARCH.debounceMs });
+  const [seen, setSeen] = useState(reloadOn);
+  if (seen !== reloadOn) {
+    setSeen(reloadOn);
+    found.reload();
+  }
 
-  useEffect(() => {
-    if (!key) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      search(key.split(","))
-        .then((items) => !cancelled && setFound({ key, items }))
-        .catch(() => !cancelled && setFound({ key, items: [] }));
-    }, DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [key, search, reloadOn]);
-
-  return { tagMode, wanted, results: found?.key === key ? found.items : [] };
+  return { tagMode, wanted, results: found.status === "error" ? [] : (found.data ?? []), error: found.error };
 }

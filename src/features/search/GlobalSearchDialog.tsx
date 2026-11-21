@@ -25,7 +25,7 @@ export function GlobalSearchDialog({ open, onClose }: { open: boolean; onClose: 
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
-  const { results, loading } = useGlobalSearch(query, open);
+  const { results, loading, error } = useGlobalSearch(query, open);
   const index = Math.min(highlight, Math.max(0, results.length - 1));
   const heading = searchHeading(parseSearchQuery(query), results.length);
 
@@ -87,7 +87,7 @@ export function GlobalSearchDialog({ open, onClose }: { open: boolean; onClose: 
             );
           })}
         </div>
-        {!loading && results.length === 0 && <div className="px-3 py-8 text-center text-[14px] text-t4">No files or folders match.</div>}
+        {!loading && results.length === 0 && <div className="px-3 py-8 text-center text-[14px] text-t4">{error ?? "No files or folders match."}</div>}
       </div>
       <div className="flex shrink-0 gap-3.5 border-t border-card-line px-3.5 py-2.5 text-[12px] text-t4">
         <span>↑ ↓ to move</span>
