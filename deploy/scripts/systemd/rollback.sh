@@ -4,9 +4,9 @@
 #   deploy/scripts/systemd/rollback.sh            previous bundle
 #   deploy/scripts/systemd/rollback.sh <bundle>   a bundle from `ls .app`
 # After a failed release.sh (maintenance stays on) the previous bundle is the one that was live.
-# Only the app bundle changes. If the release also migrated the database, restore the
-# backup taken before it (docs/runbook.md "롤백"); the worker and WebDAV run from the checkout,
-# so `git checkout <commit> && npm ci` before restarting them when their code must go back too.
+# The app, the worker and WebDAV go back together: they all run from the bundle (bundles made
+# before the worker ran from it have no tools/; then only the app goes back). If the release
+# also migrated the database, restore the backup taken before it (docs/runbook.md "롤백").
 set -euo pipefail
 # shellcheck source=../lib.sh
 source "$(dirname "$0")/../lib.sh"
@@ -30,13 +30,20 @@ fi
 log "Rolling back $CURRENT → $TARGET"
 ln -sfn "$TARGET" "$APP_BUNDLES/current.next"
 mv -T "$APP_BUNDLES/current.next" "$APP_BUNDLES/current"
-sudo systemctl restart relayfiles-app
+UNITS=(relayfiles-app)
+if [ -d "$APP_BUNDLES/$TARGET/tools" ]; then
+  UNITS+=(relayfiles-worker)
+  if dav_unit; then UNITS+=(relayfiles-dav); fi
+else
+  echo "Note: $TARGET has no tools/ (made before the worker ran from the bundle); the worker keeps running the newer code." >&2
+fi
+sudo systemctl restart "${UNITS[@]}"
 
 log "Health check"
 if ! wait_healthy "http://127.0.0.1:$PORT/api/health"; then
   echo "$TARGET did not become healthy either; maintenance mode is left as it is." >&2
-  echo "Logs: journalctl -u relayfiles-app -n 200" >&2
+  echo "Logs: journalctl -u relayfiles-app -u relayfiles-worker -n 200" >&2
   exit 1
 fi
 rm -f "$FLAG"
-log "relayfiles-app now runs $TARGET (maintenance mode off)."
+log "${UNITS[*]} now run $TARGET (maintenance mode off)."

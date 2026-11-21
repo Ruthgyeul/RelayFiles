@@ -407,7 +407,7 @@ deploy/scripts/systemd/release.sh
 
 1. DB를 백업한다(`DATA_DIR/backups`, 최근 14개).
 2. `npm ci`와 `npm run build`를 한다. 그동안 실행 중인 앱은 자기 번들(`.app/current`)로 계속 응답한다.
-3. 새 번들을 `.app/<시각>-<커밋>`에 복사한다(빌드가 복사해 넣은 `.env`는 지운다. 앱은 체크아웃의 `.env`를 읽는다).
+3. 새 번들을 `.app/<시각>-<커밋>`에 복사한다(빌드가 복사해 넣은 `.env`는 지운다. 앱은 체크아웃의 `.env`를 읽는다). 워커와 WebDAV가 쓸 소스(`src`, `scripts`, `prisma`)와 `node_modules`(하드 링크라 공간을 거의 쓰지 않는다)도 그 안의 `tools/`에 넣고, `tools/.env`는 체크아웃의 `.env`를 가리킨다.
 4. 점검 모드를 켜고 마이그레이션을 실행한다: `db:deploy`, `data:migrate`, `storage:migrate`.
 5. `.app/current`를 새 번들로 바꾸고 app과 worker(`relayfiles-dav`를 켰다면 dav도)를 재시작한다. 멈추는 서비스는 진행 중인 요청·작업을 `TimeoutStopSec` 동안 마무리한다(§5).
 6. 앱 포트의 `/api/health`가 `status: "ok"`를 돌려줄 때까지 확인한 뒤(`degraded`는 실패로 본다) 점검 모드를 끄고 `DATA_DIR/releases.log`에 기록한다. 번들은 최근 3개만 남긴다.
@@ -415,7 +415,7 @@ deploy/scripts/systemd/release.sh
 `HEALTH_TRIES`(기본 30, 2초 간격), `BUNDLE_KEEP`(기본 3), `BACKUP_KEEP`(기본 14)으로 동작을 바꿀 수 있다.
 
 알아 둘 점:
-- 앱은 `.app/` 아래 독립 번들로 돌지만, **워커는 체크아웃(`/opt/relayfiles`)의 소스와 `node_modules`로 돈다**. `git pull`과 2단계의 `npm ci`가 실행 중인 워커의 파일을 바꾸므로, 릴리스 중에 워커 로그에 일시적인 에러가 보일 수 있다. 5단계에서 재시작하면 새 코드로 돈다.
+- 앱, 워커, WebDAV 모두 `.app/current` 번들로 돈다(워커·WebDAV 유닛의 `WorkingDirectory`는 `.app/current/tools`). `git pull`과 2단계의 `npm ci`는 실행 중인 서비스의 파일을 바꾸지 않고, `rollback.sh`는 세 서비스를 함께 되돌린다. 이 방식 이전에 설치했다면 한 번 `sudo deploy/scripts/systemd/install.sh`로 유닛을 다시 만든다(`release.sh`가 필요하면 알려 준다). 유닛은 `.env`와 상관없이 `NODE_ENV=production`으로 돈다.
 - `.env`를 바꾸고 `install.sh`를 다시 실행해야 하는 경우(포트, 도메인, 자원 상한)는 `release.sh` 전에 한다.
 
 ### 단계별로 실패했을 때

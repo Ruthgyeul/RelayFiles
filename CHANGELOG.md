@@ -42,6 +42,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Fixed
 
+- systemd deployment: the worker and WebDAV run from the release bundle (`.app/current/tools`) instead of the checkout, so `git pull` and `npm ci` no longer change a running worker and `rollback.sh` takes them back with the app; all three units run with `NODE_ENV=production`. After pulling this, run `sudo deploy/scripts/systemd/install.sh` once
 - k3s deploys back up the database before migrating (`deploy/scripts/k3s/backup.sh`, also for the daily cron), like the Docker Compose and systemd releases; a failed backup run no longer leaves a cut-off dump behind in any deployment
 - GHCR images for a `main` commit are published only after CI passes on it, and quick successive merges no longer cancel each other's CI or image builds (k3s deploys pin `sha-<commit>`)
 - Folder zips and account exports go through the Docker Compose and k3s Nginx without being held in its temporary files first (up to 1 GB of memory per download in Compose); Nginx is back on the 1.30 stable branch
@@ -79,6 +80,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Security
 
+- `minimatch` under `archiver` (zip downloads) is held at 11.0.9 or later, past its pattern denial-of-service advisory
 - Next.js 16.4.6: fixes the advisories for 16.4.4 and earlier (cache disclosure across root params and `use cache` arguments, the image optimizer's SVG check, response injection in self-hosted apps that forward fetched responses)
 - `effect` (pulled in by Prisma's config loader) is held at 3.22.4 or later, past the ReDoS advisory in its template literal schemas
 - Converted video playback (live or stored conversions) counts toward the link's and the account's daily traffic limits like the original; it went uncounted

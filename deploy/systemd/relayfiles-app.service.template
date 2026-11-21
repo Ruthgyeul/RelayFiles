@@ -12,6 +12,8 @@ User=${STORAGE_USER}
 Group=${STORAGE_USER}
 WorkingDirectory=${APP_DIR}
 Environment=HOME=${STORAGE_HOME}
+# Production whatever .env says (a value already in the environment is not replaced by .env).
+Environment=NODE_ENV=production
 # The release script points .app/current at the bundle of the running release.
 ExecStart=${NODE_BIN} ${APP_DIR}/scripts/start-server.mjs ${APP_DIR}/.app/current
 # Files and folders written to the SSD stay private to the storage account (0600 / 0700).

@@ -76,7 +76,7 @@
   - integration(heartbeat 키가 없으면 `components.worker`가 down)
   - e2e `status.spec.ts`
 
-### PR 1-5 `fix(k3s): back up the database before migrations`
+### PR 1-5 `fix(k3s): back up the database before migrations` — [#148](https://github.com/Ruthgyeul/RelayFiles/pull/148)
 - **변경 1**: `deploy/scripts/k3s/deploy.sh`의 마이그레이션 Job 전에 `kubectl exec <postgres pod> -- pg_dump -Fc`로 백업한다.
 - **변경 2**: compose의 `backup.sh`와 systemd의 `backup.sh`(pg_dump 한 줄만 다름)를 `DUMP_CMD` 분기 하나로 합친다. 저장 방식도 `.partial` → `mv`로 원자적으로 하고, k3s도 이것을 쓴다.
 - **변경 3**: `docs/deploy-k3s.md:84`의 cron 한 줄을 스크립트 호출로 바꾼다.

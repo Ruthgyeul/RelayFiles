@@ -11,8 +11,12 @@ Wants=network-online.target
 Type=simple
 User=${STORAGE_USER}
 Group=${STORAGE_USER}
-WorkingDirectory=${APP_DIR}
+# The running release's copy of the sources and node_modules (release.sh, .app/<release>/tools),
+# so a git pull or npm ci in the checkout never changes the files under a running process.
+WorkingDirectory=${APP_DIR}/.app/current/tools
 Environment=HOME=${STORAGE_HOME}
+# Production whatever .env says (a value already in the environment is not replaced by .env).
+Environment=NODE_ENV=production
 # One Node process: tsx is loaded as a hook (the tsx CLI would start a second Node process).
 ExecStart=${NODE_BIN} --import tsx --conditions=react-server scripts/dav-server.mts
 UMask=0077
