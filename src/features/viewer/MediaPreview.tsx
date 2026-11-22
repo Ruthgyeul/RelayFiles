@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { FILES } from "@/config/policy";
+import { useInView } from "@/shared/hooks/useInView";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { playbackProps } from "./playback";
@@ -9,6 +11,20 @@ import { useResume } from "./useResume";
 import { useVideoSource } from "./useVideoSource";
 
 const PERCENT = 100;
+
+/**
+ * A video's first frame as its picture (no thumbnail yet). The file is asked for only once the
+ * row comes near the screen: a folder of such videos would otherwise open one request per row.
+ */
+function FirstFrame({ src, muted, className, placeholder }: { src: string; muted: boolean; className: string; placeholder: React.ReactNode }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const near = useInView(box, FILES.videoFrameMarginPx);
+  return (
+    <span ref={box} className="flex size-full items-center justify-center">
+      {near ? <video src={src} preload="metadata" muted={muted} playsInline className={className} /> : placeholder}
+    </span>
+  );
+}
 
 /** Thin progress bar for a saved playback position. */
 export function ResumeBar({ id }: { id: string }) {
@@ -101,7 +117,7 @@ export function MediaPreview({ id, name, kind, src, thumbSrc, previewSrc, transc
   }
   return (
     <>
-      {still ?? (loadOriginal ? <video src={src} preload="metadata" muted={variant === "card"} playsInline className={cn("size-full", fit)} /> : placeholder)}
+      {still ?? (loadOriginal ? <FirstFrame src={src} muted={variant === "card"} className={cn("size-full", fit)} placeholder={placeholder} /> : placeholder)}
       <button
         type="button"
         title="Play here"
