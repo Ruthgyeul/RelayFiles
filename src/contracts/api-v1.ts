@@ -60,7 +60,12 @@ export const folderViewSchema = z.object({
 
 export const createdFolderSchema = z.object({ folder: nodeItemSchema, requestedName: z.string(), renamed: z.boolean() });
 
-export const taggedItemSchema = nodeItemSchema.extend({ parentPath: z.string(), parentId: z.string(), parentIsRoot: z.boolean() });
+export const taggedItemSchema = nodeItemSchema.extend({
+  parentPath: z.string(),
+  parentId: z.string(),
+  parentIsRoot: z.boolean(),
+  parentVisibility: z.enum(["private", "public"]).describe('Visibility of the folder it is in, which a "inherit" setting follows'),
+});
 
 /** "Shared by me": items that can be opened from outside. */
 export const sharedViewSchema = z.object({

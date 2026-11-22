@@ -1594,6 +1594,11 @@ export interface paths {
                                     parentPath: string;
                                     parentId: string;
                                     parentIsRoot: boolean;
+                                    /**
+                                     * @description Visibility of the folder it is in, which a "inherit" setting follows
+                                     * @enum {string}
+                                     */
+                                    parentVisibility: "private" | "public";
                                 }[];
                                 /** @description Every organizing folder */
                                 tree: {
@@ -1745,6 +1750,11 @@ export interface paths {
                                     parentPath: string;
                                     parentId: string;
                                     parentIsRoot: boolean;
+                                    /**
+                                     * @description Visibility of the folder it is in, which a "inherit" setting follows
+                                     * @enum {string}
+                                     */
+                                    parentVisibility: "private" | "public";
                                     /** @description Last open, play or download through the share link */
                                     lastActivityAt: string | null;
                                 }[];
@@ -1897,6 +1907,11 @@ export interface paths {
                                 parentPath: string;
                                 parentId: string;
                                 parentIsRoot: boolean;
+                                /**
+                                 * @description Visibility of the folder it is in, which a "inherit" setting follows
+                                 * @enum {string}
+                                 */
+                                parentVisibility: "private" | "public";
                             }[];
                         };
                     };

@@ -110,7 +110,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
   const itemProps = (item: ListedItem): ItemProps => ({
     item,
     parentPath: item.parentPath,
-    parentVisibility: view.effectiveVisibility,
+    parentVisibility: item.parentVisibility ?? view.effectiveVisibility,
     selected: selection.has(item.id),
     now,
     onToggle: (range) => selection.toggle(item.id, range),

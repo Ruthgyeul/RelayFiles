@@ -88,6 +88,8 @@ export interface TaggedItem extends NodeItem {
   /** The folder it is in, to open it there. */
   parentId: string;
   parentIsRoot: boolean;
+  /** What "inherit" means for this item: the visibility of the folder it is in. */
+  parentVisibility: "private" | "public";
 }
 
 export const nodeIdSchema = z.string().regex(/^[a-z0-9]{12}$/);

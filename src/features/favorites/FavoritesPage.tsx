@@ -107,7 +107,7 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
     return {
       item,
       parentPath: item.parentPath,
-      parentVisibility: "private",
+      parentVisibility: item.parentVisibility,
       selected: selection.has(item.id),
       now,
       onToggle: (range) => selection.toggle(item.id, range),
@@ -166,7 +166,6 @@ export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) 
         emptyActions={searching ? undefined : <span className="text-[13px] text-t4">Choose &quot;Add to favorites&quot; in an item&apos;s menu.</span>}
         onOpen={withListed(openItem)}
         onDownload={withListed(media.download)}
-        onDropFiles={() => undefined}
         hideEmpty={folders.length > 0}
         leading={folders.length > 0 ? folders.map((folder) => <FavoriteFolderRow key={folder.id} folder={folder} {...folderProps(folder.id)} />) : undefined}
         leadingCards={folders.length > 0 ? folders.map((folder) => <FavoriteFolderCard key={folder.id} folder={folder} {...folderProps(folder.id)} />) : undefined}

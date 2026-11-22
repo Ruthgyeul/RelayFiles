@@ -143,7 +143,7 @@ export function parentChains(rows: readonly Pick<NodeRow, "parentId">[]): Promis
 }
 
 /**
- * Adds the folder path ("root / Videos / 2024") to each hit, keeping the order. Only the folders
+ * Adds the folder path ("root / Videos / 2024") and its visibility to each hit, keeping the order. Only the folders
  * above the hits are read (`chains`, when the caller already has them from {@link parentChains}).
  */
 export async function withPaths(rows: NodeRow[], chains?: Map<string, AncestorRow[]>): Promise<TaggedItem[]> {
@@ -151,7 +151,13 @@ export async function withPaths(rows: NodeRow[], chains?: Map<string, AncestorRo
   return items.map((item, index) => {
     const parentId = rows[index]!.parentId;
     const chain = (parentId && parents.get(parentId)) || [];
-    return { ...item, parentPath: chain.map((folder) => folder.name).join(" / "), parentId: parentId ?? "root", parentIsRoot: chain.length === 1 };
+    return {
+      ...item,
+      parentPath: chain.map((folder) => folder.name).join(" / "),
+      parentId: parentId ?? "root",
+      parentIsRoot: chain.length === 1,
+      parentVisibility: effectiveVisibility(chain.map((folder) => VISIBILITY[folder.visibility]).reverse()),
+    };
   });
 }
 
