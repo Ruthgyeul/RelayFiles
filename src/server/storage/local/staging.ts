@@ -1,8 +1,11 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { link, lstat, mkdir, rm } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { link, lstat, mkdir, rm, stat } from "node:fs/promises";
+import { Readable, type Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { dirname, join } from "node:path";
-import { DIR_MODE, inUploadArea, type VolumeLayout } from "../layout";
+import { DIR_MODE, FILE_MODE, inUploadArea, type VolumeLayout } from "../layout";
 import { StorageEntryMissingError, type CopyEntry, type StorageLocation } from "../driver";
 import { resolveInsideUserRoot } from "../safe-path";
 import { copyFileEntry, dedupe } from "./copy";
@@ -73,4 +76,41 @@ export async function discardStaged(layout: VolumeLayout, tempPath: string): Pro
   const parent = dirname(tempPath);
   const own = parent !== layout.uploads && dirname(parent) === layout.uploads;
   await rm(own ? parent : tempPath, { recursive: true, force: true });
+}
+
+/** Upload ids are generated (tus ids, `api-<uuid>`, `import-<uuid>`): one name, never a path. */
+const UPLOAD_ID = /^[A-Za-z0-9_-]{1,100}$/;
+
+/** Where an upload's bytes are received (`system/tmp/uploads/<uploadId>`). */
+export function uploadPath(layout: VolumeLayout, uploadId: string): string {
+  if (!UPLOAD_ID.test(uploadId)) throw new Error("Invalid upload id.");
+  return join(layout.uploads, uploadId);
+}
+
+/** Receives a whole upload from `source` (through `transforms`); a partial file is removed. */
+export async function stageUpload(layout: VolumeLayout, uploadId: string, source: Readable | AsyncIterable<Uint8Array>, transforms: readonly Transform[]): Promise<void> {
+  const target = uploadPath(layout, uploadId);
+  await mkdir(layout.uploads, { recursive: true, mode: DIR_MODE });
+  try {
+    const input = source instanceof Readable ? source : Readable.from(source);
+    await pipeline([input, ...transforms, createWriteStream(target, { flags: "wx", mode: FILE_MODE })]);
+  } catch (error) {
+    await rm(target, { force: true });
+    throw error;
+  }
+}
+
+/** Bytes received for an upload so far, or null when there are none. */
+export async function stagedUploadSize(layout: VolumeLayout, uploadId: string): Promise<number | null> {
+  const info = await stat(uploadPath(layout, uploadId)).catch((error: unknown) => {
+    if (errorCode(error) === "ENOENT") return null;
+    throw error;
+  });
+  return info?.size ?? null;
+}
+
+/** Removes an upload's bytes and its tus metadata (`<uploadId>.json`); missing is fine. */
+export async function discardUpload(layout: VolumeLayout, uploadId: string): Promise<void> {
+  const path = uploadPath(layout, uploadId);
+  await Promise.all([rm(path, { force: true }), rm(`${path}.json`, { force: true })]);
 }

@@ -9,10 +9,13 @@ import { accountUsage, anonUsage } from "../repositories/node-usage.repo";
 import { accountVersionBytes } from "../repositories/file-version.repo";
 import { accountTrashedBytes, anonTrashedBytes } from "../repositories/trash.repo";
 import type { StorageDriver } from "../storage/driver";
-import { availableAboveReserve } from "../storage/registry";
+import { availableAboveReserve, driverFor, type VolumeRecord } from "../storage/registry";
 import { releaseUpload, reservedBytes, reserveUpload, type ReservationScope, type ScopeLimit } from "../upload/reservations";
 
 export type SpaceOwner = Pick<AccountRow, "id" | "volumeId" | "quotaBytes" | "isAdmin">;
+
+/** A volume as the space checks need it: its reserve and driver (offline: STORAGE_OFFLINE). */
+export const spaceOf = (volume: VolumeRecord & { reservePct: number }): SpaceVolume => ({ id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
 
 /** The volume an upload writes to. */
 export interface SpaceVolume {

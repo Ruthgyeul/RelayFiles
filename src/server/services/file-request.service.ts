@@ -21,11 +21,10 @@ import { findVolume } from "../repositories/volume.repo";
 import { addUnlock, isUnlocked, type Unlocks } from "../share/unlock-cookie";
 import { countUnlockGuess, refundUnlockGuess } from "../share/unlock-limit";
 import { currentUnlocks } from "../share/viewer";
-import { driverFor } from "../storage/registry";
 import { saveBatch } from "../upload/batches";
 import { assertItemRoom } from "./item-limit.service";
 import { requireFolder } from "./node-access";
-import { assertSpace } from "./space.service";
+import { assertSpace, spaceOf } from "./space.service";
 import { assertAccountWritable } from "./volume.service";
 
 /** Same length as an upload batch of the web app. */
@@ -157,7 +156,7 @@ export async function prepareRequestUpload(id: string, input: RequestUploadInput
   await assertItemRoom(owner, input.files.length);
   const volume = await findVolume(db(), owner.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
-  await assertSpace(owner, input.files.reduce((sum, file) => sum + file.size, 0), { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
+  await assertSpace(owner, input.files.reduce((sum, file) => sum + file.size, 0), spaceOf(volume));
 
   const batchId = randomString(UPLOAD.batchIdLength, ID_ALPHABET);
   await saveBatch(batchId, { accountId: owner.id, volumeId: volume.id, folderId: folder.id, fromHome: false, dup: "keep", files: input.files.map((file) => ({ rel: file.name, size: file.size })), requestId: id });
