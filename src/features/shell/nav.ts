@@ -34,3 +34,17 @@ export function navItemsFor(isAdmin: boolean): NavItem[] {
 export function activeNavItem(pathname: string): NavItem | undefined {
   return NAV_ITEMS.find((item) => (item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`)));
 }
+
+export interface FilesSubpage {
+  href: Route;
+  label: string;
+  icon: IconName;
+}
+
+/** Pages of the File Manager outside the folder tree, linked from its toolbar in this order. */
+export const FILES_SUBPAGES: readonly FilesSubpage[] = [
+  { href: "/files/photos", label: "Photos", icon: "image" },
+  { href: "/files/shared", label: "Shared by me", icon: "share-network" },
+  { href: "/files/storage", label: "Storage", icon: "hard-drives" },
+  { href: "/files/deleted", label: "Recently deleted", icon: "clock-counter-clockwise" },
+];

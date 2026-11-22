@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { FilterChip } from "@/shared/ui/FilterChip";
 import { sharesApi } from "./api";
 import { SharedRow } from "./SharedRow";
+import { shareUrl } from "@/shared/lib/routes";
 
 const card = "flex flex-col gap-3 rounded-2xl border border-card-line bg-card p-5";
 
@@ -102,7 +103,7 @@ export function SharedPage({ data }: { data: SharedView }) {
                 selected={selected.has(item.id)}
                 now={now}
                 onToggle={() => toggle(item.id)}
-                onCopy={() => copyLink(`${config.publicUrl}/d/${item.linkId}`, "public")}
+                onCopy={() => copyLink(shareUrl(config.publicUrl, item.linkId), "public")}
                 onMakePrivate={() => setConfirming([item])}
               />
             ))}

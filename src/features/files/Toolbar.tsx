@@ -8,6 +8,7 @@ import { MenuItem, MenuLabel } from "@/shared/ui/Menu";
 import { ActionMenu, anchorOf, type AnchorRect } from "./ActionMenu";
 import type { ViewMode } from "./usePrefs";
 import { THEME_COLOR } from "@/shared/styles/palette";
+import { FILES_SUBPAGES } from "@/features/shell/nav";
 
 /** The sort keys a list offers, with the "SORT BY" menu labels and the short toolbar labels. */
 export interface SortOptions<S extends string> {
@@ -94,22 +95,12 @@ export function Toolbar<S extends string>(props: ToolbarProps<S>) {
         <Icon name="arrows-down-up" size={20} />
         <span className="max-sm:hidden">{sortOptions.short[props.sort]}</span>
       </button>
-      {links && (
-        <>
-          <Link href="/files/photos" title="Photos" aria-label="Photos" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
-            <Icon name="image" size={20} />
+      {links &&
+        FILES_SUBPAGES.map((page) => (
+          <Link key={page.href} href={page.href} title={page.label} aria-label={page.label} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
+            <Icon name={page.icon} size={20} />
           </Link>
-          <Link href="/files/shared" title="Shared by me" aria-label="Shared by me" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
-            <Icon name="share-network" size={20} />
-          </Link>
-          <Link href="/files/storage" title="Storage" aria-label="Storage" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
-            <Icon name="hard-drives" size={20} />
-          </Link>
-          <Link href="/files/deleted" title="Recently deleted" aria-label="Recently deleted" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
-            <Icon name="clock-counter-clockwise" size={20} />
-          </Link>
-        </>
-      )}
+        ))}
       <ToolIcon icon="arrows-clockwise" label="Refresh" onClick={props.onRefresh} className="max-sm:hidden" />
       {sortAnchor && (
         <ActionMenu anchor={sortAnchor} label="Sort" placement="below" onClose={() => setSortAnchor(null)}>

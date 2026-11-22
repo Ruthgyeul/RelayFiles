@@ -41,19 +41,18 @@ interface FileManagerProps {
   view: FolderView;
   nav?: FolderNav;
   isAdmin: boolean;
-  publicUrl: string;
   /** A file of this folder to open in the viewer right away (global search `?view=`). */
   initialView?: string;
 }
 
 /** The File Manager page for one folder: path, header, toolbar, filters, search, items and dialogs. */
-export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: FileManagerProps) {
+export function FileManager({ view, nav, isAdmin, initialView }: FileManagerProps) {
   const [prefs, setPrefs] = usePrefs();
   const search = useFileSearch();
   const { folder, children, path, isRoot } = view;
   const parentRef = isRoot ? "root" : folder.id;
   const { items, counts, tagMode, wanted, q, searchError } = useFolderItems(children, search.filter, search.query, prefs.sort);
-  const { router, now, selection, linkOf, media, files, copyText, copyLink, propertiesFor, setPropertiesFor, refresh } = useListPage({ items, title: folder.name, isAdmin, publicUrl, initialView });
+  const { router, now, selection, linkOf, media, files, copyText, copyLink, propertiesFor, setPropertiesFor, refresh } = useListPage({ items, title: folder.name, isAdmin, initialView });
   const clearSelection = selection.clear;
   const { open, dialogs } = files;
   const menu = useItemMenu(folder, items);

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useApiQuery } from "@/shared/hooks/useApiQuery";
 import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { filesApi } from "@/shared/lib/files-api";
-import { folderHref } from "@/shared/lib/routes";
+import { folderHref, shareUrl } from "@/shared/lib/routes";
 import { useShell } from "@/features/shell/ShellProvider";
 import { useTransfersState } from "@/features/transfers/transfers-context";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -17,7 +17,7 @@ export function LastUploadCard() {
   const folder = useApiQuery(lastUpload?.folderId ?? null, (folderId) => filesApi.getProperties(folderId));
 
   if (!lastUpload || folder.status !== "ready") return null;
-  const url = `${config.publicUrl}/d/${folder.data.item.linkId}`;
+  const url = shareUrl(config.publicUrl, folder.data.item.linkId);
   return (
     <section aria-label="Last upload" className="flex flex-col gap-3 rounded-2xl border border-accent-soft-line bg-card px-5 py-[18px]">
       <div className="flex items-center gap-2.5 font-bold">
