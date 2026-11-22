@@ -8,10 +8,10 @@ import { useCopyLink } from "@/features/files/useCopyLink";
 import { useShell } from "@/features/shell/ShellProvider";
 import { usePageTitle } from "@/features/shell/usePageTitle";
 import { errorMessage } from "@/shared/lib/api-client";
-import { cn } from "@/shared/lib/cn";
 import { useNow } from "@/shared/hooks/useNow";
 import { Button } from "@/shared/ui/Button";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { FilterChip } from "@/shared/ui/FilterChip";
 import { sharesApi } from "./api";
 import { SharedRow } from "./SharedRow";
 
@@ -75,15 +75,9 @@ export function SharedPage({ data }: { data: SharedView }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {SHARED_FILTERS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={filter === key}
-              onClick={() => setFilter(key)}
-              className={cn("h-8 rounded-full border px-3 text-[13px] font-bold", filter === key ? "border-accent-hi bg-accent-soft text-accent-text" : "border-card-line bg-card text-t3")}
-            >
+            <FilterChip key={key} on={filter === key} onClick={() => setFilter(key)}>
               {SHARED_FILTER_LABEL[key]} {count(key)}
-            </button>
+            </FilterChip>
           ))}
         </div>
         {chosen.length > 0 && (

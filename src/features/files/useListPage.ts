@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOCK_TICK_MS } from "@/config/policy";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { NodeItem } from "@/contracts/nodes";
@@ -10,9 +11,6 @@ import { useCopyLink } from "./useCopyLink";
 import { useFileDialogs } from "./useFileDialogs";
 import { useFileMedia } from "./useFileMedia";
 import { useSelection } from "./useSelection";
-
-/** Re-render interval for relative times ("Expires in 3h 12m"), as in the design. */
-const CLOCK_TICK_MS = 30_000;
 
 interface ListPageOptions<T extends NodeItem> {
   /** The items shown (after filters and search). */
@@ -33,7 +31,7 @@ export function useListPage<T extends NodeItem>({ items, title, isAdmin, publicU
   const router = useRouter();
   const { notify, activeAccount } = useShell();
   usePageTitle(title);
-  const now = useNow(true, CLOCK_TICK_MS);
+  const now = useNow(true, CLOCK_TICK_MS.expiry);
   const [propertiesFor, setPropertiesFor] = useState<string | null>(null);
   const selection = useSelection(items);
   const linkOf = (linkId: string) => `${publicUrl}/d/${linkId}`;

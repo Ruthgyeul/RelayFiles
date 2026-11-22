@@ -1,5 +1,6 @@
 import { avatarOf } from "@/domain/avatar";
 import { cn } from "@/shared/lib/cn";
+import { THEME_COLOR } from "@/shared/styles/palette";
 
 export interface AvatarProps {
   /** Account id; the identicon is derived from it. */
@@ -16,7 +17,7 @@ export interface AvatarProps {
 }
 
 /** Circular pixel identicon (`image-rendering: pixelated`) as in the design's account list. */
-export function Avatar({ seed, size, active = false, dotRing = "var(--sunk)", bordered = false, label, className }: AvatarProps) {
+export function Avatar({ seed, size, active = false, dotRing = THEME_COLOR.sunk, bordered = false, label, className }: AvatarProps) {
   return (
     <span
       role={label ? "img" : undefined}

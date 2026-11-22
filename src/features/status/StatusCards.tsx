@@ -6,9 +6,10 @@ import type { LatencyHourDto } from "@/contracts/status";
 import { jitterRating, latencyRating, latencySummary, latencyTone, lossTone, STATUS_TITLE, type ConnectionStats, type StatusLevel, type Tone } from "@/domain/status";
 import { useMounted } from "@/shared/hooks/useMounted";
 import { cn } from "@/shared/lib/cn";
-import { BarChart } from "@/shared/ui/Display";
+import { BarChart, StatTile } from "@/shared/ui/Display";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { TONE_TEXT } from "./tone";
+import { FIXED_COLOR } from "@/shared/styles/palette";
 
 const PERCENT = 100;
 
@@ -38,16 +39,10 @@ export function OverallCard({ level, lastCheck, onCheck }: { level: StatusLevel;
 }
 
 function Tile({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: Tone }) {
-  return (
-    <div className="flex flex-col gap-[3px] rounded-xl bg-sunk p-3">
-      <span className="text-[11px] font-bold tracking-[.04em] text-t4">{label}</span>
-      <span className={cn("text-[20px] font-bold", TONE_TEXT[tone])}>{value}</span>
-      <span className="text-[12px] text-t4">{sub}</span>
-    </div>
-  );
+  return <StatTile label={label} value={value} sub={sub} valueSize={20} valueClassName={TONE_TEXT[tone]} />;
 }
 
-const BAR_COLOR: Record<Exclude<Tone, "neutral">, string> = { ok: "var(--color-ok-bar)", warn: "var(--color-warn-strong)", bad: "var(--color-danger-icon)" };
+const BAR_COLOR: Record<Exclude<Tone, "neutral">, string> = { ok: FIXED_COLOR.okBar, warn: FIXED_COLOR.warnStrong, bad: FIXED_COLOR.dangerIcon };
 
 function Legend({ color, children }: { color: string; children: string }) {
   return (

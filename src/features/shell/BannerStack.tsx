@@ -13,6 +13,7 @@ import { Button } from "@/shared/ui/Button";
 import type { AnnouncementDto } from "@/contracts/server-settings";
 import { AnnouncementBanner } from "./AnnouncementBanner";
 import { useShell } from "./ShellProvider";
+import { FIXED_COLOR } from "@/shared/styles/palette";
 
 /**
  * Notices above the page content, in the design's order: the account created for this
@@ -58,8 +59,8 @@ export function BannerStack({ announcement }: { announcement: AnnouncementDto | 
           tone={level === 2 ? "danger" : "warn"}
           icon="warning"
           title={level === 2 ? "Storage is full" : "Storage almost full"}
-          titleColor={level === 2 ? "var(--color-danger-text)" : "var(--color-warn-text)"}
-          iconColor={level === 2 ? "var(--color-danger-text)" : "var(--color-warn-text)"}
+          titleColor={level === 2 ? FIXED_COLOR.dangerText : FIXED_COLOR.warnText}
+          iconColor={level === 2 ? FIXED_COLOR.dangerText : FIXED_COLOR.warnText}
           actions={
             <Link href={"/files" as Route} className={buttonClassName({ variant: "secondary", size: 32 })}>
               Manage files
@@ -72,7 +73,7 @@ export function BannerStack({ announcement }: { announcement: AnnouncementDto | 
         </Banner>
       )}
       {session.usage?.storageBusy && (
-        <Banner tone="warn" icon="hard-drives" title="Your files are being moved to new storage" titleColor="var(--color-warn-text)" iconColor="var(--color-warn-text)">
+        <Banner tone="warn" icon="hard-drives" title="Your files are being moved to new storage" titleColor={FIXED_COLOR.warnText} iconColor={FIXED_COLOR.warnText}>
           Changes are paused for a few minutes; browsing and downloads still work.
         </Banner>
       )}

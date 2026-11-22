@@ -15,6 +15,7 @@ import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { cn } from "@/shared/lib/cn";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
+import { FilterChip } from "@/shared/ui/FilterChip";
 import { AccountRow } from "./AccountRow";
 import { adminApi } from "./api";
 import { ManageDialog } from "./ManageDialog";
@@ -114,18 +115,9 @@ export function AccountsPage({ data }: { data: AdminAccounts }) {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {ADMIN_FILTERS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={filter === key}
-            onClick={() => (setFilter(key), setShown(PAGE_SIZE))}
-            className={cn(
-              "h-8 rounded-full border px-3 text-[13px] font-bold",
-              filter === key ? "border-accent-hi bg-accent-soft text-accent-text" : "border-card-line bg-card text-t3",
-            )}
-          >
+          <FilterChip key={key} on={filter === key} onClick={() => (setFilter(key), setShown(PAGE_SIZE))}>
             {label} {count(key)}
-          </button>
+          </FilterChip>
         ))}
         <span className="flex-1" />
         <label className="flex h-9 min-w-[200px] items-center gap-2 rounded-[10px] border border-ctrl bg-card px-3">

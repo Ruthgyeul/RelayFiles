@@ -2,6 +2,7 @@ import type { StatusComponentDto } from "@/contracts/status";
 import { COMPONENT_STATE_LABEL, componentState, DAY_TEXT, formatDayKey, uptimeText, type ComponentState, type DayLevel, type StatusLevel } from "@/domain/status";
 import { cn } from "@/shared/lib/cn";
 import { BarChart } from "@/shared/ui/Display";
+import { FIXED_COLOR } from "@/shared/styles/palette";
 
 const PERCENT = 100;
 
@@ -13,7 +14,7 @@ const STATE_PILL: Record<ComponentState, string> = {
   nodata: "bg-btn text-t3",
 };
 
-const DAY_COLOR: Record<Exclude<DayLevel, "nodata">, string> = { ok: "var(--color-ok-bar)", warn: "var(--color-warn-strong)", down: "var(--color-danger-icon)" };
+const DAY_COLOR: Record<Exclude<DayLevel, "nodata">, string> = { ok: FIXED_COLOR.okBar, warn: FIXED_COLOR.warnStrong, down: FIXED_COLOR.dangerIcon };
 
 /** Services with their current state, uptime and the last 60 days. */
 export function ServicesCard({ components, level }: { components: StatusComponentDto[]; level: StatusLevel }) {

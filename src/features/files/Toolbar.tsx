@@ -7,6 +7,7 @@ import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { MenuItem, MenuLabel } from "@/shared/ui/Menu";
 import { ActionMenu, anchorOf, type AnchorRect } from "./ActionMenu";
 import type { ViewMode } from "./usePrefs";
+import { THEME_COLOR } from "@/shared/styles/palette";
 
 /** The sort keys a list offers, with the "SORT BY" menu labels and the short toolbar labels. */
 export interface SortOptions<S extends string> {
@@ -120,8 +121,8 @@ export function Toolbar<S extends string>(props: ToolbarProps<S>) {
                 key={key}
                 size="sort"
                 icon="check"
-                iconColor={on ? "var(--accentHi)" : "transparent"}
-                color={on ? "var(--accentText)" : undefined}
+                iconColor={on ? THEME_COLOR.accentHi : "transparent"}
+                color={on ? THEME_COLOR.accentText : undefined}
                 onSelect={() => {
                   setSortAnchor(null);
                   props.onSort(key);

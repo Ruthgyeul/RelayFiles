@@ -3,10 +3,11 @@ import { formatMetricSize } from "@/domain/format";
 import type { RateSeries } from "@/domain/server";
 import { NoData } from "@/shared/ui/Display";
 import { RateChart } from "./RateChart";
+import { FIXED_COLOR, THEME_COLOR } from "@/shared/styles/palette";
 
 const CHART_HEIGHT = 80;
-const READ_COLOR = "var(--accent)";
-const WRITE_COLOR = "var(--color-warn-orange)";
+const READ_COLOR = THEME_COLOR.accent;
+const WRITE_COLOR = FIXED_COLOR.warnOrange;
 
 function DiskRate({ disk, label, done, series, color }: { disk: string; label: string; done: string; series: RateSeries; color: string }) {
   return (

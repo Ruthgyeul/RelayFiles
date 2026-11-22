@@ -5,6 +5,7 @@ import { EmptyState, Kbd, Logo, Skeleton } from "@/shared/ui/Display";
 import { Pill } from "@/shared/ui/Pill";
 import { Tag } from "@/shared/ui/Tag";
 import { Row, Section } from "./Section";
+import { FIXED_COLOR } from "@/shared/styles/palette";
 
 export function FeedbackSection() {
   return (
@@ -33,11 +34,11 @@ export function FeedbackSection() {
         <Banner icon="user-circle-plus" iconSize={22} align="center" title="Account banner title" onDismiss={() => undefined} actions={<Button variant="primary" size={34} icon="key">Save token</Button>}>
           Body text in 13px with 1.45 line height.
         </Banner>
-        <Banner tone="warn" icon="warning" title="Storage almost full" titleColor="var(--color-warn-text)" actions={<Button size={32}>Manage files</Button>} onDismiss={() => undefined}>
+        <Banner tone="warn" icon="warning" title="Storage almost full" titleColor={FIXED_COLOR.warnText} actions={<Button size={32}>Manage files</Button>} onDismiss={() => undefined}>
           Uploads stop at 100%.
         </Banner>
-        <Banner tone="danger" icon="warning" title="Storage is full" titleColor="var(--color-danger-text)" />
-        <Banner tone="info" icon="wrench" title="Maintenance" titleColor="var(--color-info-text)" />
+        <Banner tone="danger" icon="warning" title="Storage is full" titleColor={FIXED_COLOR.dangerText} />
+        <Banner tone="info" icon="wrench" title="Maintenance" titleColor={FIXED_COLOR.infoText} />
       </Section>
 
       <Section id="surfaces" title="Surfaces">

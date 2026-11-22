@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOCK_TICK_MS } from "@/config/policy";
 import type { LinkEventDto } from "@/contracts/nodes";
 import { formatAgo } from "@/domain/format";
 import { useApiQuery } from "@/shared/hooks/useApiQuery";
@@ -19,7 +20,7 @@ export interface ActivityRequest {
 
 /** "Link activity · …" (520px): a summary, the CSV export and the newest 200 events through the share link. */
 export function ActivityDialog({ request, onClose }: { request: ActivityRequest | null; onClose: () => void }) {
-  const now = useNow(request !== null, 60_000);
+  const now = useNow(request !== null, CLOCK_TICK_MS.minutes);
   const events = useApiQuery<LinkEventDto[]>(request?.id ?? null, (id) => filesApi.activity(id));
   const list = events.status === "ready" ? events.data : [];
 
