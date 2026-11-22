@@ -17,6 +17,7 @@ const { getFolderView } = await import("./node.service");
 const { deleteItems, topLevel } = await import("./node-ops.service");
 const { copyNodes, moveNodes } = await import("./transfer.service");
 const { zipItems } = await import("./zip.service");
+const { updateSettings, updateTags } = await import("./node-settings.service");
 const { sharePage } = await import("../share/share-view");
 
 const noViewer = { accountIds: [], unlocks: new Map() as Unlocks, visitorId: null };
@@ -291,3 +292,31 @@ describe("item paths", () => {
     expect(after.shared.queries).toBe(before.shared.queries);
   }, SLOW);
 });
+
+describe("tags and settings", () => {
+  const settings = { visibility: "public", expiry: "Never", burn: false, downloadLimit: null, access: "both", note: "", applyDown: true } as const;
+
+  it("retags many items and resets the visibility of a whole tree in a constant number of queries", async () => {
+    const m = await member();
+    const owner = (await findAccountById(prisma, m.id))!;
+    const few = await filesIn(m, m.rootId, null, 5, "tag-few");
+    const many = await filesIn(m, m.rootId, null, 500, "tag-many", { tags: ["old"] });
+    const a = await measure(() => updateTags(owner, few, ["trip"], ["old"]));
+    const b = await measure(() => updateTags(owner, many, ["trip"], ["old"]));
+    report("updateTags 5 vs 500 items", a, b);
+    expect(b.queries).toBe(a.queries);
+    const tagged = await prisma.node.findMany({ where: { id: { in: many } }, select: { tags: true } });
+    expect(tagged.every((row) => row.tags.length === 1 && row.tags[0] === "trip")).toBe(true);
+
+    const small = await tree(m, "VisSmall", 2, 2, {});
+    const large = await tree(m, "VisLarge", 40, 25, {});
+    await prisma.node.updateMany({ where: { accountId: m.id, parentId: { not: null }, NOT: { id: { in: [small.id, large.id] } } }, data: { visibility: "PRIVATE" } });
+    const c = await measure(() => updateSettings(owner, small.id, settings));
+    const d = await measure(() => updateSettings(owner, large.id, settings));
+    report("apply visibility down 13 vs 1,083 items", c, d);
+    expect(d.queries).toBe(c.queries);
+    const below = await prisma.node.groupBy({ by: ["visibility"], where: { accountId: m.id, parentId: { not: null }, NOT: { id: { in: [small.id, large.id, ...few, ...many] } } }, _count: true });
+    expect(below.map((group) => group.visibility)).toEqual(["INHERIT"]);
+  }, SLOW);
+});
+

@@ -137,6 +137,15 @@ export function updateNode(db: DbClient, nodeId: string, data: Prisma.NodeUpdate
   return db.node.update({ where: { id: nodeId }, data, select: NODE_SELECT });
 }
 
+/** Sets the tags of many of an account's items in one statement (each row gets its own list). */
+export async function setTagsEach(db: DbClient, accountId: string, rows: readonly { id: string; tags: readonly string[] }[]): Promise<void> {
+  if (rows.length === 0) return;
+  await db.$executeRaw`
+    UPDATE "Node" AS n SET tags = ARRAY(SELECT jsonb_array_elements_text(v.tags)), "updatedAt" = now()
+    FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS v(id text, tags jsonb)
+    WHERE n.id = v.id AND n."accountId" = ${accountId}`;
+}
+
 export async function deleteNodes(db: DbClient, ids: string[]): Promise<void> {
   await db.node.deleteMany({ where: { id: { in: ids } } });
 }

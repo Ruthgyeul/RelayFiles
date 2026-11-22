@@ -132,7 +132,7 @@
 | PR | 내용 | 측정·고정 |
 |---|---|---|
 | 4-1 `perf(photos): index the timeline order` — [#170](https://github.com/Ruthgyeul/RelayFiles/pull/170) | `("accountId", COALESCE(takenAt,modifiedAt,createdAt) DESC, id DESC) WHERE type='FILE' AND kind IN ('IMAGE','VIDEO')` 식 인덱스(raw SQL 마이그레이션). 먼저 CI `prisma migrate diff --exit-code`가 이 인덱스를 차이로 보는지 확인한다 | `EXPLAIN` 전후 비교 |
-| 4-2 `perf(upload): check duplicates for batch paths only` | `prepareUpload`의 `relativePaths` 전체 트리 읽기 대신 배치 경로 배열을 CTE로 거른다 | `tree-queries.int.test.ts` 방식의 쿼리 수 검사 |
+| 4-2 `perf(upload): check duplicates for batch paths only` — [#171](https://github.com/Ruthgyeul/RelayFiles/pull/171) | `prepareUpload`의 `relativePaths` 전체 트리 읽기 대신 배치 경로 배열을 CTE로 거른다 | `tree-queries.int.test.ts` 방식의 쿼리 수 검사 |
 | 4-3 `perf(files): batch tag and visibility updates` | `updateTags`를 `unnest` UPDATE로, `inheritVisibilityBelow`를 재귀 CTE UPDATE로 바꾼다 | 쿼리 수 검사 |
 | 4-4 `perf(ui): lighter lists` | `reactCompiler`를 켜거나 `memo(NodeRow/NodeCard)`와 고정 콜백을 쓴다. 썸네일 없는 영상은 IntersectionObserver로 화면에 들어온 뒤 마운트한다 | `large-folder.spec.ts`, `check:bundle` |
 | 4-5 `perf(health): index health sample cleanup` — [#169](https://github.com/Ruthgyeul/RelayFiles/pull/169) | `HealthSample`에 `[at]` 인덱스를 추가한다 | 마이그레이션 검사 |

@@ -10,7 +10,7 @@ import { gbToBytes } from "@/domain/traffic";
 import { db, type Prisma } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { addLinkEvent, listLinkEventsBelow } from "../repositories/link-event.repo";
-import { findNodes, updateNode } from "../repositories/node.repo";
+import { findNodes, setTagsEach, updateNode } from "../repositories/node.repo";
 import { inheritVisibilityBelow } from "../repositories/node-tree.repo";
 import { requireNode, type NodeOwner } from "./node-access";
 import { toNodeItem, VISIBILITY_TO_DB } from "./node-dto";
@@ -21,13 +21,10 @@ export async function updateTags(owner: NodeOwner, ids: string[], add: string[],
   const removing = new Set(remove.map(normalizeTag));
   const rows = await findNodes(db(), owner.id, [...new Set(ids)]);
   if (rows.length === 0) throw new ApiError("NOT_FOUND");
-  await db().$transaction(async (tx) => {
-    for (const row of rows) {
-      const tags = [...new Set([...row.tags.filter((tag) => !removing.has(tag)), ...adding])];
-      if (tags.length > FILES.maxTagsPerItem) throw new ApiError("BAD_REQUEST", `An item can have at most ${FILES.maxTagsPerItem} tags.`);
-      await updateNode(tx, row.id, { tags });
-    }
-  });
+  const updates = rows.map((row) => ({ id: row.id, tags: [...new Set([...row.tags.filter((tag) => !removing.has(tag)), ...adding])] }));
+  // Checked for every item first: nothing changes when one would end up with too many.
+  if (updates.some((update) => update.tags.length > FILES.maxTagsPerItem)) throw new ApiError("BAD_REQUEST", `An item can have at most ${FILES.maxTagsPerItem} tags.`);
+  await setTagsEach(db(), owner.id, updates);
   return { updated: rows.length };
 }
 

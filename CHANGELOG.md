@@ -34,6 +34,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Changed
 
+- Tagging many items, and "apply to everything inside" in Sharing & access, write in one statement each instead of one per item (500 items: 502 queries → 7)
 - Starting an upload into a large folder checks only the uploaded paths for duplicates instead of reading the folder's whole tree (50,000 files: 300 ms → 1.4 ms)
 - Photos reads each page of the timeline from an index in its order (`Node_timeline_idx`, created by its migration) instead of sorting every photo and video of the account
 - The daily cleanup finds old Status page samples through an index on their time (`HealthSample_at_idx`, created by its migration) instead of reading the whole table
