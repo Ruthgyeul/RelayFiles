@@ -5,7 +5,7 @@ import { BYTES_PER_GB } from "@/domain/quota";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import type { AccountRow } from "../repositories/account.repo";
-import { accountUsage, anonUsage } from "../repositories/node.repo";
+import { accountUsage, anonUsage } from "../repositories/node-usage.repo";
 import { accountVersionBytes } from "../repositories/file-version.repo";
 import { accountTrashedBytes, anonTrashedBytes } from "../repositories/trash.repo";
 import type { StorageDriver } from "../storage/driver";

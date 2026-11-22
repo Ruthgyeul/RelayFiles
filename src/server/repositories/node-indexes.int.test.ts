@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { fileFixtures } from "../../../test/file-fixtures";
-import { accountUsage, largestFiles, recentFiles } from "./node.repo";
+import { recentFiles } from "./node.repo";
+import { accountUsage, largestFiles } from "./node-usage.repo";
 
 const { prisma, member, cleanup } = fileFixtures();
 

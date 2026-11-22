@@ -3,7 +3,7 @@ import { FILES } from "@/config/policy";
 import type { AccountRow } from "../repositories/account.repo";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
-import { countItems } from "../repositories/node.repo";
+import { countItems } from "../repositories/node-usage.repo";
 
 /** Refuses `adding` new files and folders that would take a member account past FILES.maxItemsPerAccount. */
 export async function assertItemRoom(owner: Pick<AccountRow, "id" | "isAdmin">, adding: number): Promise<void> {
