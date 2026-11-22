@@ -10,32 +10,18 @@ import { isUniqueViolation } from "../db/errors";
 import type { Node } from "../db/generated/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
-import type { AccountRow } from "../repositories/account.repo";
 import { createDeletedItems, nodeRowsByIds, toSnapshot } from "../repositories/deleted-item.repo";
 import { favoriteFoldersOf } from "../repositories/favorite.repo";
-import { deleteNodes, findNode, findNodes, findRootFolder, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
+import { deleteNodes, findNodes, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
 import { ancestorChains, lockSubtrees, type AncestorRow } from "../repositories/node-tree.repo";
 import { addTrashedBytesEach, recordTrashed } from "../repositories/trash.repo";
 import type { StorageLocation } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { locationOf } from "./node-location";
-import { toNodeItem } from "./node.service";
+import { requireNode, type NodeOwner } from "./node-access";
+import { toNodeItem } from "./node-dto";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
-/** The account an item operation acts for (its own items only). */
-export type NodeOwner = Pick<AccountRow, "id" | "volumeId" | "isAdmin" | "quotaBytes">;
-
-export async function requireNode(accountId: string, nodeId: string): Promise<NodeRow> {
-  const row = await findNode(db(), accountId, nodeId);
-  if (!row) throw new ApiError("NOT_FOUND");
-  return row;
-}
-
-export async function requireFolder(accountId: string, ref: string): Promise<NodeRow> {
-  const row = ref === "root" ? await findRootFolder(db(), accountId) : await findNode(db(), accountId, ref);
-  if (!row || row.type !== "FOLDER") throw new ApiError("NOT_FOUND");
-  return row;
-}
 
 /** Renames in the database and on disk; a taken name is refused with a suggestion (design wording). */
 export async function renameNode(owner: NodeOwner, nodeId: string, requested: string): Promise<NodeItem> {

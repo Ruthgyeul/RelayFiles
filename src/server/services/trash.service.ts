@@ -1,6 +1,5 @@
 import "server-only";
 import { STORAGE } from "@/config/policy";
-import type { NodeKind } from "@/contracts/nodes";
 import type { DeletedItemDto, RestoredItem } from "@/contracts/trash";
 import { newLinkId } from "@/domain/ids";
 import { uniqName } from "@/domain/names";
@@ -18,9 +17,10 @@ import { withStorageTransaction } from "../storage/storage-transaction";
 import { relistFavorites } from "./favorites.service";
 import { assertItemRoom } from "./item-limit.service";
 import { lockedLocationOf } from "./node-location";
-import type { NodeOwner } from "./node-ops.service";
+import type { NodeOwner } from "./node-access";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 import { trashRetentionHours } from "../storage/trash-retention";
+import { kindOf } from "./node-dto";
 
 const MOVED_MESSAGE = "This item was deleted before your files moved to new storage, so it can't be restored. It is removed for good with the rest of the old storage's trash.";
 const NAME_TAKEN_MESSAGE = "Something with the same name was just added there. Try again.";
@@ -34,7 +34,7 @@ export async function listRecentlyDeleted(accountId: string): Promise<DeletedIte
     id: row.id,
     name: row.name,
     type: row.type === "FOLDER" ? "folder" : "file",
-    kind: row.kind ? (row.kind.toLowerCase() as NodeKind) : null,
+    kind: kindOf(row.kind),
     size: row.size.toString(),
     itemCount: row.itemCount,
     deletedAt: row.deletedAt.toISOString(),

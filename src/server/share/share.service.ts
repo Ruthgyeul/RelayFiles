@@ -6,7 +6,7 @@ import type { ShareItem, SharePage, ShareView } from "@/contracts/share";
 import { deletionDate } from "@/domain/account";
 import { shareStatus, busyBadge, strictestGuard, type Busy, type ShareStatus } from "@/domain/share";
 import { downloadBlock, type DownloadBlock } from "@/domain/share-access";
-import { effectiveVisibility, type NodeKind, segmentsBelowRoot, type SettingTag, settingTags, sortNodes, type Visibility } from "@/domain/tree";
+import { effectiveVisibility, segmentsBelowRoot, type SettingTag, settingTags, sortNodes, type Visibility } from "@/domain/tree";
 import type { ClientInfo } from "../auth/client-info";
 import { cookieSecrets } from "../auth/keys";
 import { db } from "../db/client";
@@ -22,6 +22,7 @@ import { countUnlockGuess, refundUnlockGuess } from "./unlock-limit";
 import { cappedOn, type CappedItem } from "./traffic-cap";
 import { limitingIds } from "@/domain/share-limits";
 import { scanBlock } from "@/domain/scan";
+import { kindOf as kindOfValue, VISIBILITY } from "../services/node-dto";
 
 /** Who is looking at a share link. */
 export interface ShareViewer {
@@ -34,7 +35,7 @@ export interface ShareViewer {
 
 const lower = <T extends string>(value: T) => value.toLowerCase() as Lowercase<T>;
 /** The DTO kind of a node row ("IMAGE" → "image"), or null for folders. */
-export const kindOf = (row: { kind: string | null }) => (row.kind ? (lower(row.kind) as NodeKind) : null);
+export const kindOf = (row: Pick<NodeRow, "kind">) => kindOfValue(row.kind);
 
 export const shareUrl = (linkId: string) => `${getAppEnv().PUBLIC_URL}/d/${linkId}`;
 
@@ -50,7 +51,7 @@ async function loadLink(linkId: string, viewer: ShareViewer, now: number) {
   if (!root) return null;
   const [chain, owner] = await Promise.all([sharedChain(db(), root.id), findAccountById(db(), root.accountId)]);
   if (!owner) return null;
-  const visibility = effectiveVisibility(chain.map((row) => lower(row.visibility) as Visibility).reverse());
+  const visibility = effectiveVisibility(chain.map((row) => VISIBILITY[row.visibility]).reverse());
   const guard = strictestGuard(
     chain.map((row) => ({
       expAt: row.expAt?.getTime() ?? null,

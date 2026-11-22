@@ -11,7 +11,8 @@ import { findAccountById } from "../repositories/account.repo";
 import { findNodeForJob, setScanState } from "../repositories/node.repo";
 import { scanFile, scanningEnabled } from "../scan/clamd";
 import { locationOf } from "./node-location";
-import { deleteItems, requireNode, type NodeOwner } from "./node-ops.service";
+import { deleteItems } from "./node-ops.service";
+import { requireNode, type NodeOwner } from "./node-access";
 import { driverForAccount } from "./volume.service";
 
 export type ScanOutcome = "clean" | "infected" | "failed";

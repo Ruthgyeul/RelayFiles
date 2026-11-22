@@ -10,9 +10,11 @@ import type { ApiCaller } from "./api-token.service";
 import { uploadWholeFile } from "./direct-upload.service";
 import { favoriteFoldersOf } from "../repositories/favorite.repo";
 import { addFavorites, removeFavorites } from "./favorites.service";
-import { renameNode, requireFolder, requireNode } from "./node-ops.service";
+import { renameNode } from "./node-ops.service";
+import { requireFolder, requireNode } from "./node-access";
 import { regenerateLink, updateSettings } from "./node-settings.service";
-import { getProperties, toNodeItem } from "./node.service";
+import { getProperties } from "./node.service";
+import { toNodeItem } from "./node-dto";
 import { moveNodes } from "./transfer.service";
 
 /** The token's account as API v1 shows it. */

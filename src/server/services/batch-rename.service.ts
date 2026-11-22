@@ -8,7 +8,7 @@ import { StorageTargetExistsError, type StorageLocation } from "../storage/drive
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { renameInFolder, type ChildRename } from "./folder-rename";
 import { locationOf } from "./node-location";
-import type { NodeOwner } from "./node-ops.service";
+import type { NodeOwner } from "./node-access";
 import { renumberTimeoutMs } from "./renumber.service";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
