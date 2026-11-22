@@ -7,7 +7,8 @@ import { ApiError } from "../http/api-error";
 import { lastLinkEventAt } from "../repositories/link-event.repo";
 import { makeNodesPrivate, sharedCandidates, type NodeRow } from "../repositories/node.repo";
 import type { AncestorRow } from "../repositories/node-tree.repo";
-import { parentChains, VISIBILITY, withPaths } from "./node.service";
+import { parentChains, withPaths } from "./node.service";
+import { VISIBILITY } from "./node-dto";
 
 const restricted = (row: NodeRow) => row.passwordHash !== null || row.downloadLimit !== null || row.expAt !== null || row.burn || row.dlPaused;
 

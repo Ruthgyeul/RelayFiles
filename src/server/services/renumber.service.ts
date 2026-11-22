@@ -11,7 +11,7 @@ import { StorageTargetExistsError, type StorageLocation } from "../storage/drive
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { renameInFolder } from "./folder-rename";
 import { locationOf } from "./node-location";
-import { requireFolder, type NodeOwner } from "./node-ops.service";
+import { requireFolder, type NodeOwner } from "./node-access";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
 const CHANGED_MESSAGE = "This folder changed. Review the new order.";

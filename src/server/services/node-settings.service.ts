@@ -12,8 +12,8 @@ import { ApiError } from "../http/api-error";
 import { addLinkEvent, listLinkEventsBelow } from "../repositories/link-event.repo";
 import { findNodes, updateNode } from "../repositories/node.repo";
 import { inheritVisibilityBelow } from "../repositories/node-tree.repo";
-import { requireNode, type NodeOwner } from "./node-ops.service";
-import { toNodeItem } from "./node.service";
+import { requireNode, type NodeOwner } from "./node-access";
+import { toNodeItem, VISIBILITY_TO_DB } from "./node-dto";
 
 /** Adds and removes tags on one or many items (the tags dialog edits common tags in bulk). */
 export async function updateTags(owner: NodeOwner, ids: string[], add: string[], remove: string[]): Promise<{ updated: number }> {
@@ -31,7 +31,6 @@ export async function updateTags(owner: NodeOwner, ids: string[], add: string[],
   return { updated: rows.length };
 }
 
-const VISIBILITY = { inherit: "INHERIT", private: "PRIVATE", public: "PUBLIC" } as const;
 
 /**
  * Saves share settings. Only admins change expiry and
@@ -41,7 +40,7 @@ export async function updateSettings(owner: NodeOwner, nodeId: string, input: Se
   const row = await requireNode(owner.id, nodeId);
   const isRoot = row.parentId === null;
   const data: Prisma.NodeUpdateInput = {
-    visibility: VISIBILITY[isRoot && input.visibility === "inherit" ? "private" : input.visibility],
+    visibility: VISIBILITY_TO_DB[isRoot && input.visibility === "inherit" ? "private" : input.visibility],
     downloadLimit: input.downloadLimit,
     ...(input.dailyCapGb !== undefined ? { dailyBytesCap: input.dailyCapGb === null ? null : gbToBytes(input.dailyCapGb) } : {}),
     access: input.access === "stream" ? "STREAM" : "BOTH",

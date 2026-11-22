@@ -9,7 +9,6 @@ import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { enqueueMedia } from "../jobs/queue";
 import { logger } from "../logger";
-import type { AccountRow } from "../repositories/account.repo";
 import { favoriteFoldersOf, moveFavoriteToNode, removeFavorites } from "../repositories/favorite.repo";
 import { createFileVersion, deleteFileVersion, deleteFileVersions, expiredFileVersions, findFileVersion, listFileVersions, moveVersionsToNode } from "../repositories/file-version.repo";
 import { moveLinkEvents } from "../repositories/link-event.repo";
@@ -21,8 +20,8 @@ import { withStorageTransaction, type UndoStack } from "../storage/storage-trans
 import { findVolume } from "../repositories/volume.repo";
 import { locationOf } from "./node-location";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
+import type { NodeOwner } from "./node-access";
 
-type Owner = Pick<AccountRow, "id" | "volumeId" | "isAdmin" | "quotaBytes">;
 
 /** Days an earlier version is kept (FILE_VERSIONS_DAYS); 0 keeps none. */
 function fileVersionsDays(): number {
@@ -79,7 +78,7 @@ export async function handOver(tx: DbClient, from: NodeRow, toNodeId: string): P
  * trash), and the moved row takes over the share link, its settings, tags, history, place in
  * Favorites and versions. Both must be files of `owner`.
  */
-export async function moveOverFile(owner: Owner, source: NodeRow, target: NodeRow): Promise<void> {
+export async function moveOverFile(owner: NodeOwner, source: NodeRow, target: NodeRow): Promise<void> {
   const parentId = target.parentId;
   if (source.type !== "FILE" || target.type !== "FILE" || !parentId) throw new ApiError("CONFLICT", "Only a file can replace a file.");
   const driver = await driverForAccount(owner, "write");
@@ -124,7 +123,7 @@ export async function fileVersions(accountId: string, nodeId: string): Promise<F
 
 /** The bytes of an earlier version, for "Download". */
 export async function fileVersionContent(
-  owner: Owner,
+  owner: NodeOwner,
   nodeId: string,
   versionId: string,
 ): Promise<{ driver: StorageDriver; name: string; mime: string | null; sha256: string | null; source: ByteSource }> {
@@ -142,7 +141,7 @@ export async function fileVersionContent(
  * nothing is lost, and like an upload that replaces a file the restored content gets a new node
  * id that keeps the share link, its settings, tags, favorites and versions.
  */
-export async function restoreFileVersion(owner: Owner, nodeId: string, versionId: string): Promise<{ nodeId: string }> {
+export async function restoreFileVersion(owner: NodeOwner, nodeId: string, versionId: string): Promise<{ nodeId: string }> {
   const row = await requireFile(owner.id, nodeId);
   const version = await findFileVersion(db(), owner.id, nodeId, versionId);
   if (!version) throw new ApiError("NOT_FOUND");
@@ -188,7 +187,7 @@ export async function restoreFileVersion(owner: Owner, nodeId: string, versionId
 }
 
 /** Deletes an earlier version for good ("Delete" in Version history). */
-export async function removeFileVersion(owner: Owner, nodeId: string, versionId: string): Promise<void> {
+export async function removeFileVersion(owner: NodeOwner, nodeId: string, versionId: string): Promise<void> {
   await requireFile(owner.id, nodeId);
   const version = await findFileVersion(db(), owner.id, nodeId, versionId);
   if (!version || !(await deleteFileVersion(db(), owner.id, version.id))) throw new ApiError("NOT_FOUND");

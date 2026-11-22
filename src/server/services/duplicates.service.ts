@@ -1,12 +1,13 @@
 import "server-only";
 import { getEnv } from "@/config/env";
 import { DUPLICATES } from "@/config/policy";
-import type { DuplicateFile, DuplicatesResult, NodeItem } from "@/contracts/nodes";
+import type { DuplicateFile, DuplicatesResult } from "@/contracts/nodes";
 import { groupDuplicates } from "@/domain/duplicates";
 import { db } from "../db/client";
 import { filesInFolders, findRootFolder } from "../repositories/node.repo";
 import { folderPathsBelow } from "../repositories/node-tree.repo";
-import { requireFolder, type NodeOwner } from "./node-ops.service";
+import { requireFolder, type NodeOwner } from "./node-access";
+import { kindOf } from "./node-dto";
 
 /**
  * Files with the same content (SHA-256 and size) in a folder, or in its whole tree. Read only:
@@ -34,7 +35,7 @@ export async function findDuplicates(owner: NodeOwner, folderRef: string, recurs
         folderPath: pathOf.get(row.parentId ?? "") ?? "",
         parentId: row.parentId ?? folder.id,
         parentIsRoot: row.parentId === rootId,
-        kind: row.kind ? (row.kind.toLowerCase() as NodeItem["kind"]) : null,
+        kind: kindOf(row.kind),
         hasThumb: row.hasThumb,
         createdAt: row.createdAt.toISOString(),
         modifiedAt: row.modifiedAt?.toISOString() ?? null,

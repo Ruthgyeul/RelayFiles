@@ -17,7 +17,7 @@ import { DIR_MODE, FILE_MODE, layoutOf } from "../storage/layout";
 import { driverFor } from "../storage/registry";
 import type { UploadBatch } from "../upload/batches";
 import { assertItemRoom } from "./item-limit.service";
-import { requireFolder, type NodeOwner } from "./node-ops.service";
+import { requireFolder, type NodeOwner } from "./node-access";
 import { releaseSpace, reserveSpace } from "./space.service";
 import { finalizeUpload } from "./upload.service";
 import { assertAccountWritable } from "./volume.service";

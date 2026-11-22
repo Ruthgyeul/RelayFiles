@@ -18,7 +18,7 @@ import { addTraffic } from "../repositories/traffic.repo";
 import { redis } from "../redis";
 import { acquireSlot, type SemaphoreSlot } from "../redis-semaphore";
 import type { StorageDriver } from "../storage/driver";
-import { VISIBILITY } from "./node.service";
+import { VISIBILITY } from "./node-dto";
 import { driverForAccount } from "./volume.service";
 
 type Owner = Pick<AccountRow, "id" | "name" | "volumeId">;

@@ -7,7 +7,6 @@ import { pipeline } from "node:stream/promises";
 import type { UploadedFile } from "@/contracts/uploads";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
-import type { AccountRow } from "../repositories/account.repo";
 import { findNode, findRootFolder } from "../repositories/node.repo";
 import { relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
@@ -16,11 +15,11 @@ import { driverFor } from "../storage/registry";
 import type { UploadBatch } from "../upload/batches";
 import { assertSpace } from "./space.service";
 import { checkRelPath, finalizeUpload } from "./upload.service";
+import type { NodeOwner } from "./node-access";
 
-type Owner = Pick<AccountRow, "id" | "volumeId" | "quotaBytes" | "isAdmin">;
 
 export interface ImportTarget {
-  owner: Owner;
+  owner: NodeOwner;
   volumeId: string;
   rootId: string;
   /** Paths already in the account (relative to its root), read once when the import starts. */
@@ -31,7 +30,7 @@ export interface ImportTarget {
 export type ImportResult = { status: "imported"; file: UploadedFile } | { status: "skipped" };
 
 /** The account an import writes into, with the paths it already holds. */
-export async function openImportTarget(owner: Owner, ignoreQuota: boolean): Promise<ImportTarget> {
+export async function openImportTarget(owner: NodeOwner, ignoreQuota: boolean): Promise<ImportTarget> {
   const root = await findRootFolder(db(), owner.id);
   if (!root) throw new ApiError("NOT_FOUND");
   return { owner, volumeId: owner.volumeId, rootId: root.id, existing: await relativePaths(db(), root.id), ignoreQuota };

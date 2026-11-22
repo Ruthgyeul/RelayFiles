@@ -24,7 +24,7 @@ import { currentUnlocks } from "../share/viewer";
 import { driverFor } from "../storage/registry";
 import { saveBatch } from "../upload/batches";
 import { assertItemRoom } from "./item-limit.service";
-import { requireFolder } from "./node-ops.service";
+import { requireFolder } from "./node-access";
 import { assertSpace } from "./space.service";
 import { assertAccountWritable } from "./volume.service";
 

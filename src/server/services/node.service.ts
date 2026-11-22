@@ -1,58 +1,25 @@
 import "server-only";
 import { SEARCH, STORAGE } from "@/config/policy";
-import type { CreatedFolder, FolderNode, FolderView, NodeItem, NodeProperties, TaggedItem, Visibility } from "@/contracts/nodes";
+import type { CreatedFolder, FolderNode, FolderView, NodeItem, NodeProperties, TaggedItem } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
 import { parseSearchQuery, rankByName } from "@/domain/search";
 import { busyBadge, type Busy } from "@/domain/share";
 import { effectiveVisibility, segmentsBelowRoot } from "@/domain/tree";
-import { bytesToGb } from "@/domain/traffic";
 import type { AccountRow } from "../repositories/account.repo";
 import { db } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { countFavorites, favoriteFoldersOf } from "../repositories/favorite.repo";
-import { childCounts, createFolderNode, findByName, findByTags, findNode, findRootFolder, listChildren, listFolders, listSiblingNames, recentFiles, tagUsage, type NodeRow } from "../repositories/node.repo";
+import { childCounts, createFolderNode, findByName, findByTags, listChildren, listFolders, listSiblingNames, recentFiles, tagUsage, type NodeRow } from "../repositories/node.repo";
 import { ancestorChain, ancestorChains, childStats, descendantCounts, folderSizes, type AncestorRow, type ChildStats } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
+import { requireFolder, requireNode } from "./node-access";
+import { toNodeItem, VISIBILITY } from "./node-dto";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
-
-export const VISIBILITY: Record<NodeRow["visibility"], Visibility> = { INHERIT: "inherit", PRIVATE: "private", PUBLIC: "public" };
-
-export function toNodeItem(row: NodeRow, extra: { size?: bigint; itemCount?: number; fileCount?: number } = {}): NodeItem {
-  return {
-    id: row.id,
-    type: row.type === "FOLDER" ? "folder" : "file",
-    name: row.name,
-    kind: row.kind ? (row.kind.toLowerCase() as NodeItem["kind"]) : null,
-    size: (extra.size ?? row.size).toString(),
-    createdAt: row.createdAt.toISOString(),
-    ...(row.modifiedAt ? { modifiedAt: row.modifiedAt.toISOString() } : {}),
-    downloads: row.downloads,
-    itemCount: extra.itemCount ?? 0,
-    fileCount: extra.fileCount ?? (row.type === "FILE" ? 1 : 0),
-    tags: row.tags,
-    linkId: row.linkId,
-    hasThumb: row.hasThumb,
-    settings: {
-      visibility: VISIBILITY[row.visibility],
-      expiry: row.expiryLabel,
-      expAt: row.expAt?.toISOString() ?? null,
-      burn: row.burn,
-      downloadLimit: row.downloadLimit,
-      dailyCapGb: bytesToGb(row.dailyBytesCap),
-      hasPassword: row.passwordHash !== null,
-      access: row.access === "STREAM" ? "stream" : "both",
-      note: row.note,
-      dlPaused: row.dlPaused,
-    },
-    busy: null,
-    ...(row.scanState === "PENDING" ? { scan: "pending" as const } : row.scanState === "FAILED" ? { scan: "failed" as const } : {}),
-  };
-}
 
 /** What a list needs besides the rows: busy levels and which rows are in Favorites. */
 interface ListContext {
@@ -84,20 +51,13 @@ async function withFolderStats(rows: NodeRow[]): Promise<NodeItem[]> {
   });
 }
 
-/** Resolves "root" or a folder id owned by the account; other accounts' folders are 404. */
-async function resolveFolder(accountId: string, ref: string): Promise<NodeRow> {
-  const row = ref === "root" ? await findRootFolder(db(), accountId) : await findNode(db(), accountId, ref);
-  if (!row || row.type !== "FOLDER") throw new ApiError("NOT_FOUND");
-  return row;
-}
-
 /**
  * A folder with its path and children. The sizes of the folder and of every child folder come
  * from one walk of the folder's tree grouped by child (`childStats`); the folder's own numbers
  * are the sums over its children.
  */
 export async function getFolderView(accountId: string, ref: string): Promise<FolderView> {
-  const folder = await resolveFolder(accountId, ref);
+  const folder = await requireFolder(accountId, ref);
   const isRoot = folder.parentId === null;
   const [chain, children, stats, favoriteCount] = await Promise.all([
     ancestorChain(db(), folder.id),
@@ -121,8 +81,7 @@ export async function getFolderView(accountId: string, ref: string): Promise<Fol
 
 /** Everything the Properties dialog shows about one item. */
 export async function getProperties(accountId: string, nodeId: string): Promise<NodeProperties> {
-  const row = await findNode(db(), accountId, nodeId);
-  if (!row) throw new ApiError("NOT_FOUND");
+  const row = await requireNode(accountId, nodeId);
   const folder = row.type === "FOLDER";
   const [chain, [item], contains] = await Promise.all([ancestorChain(db(), row.id), withFolderStats([row]), folder ? descendantCounts(db(), row.id) : Promise.resolve(null)]);
   return {
@@ -191,7 +150,7 @@ export async function createFolder(account: Pick<AccountRow, "id" | "volumeId" |
   if (error) throw new ApiError("BAD_REQUEST", error, { fields: { name: error } });
   await assertItemRoom(account, 1);
 
-  const parent = await resolveFolder(account.id, parentRef);
+  const parent = await requireFolder(account.id, parentRef);
   const chain = await ancestorChain(db(), parent.id);
   if (chain.length >= STORAGE.maxFolderDepth) throw new ApiError("BAD_REQUEST", `Folders can be nested at most ${STORAGE.maxFolderDepth} levels deep.`);
   const driver = await driverForAccount(account, "write");

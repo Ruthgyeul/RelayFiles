@@ -17,7 +17,8 @@ import { findVolume } from "../repositories/volume.repo";
 import { StorageEntryMissingError, type CopyEntry } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { assertItemRoom } from "./item-limit.service";
-import { requireFolder, topLevel, topLocation, type NodeOwner } from "./node-ops.service";
+import { topLevel, topLocation } from "./node-ops.service";
+import { requireFolder, type NodeOwner } from "./node-access";
 import { releaseSpace, reserveSpace } from "./space.service";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 
