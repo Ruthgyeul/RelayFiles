@@ -1,19 +1,15 @@
+import { SELECTION_TOOLBAR, toolbarButtons } from "./item-actions";
 import { ToolButton } from "./Toolbar";
 
 export interface ToolbarHandlers {
   upload: () => void;
   uploadFolder: () => void;
   newFolder: () => void;
-  download: () => void;
-  zip: () => void;
-  tags: () => void;
-  favorite: () => void;
-  copy: () => void;
-  move: () => void;
-  /** "Rename" for several selected items at once. */
-  rename: () => void;
-  remove: () => void;
+  /** What the selection buttons do with the selected items ("Rename" renames several at once). */
+  selection: Record<(typeof SELECTION_TOOLBAR)[number], () => void>;
 }
+
+const selectionButtons = toolbarButtons(SELECTION_TOOLBAR);
 
 /**
  * The File Manager's button groups (design toolbar): folder actions, the selection actions
@@ -37,14 +33,9 @@ export function toolbarActions(on: ToolbarHandlers) {
     ),
     selection: (
       <>
-        <ToolButton icon="download-simple" label="Download" onClick={on.download} />
-        <ToolButton icon="file-zip" label="Zip" title="Download as zip" onClick={on.zip} />
-        <ToolButton icon="tag" label="Tags" onClick={on.tags} />
-        <ToolButton icon="star" label="Favorite" title="Add to favorites" onClick={on.favorite} />
-        <ToolButton icon="copy" label="Copy" onClick={on.copy} />
-        <ToolButton icon="arrow-bend-up-right" label="Move" onClick={on.move} />
-        <ToolButton icon="pencil-simple" label="Rename" title="Rename the selected items" onClick={on.rename} />
-        <ToolButton icon="trash" label="Delete" danger onClick={on.remove} />
+        {selectionButtons.map((button) => (
+          <ToolButton key={button.id} icon={button.icon} label={button.label} title={button.title} danger={button.danger} onClick={on.selection[button.id]} />
+        ))}
       </>
     ),
   };

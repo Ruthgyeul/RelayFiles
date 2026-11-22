@@ -42,6 +42,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Fixed
 
+- An item menu offers Preview for documents the viewer shows (PDF, text, code, Markdown, tables, …) in the File Manager too, and no longer for download-only files in Favorites
 - Tag search hits (`#tag`) and Favorites show, copy and share with the visibility of the folder each item is in, and move or copy from that folder, instead of the folder being viewed; the full-screen viewer on phones keeps keyboard focus inside and gives it back when closed; the Favorites list no longer lights up as a drop zone for files it does not take
 - A search (Ctrl/⌘ K, `#tag` in the File Manager and Favorites), link activity or the upload links of a folder that fail to load say so instead of showing an empty list
 - A failed action shows the server's message or "Something went wrong.", never a browser exception's text (sign-in, account switching and the other account actions could show it)
