@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { CreateFileRequestInput, FileRequestDto } from "@/contracts/file-requests";
 import { formatLongDate, formatSize } from "@/domain/format";
-import { errorMessage } from "@/shared/lib/api-client";
+import { useApiQuery } from "@/shared/hooks/useApiQuery";
+import { useMutation } from "@/shared/hooks/useMutation";
 import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
@@ -60,34 +61,16 @@ function RequestRow({ request, onCopy, onDelete }: { request: FileRequestDto; on
 
 /** "Upload links" of a folder: links that let others add files to it without seeing it. */
 export function FileRequestsDialog({ request, notify, onClose }: { request: FileRequestsRequest; notify: (message: string) => void; onClose: () => void }) {
-  const [items, setItems] = useState<FileRequestDto[] | null>(null);
+  const list = useApiQuery<FileRequestDto[]>(request.folderId, (folderId) => fileRequestsApi.list(folderId));
+  const items = list.data;
   const [creating, setCreating] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  /** Bumped after each change to load the list again. */
-  const [version, setVersion] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    fileRequestsApi
-      .list(request.folderId)
-      .then((list) => !cancelled && setItems(list))
-      .catch((caught: unknown) => !cancelled && notify(errorMessage(caught)));
-    return () => {
-      cancelled = true;
-    };
-  }, [request.folderId, notify, version]);
+  const sending = useMutation();
 
   const act = async (action: () => Promise<string>) => {
-    setBusy(true);
-    try {
-      notify(await action());
-      setVersion((current) => current + 1);
-    } catch (caught) {
-      notify(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
+    const done = await sending.run(action);
+    if (!done) return;
+    notify(done.ok ? done.value : done.error);
+    if (done.ok) list.reload();
   };
 
   const create = (input: CreateFileRequestInput) =>
@@ -108,14 +91,15 @@ export function FileRequestsDialog({ request, notify, onClose }: { request: File
       <ModalBody className="gap-3">
         <span className="text-[13px] text-pretty text-t3">Anyone with an upload link can add files to this folder. They can&apos;t see, download or change anything in it.</span>
         {creating ? (
-          <NewFileRequestForm folderId={request.folderId} busy={busy} onCreate={create} onCancel={() => setCreating(false)} />
+          <NewFileRequestForm folderId={request.folderId} busy={sending.busy} onCreate={create} onCancel={() => setCreating(false)} />
         ) : (
           <Button variant="primary" size={36} icon="plus" onClick={() => setCreating(true)} className="self-start px-3.5">
             New upload link
           </Button>
         )}
         <div className="flex flex-col">
-          {items?.length === 0 && <span className="border-t border-card-line py-3 text-[13px] text-t4">No upload links for this folder yet.</span>}
+          {list.error && <span className="border-t border-card-line py-3 text-[13px] text-danger-text">{list.error}</span>}
+          {!list.error && items?.length === 0 && <span className="border-t border-card-line py-3 text-[13px] text-t4">No upload links for this folder yet.</span>}
           {items?.map((item) => (
             <RequestRow
               key={item.id}

@@ -32,7 +32,16 @@ describe("account usage", () => {
     expect(await accountUsage(prisma, m.id)).toEqual({ usedBytes: 2_001_000n, rootItems: 2000 });
     expect((await largestFiles(prisma, m.id, 2)).map((row) => row.name)).toEqual(["file-2000", "file-1999"]);
 
-    expect(await planOf(`SELECT sum(size) FROM "Node" WHERE "accountId" = $1 AND type = 'FILE'`, m.id)).toMatch(/Index Only Scan using "Node_accountId_type_size_idx"/);
+    // The sum can come from the index alone: it holds every column the query reads. (Whether the
+    // planner then picks an index-only scan follows the share of all-visible pages in pg_class,
+    // which the other integration test files, writing to "Node" at the same time, keep moving.)
+    const [index] = await prisma.$queryRaw<{ columns: string[] }[]>`
+      SELECT array_agg(a.attname ORDER BY k.n)::text[] AS columns
+      FROM pg_index i
+      CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, n)
+      JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+      WHERE i.indexrelid = '"Node_accountId_type_size_idx"'::regclass`;
+    expect(index?.columns).toEqual(["accountId", "type", "size"]);
     expect(await planOf(`SELECT id FROM "Node" WHERE "accountId" = $1 AND type = 'FILE' AND size > 0 ORDER BY size DESC, id LIMIT 2`, m.id)).toContain("Node_accountId_type_size_idx");
     await prisma.node.deleteMany({ where: { accountId: m.id, parentId: m.rootId } });
   });

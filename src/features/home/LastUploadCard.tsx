@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useApiQuery } from "@/shared/hooks/useApiQuery";
 import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { filesApi } from "@/shared/lib/files-api";
 import { folderHref } from "@/shared/lib/routes";
@@ -14,21 +14,10 @@ export function LastUploadCard() {
   const router = useRouter();
   const { config, notify } = useShell();
   const { lastUpload } = useTransfers();
-  const [link, setLink] = useState<{ folderId: string; url: string } | null>(null);
+  const folder = useApiQuery(lastUpload?.folderId ?? null, (folderId) => filesApi.getProperties(folderId));
 
-  useEffect(() => {
-    if (!lastUpload) return;
-    let cancelled = false;
-    filesApi
-      .getProperties(lastUpload.folderId)
-      .then(({ item }) => !cancelled && setLink({ folderId: lastUpload.folderId, url: `${config.publicUrl}/d/${item.linkId}` }))
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [lastUpload, config.publicUrl]);
-
-  if (!lastUpload || link?.folderId !== lastUpload.folderId) return null;
+  if (!lastUpload || folder.status !== "ready") return null;
+  const url = `${config.publicUrl}/d/${folder.data.item.linkId}`;
   return (
     <section aria-label="Last upload" className="flex flex-col gap-3 rounded-2xl border border-accent-soft-line bg-card px-5 py-[18px]">
       <div className="flex items-center gap-2.5 font-bold">
@@ -36,11 +25,11 @@ export function LastUploadCard() {
         {lastUpload.name} is ready
       </div>
       <div className="flex flex-wrap gap-2">
-        <div className="flex h-10 min-w-[220px] flex-1 items-center overflow-hidden rounded-[10px] border border-ctrl bg-bg px-3 font-mono text-[13px] whitespace-nowrap text-accent-text">{link.url}</div>
+        <div className="flex h-10 min-w-[220px] flex-1 items-center overflow-hidden rounded-[10px] border border-ctrl bg-bg px-3 font-mono text-[13px] whitespace-nowrap text-accent-text">{url}</div>
         <button
           type="button"
           onClick={() => {
-            void copyText(link.url).then((copied) => notify(copied ? "Link copied · private, only you can open it" : COPY_FAILED));
+            void copyText(url).then((copied) => notify(copied ? "Link copied · private, only you can open it" : COPY_FAILED));
           }}
           className="flex h-10 items-center gap-1.5 rounded-[10px] border border-accent bg-accent px-4 text-[14px] font-bold text-on-accent"
         >
