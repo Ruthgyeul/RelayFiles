@@ -29,9 +29,11 @@ export async function runScript(main: () => Promise<number | void>): Promise<nev
   process.exit(exitCode);
 }
 
+/** Closes what a script may have opened: the media queue (only if used), the database and Redis. */
 async function closeConnections(): Promise<void> {
-  const [{ db }, { closeRedis }] = await Promise.all([import("../../src/server/db/client"), import("../../src/server/redis")]);
+  const [{ db }, { closeRedis }, { closeQueues }] = await Promise.all([import("../../src/server/db/client"), import("../../src/server/redis"), import("../../src/server/jobs/queue")]);
   try {
+    await closeQueues();
     await db().$disconnect();
   } finally {
     closeRedis();
