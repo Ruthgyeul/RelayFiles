@@ -65,6 +65,7 @@ POSTGRES_IMAGE="$(compose_image postgres)" REDIS_IMAGE="$(compose_image redis)" 
 export POSTGRES_IMAGE REDIS_IMAGE NGINX_IMAGE
 NGINX_RESOLVER="$(kubectl -n kube-system get service kube-dns -o jsonpath='{.spec.clusterIP}')"
 export NGINX_RESOLVER
+# KEY:default (defaults as in src/config/env.ts; scripts/deploy-defaults.test.ts checks them).
 for pair in K3S_APP_REPLICAS:1 APP_PORT:3000 STORAGE_UID:10001 STORAGE_GID:10001 DATA_DIR:/srv/relayfiles LOG_DIR:/var/log/relayfiles \
   APP_MEMORY_MAX:2G APP_CPUS:3 WORKER_MEMORY_MAX:2G WORKER_CPUS:2 NGINX_LISTEN_PORT:80 SERVER_NAME:localhost STORAGE_ACCEL_PREFIX:/_protected/ \
   NGINX_MAX_BODY_MB:100 NGINX_AUTH_RATE_PER_MIN:20 NGINX_AUTH_BURST:20 NGINX_UPLOAD_RATE_PER_MIN:60 NGINX_UPLOAD_BURST:30 NGINX_TUS_RATE_PER_MIN:600 NGINX_TUS_BURST:120 REDIS_MAXMEMORY_MB:256 \

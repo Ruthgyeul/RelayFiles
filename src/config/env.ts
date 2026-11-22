@@ -40,6 +40,21 @@ export type GroupEnv<G extends EnvGroup> = z.infer<(typeof ENV_GROUPS)[G]>;
 /** All keys defined across groups (used to keep `.env.example` in sync). */
 export const ENV_KEYS: readonly string[] = Object.values(ENV_GROUPS).flatMap((schema) => Object.keys(schema.shape));
 
+/**
+ * The default of every key that has one. Deployment scripts that cannot load this file (shell
+ * installers, compose) repeat some of them; scripts/deploy-defaults.test.ts keeps them equal.
+ */
+export function envDefaults(): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  for (const schema of Object.values(ENV_GROUPS)) {
+    for (const [key, field] of Object.entries(schema.shape)) {
+      const parsed = (field as z.ZodType).safeParse(undefined);
+      if (parsed.success && parsed.data !== undefined) defaults[key] = parsed.data;
+    }
+  }
+  return defaults;
+}
+
 export class EnvError extends Error {
   constructor(public readonly issues: string[]) {
     super(`Invalid environment configuration:\n- ${issues.join("\n- ")}`);
