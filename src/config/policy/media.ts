@@ -1,6 +1,8 @@
 /** Media processing, the viewer and child processes. Part of the product policy (src/config/policy.ts). */
 
 export const MEDIA = {
+  /** File kinds the worker makes thumbnails, previews and metadata-stripped copies for. */
+  processedKinds: ["IMAGE", "VIDEO"],
   /** Retry-After for a shared photo whose metadata-stripped copy the worker has not made yet. */
   stripPendingRetrySec: 5,
   /** Longest side of generated thumbnails (2x the 288px list preview). */

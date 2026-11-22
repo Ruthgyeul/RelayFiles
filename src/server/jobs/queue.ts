@@ -3,6 +3,7 @@ import { Queue, type ConnectionOptions } from "bullmq";
 import { getEnv, redisUrlOf } from "@/config/env";
 import { MEDIA } from "@/config/policy";
 import { logger } from "../logger";
+import { isProcessedKind } from "../services/node-dto";
 
 export const MEDIA_QUEUE = "media";
 
@@ -55,6 +56,23 @@ export async function enqueueMedia(nodeIds: readonly string[]): Promise<void> {
   } catch (error) {
     logger.warn("media jobs not queued", { error, count: nodeIds.length });
   }
+}
+
+/** Rows `queueMediaFor` picks from: files on disk, scanned clean (or never scanned), of a processed kind. */
+export interface MediaCandidate {
+  id: string;
+  type: string;
+  kind?: string | null;
+  missing?: boolean;
+  scanState?: string;
+}
+
+/**
+ * Queues generated files for the rows that need them. A file still waiting for its virus scan
+ * gets them once the scan found it clean (scan.service.ts).
+ */
+export function queueMediaFor(rows: readonly MediaCandidate[]): Promise<void> {
+  return enqueueMedia(rows.filter((row) => row.type === "FILE" && !row.missing && row.scanState !== "PENDING" && isProcessedKind(row.kind)).map((row) => row.id));
 }
 
 /**

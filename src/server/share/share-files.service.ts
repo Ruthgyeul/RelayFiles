@@ -32,10 +32,11 @@ import { kindOf, type ShareViewer } from "./share-link";
 import { driverForAccount } from "../services/volume.service";
 import { markActive } from "../metrics/activity";
 import { BUSY } from "@/domain/share";
+import { isProcessedKind } from "../services/node-dto";
 
 
 /** Whether visitors get this photo or video as the worker's copy without metadata (SHARE_METADATA_STRIP and the owner's setting). */
-export const stripsMedia = (owner: AccountRow, row: Pick<SharedRow, "kind">) => owner.stripMetadataOnShare && shareStripMode() !== "none" && (row.kind === "IMAGE" || row.kind === "VIDEO");
+export const stripsMedia = (owner: AccountRow, row: Pick<SharedRow, "kind">) => owner.stripMetadataOnShare && shareStripMode() !== "none" && isProcessedKind(row.kind);
 
 /** Why a photo or video that must be sent without metadata cannot be sent now, or null when its clean copy exists. */
 export function publicImageBlock(row: Pick<SharedRow, "kind" | "hasDerived" | "stripFailed" | "derivedMode" | "mime" | "name">): "location" | "not-ready" | null {

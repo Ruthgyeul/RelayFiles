@@ -1,11 +1,21 @@
 import "server-only";
+import { MEDIA } from "@/config/policy";
 import type { NodeItem, Visibility } from "@/contracts/nodes";
 import { bytesToGb } from "@/domain/traffic";
+import { kindFromMime } from "@/domain/upload";
 import type { NodeRow } from "../repositories/node.repo";
 
 /** A row's visibility as the API names it, and back. */
 export const VISIBILITY: Record<NodeRow["visibility"], Visibility> = { INHERIT: "inherit", PRIVATE: "private", PUBLIC: "public" };
 export const VISIBILITY_TO_DB = { inherit: "INHERIT", private: "PRIVATE", public: "PUBLIC" } as const satisfies Record<Visibility, NodeRow["visibility"]>;
+
+/** The stored kind of a file of this MIME type ("video/mp4" → "VIDEO"). */
+export function dbKindOfMime(mime: string): NonNullable<NodeRow["kind"]> {
+  return kindFromMime(mime).toUpperCase() as NonNullable<NodeRow["kind"]>;
+}
+
+/** Whether the worker makes generated files (thumbnail, preview, stripped copy) for this kind. */
+export const isProcessedKind = (kind: string | null | undefined): boolean => kind != null && (MEDIA.processedKinds as readonly string[]).includes(kind);
 
 /** A row's kind as the API names it (folders have none). */
 export function kindOf(kind: NodeRow["kind"]): NodeItem["kind"] {
