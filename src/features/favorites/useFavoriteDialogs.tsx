@@ -13,8 +13,8 @@ import { filesApi } from "@/shared/lib/files-api";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { MoveInFavoritesDialog, type MoveInFavoritesRequest } from "./MoveInFavoritesDialog";
+import { plural } from "@/domain/format";
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 interface Options {
   view: FavoritesView;

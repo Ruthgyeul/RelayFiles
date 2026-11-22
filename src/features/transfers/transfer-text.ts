@@ -1,4 +1,4 @@
-import { formatClock, formatSize } from "@/domain/format";
+import { formatClock, formatSize, plural } from "@/domain/format";
 
 /**
  * Upload states, plus "handed" for downloads: the browser saves those itself, so the panel
@@ -21,7 +21,6 @@ export interface TransferProgress {
   error?: string;
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** Whole percent done. */
 export function percentDone(progress: Pick<TransferProgress, "done" | "total">): number {

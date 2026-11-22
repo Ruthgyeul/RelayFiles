@@ -1,3 +1,4 @@
+import { utf8Length } from "./format";
 /**
  * File and folder name rules: valid names, taken names and "Name (2)" for duplicates. The same rules run in the browser (instant feedback) and on the server
  * (authoritative), and they match the ext4 limits of the storage volume.
@@ -6,7 +7,6 @@
 /** ext4 allows at most 255 bytes per path segment. */
 export const MAX_NAME_BYTES = 255;
 
-const utf8Length = (value: string) => new TextEncoder().encode(value).length;
 
 /** C0 and C1 control characters (NUL, line breaks, escape, ...): invisible in lists, unsafe in headers and logs. */
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;

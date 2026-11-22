@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { bytesToGb, capReached, gbToBytes, secondsUntilUtcMidnight, utcDay } from "./traffic";
+import { utcDay } from "./format";
+import { bytesToGb, capReached, gbToBytes, secondsUntilUtcMidnight } from "./traffic";
 
 describe("secondsUntilUtcMidnight", () => {
   it("counts to the next UTC midnight", () => {

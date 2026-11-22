@@ -5,8 +5,9 @@
  */
 
 import { MS } from "@/config/policy";
+import { BYTES_PER_GB as BYTES_PER_GB_NUMBER } from "./quota";
 
-const BYTES_PER_GB = 1_000_000_000n;
+const BYTES_PER_GB = BigInt(BYTES_PER_GB_NUMBER);
 
 /** Seconds until the next UTC midnight (at least 1), when the day's counters start over. */
 export function secondsUntilUtcMidnight(now: number): number {
@@ -14,8 +15,6 @@ export function secondsUntilUtcMidnight(now: number): number {
   return Math.max(1, Math.ceil((next - now) / MS.second));
 }
 
-/** "2026-11-12": the UTC day a byte is counted on. */
-export const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
 
 export interface CapUse {
   used: bigint;

@@ -1,7 +1,8 @@
 import "server-only";
 import { getEnv } from "@/config/env";
 import { MS } from "@/config/policy";
-import { capReached, gbToBytes, secondsUntilUtcMidnight, utcDay } from "@/domain/traffic";
+import { utcDay } from "@/domain/format";
+import { capReached, gbToBytes, secondsUntilUtcMidnight } from "@/domain/traffic";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";

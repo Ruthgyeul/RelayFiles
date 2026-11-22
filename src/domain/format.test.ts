@@ -1,22 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  formatAgo,
-  formatClock,
-  formatCount,
-  formatCountdown,
-  formatDateTime,
-  formatLeft,
-  formatLongDate,
-  formatMetricSize,
-  formatPercent,
-  formatSeen,
-  formatShortDate,
-  formatShortDateTime,
-  formatSize,
-  formatTimeOfDay,
-  formatWeekdayHour,
-  roundDecimals,
-} from "./format";
+import { formatAgo, formatClock, formatCount, formatCountdown, formatDateTime, formatLeft, formatLongDate, formatMetricSize, formatPercent, formatSeen, formatShortDate, formatShortDateTime, formatSize, formatTimeOfDay, formatWeekdayHour, plural, roundDecimals, utcDay, utf8Length } from "./format";
 
 describe("formatClock (prototype fmtT)", () => {
   it("formats minutes and hours", () => {
@@ -112,5 +95,26 @@ describe("formatSeen", () => {
     expect(formatSeen(now - 12 * 60_000, now)).toBe("12m ago");
     expect(formatSeen(now - 3 * 3_600_000, now)).toBe("3h ago");
     expect(formatSeen(now - 4 * 86_400_000, now)).toBe("4d ago");
+  });
+});
+
+describe("plural", () => {
+  it("adds an s except for one", () => {
+    expect([0, 1, 2].map((count) => plural(count, "file"))).toEqual(["0 files", "1 file", "2 files"]);
+  });
+});
+
+describe("utf8Length", () => {
+  it("counts bytes, not characters", () => {
+    expect(utf8Length("abc")).toBe(3);
+    expect(utf8Length("한글")).toBe(6);
+    expect(utf8Length("\u{10348}")).toBe(4);
+  });
+});
+
+describe("utcDay", () => {
+  it("gives the UTC calendar day of a time or date", () => {
+    expect(utcDay(Date.UTC(2026, 10, 12, 23, 59))).toBe("2026-11-12");
+    expect(utcDay(new Date("2026-11-13T00:00:00Z"))).toBe("2026-11-13");
   });
 });

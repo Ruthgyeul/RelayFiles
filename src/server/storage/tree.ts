@@ -1,9 +1,8 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { cp, lstat, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { pipeline } from "node:stream/promises";
+import { sha256Of } from "./hash";
 
 /** Relative path → SHA-256 of every regular file below `root` (symbolic links are refused). */
 export async function hashTree(root: string): Promise<Map<string, { sha256: string; size: number }>> {
@@ -14,9 +13,7 @@ export async function hashTree(root: string): Promise<Map<string, { sha256: stri
       if (entry.isSymbolicLink()) throw new Error(`Symbolic link in a storage tree: ${relative(root, path)}`);
       if (entry.isDirectory()) await walk(path);
       else if (entry.isFile()) {
-        const hash = createHash("sha256");
-        await pipeline(createReadStream(path), hash);
-        result.set(relative(root, path), { sha256: hash.digest("hex"), size: (await lstat(path)).size });
+        result.set(relative(root, path), { sha256: await sha256Of(createReadStream(path)), size: (await lstat(path)).size });
       }
     }
   }

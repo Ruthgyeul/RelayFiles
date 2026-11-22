@@ -127,3 +127,18 @@ export function formatSeen(at: number, now: number): string {
   if (minutes < 1_440) return `${Math.round(minutes / 60)}h ago`;
   return `${Math.round(minutes / 1_440)}d ago`;
 }
+
+/** "1 file", "3 files": a count and an English word that takes "s" in the plural. */
+export function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+/** Bytes a string takes in UTF-8 (file name limits are in bytes). */
+export function utf8Length(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+/** "2026-11-12": the UTC calendar day of a moment. */
+export function utcDay(at: number | Date): string {
+  return new Date(at).toISOString().slice(0, 10);
+}

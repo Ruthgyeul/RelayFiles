@@ -1,4 +1,4 @@
-import { makePrivateSchema } from "@/contracts/shares";
+import { makePrivateSchema } from "@/contracts/shared-items";
 import { apiHandler } from "@/server/http/api-handler";
 import { makeItemsPrivate } from "@/server/services/shared-items.service";
 

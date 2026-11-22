@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { SharedItem, SharedView } from "@/contracts/shares";
+import type { SharedItem, SharedView } from "@/contracts/shared-items";
 import { matchesSharedFilter, SHARED_FILTER_LABEL, SHARED_FILTERS, type SharedFilter } from "@/domain/shared-items";
 import { useCopyLink } from "@/features/files/useCopyLink";
 import { useShell } from "@/features/shell/ShellProvider";
