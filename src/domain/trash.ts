@@ -4,6 +4,7 @@
  */
 
 import { MS } from "@/config/policy";
+import { formatSize } from "./format";
 
 const HOUR_MS = MS.hour;
 
@@ -38,6 +39,35 @@ export function trashExpiresAt(deletedAt: Date, retentionHours: number): Date {
 /** "24 hours": how long deleted items can be restored, for the delete confirmations. */
 export function retentionText(hours: number): string {
   return hours === 1 ? "1 hour" : `${hours} hours`;
+}
+
+/** What a delete confirmation needs to know about an item. */
+export interface DeletedItem {
+  name: string;
+  type: "file" | "folder";
+  /** Bytes (a decimal string from the API, or a number). */
+  size: string | number;
+  /** Files inside (folders), 1 for a file. */
+  fileCount: number;
+}
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/** `"name"` for one item, "3 items" for several: the subject of a dialog title. */
+export function itemsLabel(items: readonly Pick<DeletedItem, "name">[]): string {
+  return items.length === 1 ? `"${items[0]!.name}"` : `${items.length} items`;
+}
+
+/** Delete confirmation text (the design's, with the "Recently deleted" window instead of "can't be undone"). */
+export function deleteText(items: readonly DeletedItem[], retentionHours: number): { title: string; text: string } {
+  const one = items.length === 1 ? items[0]! : null;
+  const size = items.reduce((sum, item) => sum + Number(item.size), 0);
+  const files = items.reduce((sum, item) => sum + item.fileCount, 0);
+  const what = one && one.type === "file" ? formatSize(size) : `${plural(files, "file")} · ${formatSize(size)}`;
+  return {
+    title: one ? `Delete "${one.name}"?` : `Delete ${items.length} items?`,
+    text: `${what} will be moved to Recently deleted and can be restored for ${retentionText(retentionHours)}, then ${one ? "it is" : "they are"} removed for good. Share links to ${one ? "it" : "them"} stop working.`,
+  };
 }
 
 /** "Deletes in 5 hours" for a deleted item, from when it expires; "Deletes soon" once that has passed. */

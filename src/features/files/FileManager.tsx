@@ -1,43 +1,31 @@
 "use client";
 
 import type { Route } from "next";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
 import type { FolderCrumb, FolderView, NodeItem } from "@/contracts/nodes";
-import { emptyTitle, itemCount } from "@/domain/tree";
-import { usePageTitle } from "@/features/shell/usePageTitle";
-import { useShell } from "@/features/shell/ShellProvider";
+import { emptyTitle } from "@/domain/tree";
 import { useTransfers } from "@/features/transfers/transfers-context";
-import { useNow } from "@/shared/hooks/useNow";
 import { ActionMenu } from "./ActionMenu";
 import { FavoritesEntry } from "./FavoritesEntry";
-import { FilterBar } from "./FilterBar";
 import { FolderHeader } from "./FolderHeader";
 import { buildMenu, NODE_MENU } from "./item-actions";
 import type { ItemProps } from "./item-props";
 import { FileList } from "./FileList";
+import { ListChrome } from "./ListChrome";
 import { PathBar } from "./PathBar";
 import { folderHref, sharePageHref } from "@/shared/lib/routes";
 import { PropertiesDialog } from "./PropertiesDialog";
-import { SearchBox, TagModeBar } from "./SearchBox";
 import { FILE_SORT_OPTIONS, Toolbar } from "./Toolbar";
 import { toolbarActions } from "./ToolbarActions";
-import { useFileDialogs } from "./useFileDialogs";
 import { useFolderDrop } from "./useFolderDrop";
 import { useFolderTools } from "./useFolderTools";
-import { useFileMedia } from "./useFileMedia";
 import { useFileSearch } from "./useFileSearch";
 import { useFileShortcuts } from "./useFileShortcuts";
 import { useFolderItems, type ListedItem } from "./useFolderItems";
-import { useCopyLink } from "./useCopyLink";
 import { useItemMenu } from "./useItemMenu";
+import { useListPage } from "./useListPage";
 import { useNewFolder } from "./useNewFolder";
 import { useNodeActions } from "./useNodeActions";
-import { useSelection } from "./useSelection";
 import { usePrefs } from "./usePrefs";
-
-/** Re-render interval for relative times ("Expires in 3h 12m"), as in the design. */
-const CLOCK_TICK_MS = 30_000;
 
 /** A folder reached another way than from the root (a favorite folder opened from Favorites). */
 export interface FolderNav {
@@ -60,31 +48,22 @@ interface FileManagerProps {
 
 /** The File Manager page for one folder: path, header, toolbar, filters, search, items and dialogs. */
 export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: FileManagerProps) {
-  const router = useRouter();
-  const { notify, activeAccount } = useShell();
   const [prefs, setPrefs] = usePrefs();
   const search = useFileSearch();
-  const [propertiesFor, setPropertiesFor] = useState<string | null>(null);
-  const now = useNow(true, CLOCK_TICK_MS);
-  usePageTitle(view.folder.name);
-
   const { folder, children, path, isRoot } = view;
   const parentRef = isRoot ? "root" : folder.id;
   const { items, counts, tagMode, wanted, q, searchError } = useFolderItems(children, search.filter, search.query, prefs.sort);
-  const linkOf = (linkId: string) => `${publicUrl}/d/${linkId}`;
-  const selection = useSelection(items);
+  const { router, now, selection, linkOf, media, files, copyText, copyLink, propertiesFor, setPropertiesFor, refresh } = useListPage({ items, title: folder.name, isAdmin, publicUrl, initialView });
   const clearSelection = selection.clear;
+  const { open, dialogs } = files;
   const menu = useItemMenu(folder, items);
-  const { open, dialogs } = useFileDialogs({ isAdmin, accountDeletesAt: activeAccount?.deletesAt ?? null, linkOf, onChanged: clearSelection });
   const folderTools = useFolderTools(clearSelection);
   const newFolder = useNewFolder(parentRef, children.map((child) => child.name));
-  const media = useFileMedia(items, folder.name, initialView);
 
   const transfers = useTransfers();
   const uploadTarget = { ref: parentRef, name: folder.name };
   const { drag, dropFiles } = useFolderDrop(folder, uploadTarget, items, selection.ids, clearSelection);
 
-  const { copyText, copyLink } = useCopyLink();
   const subfolderHref = nav?.folderHref ?? ((id: string) => folderHref(id));
   const actionsFor = useNodeActions({ view, isAdmin, dialogs: open, folderTools: folderTools.open, media, linkOf, copyLink, onProperties: setPropertiesFor, folderHref: subfolderHref });
   const openItem = (item: NodeItem) => (item.type === "folder" ? router.push(subfolderHref(item.id)) : media.preview(item));
@@ -172,20 +151,17 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
         sort={prefs.sort}
         sortOptions={FILE_SORT_OPTIONS}
         onSort={(sort) => setPrefs({ sort })}
-        onRefresh={() => {
-          router.refresh();
-          notify("Up to date");
-        }}
+        onRefresh={refresh}
       />
-      {children.length > 0 && <FilterBar counts={counts} value={search.filter} onChange={(key) => (search.setFilter(key), clearSelection())} />}
-      {search.searchOpen && <SearchBox value={search.query} onChange={search.setQuery} />}
-      {tagMode && (
-        <TagModeBar
-          label={wanted.length ? wanted.map((tag) => `#${tag}`).join(" + ") : "Type a tag after #"}
-          count={itemCount(items.length)}
-          onClear={search.clear}
-        />
-      )}
+      <ListChrome
+        search={search}
+        counts={counts}
+        showFilters={children.length > 0}
+        onFilter={(key) => (search.setFilter(key), clearSelection())}
+        tagMode={tagMode}
+        wanted={wanted}
+        matched={items.length}
+      />
       <FileList
         items={items}
         view={prefs.view}

@@ -6,7 +6,7 @@ import { useState, type ReactNode } from "react";
 import type { StorageOverview } from "@/contracts/storage";
 import { formatSize } from "@/domain/format";
 import { quotaMeter } from "@/domain/quota";
-import { deleteText } from "@/features/files/useFileDialogs";
+import { deleteText } from "@/domain/trash";
 import { useShell } from "@/features/shell/ShellProvider";
 import { METER_COLOR } from "@/features/shell/StorageMeter";
 import { usePageTitle } from "@/features/shell/usePageTitle";

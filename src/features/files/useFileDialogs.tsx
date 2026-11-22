@@ -3,8 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import type { NodeItem } from "@/contracts/nodes";
-import { formatSize } from "@/domain/format";
-import { retentionText } from "@/domain/trash";
+import { deleteText, itemsLabel } from "@/domain/trash";
 import { nameError, splitExtension } from "@/domain/names";
 import { useShell } from "@/features/shell/ShellProvider";
 import { errorMessage } from "@/shared/lib/api-client";
@@ -27,20 +26,6 @@ interface Context {
   onChanged: () => void;
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-const labelOf = (items: NodeItem[]) => (items.length === 1 ? `"${items[0]!.name}"` : `${items.length} items`);
-
-/** Delete confirmation text (the design's, with the "Recently deleted" window instead of "can't be undone"). */
-export function deleteText(items: NodeItem[], retentionHours: number): { title: string; text: string } {
-  const one = items.length === 1 ? items[0]! : null;
-  const size = items.reduce((sum, item) => sum + Number(item.size), 0);
-  const files = items.reduce((sum, item) => sum + item.fileCount, 0);
-  const what = one && one.type === "file" ? formatSize(size) : `${plural(files, "file")} · ${formatSize(size)}`;
-  return {
-    title: one ? `Delete "${one.name}"?` : `Delete ${items.length} items?`,
-    text: `${what} will be moved to Recently deleted and can be restored for ${retentionText(retentionHours)}, then ${one ? "it is" : "they are"} removed for good. Share links to ${one ? "it" : "them"} stop working.`,
-  };
-}
 
 /**
  * State and dialogs for file operations: rename, move/copy, delete, tags, share settings,
@@ -67,7 +52,7 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
 
   const open = {
     rename: (item: NodeItem) => setRename({ item }),
-    move: (items: NodeItem[], mode: "move" | "copy", parentId: string) => setMove({ ids: items.map((item) => item.id), mode, label: labelOf(items), parentIds: [parentId] }),
+    move: (items: NodeItem[], mode: "move" | "copy", parentId: string) => setMove({ ids: items.map((item) => item.id), mode, label: itemsLabel(items), parentIds: [parentId] }),
     remove: (items: NodeItem[]) => setRemove(items),
     tags: (items: NodeItem[]) =>
       setTags({

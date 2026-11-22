@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import type { FavoriteFolderDto, FavoritesView } from "@/contracts/favorites";
 import type { NodeItem } from "@/contracts/nodes";
 import { nameError } from "@/domain/names";
-import { deleteText } from "@/features/files/useFileDialogs";
+import { deleteText } from "@/domain/trash";
 import { useShell } from "@/features/shell/ShellProvider";
 import { errorMessage } from "@/shared/lib/api-client";
 import { favoritesApi } from "@/shared/lib/favorites-api";

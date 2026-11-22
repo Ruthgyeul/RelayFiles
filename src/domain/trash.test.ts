@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MS } from "@/config/policy";
-import { deletesInText, groupByTop, originalLocation, retentionText, trashExpiresAt } from "./trash";
+import { deletesInText, groupByTop, originalLocation, retentionText, trashExpiresAt, deleteText, itemsLabel } from "./trash";
 
 describe("groupByTop", () => {
   it("splits rows of several trees per top item, in their order", () => {
@@ -53,5 +53,29 @@ describe("retention", () => {
 describe("originalLocation", () => {
   it("joins the folder names", () => {
     expect(originalLocation(["root", "Photos", "2024"])).toBe("root / Photos / 2024");
+  });
+});
+
+describe("itemsLabel", () => {
+  it("quotes one name and counts several", () => {
+    expect(itemsLabel([{ name: "a.txt" }])).toBe('"a.txt"');
+    expect(itemsLabel([{ name: "a" }, { name: "b" }])).toBe("2 items");
+  });
+});
+
+describe("deleteText", () => {
+  const file = { name: "a.mp4", type: "file", size: "2048", fileCount: 1 } as const;
+  const folder = { name: "Trips", type: "folder", size: 3072, fileCount: 2 } as const;
+
+  it("names one item, with the file's size or the folder's files", () => {
+    expect(deleteText([file], 24)).toEqual({
+      title: 'Delete "a.mp4"?',
+      text: "2.0 KB will be moved to Recently deleted and can be restored for 24 hours, then it is removed for good. Share links to it stop working.",
+    });
+    expect(deleteText([folder], 1).text).toMatch(/^2 files · 3.1 KB .* restored for 1 hour, then it is/);
+  });
+
+  it("counts several items and their files", () => {
+    expect(deleteText([file, folder], 24)).toMatchObject({ title: "Delete 2 items?", text: expect.stringMatching(/^3 files · 5.1 KB .*they are removed .* to them stop/) });
   });
 });
