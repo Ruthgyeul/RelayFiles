@@ -2,6 +2,7 @@ import { useId } from "react";
 import { areaPath, CHART_SCALE, linePath, lineSegments, slotCenter } from "@/domain/chart";
 import { cn } from "@/shared/lib/cn";
 import { NoData } from "./Display";
+import { THEME_COLOR } from "@/shared/styles/palette";
 
 /** Opacity of the area fill right under the line; it fades to 0 at the baseline. */
 const AREA_TOP_OPACITY = 0.28;
@@ -28,7 +29,7 @@ export interface LineChartProps {
  * drawing fake values; a value between two gaps shows as a dot. Each slot keeps a
  * native `title` tooltip like the bar chart.
  */
-export function LineChart({ points, height, color = "var(--accent)", markLast = false, label, className }: LineChartProps) {
+export function LineChart({ points, height, color = THEME_COLOR.accent, markLast = false, label, className }: LineChartProps) {
   const gradientId = useId();
   const segments = lineSegments(points.map((point) => point.value));
   const dots = segments.filter((segment) => segment.length === 1).flat();
@@ -44,7 +45,7 @@ export function LineChart({ points, height, color = "var(--accent)", markLast = 
             <stop offset="1" style={{ stopColor: color, stopOpacity: 0 }} />
           </linearGradient>
         </defs>
-        <line x1="0" x2={CHART_SCALE} y1={CHART_SCALE} y2={CHART_SCALE} vectorEffect="non-scaling-stroke" style={{ stroke: "var(--line)", strokeWidth: 1 }} />
+        <line x1="0" x2={CHART_SCALE} y1={CHART_SCALE} y2={CHART_SCALE} vectorEffect="non-scaling-stroke" style={{ stroke: THEME_COLOR.line, strokeWidth: 1 }} />
         {segments.map((segment, index) => (
           <g key={index}>
             <path d={areaPath(segment)} fill={`url(#${gradientId})`} />

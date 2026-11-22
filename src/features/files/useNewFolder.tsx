@@ -7,6 +7,7 @@ import { useShell } from "@/features/shell/ShellProvider";
 import { errorMessage } from "@/shared/lib/api-client";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { filesApi } from "@/shared/lib/files-api";
+import { KIND_COLOR } from "@/shared/styles/palette";
 
 /** "New folder" dialog: suggests a free name and reports when the server picked another. */
 export function useNewFolder(parentRef: string, siblingNames: string[]) {
@@ -32,7 +33,7 @@ export function useNewFolder(parentRef: string, siblingNames: string[]) {
         open
         title="New folder"
         icon="folder-plus"
-        iconColor="var(--color-kind-folder)"
+        iconColor={KIND_COLOR.folder}
         initialValue={state.initial}
         confirmLabel="Create"
         error={state.error}

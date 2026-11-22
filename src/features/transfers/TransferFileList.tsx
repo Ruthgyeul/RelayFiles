@@ -10,13 +10,14 @@ import { LineChart } from "@/shared/ui/LineChart";
 import { kindOf } from "@/shared/ui/node-kind";
 import { cancellable, itemPercent, itemsSummary, speedPoints, type TransferItem, type TransferItemStatus } from "./transfer-items";
 import { useTransferActions, type Transfer } from "./transfers-context";
+import { FIXED_COLOR, THEME_COLOR } from "@/shared/styles/palette";
 
 const BAR_COLOR: Record<TransferItemStatus, string> = {
-  queued: "var(--line)",
-  active: "var(--accent)",
-  done: "var(--color-ok-text)",
-  cancelled: "var(--t5)",
-  failed: "var(--color-danger-text)",
+  queued: THEME_COLOR.line,
+  active: THEME_COLOR.accent,
+  done: FIXED_COLOR.okText,
+  cancelled: THEME_COLOR.t5,
+  failed: FIXED_COLOR.dangerText,
 };
 const STATUS_TEXT: Record<Exclude<TransferItemStatus, "active">, string> = { queued: "Waiting", done: "Done", cancelled: "Cancelled", failed: "Failed" };
 /** Width of the per-file speed sparkline. */

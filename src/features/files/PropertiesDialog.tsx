@@ -12,6 +12,7 @@ import { Modal } from "@/shared/ui/Modal";
 import { filesApi } from "@/shared/lib/files-api";
 import { kindOf } from "@/shared/ui/node-kind";
 import { LinkField } from "./LinkField";
+import { THEME_COLOR } from "@/shared/styles/palette";
 
 const TYPE_LABEL = { video: "Video", audio: "Audio", image: "Image", other: "File" } as const;
 
@@ -60,7 +61,7 @@ export function PropertiesDialog({ nodeId, onClose, linkOf, onCopyLink, onEditTa
   const props = loaded.status === "ready" ? loaded.data : null;
   const error = loaded.error;
   const close = onClose;
-  const kind = props ? (props.isRoot ? { icon: "hard-drives" as const, color: "var(--accentIcon)" } : kindOf(props.item)) : null;
+  const kind = props ? (props.isRoot ? { icon: "hard-drives" as const, color: THEME_COLOR.accentIcon } : kindOf(props.item)) : null;
   const url = props ? linkOf(props.item.linkId) : "";
 
   return (

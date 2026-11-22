@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOCK_TICK_MS } from "@/config/policy";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -16,9 +17,6 @@ import { EmptyState } from "@/shared/ui/Display";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { trashApi } from "./api";
 import { DeletedItemRow } from "./DeletedItemRow";
-
-/** Re-render interval for "Deletes in N hours". */
-const CLOCK_TICK_MS = 60_000;
 
 
 /** Toast after a restore: where the item went and under which name. */
@@ -42,7 +40,7 @@ export function RecentlyDeletedPage({ initial }: { initial: DeletedItemDto[] }) 
   }
   const [busy, setBusy] = useState<string | null>(null);
   const [forever, setForever] = useState<DeletedItemDto | null>(null);
-  const now = useNow(true, CLOCK_TICK_MS);
+  const now = useNow(true, CLOCK_TICK_MS.minutes);
   usePageTitle("Recently deleted");
 
   const act = async (item: DeletedItemDto, action: () => Promise<string>) => {

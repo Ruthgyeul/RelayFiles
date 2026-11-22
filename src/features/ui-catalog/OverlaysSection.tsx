@@ -8,6 +8,7 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/shared/ui/Menu";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/shared/ui/Modal";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { Row, Section } from "./Section";
+import { KIND_COLOR, THEME_COLOR } from "@/shared/styles/palette";
 
 type Overlay = "modal" | "confirm" | "prompt" | "sheet" | null;
 
@@ -37,7 +38,7 @@ export function OverlaysSection() {
         </Menu>
         <Menu label="Sort">
           <MenuLabel>SORT BY</MenuLabel>
-          <MenuItem icon="check" color="var(--accentText)" onSelect={noop}>
+          <MenuItem icon="check" color={THEME_COLOR.accentText} onSelect={noop}>
             Name A → Z
           </MenuItem>
           <MenuItem icon="check" onSelect={noop}>
@@ -91,7 +92,7 @@ export function OverlaysSection() {
           open
           title="Rename file"
           icon="file-video"
-          iconColor="var(--color-kind-video)"
+          iconColor={KIND_COLOR.video}
           initialValue="example.mp4"
           confirmLabel="Rename"
           validate={(value) => (value.includes("/") ? 'Name can\'t contain "/".' : "")}

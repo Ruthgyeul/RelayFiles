@@ -5,6 +5,7 @@ import type { ServerSnapshot, ServiceStatus } from "@/contracts/server-metrics";
 import { formatMetricSize, formatPercent, roundDecimals } from "@/domain/format";
 import { formatUptime, linkLabel } from "@/domain/server";
 import { cn } from "@/shared/lib/cn";
+import { StatTile } from "@/shared/ui/Display";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { DiskActivity } from "./DiskActivity";
 import { RateChart } from "./RateChart";
@@ -28,15 +29,6 @@ function MetricCard({ icon, box, color, bar, label, value, sub, percent }: { ico
       </div>
       <span className="text-[12px] text-t4">{sub}</span>
     </section>
-  );
-}
-
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-[3px] rounded-xl bg-sunk p-3">
-      <span className="text-[11px] font-bold tracking-[.04em] text-t4">{label}</span>
-      <span className="text-[18px] font-bold">{value}</span>
-    </div>
   );
 }
 
@@ -110,13 +102,13 @@ export function ServerMetrics({ initial }: { initial: ServerSnapshot }) {
         </div>
         <RateChart series={bandwidth} height={120} label={`Outbound bandwidth, last ${hours} hours`} />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2.5">
-          <Tile label={`AVG ${hours}H`} value={`${formatMetricSize(bandwidth.avg)}/s`} />
-          <Tile label={`PEAK ${hours}H`} value={`${formatMetricSize(bandwidth.peak)}/s`} />
-          <Tile label={`SENT ${hours}H`} value={formatMetricSize(bandwidth.total)} />
-          <Tile label="ACTIVE STREAMS" value={String(live.streams)} />
-          <Tile label="TRANSFERS" value={String(live.transfers)} />
-          <Tile label="ACCOUNTS" value={String(live.accounts)} />
-          <Tile label="UPTIME" value={formatUptime(live.uptimeSec)} />
+          <StatTile label={`AVG ${hours}H`} value={`${formatMetricSize(bandwidth.avg)}/s`} />
+          <StatTile label={`PEAK ${hours}H`} value={`${formatMetricSize(bandwidth.peak)}/s`} />
+          <StatTile label={`SENT ${hours}H`} value={formatMetricSize(bandwidth.total)} />
+          <StatTile label="ACTIVE STREAMS" value={String(live.streams)} />
+          <StatTile label="TRANSFERS" value={String(live.transfers)} />
+          <StatTile label="ACCOUNTS" value={String(live.accounts)} />
+          <StatTile label="UPTIME" value={formatUptime(live.uptimeSec)} />
         </div>
       </section>
 

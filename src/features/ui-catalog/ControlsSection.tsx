@@ -6,6 +6,7 @@ import { Field, FieldGroup, TextArea, TextInput } from "@/shared/ui/Field";
 import { IconButton } from "@/shared/ui/IconButton";
 import { CheckRow, OptionCard, OptionChip } from "@/shared/ui/Option";
 import { Row, Section } from "./Section";
+import { THEME_COLOR } from "@/shared/styles/palette";
 
 const VARIANTS: ButtonVariant[] = ["primary", "secondary", "ghost", "danger-outline", "danger-solid"];
 const SIZES: ButtonSize[] = [28, 30, 32, 34, 36, 38, 40, 44];
@@ -81,7 +82,7 @@ export function ControlsSection() {
           <OptionCard selected={visibility === "public"} icon="globe-simple" description="Anyone with the link" onClick={() => setVisibility("public")}>
             Public
           </OptionCard>
-          <OptionCard surface="elev" icon="circle" iconSize={20} iconColor="var(--accentHi)" description="No new accounts">
+          <OptionCard surface="elev" icon="circle" iconSize={20} iconColor={THEME_COLOR.accentHi} description="No new accounts">
             Closed
           </OptionCard>
         </div>

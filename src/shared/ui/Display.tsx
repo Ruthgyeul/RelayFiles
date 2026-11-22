@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "./icon/Icon";
+import { THEME_COLOR } from "@/shared/styles/palette";
 
 /** Pulsing placeholder block (bg btn, `skel` 1.4s). Size and radius come from the caller. */
 export function Skeleton({ className, style }: { className?: string; style?: CSSProperties }) {
@@ -12,17 +13,19 @@ export interface StatTileProps {
   value: ReactNode;
   sub?: ReactNode;
   valueColor?: string;
+  /** Classes for the value (a tone's text color). */
+  valueClassName?: string;
   /** Value size: 18 (server tiles) or 20 (connection tiles). */
   valueSize?: 15 | 18 | 20;
   className?: string;
 }
 
 /** Sunk stat tile: radius 12, padding 12, uppercase label (11px/700/.04em). */
-export function StatTile({ label, value, sub, valueColor, valueSize = 18, className }: StatTileProps) {
+export function StatTile({ label, value, sub, valueColor, valueClassName, valueSize = 18, className }: StatTileProps) {
   return (
     <div className={cn("flex flex-col gap-[3px] rounded-xl bg-sunk p-3", className)}>
       <span className="text-[11px] font-bold tracking-[.04em] text-t4">{label}</span>
-      <span className={cn("font-bold", { 15: "text-[15px]", 18: "text-[18px]", 20: "text-[20px]" }[valueSize])} style={{ color: valueColor }}>
+      <span className={cn("font-bold", { 15: "text-[15px]", 18: "text-[18px]", 20: "text-[20px]" }[valueSize], valueClassName)} style={{ color: valueColor }}>
         {value}
       </span>
       {sub && <span className="text-[12px] text-t4">{sub}</span>}
@@ -41,7 +44,7 @@ export interface MeterProps {
 }
 
 /** Progress / usage bar on a `line` track. */
-export function Meter({ value, height = 6, color = "var(--accent)", label, animated = false, className }: MeterProps) {
+export function Meter({ value, height = 6, color = THEME_COLOR.accent, label, animated = false, className }: MeterProps) {
   const pct = Math.min(100, Math.max(0, value));
   return (
     <div
@@ -83,7 +86,7 @@ export interface BarChartProps {
 }
 
 /** Simple column chart / uptime strip. Slots without data render in the `btn` color, never fake values. */
-export function BarChart({ bars, height, gap = 3, color = "var(--accent)", emptyHeight = "100%", shape = "column", label, className }: BarChartProps) {
+export function BarChart({ bars, height, gap = 3, color = THEME_COLOR.accent, emptyHeight = "100%", shape = "column", label, className }: BarChartProps) {
   const hasData = bars.some((b) => b.value !== null);
   return (
     <div role="img" aria-label={label} className={cn("relative flex items-end", gap === 2 ? "gap-0.5" : "gap-[3px]", className)} style={{ height }}>
@@ -94,7 +97,7 @@ export function BarChart({ bars, height, gap = 3, color = "var(--accent)", empty
           className={cn("flex-1 transition-[height] duration-[400ms]", shape === "column" ? "rounded-t-[2px]" : "rounded-[2px]")}
           style={
             bar.value === null
-              ? { height: emptyHeight, background: "var(--btn)" }
+              ? { height: emptyHeight, background: THEME_COLOR.btn }
               : { height: `${Math.min(100, Math.max(0, bar.value))}%`, background: bar.color ?? color, opacity: bar.opacity }
           }
         />

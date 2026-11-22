@@ -1,10 +1,10 @@
 import type { SessionAccount, SessionState } from "@/contracts/auth";
 import { formatSize } from "@/domain/format";
 import { quotaMeter } from "@/domain/quota";
-import { FIXED_COLOR } from "@/shared/styles/palette";
+import { FIXED_COLOR, THEME_COLOR } from "@/shared/styles/palette";
 
 /** Design `quotaColor`: accent, #f5a142 at 70%, #ff6b7d at 90%. */
-export const METER_COLOR = { accent: "var(--accent)", warn: FIXED_COLOR.warnOrange, danger: FIXED_COLOR.dangerIcon } as const;
+export const METER_COLOR = { accent: THEME_COLOR.accent, warn: FIXED_COLOR.warnOrange, danger: FIXED_COLOR.dangerIcon } as const;
 
 /** "Storage  1.2 GB / 5.0 GB" with a 4px meter at the bottom of the sidebar and drawer. */
 export function StorageMeter({ account, usage }: { account: SessionAccount | null; usage: SessionState["usage"] }) {

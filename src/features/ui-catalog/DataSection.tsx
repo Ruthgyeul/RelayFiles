@@ -2,6 +2,7 @@ import { Avatar } from "@/shared/ui/Avatar";
 import { BarChart, Meter, StatTile, type Bar } from "@/shared/ui/Display";
 import { LineChart, type LinePoint } from "@/shared/ui/LineChart";
 import { Row, Section } from "./Section";
+import { FIXED_COLOR, THEME_COLOR } from "@/shared/styles/palette";
 
 /** Fixed specimen series for visual review of the chart primitive (not application data). */
 const SPECIMEN_BARS: Bar[] = Array.from({ length: 30 }, (_, i) => ({ value: 20 + ((i * 37) % 70) }));
@@ -25,19 +26,19 @@ export function DataSection() {
       <Section id="stats" title="Stats and meters">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2.5">
           <StatTile label="AVG 1H" value="12.4 MB/s" />
-          <StatTile label="LATENCY" value="38 ms" sub="Excellent" valueSize={20} valueColor="var(--color-ok-text)" />
+          <StatTile label="LATENCY" value="38 ms" sub="Excellent" valueSize={20} valueColor={FIXED_COLOR.okText} />
           <StatTile label="PACKET LOSS" value="0%" sub="No failed checks" valueSize={20} />
         </div>
         <Meter value={21} height={4} label="Storage" />
-        <Meter value={72} label="Quota" color="var(--color-warn-orange)" />
-        <Meter value={93} label="Quota full" color="var(--color-danger-icon)" />
+        <Meter value={72} label="Quota" color={FIXED_COLOR.warnOrange} />
+        <Meter value={93} label="Quota full" color={FIXED_COLOR.dangerIcon} />
       </Section>
 
       <Section id="charts" title="Charts">
-        <BarChart bars={SPECIMEN_BARS} height={44} gap={2} color="var(--accentHi)" label="Specimen chart" />
+        <BarChart bars={SPECIMEN_BARS} height={44} gap={2} color={THEME_COLOR.accentHi} label="Specimen chart" />
         <BarChart bars={PARTIAL_BARS} height={90} emptyHeight="8%" label="Partial history" className="rounded-xl bg-sunk p-2" />
         <BarChart bars={EMPTY_BARS} height={22} gap={2} shape="cell" label="No history" />
-        <LineChart points={SPECIMEN_LINE} height={44} color="var(--accentHi)" label="Specimen line chart" />
+        <LineChart points={SPECIMEN_LINE} height={44} color={THEME_COLOR.accentHi} label="Specimen line chart" />
         <LineChart points={GAPPED_LINE} height={120} markLast label="Line with gaps" />
       </Section>
     </>

@@ -4,6 +4,7 @@ import type { FilterKey } from "@/domain/tree";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { FILTER_CHIPS } from "@/shared/ui/node-kind";
+import { THEME_COLOR } from "@/shared/styles/palette";
 
 /** Type filter chips with counts; types without items are hidden unless selected. */
 export function FilterBar({ counts, value, onChange }: { counts: Record<FilterKey, number>; value: FilterKey; onChange: (key: FilterKey) => void }) {
@@ -19,7 +20,7 @@ export function FilterBar({ counts, value, onChange }: { counts: Record<FilterKe
             onClick={() => onChange(chip.key)}
             className={cn("flex h-[30px] items-center gap-1.5 rounded-full border px-3 text-[12px] font-bold", on ? "border-accent-hi bg-accent-soft text-accent-text" : "border-card-line bg-card text-t2")}
           >
-            <Icon name={chip.icon} size={14} style={{ color: on ? "var(--accentText)" : chip.color }} />
+            <Icon name={chip.icon} size={14} style={{ color: on ? THEME_COLOR.accentText : chip.color }} />
             {chip.label}
             <span className="opacity-65">{counts[chip.key]}</span>
           </button>

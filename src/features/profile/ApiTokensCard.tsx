@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOCK_TICK_MS } from "@/config/policy";
 import { useState } from "react";
 import type { ApiTokenDto, CreateApiTokenInput, CreatedApiToken } from "@/contracts/api-tokens";
 import { tokenHealth, tokenHealthText, type TokenUse } from "@/domain/api-token";
@@ -15,8 +16,6 @@ import { profileApi } from "./api";
 import { CreateApiTokenDialog } from "./CreateApiTokenDialog";
 import { SectionTitle } from "./Section";
 
-/** Re-render interval for "used 12m ago". */
-const SEEN_TICK_MS = 60_000;
 
 interface ApiTokensCardProps {
   tokens: ApiTokenDto[];
@@ -74,7 +73,7 @@ function TokenRow({ token, now, busy, onRevoke }: { token: ApiTokenDto; now: num
 
 /** "API tokens": personal tokens for scripts and apps (/api/v1), with create and revoke. */
 export function ApiTokensCard({ tokens, isAdmin, notify, refresh }: ApiTokensCardProps) {
-  const now = useNow(true, SEEN_TICK_MS);
+  const now = useNow(true, CLOCK_TICK_MS.minutes);
   const mounted = useMounted();
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<CreatedApiToken | null>(null);

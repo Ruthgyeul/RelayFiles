@@ -11,6 +11,7 @@ import { ApiClientError } from "@/shared/lib/api-client";
 import { Button } from "@/shared/ui/Button";
 import { OptionChip } from "@/shared/ui/Option";
 import { Row, Section } from "./Section";
+import { THEME_COLOR } from "@/shared/styles/palette";
 
 /** Offline stand-in for the account API so the dialogs can be reviewed without a server. */
 function useCatalogApi(): NonNullable<SignInDialogProps["api"]> {
@@ -26,7 +27,7 @@ function useCatalogApi(): NonNullable<SignInDialogProps["api"]> {
       if (inviteCode !== undefined && !/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(inviteCode)) {
         throw new ApiClientError("INVALID_INVITE", "Invalid or already used invite code.", 400);
       }
-      const account = { id: newAccountId(), name: newAnonName(), color: "var(--accent)", isAdmin: false, neverExpire: false, deletesAt: null, quotaBytes: null };
+      const account = { id: newAccountId(), name: newAnonName(), color: THEME_COLOR.accent, isAdmin: false, neverExpire: false, deletesAt: null, quotaBytes: null };
       return { account, token: newAccountToken(), session: { accounts: [account], activeAccountId: account.id, signupMode: "open", usage: { usedBytes: "0", rootItems: 0, storageBusy: false, expiringLinks: 0 } } } satisfies CreatedAccount;
     },
   };

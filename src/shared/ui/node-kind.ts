@@ -1,7 +1,7 @@
 import type { NodeItem } from "@/contracts/nodes";
 import { fileFormatOf, type FormatIcon } from "@/domain/file-format";
 import type { FilterKey } from "@/domain/tree";
-import { KIND_COLOR } from "@/shared/styles/palette";
+import { KIND_COLOR, THEME_COLOR } from "@/shared/styles/palette";
 import type { IconName } from "@/shared/ui/icon/Icon";
 
 interface KindIcon {
@@ -66,7 +66,7 @@ export function kindOf(item: Pick<NodeItem, "type" | "kind" | "name">): KindIcon
 
 /** Filter chips in the design order with their icons and colors. */
 export const FILTER_CHIPS: readonly { key: FilterKey; label: string; icon: IconName; color: string }[] = [
-  { key: "all", label: "All", icon: "squares-four", color: "var(--t3)" },
+  { key: "all", label: "All", icon: "squares-four", color: THEME_COLOR.t3 },
   { key: "folder", label: "Folders", icon: "folder-simple", color: KIND_COLOR.folder },
   { key: "video", label: "Videos", icon: "film-strip", color: KIND_COLOR.video },
   { key: "audio", label: "Audio", icon: "music-note", color: KIND_COLOR.audio },

@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOCK_TICK_MS } from "@/config/policy";
 import type { DeviceDto } from "@/contracts/profile";
 import { deviceIcon } from "@/domain/device";
 import { formatSeen } from "@/domain/format";
@@ -9,8 +10,6 @@ import { Button } from "@/shared/ui/Button";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { SectionTitle } from "./Section";
 
-/** Re-render interval for "12m ago". */
-const SEEN_TICK_MS = 60_000;
 
 interface DevicesCardProps {
   devices: DeviceDto[];
@@ -20,7 +19,7 @@ interface DevicesCardProps {
 
 /** "Signed-in devices" with this device first. */
 export function DevicesCard({ devices, onSignOut, onSignOutOthers }: DevicesCardProps) {
-  const now = useNow(true, SEEN_TICK_MS);
+  const now = useNow(true, CLOCK_TICK_MS.minutes);
   const mounted = useMounted();
   const others = devices.some((device) => !device.current);
   return (
