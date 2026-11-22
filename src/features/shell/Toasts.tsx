@@ -3,11 +3,12 @@
 import { Avatar } from "@/shared/ui/Avatar";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { NoticePill } from "@/shared/ui/NoticePill";
-import { useShell } from "./ShellProvider";
+import { useShell, useShellNotice } from "./ShellProvider";
 
 /** Short confirmation pill and the "Switched to …" account toast. */
 export function Toasts() {
-  const { notice, accountToast, dismissAccountToast } = useShell();
+  const notice = useShellNotice();
+  const { accountToast, dismissAccountToast } = useShell();
   return (
     <>
       {notice && <NoticePill message={notice} />}

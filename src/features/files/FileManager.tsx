@@ -3,7 +3,7 @@
 import type { Route } from "next";
 import type { FolderCrumb, FolderView, NodeItem } from "@/contracts/nodes";
 import { emptyTitle } from "@/domain/tree";
-import { useTransfers } from "@/features/transfers/transfers-context";
+import { useTransferActions } from "@/features/transfers/transfers-context";
 import { ActionMenu } from "./ActionMenu";
 import { FavoritesEntry } from "./FavoritesEntry";
 import { FolderHeader } from "./FolderHeader";
@@ -60,7 +60,7 @@ export function FileManager({ view, nav, isAdmin, publicUrl, initialView }: File
   const folderTools = useFolderTools(clearSelection);
   const newFolder = useNewFolder(parentRef, children.map((child) => child.name));
 
-  const transfers = useTransfers();
+  const transfers = useTransferActions();
   const uploadTarget = { ref: parentRef, name: folder.name };
   const { drag, dropFiles } = useFolderDrop(folder, uploadTarget, items, selection.ids, clearSelection);
 
