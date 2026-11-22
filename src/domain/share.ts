@@ -112,9 +112,12 @@ export interface BusyThresholds {
   pauseAt: number;
 }
 
+/** Busy levels of an item's downloads. */
+export const BUSY = { normal: 0, throttled: 1, paused: 2 } as const;
+export type BusyLevel = (typeof BUSY)[keyof typeof BUSY];
+
 export interface Busy {
-  /** 0 normal, 1 throttled, 2 downloads paused. */
-  level: 0 | 1 | 2;
+  level: BusyLevel;
   /** Downloads in the window. */
   count: number;
   /** When a "Server busy" pause ends (epoch ms). */
@@ -127,31 +130,31 @@ export interface Busy {
 export function busyOf(downloadTimes: readonly number[], paused: boolean, now: number, limits: BusyThresholds): Busy {
   const recent = downloadTimes.filter((at) => now - at < limits.windowMs).sort((a, b) => b - a);
   const count = recent.length;
-  if (paused) return { level: 2, count, until: null, manual: true };
-  if (count >= limits.pauseAt) return { level: 2, count, until: recent[limits.pauseAt - 1]! + limits.windowMs, manual: false };
-  if (count >= limits.throttleAt) return { level: 1, count, until: null, manual: false };
-  return { level: 0, count, until: null, manual: false };
+  if (paused) return { level: BUSY.paused, count, until: null, manual: true };
+  if (count >= limits.pauseAt) return { level: BUSY.paused, count, until: recent[limits.pauseAt - 1]! + limits.windowMs, manual: false };
+  if (count >= limits.throttleAt) return { level: BUSY.throttled, count, until: null, manual: false };
+  return { level: BUSY.normal, count, until: null, manual: false };
 }
 
 export interface BusyBadge {
-  level: 1 | 2;
+  level: Exclude<BusyLevel, typeof BUSY.normal>;
   label: string;
   tip: string;
 }
 
 /** Badge text for the File Manager (`app`) and the share page (`share`). */
 export function busyBadge(busy: Busy, now: number, place: "app" | "share"): BusyBadge | null {
-  if (busy.level === 0) return null;
+  if (busy.level === BUSY.normal) return null;
   const left = busy.until ? formatLeft(busy.until - now) : "";
-  if (busy.level === 2) {
-    if (busy.manual) return { level: 2, label: "Downloads paused", tip: "Downloads paused by the admin" };
+  if (busy.level === BUSY.paused) {
+    if (busy.manual) return { level: BUSY.paused, label: "Downloads paused", tip: "Downloads paused by the admin" };
     return {
-      level: 2,
+      level: BUSY.paused,
       label: place === "app" ? "Server busy" : `Server busy · retry in ${left}`,
       tip: `${busy.count} downloads in the last 10 min · downloads paused for ${left}`,
     };
   }
-  return { level: 1, label: place === "app" ? "Busy" : "Busy · slower downloads", tip: `${busy.count} downloads in the last 10 min · downloads are throttled` };
+  return { level: BUSY.throttled, label: place === "app" ? "Busy" : "Busy · slower downloads", tip: `${busy.count} downloads in the last 10 min · downloads are throttled` };
 }
 
 /** Second line of a share page row: "12 MB · Video". */

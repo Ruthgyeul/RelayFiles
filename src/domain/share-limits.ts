@@ -12,7 +12,7 @@ export interface LimitFacts {
 export const limitsDownloads = (row: Pick<LimitFacts, "burn" | "downloadLimit">): boolean => row.burn || (row.downloadLimit !== null && row.downloadLimit > 0);
 
 /** Whether an item that limits downloads has none left (its limit reached, or deleted after its first). */
-export const downloadsUsedUp = (row: LimitFacts): boolean => limitHit(row.downloadLimit, row.downloads) || (row.burn && row.downloads >= 1);
+export const downloadsUsedUp = (row: Omit<LimitFacts, "id">): boolean => limitHit(row.downloadLimit, row.downloads) || (row.burn && row.downloads >= 1);
 
 /**
  * What a download that was just counted (`downloads` already includes it) used up: the item's

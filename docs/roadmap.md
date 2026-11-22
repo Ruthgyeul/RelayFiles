@@ -116,7 +116,7 @@
 
 | PR | 내용 |
 |---|---|
-| 3-1 `refactor(server): node dto module` | `toNodeItem`·`VISIBILITY`(9개 모듈이 import)를 `services/node-dto.ts`로 옮긴다. `visibilityFromDb/ToDb`와 `kindOf`를 하나로 만든다. `requireNode`·`requireFolder`는 `services/node-access.ts`로 옮긴다(`resolveFolder` 중복 제거). Owner 타입 4벌을 공용 export 하나로 합친다 |
+| 3-1 `refactor(server): node dto module` — [#160](https://github.com/Ruthgyeul/RelayFiles/pull/160) | `toNodeItem`·`VISIBILITY`(9개 모듈이 import)를 `services/node-dto.ts`로 옮긴다. `visibilityFromDb/ToDb`와 `kindOf`를 하나로 만든다. `requireNode`·`requireFolder`는 `services/node-access.ts`로 옮긴다(`resolveFolder` 중복 제거). Owner 타입 4벌을 공용 export 하나로 합친다 |
 | 3-2 `refactor(share): split share services` | `share.service.ts`를 `share-link` / `share-view` / `share-access` / `share-unlock`으로, `share-files.service.ts`의 zip 부분을 `share-zip.service.ts`로 나눈다. busy 수준에 `BUSY` 상수를 쓰고, 다운로드 소진 판정은 `downloadsUsedUp`(`domain/share-limits.ts`) 하나로 모은다 |
 | 3-3 `refactor(repo): split node repo` | `node-backfill.repo.ts`와 `node-usage.repo.ts`를 만들고, keyset 페이지네이션을 `id > afterId` 한 방식으로 맞춘다. `tagUsage`의 `LIMIT 100`은 정책 값으로 옮긴다 |
 | 3-4 `refactor(media): one media enqueue helper` | `MEDIA.processedKinds`와 `queueMediaFor(rows)`로 11곳을 교체한다. `kindFromMime(...).toUpperCase()` 캐스트를 제거한다 |

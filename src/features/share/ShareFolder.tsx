@@ -16,6 +16,7 @@ import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
 import { shareApi, shareUrls } from "./api";
 import { ShareRows } from "./ShareItems";
+import { BUSY } from "@/domain/share";
 
 interface ShareFolderProps {
   linkId: string;
@@ -45,7 +46,7 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
   };
   const downloadItem = (item: ShareItem) => void download(item.type === "folder" ? shareUrls.zip(linkId, item.id) : shareUrls.download(linkId, item.id));
   const downloadAll = () => {
-    if (view.folderBusy?.level === 2) return notify("Server busy · try again later");
+    if (view.folderBusy?.level === BUSY.paused) return notify("Server busy · try again later");
     void download(fileLink ? shareUrls.download(linkId, root.id) : shareUrls.zip(linkId, folder.id));
   };
 

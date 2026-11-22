@@ -17,7 +17,7 @@ const { getFolderView } = await import("./node.service");
 const { deleteItems, topLevel } = await import("./node-ops.service");
 const { copyNodes, moveNodes } = await import("./transfer.service");
 const { zipItems } = await import("./zip.service");
-const { sharePage } = await import("../share/share.service");
+const { sharePage } = await import("../share/share-view");
 
 const noViewer = { accountIds: [], unlocks: new Map() as Unlocks, visitorId: null };
 

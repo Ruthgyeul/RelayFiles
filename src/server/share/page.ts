@@ -5,7 +5,7 @@ import { SHARE } from "@/config/policy";
 import type { SharePage } from "@/contracts/share";
 import { clientInfo, requestIp } from "../auth/client-info";
 import { countInWindow, redis } from "../redis";
-import { retiredSharePage, sharePage } from "./share.service";
+import { retiredSharePage, sharePage } from "./share-view";
 import { logLinkEvent } from "./events";
 import { noteLinkOpened } from "./link-notify";
 import { currentShareViewer } from "./viewer";
