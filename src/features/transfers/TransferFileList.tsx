@@ -9,7 +9,7 @@ import { Icon } from "@/shared/ui/icon/Icon";
 import { LineChart } from "@/shared/ui/LineChart";
 import { kindOf } from "@/shared/ui/node-kind";
 import { cancellable, itemPercent, itemsSummary, speedPoints, type TransferItem, type TransferItemStatus } from "./transfer-items";
-import { useTransfers, type Transfer } from "./transfers-context";
+import { useTransferActions, type Transfer } from "./transfers-context";
 
 const BAR_COLOR: Record<TransferItemStatus, string> = {
   queued: "var(--line)",
@@ -61,7 +61,7 @@ const TransferFileRow = memo(function TransferFileRow({ item, verb, onCancel }: 
 
 /** The card's dropdown: every file of the batch with its own progress and cancel button. */
 export function TransferFileList({ transfer, id }: { transfer: Transfer & { items: TransferItem[] }; id: string }) {
-  const { cancelItem } = useTransfers();
+  const { cancelItem } = useTransferActions();
   // Rows are memoized; a stable callback keeps unchanged rows from re-rendering on every update.
   const latest = useRef(cancelItem);
   useEffect(() => {

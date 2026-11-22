@@ -7,9 +7,8 @@ import type { CreatedAccount, SessionAccount, SessionState } from "@/contracts/a
 import { accountApi } from "@/features/account/api";
 import { useNotice } from "@/shared/hooks/useNotice";
 import { autoAccountStore } from "./auto-account";
+import { useAccountActions } from "./useAccountActions";
 import { useLiveRefresh } from "./useLiveRefresh";
-import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
-import { errorMessage } from "@/shared/lib/api-client";
 
 /** Account switch toast duration from the design. */
 const ACCOUNT_TOAST_MS = 3_200;
@@ -41,7 +40,6 @@ interface ShellContextValue {
   config: ClientConfig;
   session: SessionState;
   activeAccount: SessionAccount | null;
-  notice: string | null;
   accountToast: AccountToast | null;
   signInOpen: boolean;
   tokenToSave: TokenToSave | null;
@@ -63,11 +61,18 @@ interface ShellContextValue {
 }
 
 const ShellContext = createContext<ShellContextValue | null>(null);
+/** The short notice on screen: its own context, so showing one re-renders only the pill, not every page. */
+const NoticeContext = createContext<string | null>(null);
 
 export function useShell(): ShellContextValue {
   const value = useContext(ShellContext);
   if (!value) throw new Error("useShell must be used inside <ShellProvider>.");
   return value;
+}
+
+/** The notice shown now (null when none); read by the toast pill. */
+export function useShellNotice(): string | null {
+  return useContext(NoticeContext);
 }
 
 function toastMeta(account: SessionAccount, session: SessionState): string {
@@ -133,23 +138,13 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
     [applySession],
   );
 
-  const run = useCallback(
-    async (action: () => Promise<void>) => {
-      try {
-        await action();
-      } catch (error) {
-        notify(errorMessage(error));
-      }
-    },
-    [notify],
-  );
+  const { switchTo, signOutAccount, copyToken, saveToken } = useAccountActions({ session, applySession, notify, showToken: setTokenToSave });
 
   const value = useMemo<ShellContextValue>(
     () => ({
       config,
       session,
       activeAccount: session.accounts.find((item) => item.id === session.activeAccountId) ?? null,
-      notice,
       accountToast,
       signInOpen,
       tokenToSave,
@@ -163,23 +158,15 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
         applySession(next);
       },
       accountCreated,
-      switchTo: (accountId) => run(async () => applySession(await accountApi.switchAccount(accountId))),
-      signOutAccount: (accountId) => run(async () => applySession(await accountApi.signOut(accountId))),
-      copyToken: (accountId) =>
-        run(async () => {
-          notify((await copyText(await accountApi.revealToken(accountId))) ? "Token copied" : COPY_FAILED);
-        }),
-      saveToken: (accountId) =>
-        run(async () => {
-          const account = session.accounts.find((item) => item.id === accountId);
-          if (!account) return;
-          setTokenToSave({ id: account.id, name: account.name, token: await accountApi.revealToken(accountId) });
-        }),
+      switchTo,
+      signOutAccount,
+      copyToken,
+      saveToken,
       finishSaveToken: () => setTokenToSave(null),
       showNewToken: setTokenToSave,
       dismissAutoAccount: () => autoAccountStore.set(null),
     }),
-    [config, session, notice, accountToast, signInOpen, tokenToSave, autoAccountId, notify, dismissAccountToast, applySession, accountCreated, run],
+    [config, session, accountToast, signInOpen, tokenToSave, autoAccountId, notify, dismissAccountToast, applySession, accountCreated, switchTo, signOutAccount, copyToken, saveToken],
   );
 
   // First visit with open sign-ups: create an anonymous account.
@@ -199,5 +186,9 @@ export function ShellProvider({ initialSession, config, children }: { initialSes
   // Changes made elsewhere (another device, WebDAV, the CLI, the worker) show up without a reload.
   useLiveRefresh(session.activeAccountId);
 
-  return <ShellContext value={value}>{children}</ShellContext>;
+  return (
+    <ShellContext value={value}>
+      <NoticeContext value={notice}>{children}</NoticeContext>
+    </ShellContext>
+  );
 }

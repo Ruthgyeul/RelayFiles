@@ -6,7 +6,7 @@ import { formatSize } from "@/domain/format";
 import { SHARE_PROBLEM_TEXT, sharedTotals, type ShareProblem, type ShareTargetState } from "@/domain/share-target";
 import { useShell } from "@/features/shell/ShellProvider";
 import { entriesFromList } from "@/features/transfers/read-drop";
-import { HOME_TARGET, useTransfers } from "@/features/transfers/transfers-context";
+import { HOME_TARGET, useTransferActions } from "@/features/transfers/transfers-context";
 import { folderHref } from "@/shared/lib/routes";
 import { Button } from "@/shared/ui/Button";
 import { ButtonLink } from "@/shared/ui/ButtonLink";
@@ -35,7 +35,7 @@ function ProblemCard({ problem }: { problem: ShareProblem }) {
 function SharedFilesCard({ files }: { files: File[] }) {
   const router = useRouter();
   const { activeAccount, openSignIn } = useShell();
-  const { upload } = useTransfers();
+  const { upload } = useTransferActions();
   const [busy, setBusy] = useState(false);
   const { count, bytes } = sharedTotals(files);
 

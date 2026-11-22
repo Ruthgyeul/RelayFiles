@@ -55,11 +55,16 @@ export interface Transfer {
   items?: TransferItem[];
 }
 
-export interface TransfersContextValue {
+/** What changes while transfers run: read only where the progress is shown. */
+export interface TransfersState {
   transfers: Transfer[];
   panelOpen: boolean;
   panelExpanded: boolean;
   lastUpload: { folderId: string; name: string } | null;
+}
+
+/** What starts and controls transfers. Every function stays the same for the app's lifetime, so using them does not re-render on progress. */
+export interface TransferActions {
   pickFiles: (target: UploadTarget) => void;
   pickFolder: (target: UploadTarget) => void;
   upload: (entries: UploadEntry[], target: UploadTarget, options?: UploadOptions) => void;
@@ -77,10 +82,19 @@ export interface TransfersContextValue {
   setPanel: (open: boolean, expanded?: boolean) => void;
 }
 
-export const TransfersContext = createContext<TransfersContextValue | null>(null);
+export const TransfersStateContext = createContext<TransfersState | null>(null);
+export const TransferActionsContext = createContext<TransferActions | null>(null);
 
-export function useTransfers(): TransfersContextValue {
-  const value = useContext(TransfersContext);
-  if (!value) throw new Error("useTransfers must be used inside <TransfersProvider>.");
+/** The transfer list and panel state; the component re-renders with every progress update. */
+export function useTransfersState(): TransfersState {
+  const value = useContext(TransfersStateContext);
+  if (!value) throw new Error("useTransfersState must be used inside <TransfersProvider>.");
+  return value;
+}
+
+/** Starting uploads and downloads and controlling them, without re-rendering on progress. */
+export function useTransferActions(): TransferActions {
+  const value = useContext(TransferActionsContext);
+  if (!value) throw new Error("useTransferActions must be used inside <TransfersProvider>.");
   return value;
 }

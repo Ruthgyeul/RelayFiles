@@ -5,7 +5,7 @@ import type { NodeItem } from "@/contracts/nodes";
 import { itemCount } from "@/domain/tree";
 import { useShell } from "@/features/shell/ShellProvider";
 import { entriesFromDrop } from "@/features/transfers/read-drop";
-import { useTransfers, type UploadTarget } from "@/features/transfers/transfers-context";
+import { useTransferActions, type UploadTarget } from "@/features/transfers/transfers-context";
 import { errorMessage } from "@/shared/lib/api-client";
 import { filesApi } from "@/shared/lib/files-api";
 import { useDragMove } from "./useDragMove";
@@ -17,7 +17,7 @@ import { useDragMove } from "./useDragMove";
 export function useFolderDrop(folder: NodeItem, uploadTarget: UploadTarget, items: readonly NodeItem[], selected: ReadonlySet<string>, onMoved: () => void) {
   const router = useRouter();
   const { notify } = useShell();
-  const transfers = useTransfers();
+  const transfers = useTransferActions();
 
   const moveTo = (ids: string[], targetId: string) =>
     filesApi

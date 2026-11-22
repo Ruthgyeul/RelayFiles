@@ -11,7 +11,7 @@ import { cn } from "@/shared/lib/cn";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
 import { TransferFileList } from "./TransferFileList";
 import { panelSummary, percentDone, transferMeta, type TransferStatus } from "./transfer-text";
-import { useTransfers, type Transfer } from "./transfers-context";
+import { useTransferActions, useTransfersState, type Transfer } from "./transfers-context";
 
 /** Look per status. */
 const LOOK: Record<TransferStatus, { badge: string; box: string; badgeText: string; icon: IconName; weight: "fill" | "regular" | "bold"; iconColor: string }> = {
@@ -27,7 +27,7 @@ const iconButton = "flex size-[34px] items-center justify-center rounded-lg bord
 function TransferCard({ transfer, now }: { transfer: Transfer; now: number }) {
   const router = useRouter();
   const { notify, config } = useShell();
-  const { togglePause, remove } = useTransfers();
+  const { togglePause, remove } = useTransferActions();
   const [filesOpen, setFilesOpen] = useState(false);
   const listId = useId();
   const look = LOOK[transfer.status];
@@ -96,7 +96,8 @@ function TransferCard({ transfer, now }: { transfer: Transfer; now: number }) {
 
 /** Bottom-right transfers panel (400px) and the "Transfers · N" pill when it is closed. */
 export function TransfersPanel() {
-  const { transfers, panelOpen, panelExpanded, clearFinished, setPanel } = useTransfers();
+  const { transfers, panelOpen, panelExpanded } = useTransfersState();
+  const { clearFinished, setPanel } = useTransferActions();
   const active = transfers.filter((transfer) => transfer.status === "active" || transfer.status === "paused").length;
   const now = useNow(transfers.some((transfer) => transfer.status === "active"));
   if (transfers.length === 0) return null;

@@ -6,14 +6,14 @@ import { COPY_FAILED, copyText } from "@/shared/lib/clipboard";
 import { filesApi } from "@/shared/lib/files-api";
 import { folderHref } from "@/shared/lib/routes";
 import { useShell } from "@/features/shell/ShellProvider";
-import { useTransfers } from "@/features/transfers/transfers-context";
+import { useTransfersState } from "@/features/transfers/transfers-context";
 import { Icon } from "@/shared/ui/icon/Icon";
 
 /** "… is ready" card after a Home upload, with the folder's share link. */
 export function LastUploadCard() {
   const router = useRouter();
   const { config, notify } = useShell();
-  const { lastUpload } = useTransfers();
+  const { lastUpload } = useTransfersState();
   const folder = useApiQuery(lastUpload?.folderId ?? null, (folderId) => filesApi.getProperties(folderId));
 
   if (!lastUpload || folder.status !== "ready") return null;

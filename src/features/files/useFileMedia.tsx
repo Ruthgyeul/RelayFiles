@@ -5,7 +5,7 @@ import { TRANSFERS } from "@/config/policy";
 import type { NodeItem } from "@/contracts/nodes";
 import { zipName } from "@/domain/serving";
 import { useShell } from "@/features/shell/ShellProvider";
-import { useTransfers } from "@/features/transfers/transfers-context";
+import { useTransferActions } from "@/features/transfers/transfers-context";
 import { MediaViewer, type ViewerItem } from "@/features/viewer/MediaViewer";
 import { withSubtitles } from "@/features/viewer/subtitle-tracks";
 import { fileUrls } from "@/shared/lib/files-api";
@@ -28,7 +28,7 @@ const toViewerItem = (item: Item): ViewerItem => ({
  */
 export function useFileMedia(listed: Item[], folderName: string, initialView?: string) {
   const { notify } = useShell();
-  const transfers = useTransfers();
+  const transfers = useTransferActions();
   const files = listed.filter((item) => item.type === "file");
   const [viewing, setViewing] = useState<string | null>(() => (initialView && files.some((item) => item.id === initialView) ? initialView : null));
   // The `?view=` link only opens the viewer once; closing it leaves the plain folder URL.
