@@ -107,7 +107,7 @@
 | 2-5 `refactor(files): one action registry` — [#155](https://github.com/Ruthgyeul/RelayFiles/pull/155) | `{id,label,icon,group,danger,when(item,ctx),run}` 레지스트리 하나에서 `node-menu`, `favorite-menu`, `ToolbarActions`를 파생한다. `label === "Delete"` 판정을 없애고 Preview 규칙을 하나로 맞춘다 | `files/node-menu.ts`, `favorites/favorite-menu.ts` |
 | 2-6 `refactor(files): shared list page` — [#156](https://github.com/Ruthgyeul/RelayFiles/pull/156) | `useListPage()`와 `<ListChrome>`로 `FileManager`와 `FavoritesPage`가 함께 쓰는 조립을 뽑는다. `useFileDialogs`는 keyed 조건부 마운트 + 대화상자별 훅으로 나눈다. `deleteText`·`labelOf`는 domain으로 옮긴다 | 목표 200줄 이하 |
 | 2-7 `perf(ui): split hot contexts` — [#157](https://github.com/Ruthgyeul/RelayFiles/pull/157) | `TransfersProvider`를 actions와 state로, `ShellProvider`를 notice store와 `useAccountActions`로 나눈다 | 업로드 중 목록 재렌더 측정(React Profiler) 전후 비교 |
-| 2-8 `refactor(ui): reuse primitives` | 손으로 짠 버튼을 Button·IconButton으로, `FilterChip`과 `useSelection`을 shared로, private `Tile`을 `StatTile`로, 원시 `var(--…)`를 `palette.ts` 상수로 바꾼다. `CLOCK_TICK_MS`·`SEEN_TICK_MS`는 policy로 옮긴다 | `shared/ui/Display.tsx`, `shared/styles/palette.ts` |
+| 2-8 `refactor(ui): reuse primitives` — [#158](https://github.com/Ruthgyeul/RelayFiles/pull/158) | 손으로 짠 버튼을 Button·IconButton으로, `FilterChip`과 `useSelection`을 shared로, private `Tile`을 `StatTile`로, 원시 `var(--…)`를 `palette.ts` 상수로 바꾼다. `CLOCK_TICK_MS`·`SEEN_TICK_MS`는 policy로 옮긴다 | `shared/ui/Display.tsx`, `shared/styles/palette.ts` |
 | 2-9 `refactor(app): page helpers and routes` | `requireActiveAccount()`(서버 페이지 9곳), `routes.shareUrl()`(`/d/${id}` 6곳), `FILES_SUBPAGES`(Toolbar 하드코딩)를 만든다. `publicUrl` prop drilling을 없애고 `useShell().config`를 쓴다 | `src/features/shell/nav.ts` |
 
 ---

@@ -10,6 +10,11 @@ export function sharePageHref(linkId: string): Route {
   return `/d/${linkId}` as Route;
 }
 
+/** The full share link of a node, for copying (`publicUrl` without a trailing slash). */
+export function shareUrl(publicUrl: string, linkId: string): string {
+  return `${publicUrl}${sharePageHref(linkId)}`;
+}
+
 /** Favorites, or one of its organizing folders. */
 export function favoritesHref(folderId?: string | null): Route {
   return (folderId ? `/files/favorites?folder=${encodeURIComponent(folderId)}` : "/files/favorites") as Route;

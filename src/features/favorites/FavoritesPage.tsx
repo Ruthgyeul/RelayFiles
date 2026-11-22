@@ -32,7 +32,6 @@ const SORT_OPTIONS: SortOptions<FavoriteSortKey> = { keys: FAVORITE_SORT_KEYS, l
 interface Props {
   view: FavoritesView;
   isAdmin: boolean;
-  publicUrl: string;
   initialView?: string;
 }
 
@@ -43,14 +42,14 @@ type Menu = { kind: "item" | "folder"; id: string; anchor: AnchorRect };
  * itself), and organizing folders that exist only here. Search, tag search, type filters,
  * sort and grid or list work as in the File Manager; tag search covers every organizing folder.
  */
-export function FavoritesPage({ view, isAdmin, publicUrl, initialView }: Props) {
+export function FavoritesPage({ view, isAdmin, initialView }: Props) {
   const [prefs, setPrefs] = useViewPrefs(PREFS_KEY, FAVORITE_SORT_KEYS, DEFAULT_PREFS);
   const search = useFileSearch();
   const [menu, setMenu] = useState<Menu | null>(null);
   const title = view.folder?.name ?? "Favorites";
 
   const { items, folders, counts, tagMode, wanted, q, searchError } = useFavoriteItems(view, search.filter, search.query, prefs.sort);
-  const { router, now, selection, linkOf, media, files, copyText, copyLink, propertiesFor, setPropertiesFor, refresh } = useListPage({ items, title, isAdmin, publicUrl, initialView });
+  const { router, now, selection, linkOf, media, files, copyText, copyLink, propertiesFor, setPropertiesFor, refresh } = useListPage({ items, title, isAdmin, initialView });
   const favorites = useFavoriteDialogs({ view, onChanged: selection.clear });
   const byId = new Map(items.map((item) => [item.id, item]));
   const withListed = (run: (item: TaggedItem) => void) => (listed: { id: string }) => {

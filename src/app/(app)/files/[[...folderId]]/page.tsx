@@ -1,11 +1,9 @@
 import { notFound } from "next/navigation";
-import { getAppEnv } from "@/config/env";
-import { folderRefSchema, nodeIdSchema } from "@/contracts/nodes";
+import { folderRefSchema } from "@/contracts/nodes";
 import { FileManager } from "@/features/files/FileManager";
-import { currentDevice } from "@/server/auth/current";
 import { ApiError } from "@/server/http/api-error";
 import { getFolderView } from "@/server/services/node.service";
-import Loading from "../../loading";
+import { initialViewOf, withActiveAccount } from "../../with-active-account";
 
 /** File Manager: /files is the account root, /files/<folderId> a folder inside it. */
 export default async function FilesPage({ params, searchParams }: PageProps<"/files/[[...folderId]]">) {
@@ -14,13 +12,11 @@ export default async function FilesPage({ params, searchParams }: PageProps<"/fi
   const ref = folderRefSchema.safeParse(folderId?.[0] ?? "root");
   if (!ref.success) notFound();
 
-  const device = await currentDevice();
-  // A first visit has no account yet; the shell creates one and refreshes this page.
-  if (!device.active) return <Loading />;
-
-  const view = await getFolderView(device.active.account.id, ref.data).catch((error: unknown) => {
-    if (error instanceof ApiError && error.code === "NOT_FOUND") notFound();
-    throw error;
+  return withActiveAccount(async ({ account }) => {
+    const view = await getFolderView(account.id, ref.data).catch((error: unknown) => {
+      if (error instanceof ApiError && error.code === "NOT_FOUND") notFound();
+      throw error;
+    });
+    return <FileManager key={view.folder.id} view={view} isAdmin={account.isAdmin} initialView={initialViewOf(viewParam)} />;
   });
-  return <FileManager key={view.folder.id} view={view} isAdmin={device.active.account.isAdmin} publicUrl={getAppEnv().PUBLIC_URL.replace(/\/$/, "")} initialView={typeof viewParam === "string" && nodeIdSchema.safeParse(viewParam).success ? viewParam : undefined} />;
 }
