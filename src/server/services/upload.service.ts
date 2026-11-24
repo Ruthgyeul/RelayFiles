@@ -6,7 +6,7 @@ import { STORAGE, UPLOAD } from "@/config/policy";
 import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
 import { randomString, ID_ALPHABET, newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
-import { folderCount, homeUploadPlan, kindFromMime, mimeFromName, uploadFallbackName } from "@/domain/upload";
+import { folderCount, homeUploadPlan, mimeFromName, uploadFallbackName } from "@/domain/upload";
 import { segmentsBelowRoot } from "@/domain/tree";
 import { db } from "../db/client";
 import { retryOnUniqueViolation } from "../db/errors";
@@ -31,6 +31,7 @@ import { countOne } from "../metrics/counters";
 import { lockedLocationOf } from "./node-location";
 import { logger } from "../logger";
 import { scanningEnabled } from "../scan/clamd";
+import { dbKindOfMime, isProcessedKind } from "./node-dto";
 
 type Owner = SpaceOwner;
 
@@ -232,7 +233,7 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
       accountId: owner.id,
       parentId: folder.id,
       name,
-      kind: kindFromMime(mime).toUpperCase() as "VIDEO" | "AUDIO" | "IMAGE" | "OTHER",
+      kind: dbKindOfMime(mime),
       mime,
       size: BigInt(entry.size),
       sha256,
@@ -265,6 +266,6 @@ async function placeUpload(owner: Owner, driver: StorageDriver, batch: UploadBat
   if (replace) await driver.removeAssets(owner.id, [replace.id]).catch((error: unknown) => logger.warn("old media assets not removed", { error }));
   // Thumbnails and copies are made only once the scan found the file clean (scan.service.ts).
   if (scanned) void enqueueScan([row.id]);
-  else if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
+  else if (isProcessedKind(row.kind)) void enqueueMedia([row.id]);
   return { nodeId: row.id, name: row.name, folderId: folder.id };
 }

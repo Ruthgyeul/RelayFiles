@@ -9,7 +9,7 @@ import { segmentsBelowRoot } from "@/domain/tree";
 import { db, Prisma } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
-import { enqueueMedia, enqueueScan } from "../jobs/queue";
+import { enqueueScan, queueMediaFor, type MediaCandidate } from "../jobs/queue";
 import { logger } from "../logger";
 import { insertNodes, listSiblingNames, moveIntoFolder } from "../repositories/node.repo";
 import { ancestorChain, subtreeHeight, subtreeRowsOf } from "../repositories/node-tree.repo";
@@ -147,7 +147,7 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
     const taken = await listSiblingNames(db(), target.id);
     let renamed = 0;
     const now = new Date();
-    const media: string[] = [];
+    const media: MediaCandidate[] = [];
     // A copy of a file still waiting for its virus scan gets a new id: the scan job of the
     // original never covers it, so it is queued again (and its thumbnails wait for the result).
     const unscanned: string[] = [];
@@ -190,12 +190,12 @@ export async function copyNodes(owner: NodeOwner, ids: string[], targetRef: stri
         undo.push("remove copy", async () => {
           await driver.moveToTrash(to);
         });
-        media.push(...rows.filter((copy) => copy.type === "FILE" && copy.scanState !== "PENDING" && (copy.kind === "IMAGE" || copy.kind === "VIDEO")).map((copy) => copy.id));
+        media.push(...rows);
         unscanned.push(...rows.filter((copy) => copy.type === "FILE" && copy.scanState === "PENDING").map((copy) => copy.id));
       }
     });
     // Assets are keyed by node id, so copies get their own (rebuilt by the worker).
-    void enqueueMedia(media);
+    void queueMediaFor(media);
     void enqueueScan(unscanned);
     return { done: items.length, renamed, targetName: target.name };
   } catch (caught) {

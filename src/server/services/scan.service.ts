@@ -14,6 +14,7 @@ import { locationOf } from "./node-location";
 import { deleteItems } from "./node-ops.service";
 import { requireNode, type NodeOwner } from "./node-access";
 import { driverForAccount } from "./volume.service";
+import { isProcessedKind } from "./node-dto";
 
 export type ScanOutcome = "clean" | "infected" | "failed";
 
@@ -44,7 +45,7 @@ export async function runScan(nodeId: string): Promise<ScanOutcome | null> {
   switch (verdict.state) {
     case "clean":
       await setScanState(db(), row.id, "CLEAN", "PENDING");
-      if (row.kind === "IMAGE" || row.kind === "VIDEO") void enqueueMedia([row.id]);
+      if (isProcessedKind(row.kind)) void enqueueMedia([row.id]);
       // The owner's open pages drop the "Scanning" badge.
       publishAccountChange(row.accountId);
       return "clean";

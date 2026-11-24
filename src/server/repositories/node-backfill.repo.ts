@@ -7,7 +7,7 @@ import type { DbClient } from "../db/client";
 /** Images and videos still without a thumbnail, in id order (a keyset cursor), for the backfill script. */
 export function mediaWithoutThumbs(db: DbClient, take: number, afterId: string | null) {
   return db.node.findMany({
-    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, hasThumb: false, missing: false, ...(afterId ? { id: { gt: afterId } } : {}) },
+    where: { type: "FILE", kind: { in: [...MEDIA.processedKinds] }, hasThumb: false, missing: false, ...(afterId ? { id: { gt: afterId } } : {}) },
     select: { id: true },
     orderBy: { id: "asc" },
     take,
@@ -30,7 +30,7 @@ export function imagesForPreview(db: DbClient, take: number, afterId: string | n
  */
 export function mediaWithStaleCopies(db: DbClient, mode: "SENSITIVE" | "ALL", take: number, afterId: string | null) {
   return db.node.findMany({
-    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, missing: false, stripFailed: false, OR: [{ derivedMode: null }, { derivedMode: { not: mode } }], ...(afterId ? { id: { gt: afterId } } : {}) },
+    where: { type: "FILE", kind: { in: [...MEDIA.processedKinds] }, missing: false, stripFailed: false, OR: [{ derivedMode: null }, { derivedMode: { not: mode } }], ...(afterId ? { id: { gt: afterId } } : {}) },
     select: { id: true },
     orderBy: { id: "asc" },
     take,
@@ -60,7 +60,7 @@ export function filesWithoutSha256(db: DbClient, take: number, afterId: string |
 /** Photos and videos whose date taken was never read, by id (the release data migration queues them). */
 export function mediaWithoutDateTaken(db: DbClient, take: number, afterId: string | null) {
   return db.node.findMany({
-    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, takenAt: null, missing: false, ...(afterId ? { id: { gt: afterId } } : {}) },
+    where: { type: "FILE", kind: { in: [...MEDIA.processedKinds] }, takenAt: null, missing: false, ...(afterId ? { id: { gt: afterId } } : {}) },
     select: { id: true },
     orderBy: { id: "asc" },
     take,

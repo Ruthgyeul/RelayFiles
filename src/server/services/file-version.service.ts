@@ -3,7 +3,6 @@ import { getEnv } from "@/config/env";
 import { MS, STORAGE } from "@/config/policy";
 import type { FileVersionDto } from "@/contracts/nodes";
 import { newFileVersionId, newLinkId, newNodeId } from "@/domain/ids";
-import { kindFromMime } from "@/domain/upload";
 import { db, type DbClient } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
@@ -21,6 +20,7 @@ import { findVolume } from "../repositories/volume.repo";
 import { locationOf } from "./node-location";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 import type { NodeOwner } from "./node-access";
+import { dbKindOfMime, isProcessedKind } from "./node-dto";
 
 
 /** Days an earlier version is kept (FILE_VERSIONS_DAYS); 0 keeps none. */
@@ -166,7 +166,7 @@ export async function restoreFileVersion(owner: NodeOwner, nodeId: string, versi
         accountId: owner.id,
         parentId: now.parentId!,
         name: now.name,
-        kind: kindFromMime(mime).toUpperCase() as "VIDEO" | "AUDIO" | "IMAGE" | "OTHER",
+        kind: dbKindOfMime(mime),
         mime,
         size: version.size,
         sha256: version.sha256,
@@ -178,7 +178,7 @@ export async function restoreFileVersion(owner: NodeOwner, nodeId: string, versi
       return created;
     });
     await driver.removeAssets(owner.id, [row.id]).catch((error: unknown) => logger.warn("old media assets not removed", { error }));
-    if (placed.kind === "IMAGE" || placed.kind === "VIDEO") void enqueueMedia([placed.id]);
+    if (isProcessedKind(placed.kind)) void enqueueMedia([placed.id]);
     return { nodeId: placed.id };
   } catch (caught) {
     if (caught instanceof StorageTargetExistsError || isUniqueViolation(caught)) throw new ApiError("CONFLICT", "This file changed. Reload and try again.");
