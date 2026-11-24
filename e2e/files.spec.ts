@@ -105,3 +105,35 @@ test("other accounts' folders are not found", async ({ page, browser }) => {
   await expect(intruder.getByText("Secret")).toBeHidden();
   await other.close();
 });
+
+test("moves between items with the keyboard, selects with Space and opens with Enter", async ({ page }) => {
+  await openFiles(page);
+  for (const name of ["Alpha", "Beta", "Gamma"]) await newFolder(page, name);
+  const name = (item: string) => page.locator(`[data-item="${item}"] [data-nav-item]`);
+
+  await name("Alpha").focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(name("Beta")).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(name("Gamma")).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(name("Alpha")).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(name("Alpha")).toBeFocused();
+
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("checkbox", { name: "Select Alpha" })).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Shift+Space");
+  await expect(page.getByText("2 selected")).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("checkbox", { name: "Select Beta" })).toHaveAttribute("aria-checked", "false");
+
+  // The grid moves by card; Enter opens the folder.
+  await page.keyboard.press("g");
+  await name("Alpha").focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(name("Beta")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { level: 1, name: "Beta" })).toBeVisible();
+});

@@ -35,3 +35,6 @@ export function itemMeta(item: NodeItem, parentPath?: string): string {
   const own = item.type === "folder" ? itemCount(item.itemCount) : formatSize(Number(item.size));
   return parentPath ? `${parentPath} · ${own}` : own;
 }
+
+/** An item's name as a button (the list's keyboard stop), looking like the plain name it replaces. */
+export const NAME_BUTTON = "min-w-0 truncate border-0 bg-transparent p-0 text-left font-[inherit] text-[inherit] text-t1";

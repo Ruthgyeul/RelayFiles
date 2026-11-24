@@ -17,7 +17,8 @@ import { fileUrls } from "@/shared/lib/files-api";
 import { kindOf } from "@/shared/ui/node-kind";
 import { toShareSettings } from "./settings";
 import { MenuButton } from "./ItemButtons";
-import { itemMeta, type ItemProps } from "./item-props";
+import { itemMeta, NAME_BUTTON, type ItemProps } from "./item-props";
+import { NAV_ITEM_ATTR } from "./useListKeyboard";
 
 /** "1:12 / 4:05" when a video or audio file has a saved position. */
 function ResumeMeta({ id }: { id: string }) {
@@ -97,7 +98,18 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
         </div>
         <div onClick={onPrimary} className="flex min-w-0 flex-1 cursor-pointer flex-col gap-[3px]">
           <span className="flex items-center gap-1.5 truncate text-[15px] font-bold">
-            <span className="truncate">{item.name}</span>
+            {/* The keyboard stop of the row: Enter opens, Space selects, arrows move (useListKeyboard). */}
+            <button
+              type="button"
+              {...{ [NAV_ITEM_ATTR]: item.id }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onPrimary();
+              }}
+              className={NAME_BUTTON}
+            >
+              {item.name}
+            </button>
             {item.favorite && <Icon name="star" weight="fill" size={13} label="In Favorites" className="shrink-0 text-warn-strong" />}
             {item.settings.hasPassword && <Icon name="lock-simple" size={13} label="Password protected" className="text-t4" />}
             {item.busy && <BusyPill busy={item.busy} />}

@@ -27,6 +27,10 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ["Ctrl", "A"], description: "Select all" },
       { keys: ["Del"], description: "Delete selected" },
       { keys: ["Backspace"], description: "Parent folder" },
+      { keys: ["↑", "↓", "←", "→"], description: "Move between items" },
+      { keys: ["Home", "End"], description: "First / last item" },
+      { keys: ["Enter"], description: "Open the item" },
+      { keys: ["Space"], description: "Select the item" },
     ],
   },
   {

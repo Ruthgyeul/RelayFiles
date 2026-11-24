@@ -8,7 +8,8 @@ import { Icon } from "@/shared/ui/icon/Icon";
 import { kindOf } from "@/shared/ui/node-kind";
 import { MediaThumb, ResumeBar } from "./MediaThumb";
 import { MenuButton } from "./ItemButtons";
-import { itemMeta, type ItemProps } from "./item-props";
+import { itemMeta, NAME_BUTTON, type ItemProps } from "./item-props";
+import { NAV_ITEM_ATTR } from "./useListKeyboard";
 
 /** Grid card: 4:3 preview area with the type icon, corner checkbox, name, meta and menu. */
 export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy }: ItemProps) {
@@ -49,7 +50,17 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPr
       <div className="flex items-center gap-1 py-2.5 pr-1.5 pl-3">
         <div onClick={onPrimary} className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5">
           <span className="flex items-center gap-[5px] text-[14px] font-bold">
-            <span className="truncate">{item.name}</span>
+            <button
+              type="button"
+              {...{ [NAV_ITEM_ATTR]: item.id }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onPrimary();
+              }}
+              className={NAME_BUTTON}
+            >
+              {item.name}
+            </button>
             {item.favorite && <Icon name="star" weight="fill" size={12} label="In Favorites" className="shrink-0 text-warn-strong" />}
             {item.settings.hasPassword && <Icon name="lock-simple" size={12} label="Password protected" className="text-t4" />}
             {item.busy && <BusyPill busy={item.busy} />}
