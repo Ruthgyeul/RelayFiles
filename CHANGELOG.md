@@ -6,6 +6,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Added
 
+- Folder auto clean: a folder's menu can move files older than 7, 30, 90 or 365 days (by date added or date modified) to Recently deleted every day, with a count of what would move now and a tag on the folder (`/api/nodes/:id/auto-clean`)
 - Recently deleted: select several items to restore or delete forever, "Restore all" and "Empty"; deleting items in the File Manager, Favorites or Storage offers Undo in its notice for a few seconds (`POST /api/trash/bulk`)
 - Worker watch: `/api/health` reports the worker (`components.worker`, not part of the overall status), the app sends "Background worker stopped" and "running again" notifications itself, and the Docker Compose worker has a healthcheck (k3s: a liveness probe) that `npm run worker:health` runs
 - Videos browsers cannot play (AVI, WMV, MPEG-TS, …) can be seeked anywhere while they convert: the viewer plays them over HLS (natively in Safari and recent Chrome, through hls.js elsewhere), converting from wherever the player jumps

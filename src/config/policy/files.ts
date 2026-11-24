@@ -44,6 +44,22 @@ export const RENUMBER = {
   tempPrefix: ".relayfiles-renumber-",
 } as const;
 
+/** Folder auto-clean rules: files directly in a folder older than the rule move to Recently deleted each day. */
+export const AUTO_CLEAN = {
+  /** Ages offered in the dialog, in days. */
+  dayChoices: [7, 30, 90, 365],
+  /** The age chosen first for a folder without a rule. */
+  defaultDays: 30,
+  /** Longest age a rule may have, in days (ten years). */
+  maxDays: 3_650,
+  /** Most files the daily job moves for one rule; the rest move on the next days. */
+  perRunLimit: 5_000,
+  /** Files moved per delete (one storage transaction each). */
+  batchSize: 500,
+  /** Rules read per page of the daily job. */
+  rulePage: 200,
+} as const;
+
 /** "Find duplicates": files with the same content (SHA-256 and size). */
 export const DUPLICATES = {
   /** Default for DUPLICATES_MAX_SCAN: most files one scan compares; a larger tree is reported as truncated. */

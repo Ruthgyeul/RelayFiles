@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { folderRefSchema } from "@/contracts/nodes";
 import { FileManager } from "@/features/files/FileManager";
 import { ApiError } from "@/server/http/api-error";
+import { autoCleanRuleOf } from "@/server/services/auto-clean.service";
 import { getFolderView } from "@/server/services/node.service";
 import { initialViewOf, withActiveAccount } from "../../with-active-account";
 
@@ -17,6 +18,7 @@ export default async function FilesPage({ params, searchParams }: PageProps<"/fi
       if (error instanceof ApiError && error.code === "NOT_FOUND") notFound();
       throw error;
     });
-    return <FileManager key={view.folder.id} view={view} isAdmin={account.isAdmin} initialView={initialViewOf(viewParam)} />;
+    const autoClean = view.isRoot ? null : await autoCleanRuleOf(account.id, view.folder.id);
+    return <FileManager key={view.folder.id} view={view} autoClean={autoClean} isAdmin={account.isAdmin} initialView={initialViewOf(viewParam)} />;
   });
 }

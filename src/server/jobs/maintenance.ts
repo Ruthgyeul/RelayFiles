@@ -12,6 +12,7 @@ import { runHealthProbe } from "./health-probe";
 import { diskRates } from "../metrics/disks";
 import { networkRates } from "../metrics/system";
 import { runCleanup } from "../services/admin.service";
+import { runAutoClean } from "../services/auto-clean.service";
 import { purgeOldAuditEvents } from "../services/audit.service";
 import { purgeExpiredVersions } from "../services/file-version.service";
 import { purgeOldAccountEvents } from "../services/security-log.service";
@@ -46,11 +47,16 @@ export interface RunningQueue {
  * The daily job: expired accounts and items, then trash entries older than the retention
  * and unfinished uploads older than UPLOAD_TMP_TTL_HOURS on every ACTIVE or DRAINING volume,
  * admin audit entries older than AUTH.auditRetentionDays and security log entries older than
- * SECURITY_LOG.retentionDays, and earlier file versions older than FILE_VERSIONS_DAYS.
+ * SECURITY_LOG.retentionDays, and earlier file versions older than FILE_VERSIONS_DAYS. Folder
+ * auto-clean rules run before the trash is emptied, so the files they move wait the full retention.
  */
 export async function runMaintenance(now: Date) {
   const cleanup = await runCleanup(now);
   await recordCleanup({ at: now.toISOString(), ...cleanup }).catch((error: unknown) => logger.warn("cleanup result not stored", { error }));
+  const autoClean = await runAutoClean(now).catch((error: unknown) => {
+    logger.warn("auto clean not run", { error });
+    return { rules: 0, files: 0 };
+  });
   const trashBefore = new Date(now.getTime() - trashRetentionHours() * MS.hour);
   const uploadsBefore = new Date(now.getTime() - getEnv("uploads").UPLOAD_TMP_TTL_HOURS * MS.hour);
   const transcodedBefore = new Date(now.getTime() - TRANSCODE.cacheKeepDays * MS.day);
@@ -77,7 +83,7 @@ export async function runMaintenance(now: Date) {
   await purgeOldAuditEvents(now).catch((error: unknown) => logger.warn("audit log not purged", { error }));
   await purgeOldAccountEvents(now).catch((error: unknown) => logger.warn("security log not purged", { error }));
   await purgeExpiredVersions(now).catch((error: unknown) => logger.warn("expired file versions not purged", { error }));
-  return { ...cleanup, trash, uploads };
+  return { ...cleanup, autoCleaned: autoClean.files, trash, uploads };
 }
 
 /** A job on the probes queue: its scheduler id, job name, interval and what it does. */
