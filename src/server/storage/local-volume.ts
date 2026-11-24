@@ -1,5 +1,5 @@
 import "server-only";
-import type { Readable } from "node:stream";
+import type { Readable, Transform } from "node:stream";
 import type { DiskEntry } from "@/domain/fsck";
 import { layoutOf, type VolumeLayout } from "./layout";
 import type { AssetRef, ByteSource, CopyEntry, SpaceInfo, StorageDriver, StorageLocation, StorageStat, VersionRef } from "./driver";
@@ -67,6 +67,22 @@ export class LocalVolumeDriver implements StorageDriver {
 
   discardStaged(tempPath: string): Promise<void> {
     return staging.discardStaged(this.layout, tempPath);
+  }
+
+  stagedUploadPath(uploadId: string): string {
+    return staging.uploadPath(this.layout, uploadId);
+  }
+
+  stageUpload(uploadId: string, source: Readable | AsyncIterable<Uint8Array>, transforms: readonly Transform[] = []): Promise<void> {
+    return staging.stageUpload(this.layout, uploadId, source, transforms);
+  }
+
+  stagedUploadSize(uploadId: string): Promise<number | null> {
+    return staging.stagedUploadSize(this.layout, uploadId);
+  }
+
+  discardUpload(uploadId: string): Promise<void> {
+    return staging.discardUpload(this.layout, uploadId);
   }
 
   moveToTrash(location: StorageLocation): Promise<string> {

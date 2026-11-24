@@ -3,9 +3,8 @@ import type { ResumedUpload, ResumeUploadInput } from "@/contracts/uploads";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { findVolume } from "../repositories/volume.repo";
-import { reserveSpace, type SpaceOwner } from "../services/space.service";
+import { reserveSpace, spaceOf, type SpaceOwner } from "../services/space.service";
 import { assertAccountWritable } from "../services/volume.service";
-import { driverFor } from "../storage/registry";
 import { claimSlot, loadBatch, reboundSlot, rebindUpload, releaseSlot, setUploadOwner, uploadOwner, uploadRequest } from "./batches";
 import { liveReservations } from "./reservations";
 import { storedUpload } from "./tus";
@@ -40,7 +39,7 @@ export async function resumeUpload(owner: SpaceOwner, input: ResumeUploadInput):
   // The new batch's slot goes to this upload; a fresh upload for the same file is then refused.
   if (!(await claimSlot({ batchId, slot }, uploadId, { takeOver: false })).ok) throw new ApiError("NOT_FOUND");
   try {
-    await reserveSpace(owner, uploadId, entry.size, { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
+    await reserveSpace(owner, uploadId, entry.size, spaceOf(volume));
   } catch (error) {
     await releaseSlot(uploadId);
     throw error;

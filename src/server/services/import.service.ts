@@ -1,19 +1,14 @@
 import "server-only";
 import { publishAccountChange } from "../events/account-events";
 import { randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdir, stat, unlink } from "node:fs/promises";
-import { pipeline } from "node:stream/promises";
 import type { UploadedFile } from "@/contracts/uploads";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { findNode, findRootFolder } from "../repositories/node.repo";
 import { relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
-import { DIR_MODE, FILE_MODE, layoutOf } from "../storage/layout";
-import { driverFor } from "../storage/registry";
 import type { UploadBatch } from "../upload/batches";
-import { assertSpace } from "./space.service";
+import { assertSpace, spaceOf } from "./space.service";
 import { checkRelPath, finalizeUpload } from "./upload.service";
 import type { NodeOwner } from "./node-access";
 
@@ -53,22 +48,20 @@ export async function importFile(target: ImportTarget, rel: string, size: number
 
   const volume = await findVolume(db(), target.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
-  await assertSpace(target.owner, size, { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) }, { quotas: !target.ignoreQuota });
+  const space = spaceOf(volume);
+  await assertSpace(target.owner, size, space, { quotas: !target.ignoreQuota });
 
-  const uploads = layoutOf(volume.mountPath).uploads;
-  await mkdir(uploads, { recursive: true, mode: DIR_MODE });
   const uploadId = `import-${randomUUID()}`;
-  const tempPath = `${uploads}/${uploadId}`;
   try {
-    await pipeline(source, createWriteStream(tempPath, { flags: "wx", mode: FILE_MODE }));
-    if ((await stat(tempPath)).size !== size) throw new Error(`Short read for ${rel}`);
+    await space.driver.stageUpload(uploadId, source);
+    if ((await space.driver.stagedUploadSize(uploadId)) !== size) throw new Error(`Short read for ${rel}`);
     const batch: UploadBatch = { accountId: target.owner.id, volumeId: volume.id, folderId: target.rootId, fromHome: false, dup: "keep", files: [{ rel, size }] };
     const file = await finalizeUpload(target.owner, batch, 0, uploadId, modifiedAt);
     // Open pages of the account follow the import (one event per second at most per page).
     publishAccountChange(target.owner.id);
     return { status: "imported", file };
   } catch (error) {
-    await unlink(tempPath).catch(() => undefined);
+    await space.driver.discardUpload(uploadId);
     throw error;
   }
 }

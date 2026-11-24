@@ -1,5 +1,5 @@
 import "server-only";
-import type { Readable } from "node:stream";
+import type { Readable, Transform } from "node:stream";
 import type { DiskEntry } from "@/domain/fsck";
 import type { ASSET_DIRS } from "./layout";
 
@@ -96,6 +96,14 @@ export interface StorageDriver {
   stageCopy(from: StorageLocation, entries: readonly CopyEntry[]): Promise<string>;
   /** Removes a staged copy or upload from the temp area (missing is fine). */
   discardStaged(tempPath: string): Promise<void>;
+  /** Where the bytes of upload `uploadId` are received in the temp area, for {@link moveIntoPlace}. */
+  stagedUploadPath(uploadId: string): string;
+  /** Receives a whole upload (API upload, import) from `source` through `transforms`. A partial file is removed. */
+  stageUpload(uploadId: string, source: Readable | AsyncIterable<Uint8Array>, transforms?: readonly Transform[]): Promise<void>;
+  /** Bytes received for an upload, or null when there are none. */
+  stagedUploadSize(uploadId: string): Promise<number | null>;
+  /** Removes an upload's bytes and its resumable-upload metadata (missing is fine). */
+  discardUpload(uploadId: string): Promise<void>;
   /**
    * Renames a file only if nothing exists at `to` (a plain rename replaces it). Throws
    * {@link StorageTargetExistsError} when the name is taken, leaving both files untouched.

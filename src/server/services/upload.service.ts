@@ -1,6 +1,6 @@
 import "server-only";
 import { createReadStream } from "node:fs";
-import { rm, stat, unlink } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
 import { STORAGE, UPLOAD } from "@/config/policy";
 import type { PrepareUploadInput, PrepareUploadResult, UploadedFile } from "@/contracts/uploads";
@@ -15,7 +15,6 @@ import { carriedSettingsOf, createFileNode, createFolderNode, findChildByName, f
 import { ancestorChain, lockFolderForNames, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { sha256Of } from "../storage/hash";
-import { layoutOf } from "../storage/layout";
 import { driverFor } from "../storage/registry";
 import type { StorageDriver } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
@@ -23,7 +22,7 @@ import { loadBatch, saveBatch, type UploadBatch } from "../upload/batches";
 import { handOver, setAside } from "./file-version.service";
 import { assertItemRoom } from "./item-limit.service";
 import { createFolder } from "./node.service";
-import { assertSpace, reserveSpace, type SpaceOwner } from "./space.service";
+import { assertSpace, reserveSpace, spaceOf, type SpaceOwner } from "./space.service";
 import { resumableUploads } from "../upload/resume";
 import { assertAccountWritable, driverForAccount, lockAccountForWrite } from "./volume.service";
 import { enqueueMedia, enqueueScan } from "../jobs/queue";
@@ -129,7 +128,7 @@ export async function checkUploadStart(owner: Owner, batchId: string, slot: numb
   await assertAccountWritable(owner.id);
   const volume = await findVolume(db(), batch.volumeId);
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
-  await reserveSpace(owner, uploadId, entry.size, { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
+  await reserveSpace(owner, uploadId, entry.size, spaceOf(volume));
   return { batch, rel: entry.rel };
 }
 
@@ -175,19 +174,18 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
   const volume = await findVolume(db(), batch.volumeId);
   // Without its volume the received bytes cannot be reached (nor removed) from here.
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
-  const tempPath = `${layoutOf(volume.mountPath).uploads}/${uploadId}`;
+  const staging = driverFor(volume);
   try {
     const driver = await driverForAccount(owner, "write");
     // The recorded size counts toward the quota, so it must be the size of the bytes received.
-    if ((await stat(tempPath)).size !== entry.size) throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
-    return await placeUpload(owner, driver, batch, entry, tempPath, modifiedAt ?? new Date());
+    if ((await staging.stagedUploadSize(uploadId)) !== entry.size) throw new ApiError("BAD_REQUEST", "The file changed since the upload started.");
+    return await placeUpload(owner, driver, batch, entry, staging.stagedUploadPath(uploadId), modifiedAt ?? new Date());
   } catch (error) {
     // Any refusal (volume busy or offline, its folder deleted meanwhile, a name clash) removes
     // the received bytes. Left in place they would sit in the temp area where no quota sees
     // them, and a retry would find the upload complete (offset = length) and stop without
     // this step ever running again; removed, the retry gets 404 and starts a new upload.
-    await rm(tempPath, { force: true });
-    await rm(`${tempPath}.json`, { force: true });
+    await staging.discardUpload(uploadId);
     throw error;
   }
 }

@@ -1,9 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
 import { Readable, Transform, type TransformCallback } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { getEnv } from "@/config/env";
 import type { DuplicatePolicy, UploadedFile } from "@/contracts/uploads";
 import { nameError } from "@/domain/names";
@@ -13,12 +10,10 @@ import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { findChildByName } from "../repositories/node.repo";
 import { findVolume } from "../repositories/volume.repo";
-import { DIR_MODE, FILE_MODE, layoutOf } from "../storage/layout";
-import { driverFor } from "../storage/registry";
 import type { UploadBatch } from "../upload/batches";
 import { assertItemRoom } from "./item-limit.service";
 import { requireFolder, type NodeOwner } from "./node-access";
-import { releaseSpace, reserveSpace } from "./space.service";
+import { releaseSpace, reserveSpace, spaceOf } from "./space.service";
 import { finalizeUpload } from "./upload.service";
 import { assertAccountWritable } from "./volume.service";
 
@@ -58,17 +53,15 @@ export async function uploadWholeFile(owner: NodeOwner, folderRef: string, reque
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
 
   const uploadId = `api-${randomUUID()}`;
-  await reserveSpace(owner, uploadId, size, { id: volume.id, reservePct: volume.reservePct, driver: driverFor(volume) });
-  const uploads = layoutOf(volume.mountPath).uploads;
-  const tempPath = `${uploads}/${uploadId}`;
+  const space = spaceOf(volume);
+  await reserveSpace(owner, uploadId, size, space);
   try {
-    await mkdir(uploads, { recursive: true, mode: DIR_MODE });
-    await pipeline(Readable.fromWeb(body as import("node:stream/web").ReadableStream<Uint8Array>), new ByteLimit(size), createWriteStream(tempPath, { flags: "wx", mode: FILE_MODE }));
+    await space.driver.stageUpload(uploadId, Readable.fromWeb(body as import("node:stream/web").ReadableStream<Uint8Array>), [new ByteLimit(size)]);
     const batch: UploadBatch = { accountId: owner.id, volumeId: volume.id, folderId: folder.id, fromHome: false, dup, files: [{ rel: name, size }] };
     // finalizeUpload refuses (and removes) a body shorter than promised.
     return await finalizeUpload(owner, batch, 0, uploadId);
   } catch (error) {
-    await rm(tempPath, { force: true });
+    await space.driver.discardUpload(uploadId);
     throw error;
   } finally {
     await releaseSpace(uploadId, owner.id, volume.id).catch((error: unknown) => logger.warn("upload reservation not released", { error }));
