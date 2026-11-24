@@ -11,7 +11,7 @@ import { shareUrl } from "@/shared/lib/routes";
 import { useCopyLink } from "./useCopyLink";
 import { useFileDialogs } from "./useFileDialogs";
 import { useFileMedia } from "./useFileMedia";
-import { useSelection } from "./useSelection";
+import { useSelection } from "@/shared/hooks/useSelection";
 
 interface ListPageOptions<T extends NodeItem> {
   /** The items shown (after filters and search). */

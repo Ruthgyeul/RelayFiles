@@ -42,7 +42,7 @@ export function SharePage({ page }: { page: SharePageData }) {
         {page.status === "locked" && <LockedCard linkId={page.linkId} name={page.name} />}
         {page.status === "open" && page.view && <ShareFolder linkId={page.linkId} url={page.url} view={page.view} notify={notify} />}
       </main>
-      {notice && <NoticePill message={notice} />}
+      {notice && <NoticePill notice={notice} />}
     </div>
   );
 }

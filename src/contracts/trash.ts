@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FILES } from "@/config/policy";
 import { ID_PATTERN } from "@/domain/ids";
 import type { NodeKind, NodeType } from "./nodes";
 
@@ -36,3 +37,19 @@ export interface RestoredItem {
   /** False when its old folder was deleted, so it went into the account root. */
   inOriginalFolder: boolean;
 }
+
+/** POST /api/trash/bulk: restore or delete forever several deleted items at once ("Restore all", "Empty", Undo). */
+export const trashBulkSchema = z.object({
+  action: z.enum(["restore", "delete"]),
+  ids: z.array(deletedItemIdSchema).min(1).max(FILES.maxBatchItems),
+});
+export type TrashBulkInput = z.infer<typeof trashBulkSchema>;
+
+/** What a bulk action did: the items restored (in the order asked), and how many were gone already. */
+export interface TrashBulkResult {
+  restored: RestoredItem[];
+  deleted: number;
+  /** Restored or emptied meanwhile (another device, the daily cleanup): nothing to do for them. */
+  missing: number;
+}
+

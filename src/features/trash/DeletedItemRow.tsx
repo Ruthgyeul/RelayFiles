@@ -9,22 +9,26 @@ import { ListRow } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { IconButton } from "@/shared/ui/IconButton";
 import { kindOf } from "@/shared/ui/node-kind";
+import { SelectBox } from "@/shared/ui/SelectBox";
 
 interface DeletedItemRowProps {
   item: DeletedItemDto;
   now: number;
   busy: boolean;
+  selected: boolean;
+  onToggle: () => void;
   onRestore: () => void;
   onDeleteForever: () => void;
 }
 
-/** One item under "Recently deleted": icon, name, where it was, size, time left, Restore and Delete forever. */
-export function DeletedItemRow({ item, now, busy, onRestore, onDeleteForever }: DeletedItemRowProps) {
+/** One item under "Recently deleted": checkbox, icon, name, where it was, size, time left, Restore and Delete forever. */
+export function DeletedItemRow({ item, now, busy, selected, onToggle, onRestore, onDeleteForever }: DeletedItemRowProps) {
   const icon = kindOf(item);
   const location = originalLocation(item.location);
   const inside = item.type === "folder" ? ` · ${itemCount(item.itemCount - 1)}` : "";
   return (
     <ListRow data-deleted={item.name} className="flex items-center gap-3 px-4 py-3 max-sm:flex-wrap">
+      <SelectBox checked={selected} label={`Select ${item.name}`} onToggle={onToggle} />
       <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-ctrl bg-btn">
         <Icon name={icon.icon} weight={item.type === "folder" ? "fill" : "regular"} size={20} style={{ color: icon.color }} />
       </span>

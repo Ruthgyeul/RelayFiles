@@ -17,6 +17,7 @@ import { kindOf } from "@/shared/ui/node-kind";
 import { MoveDialog, type MoveRequest } from "./MoveDialog";
 import { SettingsDialog, type SettingsRequest } from "./SettingsDialog";
 import { TagsDialog, type TagsRequest } from "./TagsDialog";
+import { undoDelete } from "./undo-delete";
 
 interface Context {
   isAdmin: boolean;
@@ -145,8 +146,9 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
         onCancel={() => setRemove(null)}
         onConfirm={() =>
           void run(async () => {
-            const { deleted } = await filesApi.remove(remove!.map((item) => item.id));
-            changed(deleted === 1 ? "Deleted" : `${deleted} items deleted`);
+            const { deleted, trashIds } = await filesApi.remove(remove!.map((item) => item.id));
+            notify(deleted === 1 ? "Deleted" : `${deleted} items deleted`, undoDelete(trashIds, { notify, done: () => router.refresh() }));
+            changed();
           }, () => setRemove(null))
         }
       />

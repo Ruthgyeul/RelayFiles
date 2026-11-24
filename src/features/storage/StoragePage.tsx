@@ -17,6 +17,7 @@ import { Button } from "@/shared/ui/Button";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { StorageFileList } from "./StorageFileList";
+import { undoDelete } from "@/features/files/undo-delete";
 
 const PERCENT = 100;
 const card = "flex flex-col gap-3 rounded-2xl border border-card-line bg-card p-5";
@@ -59,8 +60,8 @@ export function StoragePage({ data }: { data: StorageOverview }) {
   const remove = async () => {
     setBusy(true);
     try {
-      const { deleted } = await filesApi.remove(chosen.map((item) => item.id));
-      notify(`${deleted} ${deleted === 1 ? "item" : "items"} deleted`);
+      const { deleted, trashIds } = await filesApi.remove(chosen.map((item) => item.id));
+      notify(`${deleted} ${deleted === 1 ? "item" : "items"} deleted`, undoDelete(trashIds, { notify, done: () => router.refresh() }));
       setSelected(new Set());
       router.refresh();
     } catch (caught) {

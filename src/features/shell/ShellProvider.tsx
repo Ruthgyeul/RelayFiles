@@ -5,7 +5,7 @@ import type { Route } from "next";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { CreatedAccount, SessionAccount, SessionState } from "@/contracts/auth";
 import { accountApi } from "@/features/account/api";
-import { useNotice } from "@/shared/hooks/useNotice";
+import { useNotice, type Notice, type NoticeAction } from "@/shared/hooks/useNotice";
 import { autoAccountStore } from "./auto-account";
 import { useAccountActions } from "./useAccountActions";
 import { useLiveRefresh } from "./useLiveRefresh";
@@ -44,7 +44,8 @@ interface ShellContextValue {
   signInOpen: boolean;
   tokenToSave: TokenToSave | null;
   autoAccountId: string | null;
-  notify: (message: string) => void;
+  /** Shows a short notice; with an action ("Undo"), it stays a few seconds with a button. */
+  notify: (message: string, action?: NoticeAction) => void;
   dismissAccountToast: () => void;
   openSignIn: () => void;
   closeSignIn: () => void;
@@ -62,7 +63,7 @@ interface ShellContextValue {
 
 const ShellContext = createContext<ShellContextValue | null>(null);
 /** The short notice on screen: its own context, so showing one re-renders only the pill, not every page. */
-const NoticeContext = createContext<string | null>(null);
+const NoticeContext = createContext<Notice | null>(null);
 
 export function useShell(): ShellContextValue {
   const value = useContext(ShellContext);
@@ -71,7 +72,7 @@ export function useShell(): ShellContextValue {
 }
 
 /** The notice shown now (null when none); read by the toast pill. */
-export function useShellNotice(): string | null {
+export function useShellNotice(): Notice | null {
   return useContext(NoticeContext);
 }
 
