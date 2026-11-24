@@ -15,7 +15,7 @@ import { carriedSettingsOf, createFileNode, createFolderNode, findChildByName, f
 import { ancestorChain, lockFolderForNames, relativePaths } from "../repositories/node-tree.repo";
 import { findVolume } from "../repositories/volume.repo";
 import { sha256Of } from "../storage/hash";
-import { driverFor } from "../storage/registry";
+import { driverFor, stagingDriverFor } from "../storage/registry";
 import type { StorageDriver } from "../storage/driver";
 import { withStorageTransaction } from "../storage/storage-transaction";
 import { loadBatch, saveBatch, type UploadBatch } from "../upload/batches";
@@ -174,7 +174,8 @@ export async function finalizeUpload(owner: Owner, batch: UploadBatch, slot: num
   const volume = await findVolume(db(), batch.volumeId);
   // Without its volume the received bytes cannot be reached (nor removed) from here.
   if (!volume) throw new ApiError("STORAGE_OFFLINE");
-  const staging = driverFor(volume);
+  // Not driverFor: an OFFLINE volume refuses the upload below, and its received bytes still go.
+  const staging = stagingDriverFor(volume);
   try {
     const driver = await driverForAccount(owner, "write");
     // The recorded size counts toward the quota, so it must be the size of the bytes received.

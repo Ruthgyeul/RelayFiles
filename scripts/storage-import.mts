@@ -18,7 +18,6 @@ const { exportManifestSchema } = await import("../src/contracts/account-export")
 const { applyExportManifest } = await import("../src/server/services/import-metadata.service");
 const { formatSize } = await import("../src/domain/format");
 const { db } = await import("../src/server/db/client");
-const { closeQueues } = await import("../src/server/jobs/queue");
 const { findAccountById } = await import("../src/server/repositories/account.repo");
 const { importFile, openImportTarget } = await import("../src/server/services/import.service");
 
@@ -94,7 +93,5 @@ await runScript(async () => {
     console.error(`Import stopped: ${error instanceof Error ? error.message : String(error)}`);
     console.error("Files imported so far are kept; run the same command again to continue.");
     return 1;
-  } finally {
-    await closeQueues();
   }
 });

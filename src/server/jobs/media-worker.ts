@@ -7,12 +7,17 @@ import { storeTranscode } from "../media/transcode-cache";
 import { giveUpScan, runScan } from "../services/scan.service";
 import { MEDIA_QUEUE, queueConnection, type MediaJob } from "./queue";
 
-/** Runs one media job by its task; `signal` aborts when the worker stops (the long ffmpeg steps watch it). */
-function runMediaJob({ nodeId, task }: MediaJob, signal?: AbortSignal): Promise<unknown> {
-  if (task === "transcode") return storeTranscode(nodeId, signal);
-  if (task === "taken") return recordDateTaken(nodeId);
-  if (task === "scan") return runScan(nodeId);
-  return processMedia(nodeId, signal);
+/** What each media task does; `signal` aborts when the worker stops (the long ffmpeg steps watch it). */
+const MEDIA_TASKS: Record<NonNullable<MediaJob["task"]>, (nodeId: string, signal?: AbortSignal) => Promise<unknown>> = {
+  process: processMedia,
+  transcode: storeTranscode,
+  taken: (nodeId) => recordDateTaken(nodeId),
+  scan: (nodeId) => runScan(nodeId),
+};
+
+/** Runs one media job by its task ("process" when none is given). */
+function runMediaJob({ nodeId, task = "process" }: MediaJob, signal?: AbortSignal): Promise<unknown> {
+  return MEDIA_TASKS[task](nodeId, signal);
 }
 
 /**

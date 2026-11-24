@@ -21,6 +21,19 @@ const drivers = new Map<string, { mountPath: string; driver: StorageDriver }>();
  */
 export function driverFor(volume: VolumeRecord): StorageDriver {
   if (volume.status === "OFFLINE") throw new ApiError("STORAGE_OFFLINE");
+  return instanceFor(volume);
+}
+
+/**
+ * The driver of a volume for its upload staging area only, whatever the volume's status: an
+ * upload finishing just after an admin set the volume OFFLINE must still be able to remove
+ * (or measure) the bytes it received there, which never reach the account's files.
+ */
+export function stagingDriverFor(volume: VolumeRecord): StorageDriver {
+  return instanceFor(volume);
+}
+
+function instanceFor(volume: VolumeRecord): StorageDriver {
   const existing = drivers.get(volume.id);
   if (existing?.mountPath === volume.mountPath) return existing.driver;
   // S3 is a reserved enum value (prisma/schema.prisma): no driver implements it yet.

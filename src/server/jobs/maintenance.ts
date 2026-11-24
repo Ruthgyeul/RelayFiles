@@ -80,19 +80,40 @@ export async function runMaintenance(now: Date) {
   return { ...cleanup, trash, uploads };
 }
 
-/** Runs one probe by its name. */
-async function runProbe(name: string): Promise<unknown> {
-  if (name === "metrics") {
+/** A job on the probes queue: its scheduler id, job name, interval and what it does. */
+interface Probe {
+  scheduler: string;
+  name: string;
+  everyMs: () => number;
+  run: () => Promise<unknown>;
+}
+
+/** Every probe, scheduled from this list and run by its job name. */
+const PROBES: readonly Probe[] = [
+  {
+    scheduler: METRICS_SAMPLE,
+    name: "metrics",
+    everyMs: () => getEnv("jobs").METRICS_SAMPLE_INTERVAL_SEC * MS.second,
     // Average outbound and disk rates since the previous sample (one per interval).
-    const [network, disks] = await Promise.all([networkRates(), diskRates()]);
-    await recordSample({ outPerSec: network.outPerSec, disks }, new Date());
-    return null;
-  }
-  if (name === "volumes") return watchVolumes();
-  if (name === "health") {
-    const { probe } = await runHealthProbe(new Date());
-    return probe;
-  }
+    run: async () => {
+      const [network, disks] = await Promise.all([networkRates(), diskRates()]);
+      await recordSample({ outPerSec: network.outPerSec, disks }, new Date());
+      return null;
+    },
+  },
+  {
+    scheduler: HEALTH_PROBE,
+    name: "health",
+    everyMs: () => getEnv("jobs").HEALTH_PROBE_INTERVAL_SEC * MS.second,
+    run: async () => (await runHealthProbe(new Date())).probe,
+  },
+  { scheduler: VOLUME_WATCH, name: "volumes", everyMs: () => getEnv("storage").VOLUME_WATCH_INTERVAL_SEC * MS.second, run: watchVolumes },
+];
+
+/** Runs one probe by its job name. */
+async function runProbe(name: string): Promise<unknown> {
+  const probe = PROBES.find((entry) => entry.name === name);
+  if (probe) return probe.run();
   logger.warn("unknown probe job skipped", { job: name });
   return null;
 }
@@ -163,7 +184,5 @@ export async function scheduleMaintenance(cleanupQueue: Queue, probesQueue: Queu
   const jobs = getEnv("jobs");
   for (const id of MOVED_SCHEDULERS) await cleanupQueue.removeJobScheduler(id);
   await cleanupQueue.upsertJobScheduler(DAILY_CLEANUP, { pattern: jobs.CLEANUP_CRON, tz: jobs.JOBS_TIMEZONE }, { name: "cleanup", opts: KEEP_HISTORY });
-  await probesQueue.upsertJobScheduler(METRICS_SAMPLE, { every: jobs.METRICS_SAMPLE_INTERVAL_SEC * MS.second }, { name: "metrics", opts: KEEP_HISTORY });
-  await probesQueue.upsertJobScheduler(HEALTH_PROBE, { every: jobs.HEALTH_PROBE_INTERVAL_SEC * MS.second }, { name: "health", opts: KEEP_HISTORY });
-  await probesQueue.upsertJobScheduler(VOLUME_WATCH, { every: getEnv("storage").VOLUME_WATCH_INTERVAL_SEC * MS.second }, { name: "volumes", opts: KEEP_HISTORY });
+  for (const probe of PROBES) await probesQueue.upsertJobScheduler(probe.scheduler, { every: probe.everyMs() }, { name: probe.name, opts: KEEP_HISTORY });
 }

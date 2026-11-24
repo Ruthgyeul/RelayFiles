@@ -21,6 +21,8 @@ import { SESSION_COOKIE } from "@/server/auth/session-cookie";
 import { layoutOf } from "@/server/storage/layout";
 import { configuredVolumeRoot } from "@/server/storage/registry";
 import { userRootOf } from "@/server/storage/safe-path";
+import { finalizeUpload } from "@/server/services/upload.service";
+import { loadBatch } from "@/server/upload/batches";
 import { reservedBytes } from "@/server/upload/reservations";
 import { randomTestIp } from "../../../../test/file-fixtures";
 import { callRoute } from "../../../../test/route-call";
@@ -271,6 +273,30 @@ describe("uploads", () => {
     expect(uploads.filter((name) => name.startsWith(id))).toEqual([]);
     expect((await tusCall("HEAD", `${plan.endpoint}/${id}`, s.cookie, {})).status).toBe(404);
     expect(await prisma.node.count({ where: { accountId: s.id, name: "late.txt" } })).toBe(0);
+  });
+
+  it("removes the received bytes when the volume goes offline as the upload finishes", async () => {
+    const s = await member();
+    const res = await callRoute<PrepareUploadResult>(prepare, { method: "POST", cookie: s.cookie, body: { target: "root", files: [{ rel: "offline.txt", size: 4 }] } });
+    const plan = res.json.data;
+    if (plan.kind !== "ready") throw new Error("expected a ready plan");
+    const created = await tusCall("POST", plan.endpoint, s.cookie, { "upload-length": "4", "upload-metadata": `batch ${b64(plan.batchId)},index ${b64("0")},filename ${b64("offline.txt")}` });
+    const id = created.headers.get("location")!.split("/").pop()!;
+    await tusCall("PATCH", `${plan.endpoint}/${id}`, s.cookie, { "upload-offset": "0", "content-type": "application/offset+octet-stream" }, Buffer.from("da"));
+    const owner = await prisma.account.findUniqueOrThrow({ where: { id: s.id } });
+    const { status } = await prisma.storageVolume.findUniqueOrThrow({ where: { id: owner.volumeId }, select: { status: true } });
+    // An admin takes the (still mounted) volume offline after the request got past the route.
+    await prisma.storageVolume.update({ where: { id: owner.volumeId }, data: { status: "OFFLINE" } });
+    try {
+      const batch = await loadBatch(plan.batchId);
+      if (!batch) throw new Error("expected the batch");
+      await expect(finalizeUpload(owner, batch, 0, id)).rejects.toThrow();
+    } finally {
+      await prisma.storageVolume.update({ where: { id: owner.volumeId }, data: { status } });
+    }
+    const uploads = await readdir(layoutOf(configuredVolumeRoot()).uploads);
+    expect(uploads.filter((name) => name.startsWith(id))).toEqual([]);
+    expect(await prisma.node.count({ where: { accountId: s.id, name: "offline.txt" } })).toBe(0);
   });
 
   it("enforces names, quota and upload ownership", async () => {

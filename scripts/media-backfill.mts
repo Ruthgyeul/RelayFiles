@@ -8,7 +8,7 @@
  */
 import { runScript } from "./lib/bootstrap.mjs";
 
-const { closeQueues, enqueueMedia } = await import("../src/server/jobs/queue");
+const { enqueueMedia } = await import("../src/server/jobs/queue");
 const { imagesForPreview, mediaWithStaleCopies, mediaWithoutThumbs } = await import("../src/server/repositories/node-backfill.repo");
 const { shareStripMode, storedStripMode } = await import("../src/server/media/strip-mode");
 const { db } = await import("../src/server/db/client");
@@ -28,16 +28,12 @@ const pageOf: Page = process.argv.includes("--derived")
 await runScript(async () => {
   let queued = 0;
   let after: string | null = null;
-  try {
-    for (;;) {
-      const rows = await pageOf(db(), PAGE, after);
-      if (rows.length === 0) break;
-      await enqueueMedia(rows.map((row) => row.id));
-      queued += rows.length;
-      after = rows.at(-1)!.id;
-    }
-    console.log(`Queued ${queued} file(s). Run "npm run worker" to process them.`);
-  } finally {
-    await closeQueues();
+  for (;;) {
+    const rows = await pageOf(db(), PAGE, after);
+    if (rows.length === 0) break;
+    await enqueueMedia(rows.map((row) => row.id));
+    queued += rows.length;
+    after = rows.at(-1)!.id;
   }
+  console.log(`Queued ${queued} file(s). Run "npm run worker" to process them.`);
 });
