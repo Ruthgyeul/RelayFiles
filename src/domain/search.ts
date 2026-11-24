@@ -48,9 +48,12 @@ export function parseSearchQuery(raw: string): SearchQuery {
 /** The query written back in one form ("#a type:image newer:30d trip"): what a saved search stores. */
 export function formatSearchQuery(query: SearchQuery): string {
   if (query.mode === "recent") return "";
+  // Every tag must match and any kind may: their order means nothing, so one order is kept.
+  const tags = [...query.tags].sort();
+  const kinds = SEARCH_KINDS.filter((kind) => query.kinds.includes(kind));
   return [
-    ...query.tags.map((tag) => `#${tag}`),
-    ...query.kinds.map((kind) => `${TYPE_PREFIX}${kind}`),
+    ...tags.map((tag) => `#${tag}`),
+    ...kinds.map((kind) => `${TYPE_PREFIX}${kind}`),
     ...(query.newerThanDays === null ? [] : [`newer:${query.newerThanDays}d`]),
     ...(query.olderThanDays === null ? [] : [`older:${query.olderThanDays}d`]),
     ...(query.text ? [query.text] : []),

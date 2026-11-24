@@ -3,6 +3,11 @@ import type { DbClient } from "../db/client";
 
 const SELECT = { id: true, query: true } as const;
 
+/** Serializes saving for one account, so the per-account limit is checked against a count no other request is changing. */
+export async function lockSavedSearchesOf(tx: DbClient, accountId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`saved-searches:${accountId}`}))`;
+}
+
 /** An account's saved searches, oldest first. */
 export function listSavedSearches(db: DbClient, accountId: string) {
   return db.savedSearch.findMany({ where: { accountId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: SELECT });
