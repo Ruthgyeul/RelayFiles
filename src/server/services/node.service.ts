@@ -1,5 +1,5 @@
 import "server-only";
-import { SEARCH, STORAGE } from "@/config/policy";
+import { MS, SEARCH, STORAGE } from "@/config/policy";
 import type { CreatedFolder, FolderNode, FolderView, NodeItem, NodeProperties, TaggedItem } from "@/contracts/nodes";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { nameError, uniqName } from "@/domain/names";
@@ -11,7 +11,7 @@ import { db } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { countFavorites, favoriteFoldersOf } from "../repositories/favorite.repo";
-import { childCounts, createFolderNode, findByName, findByTags, listChildren, listFolders, listSiblingNames, recentFiles, type NodeRow } from "../repositories/node.repo";
+import { childCounts, createFolderNode, findByTags, listChildren, listFolders, listSiblingNames, recentFiles, searchNodes, type NodeRow } from "../repositories/node.repo";
 import { tagUsage } from "../repositories/node-usage.repo";
 import { ancestorChain, ancestorChains, childStats, descendantCounts, folderSizes, type AncestorRow, type ChildStats } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
@@ -127,16 +127,18 @@ export async function searchByTags(accountId: string, tags: string[]): Promise<T
 }
 
 /**
- * Global search (Ctrl/⌘ K): recent files for an empty query, items with every tag for
- * "#tag1 #tag2", otherwise names containing the text, best matches first.
+ * Global search (Ctrl/⌘ K): recent files for an empty query, otherwise items matching every
+ * part of it (domain/search.ts), best name matches first.
  */
-export async function searchItems(accountId: string, raw: string): Promise<TaggedItem[]> {
+export async function searchItems(accountId: string, raw: string, now = new Date()): Promise<TaggedItem[]> {
   const query = parseSearchQuery(raw);
   if (query.mode === "recent") return withPaths(await recentFiles(db(), accountId, SEARCH.recentItems));
-  const rows = query.mode === "tags" ? await findByTags(db(), accountId, query.tags, SEARCH.tagResultLimit) : await findByName(db(), accountId, query.text, SEARCH.nameCandidates);
+  const daysAgo = (days: number | null) => (days === null ? null : new Date(now.getTime() - days * MS.day));
+  const search = { text: query.text, tags: query.tags, kinds: query.kinds, newerThan: daysAgo(query.newerThanDays), olderThan: daysAgo(query.olderThanDays) };
+  const rows = await searchNodes(db(), accountId, search, query.text ? SEARCH.nameCandidates : SEARCH.tagResultLimit);
   const ranked = rankByName(
     rows.map((row) => ({ row, name: row.name, type: row.type === "FOLDER" ? ("folder" as const) : ("file" as const) })),
-    query.mode === "name" ? query.text : "",
+    query.text,
   ).slice(0, SEARCH.maxResults);
   return withPaths(ranked.map(({ row }) => row));
 }

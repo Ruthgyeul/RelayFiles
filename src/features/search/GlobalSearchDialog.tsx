@@ -1,17 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { SEARCH } from "@/config/policy";
 import type { TaggedItem } from "@/contracts/nodes";
 import { formatSize } from "@/domain/format";
-import { moveHighlight, parseSearchQuery, searchHeading } from "@/domain/search";
+import { formatSearchQuery, moveHighlight, parseSearchQuery, searchHeading } from "@/domain/search";
 import { folderHref } from "@/shared/lib/routes";
 import { kindOf } from "@/shared/ui/node-kind";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icon/Icon";
 import { Modal } from "@/shared/ui/Modal";
+import { SavedSearchList } from "./SavedSearchList";
 import { useGlobalSearch } from "./useGlobalSearch";
+import { useSavedSearches } from "./useSavedSearches";
 
 /** Opens a folder, or a file's folder with the file in the viewer (`?view=`). */
 function searchHitHref(item: TaggedItem): string {
@@ -21,13 +23,24 @@ function searchHitHref(item: TaggedItem): string {
 }
 
 /** Global search: every file and folder of the active account. */
-export function GlobalSearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function GlobalSearchDialog({ open, onClose, notify }: { open: boolean; onClose: () => void; notify: (message: string) => void }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const { results, loading, error } = useGlobalSearch(query, open);
   const index = Math.min(highlight, Math.max(0, results.length - 1));
-  const heading = searchHeading(parseSearchQuery(query), results.length);
+  const parsed = parseSearchQuery(query);
+  const heading = searchHeading(parsed, results.length);
+  const { saved, save, remove } = useSavedSearches(open, notify);
+  // Saved searches are kept in one form, so "Beach #trip" matches a saved "#trip beach".
+  const normalized = formatSearchQuery(parsed);
+  const current = saved.find((search) => search.query === normalized);
+  const input = useRef<HTMLInputElement>(null);
+  const run = (next: string) => {
+    setQuery(next);
+    setHighlight(0);
+    input.current?.focus();
+  };
 
   const pick = (item: TaggedItem) => {
     onClose();
@@ -39,6 +52,7 @@ export function GlobalSearchDialog({ open, onClose }: { open: boolean; onClose: 
       <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-card-line px-3.5">
         <Icon name="magnifying-glass" size={20} className="text-t3" />
         <input
+          ref={input}
           autoFocus
           value={query}
           maxLength={SEARCH.maxQueryLength}
@@ -60,9 +74,22 @@ export function GlobalSearchDialog({ open, onClose }: { open: boolean; onClose: 
           }}
           className="min-w-0 flex-1 border-0 bg-transparent text-[16px] text-t1 outline-none placeholder:text-t5"
         />
+        {parsed.mode === "search" && (
+          <button
+            type="button"
+            aria-pressed={current !== undefined}
+            title={current ? "Remove from saved searches" : "Save this search"}
+            aria-label={current ? "Remove from saved searches" : "Save this search"}
+            onClick={() => void (current ? remove(current.id) : save(normalized))}
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent p-0 text-t3 hover:bg-btn hover:text-t3"
+          >
+            <Icon name="bookmark-simple" weight={current ? "fill" : "regular"} size={18} />
+          </button>
+        )}
         <span className="rounded-md border border-ctrl px-1.5 py-0.5 font-mono text-[11px] font-semibold text-t4">Esc</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-2">
+        {parsed.mode === "recent" && <SavedSearchList saved={saved} onPick={run} onDelete={(id) => void remove(id)} />}
         <span className="block px-2.5 py-1.5 text-[11px] font-extrabold tracking-[.06em] text-t4 uppercase">{loading ? "Searching…" : heading}</span>
         <div id="global-search-results" role="listbox" aria-label="Results">
           {results.map((item, i) => {
@@ -93,6 +120,7 @@ export function GlobalSearchDialog({ open, onClose }: { open: boolean; onClose: 
         <span>↑ ↓ to move</span>
         <span>Enter to open</span>
         <span>Esc to close</span>
+        <span className="ml-auto max-sm:hidden">type:image · newer:30d · older:1y to filter</span>
       </div>
     </Modal>
   );

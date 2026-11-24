@@ -89,7 +89,7 @@ export function AppShell({ announcement, children }: { announcement: Announcemen
         </div>
       </div>
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      {searchOpen && <GlobalSearchDialog open onClose={() => setSearchOpen(false)} />}
+      {searchOpen && <GlobalSearchDialog open onClose={() => setSearchOpen(false)} notify={shell.notify} />}
       <SignInDialog
         open={shell.signInOpen}
         onClose={shell.closeSignIn}

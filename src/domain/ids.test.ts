@@ -12,6 +12,7 @@ import {
   newLinkId,
   newNodeId,
   newSessionId,
+  newSavedSearchId,
   randomString,
   validRequestId,
 } from "./ids";
@@ -28,6 +29,7 @@ describe("id generators", () => {
       expect(newInviteCode()).toMatch(ID_PATTERN.invite);
       expect(newSessionId()).toMatch(ID_PATTERN.session);
       expect(newDeletedItemId()).toMatch(ID_PATTERN.deletedItem);
+      expect(newSavedSearchId()).toMatch(ID_PATTERN.savedSearch);
     }
   });
 

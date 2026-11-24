@@ -1828,7 +1828,7 @@ export interface paths {
         };
         /**
          * Search the account
-         * @description `q`: recent files when empty, items with every `#tag`, or names. Without `q`, `tags=a,b` lists every item carrying all the tags.
+         * @description `q`: recent files when empty; otherwise items matching every part: `#tag`, `type:folder|video|audio|image|other`, `newer:30d` / `older:1y` (date modified, units d w m y) and words in the name. Without `q`, `tags=a,b` lists every item carrying all the tags.
          */
         get: {
             parameters: {
