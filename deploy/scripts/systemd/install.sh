@@ -49,7 +49,7 @@ render() {
 
 # Cores as a CPUQuota percentage: 1.5 -> 150%.
 cpu_quota() { awk -v cpus="$1" 'BEGIN { printf "%d%%", cpus * 100 }'; }
-# unit, memory limit, CPU cores, stop grace period in seconds (defaults as in src/config/env.ts)
+# unit, memory limit, CPU cores, stop grace period in seconds (defaults as in src/config/env.ts; scripts/deploy-defaults.test.ts checks them)
 render_unit() {
   MEMORY_MAX="$2" CPU_QUOTA="$(cpu_quota "$3")" STOP_GRACE_SEC="$4" STORAGE_ROOT="$(env_value STORAGE_ROOT /mnt/relayfilesDB)" LOG_DIR="$(env_value LOG_DIR /var/log/relayfiles)" \
     render "$ROOT/deploy/systemd/$1.service.template" APP_DIR STORAGE_USER STORAGE_HOME NODE_BIN MEMORY_MAX CPU_QUOTA STOP_GRACE_SEC STORAGE_ROOT LOG_DIR > "$UNIT_DIR/$1.service.partial"
@@ -67,7 +67,7 @@ systemctl enable relayfiles-app relayfiles-worker
 log "Nginx site $SITE"
 CERTBOT=false
 grep -q "managed by Certbot" "$SITE" 2> /dev/null && CERTBOT=true
-# Request limits default as in src/config/policy.ts NGINX.
+# Request limits default as in src/config/policy.ts NGINX (scripts/deploy-defaults.test.ts checks them).
 NGINX_MAX_BODY_MB="$(env_value NGINX_MAX_BODY_MB 100)" NGINX_AUTH_RATE_PER_MIN="$(env_value NGINX_AUTH_RATE_PER_MIN 20)" NGINX_AUTH_BURST="$(env_value NGINX_AUTH_BURST 20)" \
   NGINX_UPLOAD_RATE_PER_MIN="$(env_value NGINX_UPLOAD_RATE_PER_MIN 60)" NGINX_UPLOAD_BURST="$(env_value NGINX_UPLOAD_BURST 30)" \
   NGINX_TUS_RATE_PER_MIN="$(env_value NGINX_TUS_RATE_PER_MIN 600)" NGINX_TUS_BURST="$(env_value NGINX_TUS_BURST 120)" \
