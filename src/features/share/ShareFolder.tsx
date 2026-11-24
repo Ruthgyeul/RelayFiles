@@ -15,7 +15,11 @@ import { Icon } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
 import { shareApi, shareUrls } from "./api";
+import { SearchBox } from "@/features/files/SearchBox";
+import { ShareGrid } from "./ShareGrid";
 import { ShareRows } from "./ShareItems";
+import { ShareToolbar } from "./ShareToolbar";
+import { useShareList } from "./useShareList";
 import { BUSY } from "@/domain/share";
 
 interface ShareFolderProps {
@@ -30,8 +34,10 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
   const [viewing, setViewing] = useState<string | null>(null);
   const { folder, root } = view;
   const folderHref = (folderId: string) => (folderId === root.id ? `/d/${linkId}` : `/d/${linkId}?f=${folderId}`) as Route;
-  const files = view.items.filter((item) => item.type === "file");
   const fileLink = root.type === "file";
+  const list = useShareList(view.items);
+  // The viewer steps through the files in the order and search shown.
+  const files = list.visible.filter((item) => item.type === "file");
   const headerIcon = fileLink ? kindOf({ type: "file", kind: root.kind, name: folder.name }) : null;
 
   const download = async (target: string) => {
@@ -126,7 +132,17 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
         )}
       </section>
 
-      <ShareRows items={view.items} urls={rowUrls} folderHref={folderHref} onOpen={(item) => setViewing(item.id)} onDownload={downloadItem} />
+      {!fileLink && view.items.length > 0 && (
+        <ShareToolbar shown={list.visible.length} total={view.items.length} view={list.view} onToggleView={list.toggleView} onToggleSearch={list.toggleSearch} sort={list.sort} onSort={list.setSort} />
+      )}
+      {list.searchOpen && <SearchBox value={list.query} onChange={list.setQuery} placeholder="Search in this folder" />}
+      {list.view === "grid" && !fileLink && list.visible.length > 0 ? (
+        <ShareGrid items={list.visible} thumbUrl={rowUrls.thumb} folderHref={folderHref} onOpen={(item) => setViewing(item.id)} />
+      ) : list.query && list.visible.length === 0 ? (
+        <div className="rounded-2xl border border-card-line bg-card px-4 py-10 text-center text-[14px] text-t4">Nothing here matches “{list.query}”.</div>
+      ) : (
+        <ShareRows items={list.visible} urls={rowUrls} folderHref={folderHref} onOpen={(item) => setViewing(item.id)} onDownload={downloadItem} />
+      )}
       <span className="pt-2 text-center text-[12px] text-t5">Shared privately with RelayFiles</span>
 
       <MediaViewer

@@ -17,6 +17,8 @@ export interface ShareItem {
   canDownload: boolean;
   /** A generated preview exists (`/api/share/<link>/files/<id>/thumb`). */
   hasThumb: boolean;
+  /** When it was added (ISO): the share page's date sort. */
+  createdAt: string;
 }
 
 export interface ShareCrumb {

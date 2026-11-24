@@ -204,3 +204,47 @@ test("the file manager shows when a shared item is busy", async ({ page }) => {
   // container outside it before moving them into place, so the row briefly exists twice.
   await expect(page.getByRole("main").locator('[data-item="notes.txt"]').getByText("Busy", { exact: true })).toBeVisible();
 });
+
+test("visitors search, sort and switch a shared folder to a grid", async ({ page, browser, baseURL, viewport }) => {
+  const trip = await tripWithFile(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([
+    { name: "beach.png", mimeType: "image/png", buffer: PNG },
+    { name: "agenda.txt", mimeType: "text/plain", buffer: Buffer.from("a much longer agenda for the trip") },
+  ]);
+  await expect(page.locator('[data-item="agenda.txt"]')).toBeVisible();
+  await saveSettings(page, trip.id, {});
+
+  const visitor = await visitorPage(browser, baseURL, viewport);
+  await visitor.goto(`/d/${trip.linkId}`);
+  const rows = visitor.locator("[data-item]");
+  await expect(rows).toHaveCount(3);
+  await expect(visitor.getByRole("toolbar", { name: "Items" })).toContainText("3 items");
+  expect(await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-item")))).toEqual(["agenda.txt", "beach.png", "notes.txt"]);
+
+  await visitor.getByRole("button", { name: /^Sort:/ }).click();
+  await visitor.getByRole("menuitem", { name: "Largest first" }).click();
+  // 70 B picture, 33 B agenda, 13 B notes.
+  await expect.poll(() => rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-item")))).toEqual(["beach.png", "agenda.txt", "notes.txt"]);
+
+  await visitor.getByRole("button", { name: "Search in this folder" }).click();
+  await visitor.getByRole("textbox", { name: "Search in this folder" }).fill("NOTE");
+  await expect(rows).toHaveCount(1);
+  await expect(visitor.getByRole("toolbar", { name: "Items" })).toContainText("1 of 3 items");
+  await visitor.getByRole("textbox", { name: "Search in this folder" }).fill("nothing");
+  await expect(visitor.getByText("Nothing here matches “nothing”.")).toBeVisible();
+  await visitor.getByRole("button", { name: "Search in this folder" }).click();
+
+  await visitor.getByRole("button", { name: "Grid view" }).click();
+  const grid = visitor.getByRole("list", { name: "Items" });
+  await expect(grid.locator("[data-item]")).toHaveCount(3);
+  await grid.getByRole("button", { name: "Open beach.png" }).click();
+  await expect(visitor.getByRole("dialog", { name: "beach.png" })).toBeVisible();
+  await visitor.getByRole("button", { name: "Close viewer" }).click();
+  // The choice is remembered on this device.
+  await visitor.reload();
+  await expect(visitor.getByRole("button", { name: "List view" })).toBeVisible();
+  expect(await visitor.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await visitor.context().close();
+});

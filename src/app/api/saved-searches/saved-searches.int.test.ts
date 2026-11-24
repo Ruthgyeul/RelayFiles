@@ -48,4 +48,12 @@ describe("saved searches", () => {
     // A search already kept is still returned.
     expect((await save(m, "q0")).status).toBe(200);
   });
+
+  it("keeps to the limit when several saves arrive at once", async () => {
+    const m = await member();
+    await prisma.savedSearch.createMany({ data: Array.from({ length: SEARCH.maxSaved - 2 }, (_, index) => ({ id: `t${String(index).padStart(11, "a")}`.slice(0, 12), accountId: m.id, query: `q${index}` })) });
+    const results = await Promise.all(["one", "two", "three", "four", "five"].map((query) => save(m, query)));
+    expect(results.filter((res) => res.status === 200)).toHaveLength(2);
+    expect(await prisma.savedSearch.count({ where: { accountId: m.id } })).toBe(SEARCH.maxSaved);
+  });
 });

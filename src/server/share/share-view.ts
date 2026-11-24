@@ -69,6 +69,7 @@ async function buildView(link: LoadedLink, folderId: string | null, now: number)
     busy: busyBadge(busy.get(row.id)!, now, "share"),
     canDownload: downloadBlockOf(row, aboveItems, busy.get(row.id)) === null,
     hasThumb: row.type === "FILE" && row.hasThumb,
+    createdAt: row.createdAt.toISOString(),
   }));
   return {
     root: { id: root.id, type: fileLink ? "file" : "folder", kind: kindOf(root), createdAt: root.createdAt.toISOString() },

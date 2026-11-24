@@ -22,6 +22,9 @@ describe("global search", () => {
   it("writes a query back in one form", () => {
     expect(formatSearchQuery(parseSearchQuery("  Beach type:image #trip newer:2w  "))).toBe("#trip type:image newer:14d beach");
     expect(formatSearchQuery(parseSearchQuery(""))).toBe("");
+    // Tags and kinds in any order are the same search.
+    expect(formatSearchQuery(parseSearchQuery("#work #trip type:video type:image"))).toBe(formatSearchQuery(parseSearchQuery("type:image #trip type:video #work")));
+    expect(formatSearchQuery(parseSearchQuery("#work #trip type:video type:image"))).toBe("#trip #work type:video type:image");
     const again = formatSearchQuery(parseSearchQuery("older:30d #a #a x"));
     expect(formatSearchQuery(parseSearchQuery(again))).toBe(again);
   });

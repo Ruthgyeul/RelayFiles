@@ -1,21 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { SORT_KEYS, SORT_OPTION_LABEL, SORT_SHORT_LABEL, type SortKey } from "@/domain/tree";
 import { Icon, type IconName } from "@/shared/ui/icon/Icon";
-import { MenuItem, MenuLabel } from "@/shared/ui/Menu";
-import { ActionMenu, anchorOf, type AnchorRect } from "./ActionMenu";
+import { SortButton, type SortOptions } from "./SortButton";
 import type { ViewMode } from "./usePrefs";
-import { THEME_COLOR } from "@/shared/styles/palette";
 import { FILES_SUBPAGES } from "@/features/shell/nav";
 
-/** The sort keys a list offers, with the "SORT BY" menu labels and the short toolbar labels. */
-export interface SortOptions<S extends string> {
-  keys: readonly S[];
-  label: Record<S, string>;
-  short: Record<S, string>;
-}
+export type { SortOptions };
 
 /** The File Manager's sort menu. */
 export const FILE_SORT_OPTIONS: SortOptions<SortKey> = { keys: SORT_KEYS, label: SORT_OPTION_LABEL, short: SORT_SHORT_LABEL };
@@ -51,7 +44,6 @@ function ToolIcon({ icon, label, onClick, className }: { icon: IconName; label: 
 
 /** File Manager toolbar card: selection, folder actions, view, search, sort, "Recently deleted" and refresh. */
 export function Toolbar<S extends string>(props: ToolbarProps<S>) {
-  const [sortAnchor, setSortAnchor] = useState<AnchorRect | null>(null);
   const { selectedCount, sortOptions, links = true } = props;
   return (
     <div role="toolbar" aria-label="Files" className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-card-line bg-card px-3 py-2 shadow-toolbar">
@@ -80,21 +72,7 @@ export function Toolbar<S extends string>(props: ToolbarProps<S>) {
       <span className="flex-1" />
       <ToolIcon icon={props.view === "grid" ? "list-bullets" : "squares-four"} label={props.view === "grid" ? "List view" : "Grid view"} onClick={props.onToggleView} />
       <ToolIcon icon="magnifying-glass" label={props.searchLabel ?? "Search in this folder"} onClick={props.onToggleSearch} />
-      <button
-        type="button"
-        title="Sort"
-        aria-label={`Sort: ${sortOptions.short[props.sort]}`}
-        aria-haspopup="menu"
-        aria-expanded={sortAnchor !== null}
-        onClick={(event) => {
-          const anchor = anchorOf(event.currentTarget);
-          setSortAnchor((open) => (open ? null : anchor));
-        }}
-        className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 text-[12px] font-semibold text-t3 hover:bg-btn"
-      >
-        <Icon name="arrows-down-up" size={20} />
-        <span className="max-sm:hidden">{sortOptions.short[props.sort]}</span>
-      </button>
+      <SortButton sort={props.sort} options={sortOptions} onSort={props.onSort} />
       {links &&
         FILES_SUBPAGES.map((page) => (
           <Link key={page.href} href={page.href} title={page.label} aria-label={page.label} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-t3 no-underline hover:bg-btn hover:text-t3">
@@ -102,29 +80,6 @@ export function Toolbar<S extends string>(props: ToolbarProps<S>) {
           </Link>
         ))}
       <ToolIcon icon="arrows-clockwise" label="Refresh" onClick={props.onRefresh} className="max-sm:hidden" />
-      {sortAnchor && (
-        <ActionMenu anchor={sortAnchor} label="Sort" placement="below" onClose={() => setSortAnchor(null)}>
-          <MenuLabel>SORT BY</MenuLabel>
-          {sortOptions.keys.map((key) => {
-            const on = key === props.sort;
-            return (
-              <MenuItem
-                key={key}
-                size="sort"
-                icon="check"
-                iconColor={on ? THEME_COLOR.accentHi : "transparent"}
-                color={on ? THEME_COLOR.accentText : undefined}
-                onSelect={() => {
-                  setSortAnchor(null);
-                  props.onSort(key);
-                }}
-              >
-                {sortOptions.label[key]}
-              </MenuItem>
-            );
-          })}
-        </ActionMenu>
-      )}
     </div>
   );
 }
