@@ -44,7 +44,7 @@ const SHARED_COLUMNS = Prisma.sql`n.id, n."parentId", n.type::text AS type, n.na
  * What visitors of a link may see below it (on "Node" n): not private, without a password of its
  * own (reachable only through its own link, where the password is asked) and not expired (deleted
  * by the daily cleanup). Walks stop at anything else, so neither it nor its contents are listed,
- * sized or zipped (share.service `closedBelowLink` is the same rule for one chain).
+ * sized or zipped (share-link `closedBelowLink` is the same rule for one chain).
  */
 const openBelowLink = (now: Date) => Prisma.sql`n.visibility <> 'PRIVATE' AND n."passwordHash" IS NULL AND (n."expAt" IS NULL OR n."expAt" > ${now})`;
 
@@ -92,7 +92,7 @@ export function publicChildStats(db: DbClient, folderId: string, now: Date) {
 
 /**
  * A node on the way from the account root down to a file, with its own link settings: every
- * one of them guards the file, whichever link it is reached through (share.service `guardsOf`).
+ * one of them guards the file, whichever link it is reached through (share-link `loadLink`, `strictestGuard`).
  */
 export type ChainRow = SharedRow & {
   visibility: "INHERIT" | "PRIVATE" | "PUBLIC";

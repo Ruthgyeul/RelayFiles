@@ -5,7 +5,7 @@ import { nameError, uniqName } from "@/domain/names";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";
 import { accountUsage, findNode, listSiblingNames } from "../repositories/node.repo";
-import { shareUrl } from "../share/share.service";
+import { shareUrl } from "../share/share-link";
 import type { ApiCaller } from "./api-token.service";
 import { uploadWholeFile } from "./direct-upload.service";
 import { favoriteFoldersOf } from "../repositories/favorite.repo";

@@ -1,6 +1,7 @@
 import { DOCUMENT_PREVIEW } from "@/config/policy";
 import { documentPreviewOf } from "./file-format";
-import { limitHit } from "./share";
+import { BUSY, type BusyLevel } from "./share";
+import { downloadsUsedUp } from "./share-limits";
 import type { ByteRange } from "./serving";
 import type { NodeKind } from "./tree";
 
@@ -20,7 +21,7 @@ export interface DownloadFacts {
   /** Delete after the first download: once downloaded, no more downloads. */
   burn: boolean;
   /** 0 normal, 1 throttled, 2 paused (see `busyOf`). */
-  busyLevel: 0 | 1 | 2;
+  busyLevel: BusyLevel;
 }
 
 export type DownloadBlock = "stream-only" | "limit" | "paused";
@@ -28,8 +29,8 @@ export type DownloadBlock = "stream-only" | "limit" | "paused";
 /** Why visitors may not download a file now, or null when they may. */
 export function downloadBlock(facts: DownloadFacts): DownloadBlock | null {
   if (facts.linkStreamOnly || facts.streamOnly) return "stream-only";
-  if (limitHit(facts.downloadLimit, facts.downloads) || (facts.burn && facts.downloads >= 1)) return "limit";
-  if (facts.busyLevel === 2) return "paused";
+  if (downloadsUsedUp(facts)) return "limit";
+  if (facts.busyLevel === BUSY.paused) return "paused";
   return null;
 }
 

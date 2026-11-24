@@ -26,7 +26,7 @@ import { endHlsSessions } from "@/server/media/hls-session";
 import { runningTranscodes } from "@/server/media/transcode";
 import { getFolderView } from "@/server/services/node.service";
 import { zipItems } from "@/server/services/zip.service";
-import { retiredSharePage, sharePage } from "@/server/share/share.service";
+import { retiredSharePage, sharePage } from "@/server/share/share-view";
 import { purgeExpired } from "@/server/services/profile.service";
 import { findAccountById } from "@/server/repositories/account.repo";
 import { purgeRetiredLinks } from "@/server/repositories/link-tombstone.repo";

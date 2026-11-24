@@ -1,10 +1,11 @@
 import type { BusyBadge } from "@/domain/share";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "./icon/Icon";
+import { BUSY } from "@/domain/share";
 
 /** "Busy" / "Server busy" badge next to a file name, with the reason as a tooltip. */
 export function BusyPill({ busy }: { busy: BusyBadge }) {
-  const paused = busy.level === 2;
+  const paused = busy.level === BUSY.paused;
   return (
     <span
       title={busy.tip}
