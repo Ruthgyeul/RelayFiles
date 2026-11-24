@@ -3,7 +3,10 @@
 import type { KeyboardEvent } from "react";
 import { gridNavIndex, isListNavKey, listNavIndex } from "@/domain/list-nav";
 
-/** Marks an item's name button, the stop of keyboard moves in a list (its value: the item id). */
+/**
+ * Marks a keyboard stop in a list: an item's name button (its value: the item id), or a leading
+ * row's link (Favorites folders, the Favorites entry), which Space leaves alone.
+ */
 export const NAV_ITEM_ATTR = "data-nav-item";
 
 /**
@@ -27,14 +30,11 @@ export function useListKeyboard(view: "list" | "grid", toggle: (id: string, rang
     const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
     const next =
       view === "grid" && vertical
-        ? gridNavIndex(
-            stops.map((stop) => {
-              const box = stop.getBoundingClientRect();
-              return { left: box.left, top: box.top };
-            }),
-            index,
-            event.key as "ArrowUp" | "ArrowDown",
-          )
+        ? gridNavIndex(stops.length, index, event.key as "ArrowUp" | "ArrowDown", (at) => {
+            // Only the cards up to the next row are measured (content-visibility skips the rest).
+            const box = stops[at]!.getBoundingClientRect();
+            return { left: box.left, top: box.top };
+          })
         : listNavIndex(index, event.key, stops.length, view);
     if (next === null) return;
     event.preventDefault();

@@ -27,16 +27,33 @@ describe("listNavIndex", () => {
 describe("gridNavIndex", () => {
   // Three columns at 0, 170, 340; two full rows and one card in the last.
   const boxes = [0, 170, 340, 0, 170, 340, 0].map((left, index) => ({ left, top: Math.floor(index / 3) * 220 + 0.4 }));
+  const nav = (index: number, key: "ArrowUp" | "ArrowDown", measured: number[] = []) =>
+    gridNavIndex(boxes.length, index, key, (at) => {
+      measured.push(at);
+      return boxes[at]!;
+    });
   it("moves to the same column in the next or previous row", () => {
-    expect(gridNavIndex(boxes, 1, "ArrowDown")).toBe(4);
-    expect(gridNavIndex(boxes, 4, "ArrowUp")).toBe(1);
+    expect(nav(1, "ArrowDown")).toBe(4);
+    expect(nav(4, "ArrowUp")).toBe(1);
   });
   it("takes the closest card of a shorter row", () => {
-    expect(gridNavIndex(boxes, 5, "ArrowDown")).toBe(6);
+    expect(nav(5, "ArrowDown")).toBe(6);
   });
   it("stops at the top and bottom rows", () => {
-    expect(gridNavIndex(boxes, 2, "ArrowUp")).toBeNull();
-    expect(gridNavIndex(boxes, 6, "ArrowDown")).toBeNull();
-    expect(gridNavIndex(boxes, 9, "ArrowDown")).toBeNull();
+    expect(nav(2, "ArrowUp")).toBeNull();
+    expect(nav(6, "ArrowDown")).toBeNull();
+    expect(nav(9, "ArrowDown")).toBeNull();
+  });
+  it("measures only up to the end of the next row, however long the grid", () => {
+    const tall = Array.from({ length: 300 }, (_, index) => ({ left: (index % 3) * 170, top: Math.floor(index / 3) * 220 }));
+    const measured: number[] = [];
+    const target = gridNavIndex(tall.length, 150, "ArrowDown", (at) => {
+      measured.push(at);
+      return tall[at]!;
+    });
+    expect(target).toBe(153);
+    // This card, the rest of its row, the next row and the first card after it.
+    expect(Math.max(...measured)).toBe(156);
+    expect(measured).toHaveLength(7);
   });
 });
