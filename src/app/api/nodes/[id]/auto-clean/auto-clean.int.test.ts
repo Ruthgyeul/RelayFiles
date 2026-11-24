@@ -16,7 +16,8 @@ const view = (m: FixtureMember, id: string, query = "") => callRoute<AutoCleanVi
 const save = (m: FixtureMember, id: string, body: unknown) => callRoute<AutoCleanView, { id: string }>(PUT, { method: "PUT", cookie: m.cookie, params: { id }, body });
 const remove = (m: FixtureMember, id: string) => callRoute<{ removed: true }, { id: string }>(DELETE, { method: "DELETE", cookie: m.cookie, params: { id } });
 const ago = (days: number) => new Date(Date.now() - days * MS.day);
-const names = async (parentId: string) => (await prisma.node.findMany({ where: { parentId }, select: { name: true }, orderBy: { name: "asc" } })).map((row) => row.name);
+/** Names in a folder in code point order (the database's collation differs between machines). */
+const names = async (parentId: string) => (await prisma.node.findMany({ where: { parentId }, select: { name: true } })).map((row) => row.name).sort();
 
 /** A file at `segments` (the folder's path on disk) dated `days` ago (date added, or date modified with `modified`). */
 async function oldFile(m: FixtureMember, folderId: string, segments: string | string[], name: string, days: number, modified = false) {
