@@ -17,7 +17,7 @@ import {
   setCollectionItems,
   updateCollection,
 } from "../repositories/collection.repo";
-import { findNodes, type NodeRow } from "../repositories/node.repo";
+import { findNodes, findNodesMany, type NodeRow } from "../repositories/node.repo";
 import { shareUrl } from "../share/share-link";
 import type { NodeOwner } from "./node-access";
 import { kindOf } from "./node-dto";
@@ -79,7 +79,7 @@ function toDto(collection: CollectionWithItems, rows: ReadonlyMap<string, NodeRo
 
 /** Collections with the names of their items (one read for all of them). */
 async function toDtos(owner: NodeOwner, collections: readonly CollectionWithItems[]): Promise<CollectionDto[]> {
-  const rows = await findNodes(db(), owner.id, [...new Set(collections.flatMap((collection) => collection.nodeIds))]);
+  const rows = await findNodesMany(db(), owner.id, [...new Set(collections.flatMap((collection) => collection.nodeIds))]);
   const byId = new Map(rows.map((row) => [row.id, row]));
   return collections.map((collection) => toDto(collection, byId));
 }

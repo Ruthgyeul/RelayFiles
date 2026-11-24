@@ -4,6 +4,7 @@ import { deletionDate } from "@/domain/account";
 import { collectionItemIndex, collectionItemOpen, type CollectionGuardRow } from "@/domain/collection";
 import { shareStatus, strictestGuard, type Busy, type ShareStatus, type StrictestGuard } from "@/domain/share";
 import { downloadBlock, type DownloadBlock } from "@/domain/share-access";
+import { downloadsUsedUp } from "@/domain/share-limits";
 import { effectiveVisibility } from "@/domain/tree";
 import { cookieSecrets } from "../auth/keys";
 import { db } from "../db/client";
@@ -29,13 +30,15 @@ export const kindOf = (row: Pick<NodeRow, "kind">) => kindOfValue(row.kind);
 
 export const shareUrl = (linkId: string) => `${getAppEnv().PUBLIC_URL}/d/${linkId}`;
 
-/** The status of a link from its own facts and the strictest guard on the way to it. */
-function linkStatus(guard: StrictestGuard, own: { burn: boolean; downloads: number; downloadLimit: number | null }, visibility: "private" | "public", now: number): ShareStatus {
-  if (guard.burnUsed) return "expired";
-  return shareStatus(
-    { expAt: guard.expAt, burn: own.burn, downloads: own.downloads, downloadLimit: own.downloadLimit, effectiveVisibility: visibility, hasPassword: guard.hasPassword, unlocked: guard.unlocked },
-    now,
-  );
+/**
+ * The status of a link from its own facts and the strictest guard on the way to it, and whether
+ * it would be open but for downloads used up (a download limit reached, a delete-after-download
+ * link downloaded): only then may a browser continue a download it was counted for.
+ */
+function linkStatus(guard: StrictestGuard, own: { burn: boolean; downloads: number; downloadLimit: number | null }, visibility: "private" | "public", now: number): { status: ShareStatus; resumable: boolean } {
+  const facts = { expAt: guard.expAt, effectiveVisibility: visibility, hasPassword: guard.hasPassword, unlocked: guard.unlocked };
+  const status = guard.burnUsed ? "expired" : shareStatus({ ...facts, burn: own.burn, downloads: own.downloads, downloadLimit: own.downloadLimit }, now);
+  return { status, resumable: shareStatus({ ...facts, burn: false, downloads: 0, downloadLimit: null }, now) === "open" };
 }
 
 const accountDeletesAt = (owner: AccountRow) => deletionDate(owner, getEnv("policy").ACCOUNT_TTL_DAYS)?.getTime() ?? null;
@@ -63,13 +66,13 @@ export async function loadLink(linkId: string, viewer: ShareViewer, now: number)
     })),
     accountDeletesAt(owner),
   );
-  const status = linkStatus(guard, root, visibility, now);
+  const { status, resumable } = linkStatus(guard, root, visibility, now);
   const isOwner = viewer.accountIds.includes(root.accountId);
   // To anyone but its owner a private link is "private" whatever else is true of it, and every
   // caller answers that as a link that does not exist: an "expired" or "limit reached" card (or
   // a 410/403, or an argon2 check on unlock) would tell someone guessing ids they found a real one.
   // The owner keeps the design's order and sees why the link is closed.
-  return { kind: "node", root, chain, owner, status: !isOwner && visibility !== "public" ? "private" : status, isOwner };
+  return { kind: "node", root, chain, owner, status: !isOwner && visibility !== "public" ? "private" : status, resumable, isOwner };
 }
 
 /** A collection link: public while it exists, with its own expiry, limits and password. */
@@ -90,12 +93,14 @@ async function loadCollectionLink(linkId: string, viewer: ShareViewer, now: numb
     ],
     accountDeletesAt(owner),
   );
-  return { kind: "collection", collection, items: new Set(collection.nodeIds), owner, status: linkStatus(guard, collection, "public", now), isOwner: viewer.accountIds.includes(collection.accountId) };
+  return { kind: "collection", collection, items: new Set(collection.nodeIds), owner, ...linkStatus(guard, collection, "public", now), isOwner: viewer.accountIds.includes(collection.accountId) };
 }
 
 interface LinkBase {
   owner: AccountRow;
   status: ShareStatus;
+  /** Open but for downloads used up: a counted browser may continue its download (`openLink`). */
+  resumable: boolean;
   isOwner: boolean;
 }
 
@@ -141,18 +146,24 @@ export function linkTrail(link: LoadedLink, chain: readonly ChainRow[], now: num
 }
 
 /**
- * Stream only and paused downloads set on the items above a row, from the account root down
- * to its parent. Like passwords and expiry (`strictestGuard`), a folder's setting applies to
- * everything inside it, whichever link the item is opened through.
+ * Stream only, paused downloads and used-up download limits on the items above a row, from the
+ * account root down to its parent. Like passwords and expiry (`strictestGuard`), a folder's
+ * setting applies to everything inside it, whichever link the item is opened through (every
+ * download below a limiting folder is counted there, `claimDownload`).
  */
 export interface WayAbove {
   streamOnly: boolean;
   dlPaused: boolean;
+  limitUsed: boolean;
 }
 
-type WayRow = Pick<SharedRow, "access" | "dlPaused">;
-const NOTHING_ABOVE: WayAbove = { streamOnly: false, dlPaused: false };
-export const through = (way: WayAbove, row: WayRow): WayAbove => ({ streamOnly: way.streamOnly || row.access === "STREAM", dlPaused: way.dlPaused || row.dlPaused });
+type WayRow = Pick<SharedRow, "access" | "dlPaused" | "downloadLimit" | "downloads" | "burn">;
+const NOTHING_ABOVE: WayAbove = { streamOnly: false, dlPaused: false, limitUsed: false };
+export const through = (way: WayAbove, row: WayRow): WayAbove => ({
+  streamOnly: way.streamOnly || row.access === "STREAM",
+  dlPaused: way.dlPaused || row.dlPaused,
+  limitUsed: way.limitUsed || downloadsUsedUp(row),
+});
 
 /** The way above the last row of a chain (account root first). */
 export const wayAboveEnd = (chain: readonly WayRow[]) => chain.slice(0, -1).reduce(through, NOTHING_ABOVE);
@@ -187,6 +198,7 @@ export function downloadBlockOf(row: SharedRow, above: WayAbove, busy: Busy | un
     streamOnly: row.access === "STREAM",
     downloadLimit: row.downloadLimit,
     downloads: row.downloads,
+    limitUsedAbove: above.limitUsed,
     burn: row.burn,
     busyLevel: busy?.level ?? 0,
   });

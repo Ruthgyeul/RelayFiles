@@ -39,6 +39,8 @@ function busyError(busy: Busy, now: number): ApiError {
 }
 
 export interface SharedFile {
+  /** The link id the file was reached through (download grants belong to it). */
+  linkId: string;
   link: LoadedLink;
   row: SharedRow;
   /** Ids from the shared item down to the file (for busy tracking). */
@@ -61,10 +63,11 @@ export interface SharedFile {
 
 
 /** A link visitors may open now: 404/410 for one that does not exist, the card's error for a closed one. */
-export async function openLink(linkId: string, viewer: ShareViewer, now: number): Promise<LoadedLink> {
+export async function openLink(linkId: string, viewer: ShareViewer, now: number, resuming = false): Promise<LoadedLink> {
   const link = await loadLink(linkId, viewer, now);
   if (!link) throw await missingLinkError(linkId);
-  if (link.status !== "open") throw statusError(link.status);
+  // A download counted before its downloads ran out may still be continued (see resolveSharedFile).
+  if (link.status !== "open" && !(resuming && link.resumable)) throw statusError(link.status);
   return link;
 }
 
@@ -74,9 +77,12 @@ const hasLimit = (link: LoadedLink) => link.kind === "collection" && (link.colle
 /**
  * Checks that a visitor may play or download a file through a link: the link is open, the
  * file is inside it and visible, and (for downloads) downloads are allowed and not paused.
+ * `resuming`: this browser was counted for this file before and asks for bytes past the start,
+ * so download limits used up since (by that very download, say) do not stop it here; whether
+ * the response continues that download or counts as a new one is decided by the caller.
  */
-export async function resolveSharedFile(linkId: string, nodeId: string, viewer: ShareViewer, purpose: "stream" | "download", now: number): Promise<SharedFile> {
-  const link = await openLink(linkId, viewer, now);
+export async function resolveSharedFile(linkId: string, nodeId: string, viewer: ShareViewer, purpose: "stream" | "download", now: number, resuming = false): Promise<SharedFile> {
+  const link = await openLink(linkId, viewer, now, resuming);
   // Only the way from the file up to the account root, not the link's whole tree (every
   // Range request of a video comes through here).
   const chain = await sharedChain(db(), nodeId);
@@ -101,6 +107,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
       case "stream-only":
         throw new ApiError("FORBIDDEN", "Downloads are disabled for this link.");
       case "limit":
+        if (resuming) break;
         throw new ApiError("FORBIDDEN", "Download limit reached");
       case "paused":
         throw busyError(busy, now);
@@ -109,7 +116,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
     }
   }
   const collectionId = collectionIdOf(link);
-  return { link, row, path, segments: segmentsBelowRoot(chain), counted, collectionId, limited: guarded.length > 0 || hasLimit(link), busy, capped: cappedOn(chain) };
+  return { linkId, link, row, path, segments: segmentsBelowRoot(chain), counted, collectionId, limited: guarded.length > 0 || hasLimit(link), busy, capped: cappedOn(chain) };
 }
 
 /**

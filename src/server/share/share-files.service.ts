@@ -2,7 +2,7 @@ import "server-only";
 import { MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER, SUBTITLE_PARAM } from "@/contracts/api";
 import { isSubtitleName } from "@/domain/subtitles";
-import { effectiveRange, parseRange } from "@/domain/serving";
+import { continuesDownload, effectiveRange, parseRange } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadDecision } from "@/domain/share-access";
 import { HEIC_COPY_MIME, heicCopyName, isHeicType } from "@/domain/heic";
 import { mimeFromName } from "@/domain/upload";
@@ -89,7 +89,7 @@ async function countSharedDownload(file: SharedFile, viewer: ShareViewer, client
   const visitorId = viewer.visitorId ?? newVisitorId();
   // Already counted: a Redis hiccup only costs the visitor resuming, never the download itself
   // (a delete-after-download file would otherwise be used up without anyone receiving it).
-  await grantDownload(row.id, visitorId).catch((error: unknown) => logger.warn("download grant not stored", { error }));
+  await grantDownload(file.linkId, row.id, visitorId).catch((error: unknown) => logger.warn("download grant not stored", { error }));
   await recordDownload(file.path, now).catch((error: unknown) => logger.warn("busy level not recorded", { error }));
   void logLinkEvent(row, "DOWNLOAD", client);
   return visitorId;
@@ -112,7 +112,9 @@ async function applyDecision(decision: DownloadDecision, file: SharedFile, viewe
 /** A visitor's playback (`stream`) or download of a file inside a share link. */
 export async function serveSharedFile(req: Request, linkId: string, nodeId: string, mode: "stream" | "download", viewer: ShareViewer, client: ClientInfo): Promise<Response> {
   const now = Date.now();
-  const file = await resolveSharedFile(linkId, nodeId, viewer, mode, now);
+  // Continuing a download (or playback) this browser was counted for: limits it used up do not stop it.
+  const resuming = continuesDownload(req.headers.get("range")) && (await hasDownloadGrant(linkId, nodeId, viewer.visitorId));
+  const file = await resolveSharedFile(linkId, nodeId, viewer, mode, now, resuming);
   const { link, row } = file;
   // loadLink read the owner already (the storage volume and the metadata setting).
   const { owner } = link;
@@ -129,7 +131,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   if (!link.isOwner && req.method === "GET") await assertShareTraffic(owner, file.capped, now);
   let newVisitor: string | null = null;
   if (mode === "download") {
-    const granted = !link.isOwner && range !== null && range !== "unsatisfiable" && range.start > 0 && (await hasDownloadGrant(row.id, viewer.visitorId));
+    const granted = !link.isOwner && range !== null && range !== "unsatisfiable" && range.start > 0 && (await hasDownloadGrant(file.linkId, row.id, viewer.visitorId));
     newVisitor = await applyDecision(downloadDecision({ method: req.method, range, owner: link.isOwner, granted }), file, viewer, client, now);
   } else if (!link.isOwner) {
     // Playback reads what the viewer needs, not a second (uncounted) download of any file.
@@ -137,7 +139,7 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
     if (reach === null) throw new ApiError("NOT_FOUND");
     if (!withinReach(reach, range, size)) throw new ApiError("FORBIDDEN", "Use Download to get the whole file.");
     // A file under a download limit or delete-after-download: playing it counts as well.
-    if (file.limited) newVisitor = await applyDecision(limitedStreamDecision({ method: req.method, range, granted: await hasDownloadGrant(row.id, viewer.visitorId) }), file, viewer, client, now);
+    if (file.limited) newVisitor = await applyDecision(limitedStreamDecision({ method: req.method, range, granted: await hasDownloadGrant(file.linkId, row.id, viewer.visitorId) }), file, viewer, client, now);
     // Videos and audio are played; pictures and documents are looked at.
     const start = req.method === "GET" && (range === null || (range !== "unsatisfiable" && range.start === 0));
     // A video's subtitle file read by the player is not a view of that file (it still counts
@@ -212,7 +214,7 @@ export async function serveSharedTranscode(req: Request, linkId: string, nodeId:
     // is judged as a request for all of it rather than let through uncounted.
     const parsed = parseRange(req.headers.get("range"), UNKNOWN_LENGTH);
     const range = parsed === "unsatisfiable" ? null : parsed;
-    newVisitor = await applyDecision(limitedStreamDecision({ method: req.method, range, granted: await hasDownloadGrant(row.id, viewer.visitorId) }), file, viewer, client, now);
+    newVisitor = await applyDecision(limitedStreamDecision({ method: req.method, range, granted: await hasDownloadGrant(file.linkId, row.id, viewer.visitorId) }), file, viewer, client, now);
   }
   if (req.method === "GET") {
     if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
@@ -246,12 +248,12 @@ export async function serveSharedHls(req: Request, linkId: string, nodeId: strin
   let newVisitor: string | null = null;
   if (parsed.request.kind === "playlist") {
     if (!link.isOwner && file.limited) {
-      newVisitor = await applyDecision(limitedStreamDecision({ method: "GET", range: null, granted: await hasDownloadGrant(row.id, viewer.visitorId) }), file, viewer, client, now);
+      newVisitor = await applyDecision(limitedStreamDecision({ method: "GET", range: null, granted: await hasDownloadGrant(file.linkId, row.id, viewer.visitorId) }), file, viewer, client, now);
     }
     if (!link.isOwner) void logLinkEvent(row, "PLAY", client);
     void markActive("stream", `${row.id}:${client.ipKey}`);
     void notePlay(row.id);
-  } else if (!link.isOwner && file.limited && !(await hasDownloadGrant(row.id, viewer.visitorId))) {
+  } else if (!link.isOwner && file.limited && !(await hasDownloadGrant(file.linkId, row.id, viewer.visitorId))) {
     throw new ApiError("FORBIDDEN", "Start the video again.");
   }
   const response = await hlsResponse(video, parsed, trafficOf(req, owner, file));

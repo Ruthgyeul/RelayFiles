@@ -3,6 +3,8 @@
 export const FILES = {
   /** Most items one request may move, copy, delete, tag or zip. */
   maxBatchItems: 500,
+  /** Ids one `IN (…)` query reads at most: PostgreSQL takes 65,535 bind parameters per statement. */
+  idsPerQuery: 10_000,
   /** Longer lists let the browser skip rendering rows outside the screen (content-visibility). */
   lazyRenderAfter: 100,
   /** A video without a thumbnail loads its first frame once its row is this close to the screen. */

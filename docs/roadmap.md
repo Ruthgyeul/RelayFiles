@@ -149,7 +149,7 @@
 | 5-6 | 관리자 패스키(WebAuthn) | — | 관리자 계정에 두 번째 로그인 수단을 둔다. 스키마는 expand로 시작한다 |
 | 5-7 | S3 호환 오프사이트 드라이버 | 3-5 | 예약된 `StorageDriver.S3`를 쓴다. 우선 백업과 콜드 데이터용 |
 | 5-8 — [#180](https://github.com/Ruthgyeul/RelayFiles/pull/180) | HEIC 사진 썸네일·미리보기 | 3-4 | 아래 상세 |
-| 5-9 | 컬렉션 공유 링크 | 3-1, 3-2 | 아래 상세 |
+| 5-9 — [#181](https://github.com/Ruthgyeul/RelayFiles/pull/181) | 컬렉션 공유 링크 | 3-1, 3-2 | 아래 상세 |
 | 5-10 — [#175](https://github.com/Ruthgyeul/RelayFiles/pull/175), [#176](https://github.com/Ruthgyeul/RelayFiles/pull/176) | 저장된 검색 · 폴더 자동 정리 규칙 | 2-3, 3-6 | 아래 상세 |
 
 권장 순서: 5-8(소) → 5-1 → 5-10 → 5-4 → 5-9 → 5-5 → 5-6 → 5-7. 5-8은 전제 3-4가 끝나기 전에 해도 된다. 그때는 3-4에서 함께 옮긴다.

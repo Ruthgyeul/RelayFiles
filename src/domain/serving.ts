@@ -32,6 +32,16 @@ export function parseRange(header: string | null, size: number): ByteRange | nul
   return { start, end };
 }
 
+/**
+ * Whether a Range header asks for bytes after the first ("bytes=1000-"): only such a request
+ * can continue a download started earlier. Suffix ranges ("bytes=-500") and the start ("bytes=0-")
+ * cannot.
+ */
+export function continuesDownload(header: string | null): boolean {
+  const match = header ? /^bytes=(\d+)-\d*$/.exec(header.trim()) : null;
+  return match !== null && Number(match[1]) > 0;
+}
+
 /** Whether Range applies: no If-Range, or an If-Range equal to the current strong ETag (RFC 9110 13.1.5). */
 export function rangeApplies(ifRange: string | null, etag: string | null): boolean {
   return ifRange === null || (etag !== null && ifRange.trim() === `"${etag}"`);

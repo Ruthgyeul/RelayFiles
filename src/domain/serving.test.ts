@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { canShowInline, contentDisposition, contentRangeTotal, effectiveRange, parseRange, rangeApplies, zipName } from "./serving";
+import { canShowInline, contentDisposition, contentRangeTotal, continuesDownload, effectiveRange, parseRange, rangeApplies, zipName } from "./serving";
+
+describe("continuesDownload", () => {
+  it("is true only for a range starting after the first byte", () => {
+    expect(continuesDownload("bytes=1000-")).toBe(true);
+    expect(continuesDownload("bytes=1000-1999")).toBe(true);
+    expect(continuesDownload("bytes=0-")).toBe(false);
+    expect(continuesDownload("bytes=-500")).toBe(false);
+    expect(continuesDownload("bytes=5-1,7-9")).toBe(false);
+    expect(continuesDownload(null)).toBe(false);
+  });
+});
 
 describe("parseRange", () => {
   it("parses open, closed and suffix ranges", () => {
