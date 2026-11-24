@@ -1,0 +1,4 @@
+# Runner labels newer than the pinned actionlint knows (GitHub-hosted, not self-hosted).
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
