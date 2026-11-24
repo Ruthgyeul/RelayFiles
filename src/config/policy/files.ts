@@ -5,6 +5,8 @@ export const FILES = {
   maxBatchItems: 500,
   /** Longer lists let the browser skip rendering rows outside the screen (content-visibility). */
   lazyRenderAfter: 100,
+  /** A video without a thumbnail loads its first frame once its row is this close to the screen. */
+  videoFrameMarginPx: 400,
   /** Height a lazy row is assumed to have before it renders (content-visibility estimate). */
   rowEstimatePx: 68,
   /** The same for rows with a media preview (288px square or audio player under the name). */
