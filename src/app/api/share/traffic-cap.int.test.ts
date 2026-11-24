@@ -49,9 +49,11 @@ describe("daily traffic limits", () => {
     expect(second.status).toBe(200);
     await second.arrayBuffer();
     await new Promise((resolve) => setTimeout(resolve, 50));
+    // Taken before the request: the server's value, read a moment later, can only be the same or smaller.
+    const latest = secondsUntilUtcMidnight(Date.now());
     const refused = await download(linkId, file);
     expect(refused.status).toBe(429);
-    expect(Number(refused.headers.get("retry-after"))).toBeLessThanOrEqual(secondsUntilUtcMidnight(Date.now()));
+    expect(Number(refused.headers.get("retry-after"))).toBeLessThanOrEqual(latest);
     expect(((await refused.json()) as { error: string }).error).toBe("This link has used up today's traffic. Try again after midnight UTC.");
     // The zip of the same link is refused too; the owner is never limited.
     expect((await visit(shareZip, `/api/share/${linkId}/zip?folder=${folderId}`, { linkId })).status).toBe(429);
