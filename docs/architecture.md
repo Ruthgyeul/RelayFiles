@@ -260,6 +260,13 @@ File Manager 툴바의 공유 아이콘(`/files/shared`)이 밖에서 열 수 �
 - 중복 제거(`STORAGE_DEDUPE`)로 이미 하드 링크를 공유하는 사본은 지워도 쿼터만 줄고 디스크 공간은 마지막 링크가 지워질 때 돌아온다(대화상자에 안내).
 - SHA-256이 없는 파일(처음 커밋부터 업로드는 해시를 기록했으므로 보통 없음)은 비교하지 않고 `unchecked`로 센다. 데이터 마이그레이션 `20261101-backfill-sha256`이 릴리스 때 채운다.
 
+### 자동 정리 (Auto clean)
+
+- 폴더마다 규칙 하나(`FolderRule { folderId, olderThanDays, basis: CREATED | MODIFIED }`)를 둔다. 루트에는 걸 수 없다(계정 전체가 대상이 되므로). Favorites는 노드가 아니라 대상이 아니다.
+- 매일 정리 작업(`runMaintenance`)이 `runCleanup` 뒤, 휴지통 비우기 전에 `runAutoClean`을 돌린다. 규칙은 `folderId` 순 keyset 페이지(`AUTO_CLEAN.rulePage`)로 읽는다. 대상은 **폴더 바로 아래 파일**이고, `basis` 날짜(수정일이 없으면 추가일)가 `olderThanDays`보다 오래된 파일이다. 하위 폴더와 디스크에 없는 파일(`missing`)은 그대로 둔다.
+- 옮기기는 일반 삭제(`deleteItems`, recoverable)라 Recently deleted에서 보존 기간 동안 되돌릴 수 있다. 한 규칙이 하루에 옮기는 파일은 `AUTO_CLEAN.perRunLimit`(5,000)까지이고, 나머지는 다음 날 이어서 옮긴다. `AUTO_CLEAN.batchSize`(500)개마다 저장 트랜잭션 하나를 쓰므로 중간에 실패해도 앞 배치는 남는다. 한 폴더가 실패해도(잠긴 하위 트리, 읽기 전용 볼륨) 다른 규칙은 계속 돈다.
+- 대화상자는 고른 규칙이 지금 옮길 파일 수를 `GET /api/nodes/:id/auto-clean?days=&basis=`(count 쿼리)로 보여 준다. 판정 규칙과 문구는 `domain/auto-clean.ts`에 있다. 폴더 헤더에는 `Auto clean · 30 days` 태그가 붙는다(규칙은 폴더 페이지가 서버에서 읽는다. API v1 `FolderView`는 바뀌지 않는다).
+
 ## 설정과 환경 변수
 
 - 정책 값(기간, 임계값, 크기)은 `src/config/policy/`의 영역별 파일(`accounts`, `storage`, `files`, `share`, `media`, `operations`, `deploy`, `time`)에 이름을 붙여 두고, 쓰는 쪽은 재수출 파일 `@/config/policy`에서 가져온다. 배포마다 다른 값(포트, 호스트, 경로, 도메인, 비밀값)은 env로 빼고, env는 `policy.ts`의 기본값을 덮어쓰기만 한다.

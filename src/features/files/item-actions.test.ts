@@ -3,7 +3,7 @@ import { buildMenu, FAVORITE_MENU, NODE_MENU, SELECTION_TOOLBAR, toolbarButtons,
 
 const settings = { visibility: "inherit", expiry: "Never", expAt: null, burn: false, downloadLimit: null, dailyCapGb: null, hasPassword: false, access: "both", note: "", dlPaused: false } as const;
 const noop = () => undefined;
-const ids: ActionId[] = ["open", "preview", "download", "downloadZip", "toggleFavorite", "showInFolder", "moveInFavorites", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rescan", "rename", "copy", "move", "delete", "renumber", "duplicates", "versions", "properties"];
+const ids: ActionId[] = ["open", "preview", "download", "downloadZip", "toggleFavorite", "showInFolder", "moveInFavorites", "share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause", "rescan", "rename", "copy", "move", "delete", "renumber", "duplicates", "autoClean", "versions", "properties"];
 const all: Required<ActionHandlers> = Object.fromEntries(ids.map((key) => [key, noop])) as Required<ActionHandlers>;
 const buildNodeMenu = (item: ActionItem, isRoot: boolean, isAdmin: boolean, actions: ActionHandlers) => buildMenu(NODE_MENU, item, { isRoot, isAdmin }, actions);
 
@@ -31,6 +31,7 @@ describe("NODE_MENU (design nodeMenu)", () => {
       "Delete",
       "| Renumber files",
       "Find duplicates",
+      "Auto clean",
       "| Properties",
     ]);
   });

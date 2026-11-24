@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { FolderView } from "@/contracts/nodes";
+import { cleanTagLabel, type CleanRule } from "@/domain/auto-clean";
 import { formatDateTime } from "@/domain/format";
 import { itemCount, settingTags, visibilityTag } from "@/domain/tree";
 import { cn } from "@/shared/lib/cn";
@@ -16,6 +17,8 @@ import type { DropTargetProps } from "./useDragMove";
 interface FolderHeaderProps {
   view: FolderView;
   now: number;
+  /** The folder's auto-clean rule, shown as a tag (null: none). */
+  autoClean?: CleanRule | null;
   onShare: () => void;
   /** Opens the visitor view of this folder's link. */
   onSharePage: () => void;
@@ -27,13 +30,14 @@ interface FolderHeaderProps {
 }
 
 /** Header card of the current folder: up button, icon, name, date, item count, setting tags, note. */
-export function FolderHeader({ view, now, onShare, onSharePage, onMenu, menuOpen, upDrop, upOver }: FolderHeaderProps) {
+export function FolderHeader({ view, now, autoClean = null, onShare, onSharePage, onMenu, menuOpen, upDrop, upOver }: FolderHeaderProps) {
   const { folder, isRoot, path, effectiveVisibility } = view;
   const parent = path.at(-2);
   const tags: { icon: IconName; label: string }[] = [
     ...(isRoot ? [{ icon: "hard-drives" as const, label: "root folder" }] : []),
     visibilityTag(folder.settings.visibility, effectiveVisibility, isRoot),
     ...settingTags(toShareSettings(folder.settings), folder.downloads, null, now).filter((tag) => tag.label !== "Public" && tag.label !== "Private"),
+    ...(autoClean ? [{ icon: "broom" as const, label: cleanTagLabel(autoClean) }] : []),
   ];
 
   return (

@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import type { DuplicateFile, NodeItem } from "@/contracts/nodes";
 import { useShell } from "@/features/shell/ShellProvider";
 import { folderHref } from "@/shared/lib/routes";
+import { AutoCleanDialog, type AutoCleanRequest } from "./AutoCleanDialog";
 import { BatchRenameDialog, type BatchRenameRequest } from "./BatchRenameDialog";
 import { DuplicatesDialog, type DuplicatesRequest } from "./DuplicatesDialog";
 import { RenumberDialog, type RenumberRequest } from "./RenumberDialog";
@@ -13,13 +14,15 @@ import { VersionsDialog, type VersionsRequest } from "./VersionsDialog";
 interface FolderToolsOpen {
   renumber: (folder: NodeItem) => void;
   duplicates: (folder: NodeItem) => void;
+  /** "Auto clean": the folder's daily move of old files to Recently deleted. */
+  autoClean: (folder: NodeItem) => void;
   /** "Rename" for selected items; `others` = the folder's other names (null when unknown). */
   rename: (items: NodeItem[], others: string[] | null) => void;
   /** "Version history" of a file. */
   versions: (file: NodeItem) => void;
 }
 
-/** Folder-wide tools: "Renumber files" and "Find duplicates" from the folder menu, "Rename" for a selection, "Version history" of a file. */
+/** Folder-wide tools: "Renumber files", "Find duplicates" and "Auto clean" from the folder menu, "Rename" for a selection, "Version history" of a file. */
 export function useFolderTools(onChanged: () => void): { open: FolderToolsOpen; dialogs: ReactNode } {
   const router = useRouter();
   const { notify } = useShell();
@@ -27,6 +30,7 @@ export function useFolderTools(onChanged: () => void): { open: FolderToolsOpen; 
   const [duplicates, setDuplicates] = useState<DuplicatesRequest | null>(null);
   const [rename, setRename] = useState<BatchRenameRequest | null>(null);
   const [versions, setVersions] = useState<VersionsRequest | null>(null);
+  const [autoClean, setAutoClean] = useState<AutoCleanRequest | null>(null);
 
   const changed = (message: string) => {
     notify(message);
@@ -41,6 +45,7 @@ export function useFolderTools(onChanged: () => void): { open: FolderToolsOpen; 
       renumber: (folder) => setRenumber({ folderId: folder.id, name: folder.name }),
       duplicates: (folder) => setDuplicates({ folderId: folder.id, name: folder.name }),
       versions: (file) => setVersions({ nodeId: file.id, name: file.name }),
+      autoClean: (folder) => setAutoClean({ folderId: folder.id, name: folder.name }),
       rename: (items, others) => {
         // Names are unique in a folder, so the selected items' names are the ones to leave out.
         const selected = new Set(items.map((item) => item.name));
@@ -52,6 +57,8 @@ export function useFolderTools(onChanged: () => void): { open: FolderToolsOpen; 
         <RenumberDialog request={renumber} onClose={() => setRenumber(null)} onDone={changed} />
         <BatchRenameDialog request={rename} onClose={() => setRename(null)} onDone={changed} />
         <VersionsDialog request={versions} onClose={() => setVersions(null)} onDone={changed} />
+        {/* Mounted per folder, so each opening reads the saved rule afresh. */}
+        {autoClean && <AutoCleanDialog key={autoClean.folderId} request={autoClean} onClose={() => setAutoClean(null)} onDone={changed} />}
         <DuplicatesDialog request={duplicates} onClose={() => setDuplicates(null)} onDone={changed} onReveal={reveal} />
       </>
     ),

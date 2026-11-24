@@ -54,26 +54,26 @@ model StorageVolume {
 /// Anonymous token account. The token is stored encrypted (shown in full on the profile)
 /// and as an HMAC for lookup; the plain token never touches the database.
 model Account {
-  id                   String        @id
-  name                 String        @unique
-  tokenLookup          String        @unique
+  id                   String           @id
+  name                 String           @unique
+  tokenLookup          String           @unique
   tokenEnc             Bytes
   color                String
-  isAdmin              Boolean       @default(false)
-  neverExpire          Boolean       @default(false)
+  isAdmin              Boolean          @default(false)
+  neverExpire          Boolean          @default(false)
   /// Explicit deletion date set by an admin; null = createdAt + ACCOUNT_TTL_DAYS.
   expiresAt            DateTime?
   /// Storage quota in bytes; null = unlimited.
   quotaBytes           BigInt?
-  stripMetadataOnShare Boolean       @default(true)
+  stripMetadataOnShare Boolean          @default(true)
   /// Owner notifications (NOTIFY_WEBHOOK_URL) about its share links: first open, downloads used up.
-  notifyLinkEvents     Boolean       @default(false)
+  notifyLinkEvents     Boolean          @default(false)
   /// True while the account's files are being moved to another volume.
-  migrating            Boolean       @default(false)
+  migrating            Boolean          @default(false)
   volumeId             String
-  volume               StorageVolume @relation(fields: [volumeId], references: [id])
-  createdAt            DateTime      @default(now())
-  lastLoginAt          DateTime      @default(now())
+  volume               StorageVolume    @relation(fields: [volumeId], references: [id])
+  createdAt            DateTime         @default(now())
+  lastLoginAt          DateTime         @default(now())
   sessions             Session[]
   nodes                Node[]
   trashed              TrashedBytes[]
@@ -85,6 +85,7 @@ model Account {
   favoriteFolders      FavoriteFolder[]
   events               AccountEvent[]
   versions             FileVersion[]
+  folderRules          FolderRule[]
 
   @@index([volumeId])
 }
@@ -180,46 +181,46 @@ enum Access {
 /// A folder or file. Each account has exactly one root folder (parentId = null), created
 /// together with the account; the root maps to users/<accountId>/ on the volume.
 model Node {
-  id            String      @id
+  id            String        @id
   accountId     String
-  account       Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account       Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
   parentId      String?
-  parent        Node?       @relation("NodeTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children      Node[]      @relation("NodeTree")
+  parent        Node?         @relation("NodeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children      Node[]        @relation("NodeTree")
   type          NodeType
   /// File or folder name, identical to the name on disk (validated by domain/names.ts).
   name          String
   kind          FileKind?
   mime          String?
-  size          BigInt      @default(0)
+  size          BigInt        @default(0)
   sha256        String?
-  hasThumb      Boolean     @default(false)
-  hasDerived    Boolean     @default(false)
+  hasThumb      Boolean       @default(false)
+  hasDerived    Boolean       @default(false)
   /// The worker could not make the metadata-stripped copy (undecodable or too large): visitors get 415, not a retry.
-  stripFailed   Boolean     @default(false)
+  stripFailed   Boolean       @default(false)
   /// How much metadata the stripped copy lost (SHARE_METADATA_STRIP when it was made); null: none yet, or one
   /// made before this column (those removed everything, like ALL).
   derivedMode   StripMode?
   /// Set by the reconcile job when the file is missing on disk.
-  missing       Boolean     @default(false)
-  scanState     ScanState   @default(NONE)
+  missing       Boolean       @default(false)
+  scanState     ScanState     @default(NONE)
   /// Public link id (/d/<linkId>). Never changes during migrations; regenerated only on request.
-  linkId        String      @unique
-  visibility    Visibility  @default(INHERIT)
-  expiryLabel   String      @default("Never")
+  linkId        String        @unique
+  visibility    Visibility    @default(INHERIT)
+  expiryLabel   String        @default("Never")
   expAt         DateTime?
-  burn          Boolean     @default(false)
+  burn          Boolean       @default(false)
   downloadLimit Int?
   /// Bytes a share link to this item may send per UTC day (null: no limit, SHARE_DAILY_BYTES_CAP_GB still applies per account).
   dailyBytesCap BigInt?
   passwordHash  String?
-  access        Access      @default(BOTH)
-  note          String      @default("")
-  dlPaused      Boolean     @default(false)
-  downloads     Int         @default(0)
-  tags          String[]    @default([])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  access        Access        @default(BOTH)
+  note          String        @default("")
+  dlPaused      Boolean       @default(false)
+  downloads     Int           @default(0)
+  tags          String[]      @default([])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   /// When the file's content last changed, as the uploader reported it (File.lastModified); files without it use the disk mtime (data migration 20261101-backfill-modified-at).
   modifiedAt    DateTime?
   /// When the photo or video was taken, from its metadata (EXIF DateTimeOriginal, video creation_time); null when it has none or the worker has not read it yet.
@@ -227,6 +228,7 @@ model Node {
   events        LinkEvent[]
   fileRequests  FileRequest[]
   favorite      Favorite?
+  cleanRule     FolderRule?
 
   @@unique([parentId, name])
   @@index([accountId, parentId])
@@ -290,15 +292,15 @@ enum LinkEventKind {
 
 /// Share link activity (opens, plays, downloads, link resets). The newest 200 per node are kept.
 model LinkEvent {
-  id        BigInt        @id @default(autoincrement())
-  nodeId    String
-  node      Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  kind      LinkEventKind
-  fileName  String
-  device    String        @default("")
-  ipMasked  String        @default("")
-  country   String        @default("")
-  at        DateTime      @default(now())
+  id       BigInt        @id @default(autoincrement())
+  nodeId   String
+  node     Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  kind     LinkEventKind
+  fileName String
+  device   String        @default("")
+  ipMasked String        @default("")
+  country  String        @default("")
+  at       DateTime      @default(now())
 
   @@index([nodeId, at])
 }
@@ -416,11 +418,11 @@ enum HealthLevel {
 
 model HealthDaily {
   component String
-  day       DateTime    @db.Date
+  day       DateTime     @db.Date
   /// No longer written (the Status page counts the day itself); dropped in the next release.
   level     HealthLevel?
-  okCount   Int         @default(0)
-  failCount Int         @default(0)
+  okCount   Int          @default(0)
+  failCount Int          @default(0)
 
   @@id([component, day])
 }
@@ -468,9 +470,9 @@ model TrashedBytes {
 /// rows back with the same ids and links and moves its files out of the trash. Link activity and
 /// upload links of the deleted items are not kept.
 model DeletedItem {
-  id               String   @id
+  id               String       @id
   accountId        String
-  account          Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account          Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   /// Volume whose trash holds the item (the account's volume when it was deleted).
   volumeId         String
   reason           DeleteReason @default(DELETED)
@@ -491,8 +493,8 @@ model DeletedItem {
   /// The folder it was in; restored there while it exists, else into the account root.
   originalParentId String?
   /// Folder names from the account root down to that folder when it was deleted, for display.
-  originalPath     String[] @default([])
-  deletedAt        DateTime @default(now())
+  originalPath     String[]     @default([])
+  deletedAt        DateTime     @default(now())
   /// The Node rows of the item and everything inside it, parents before children
   /// (server/repositories/deleted-item.repo.ts NodeSnapshot).
   nodes            Json
@@ -604,4 +606,24 @@ model FileRequest {
 
   @@index([accountId])
   @@index([folderId])
+}
+
+/// What an auto-clean rule compares with its age limit: when the file was added, or its own modification time.
+enum CleanBasis {
+  CREATED
+  MODIFIED
+}
+
+/// A folder's auto-clean rule: the daily cleanup moves its files older than `olderThanDays` to Recently deleted.
+model FolderRule {
+  folderId      String     @id
+  folder        Node       @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  olderThanDays Int
+  basis         CleanBasis @default(MODIFIED)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([accountId])
 }

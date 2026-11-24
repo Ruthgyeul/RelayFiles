@@ -2,6 +2,7 @@
 
 import type { Route } from "next";
 import type { FolderCrumb, FolderView, NodeItem } from "@/contracts/nodes";
+import type { CleanRule } from "@/domain/auto-clean";
 import { emptyTitle } from "@/domain/tree";
 import { useTransferActions } from "@/features/transfers/transfers-context";
 import { ActionMenu } from "./ActionMenu";
@@ -39,6 +40,8 @@ export interface FolderNav {
 
 interface FileManagerProps {
   view: FolderView;
+  /** The folder's auto-clean rule for its header (File Manager pages only). */
+  autoClean?: CleanRule | null;
   nav?: FolderNav;
   isAdmin: boolean;
   /** A file of this folder to open in the viewer right away (global search `?view=`). */
@@ -46,7 +49,7 @@ interface FileManagerProps {
 }
 
 /** The File Manager page for one folder: path, header, toolbar, filters, search, items and dialogs. */
-export function FileManager({ view, nav, isAdmin, initialView }: FileManagerProps) {
+export function FileManager({ view, autoClean, nav, isAdmin, initialView }: FileManagerProps) {
   const [prefs, setPrefs] = usePrefs();
   const search = useFileSearch();
   const { folder, children, path, isRoot } = view;
@@ -131,6 +134,7 @@ export function FileManager({ view, nav, isAdmin, initialView }: FileManagerProp
       <FolderHeader
         view={view}
         now={now}
+        autoClean={autoClean}
         onShare={() => copyLink(linkOf(folder.linkId), view.effectiveVisibility)}
         onSharePage={() => router.push(sharePageHref(folder.linkId))}
         onMenu={(anchor) => menu.toggle(folder.id, anchor)}

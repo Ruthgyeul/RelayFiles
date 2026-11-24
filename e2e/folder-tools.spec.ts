@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { names, openFiles } from "./helpers";
+import { itemMenu, names, newFolder, openFiles } from "./helpers";
 
 const file = (name: string, content: string) => ({ name, mimeType: "text/plain", buffer: Buffer.from(content) });
 
@@ -99,4 +99,36 @@ test("keeps the replaced file as a version and restores it", async ({ page }) =>
   await versions.first().getByRole("button", { name: "Delete", exact: true }).click();
   await expect(dialog.getByText("No earlier versions.")).toBeVisible();
   expect(await names(page)).toEqual(["notes.txt"]);
+});
+
+test("turns a folder's auto clean on, changes it and turns it off", async ({ page }) => {
+  await openFiles(page);
+  await newFolder(page, "Inbox");
+  await itemMenu(page, "Inbox", "Open");
+  await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
+  await upload(page, [file("fresh.txt", "new")]);
+
+  await folderTool(page, "Auto clean");
+  const dialog = page.getByRole("dialog", { name: "Auto clean" });
+  // Just uploaded: nothing is old enough yet.
+  await expect(dialog.getByText("No files would move now.")).toBeVisible();
+  await dialog.getByRole("button", { name: "7 days" }).click();
+  await dialog.getByRole("button", { name: "Date added" }).click();
+  await expect(dialog.getByText("added more than 7 days ago", { exact: false })).toBeVisible();
+  await dialog.getByRole("button", { name: "Turn on" }).click();
+  await expect(page.getByText("Auto clean is on")).toBeVisible();
+  const header = page.getByRole("region", { name: "Folder" });
+  await expect(header.getByText("Auto clean · 7 days")).toBeVisible();
+
+  await folderTool(page, "Auto clean");
+  await expect(dialog.getByRole("button", { name: "7 days" })).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "30 days" }).click();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(header.getByText("Auto clean · 30 days")).toBeVisible();
+
+  await folderTool(page, "Auto clean");
+  await dialog.getByRole("button", { name: "Turn off" }).click();
+  await expect(page.getByText("Auto clean is off")).toBeVisible();
+  await expect(header.getByText(/Auto clean ·/)).toBeHidden();
+  await expect.poll(() => names(page)).toEqual(["fresh.txt"]);
 });

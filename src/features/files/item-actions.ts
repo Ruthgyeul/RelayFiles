@@ -44,6 +44,8 @@ const ACTIONS = {
   renumber: { label: "Renumber files", icon: "list-numbers", when: (item) => item.type === "folder" },
   /** Folders: files with the same content. */
   duplicates: { label: "Find duplicates", icon: "files", when: (item) => item.type === "folder" },
+  /** Folders inside the root: move old files to Recently deleted every day. */
+  autoClean: { label: "Auto clean", icon: "broom", when: (item, ctx) => item.type === "folder" && !ctx.isRoot },
   /** Files: earlier versions kept when an upload replaced the file. */
   versions: { label: "Version history", icon: "clock-counter-clockwise", when: (item) => item.type === "file" },
   /** A file whose virus scan failed: queue a new one. */
@@ -70,7 +72,7 @@ export const NODE_MENU: readonly (readonly ActionId[])[] = [
   ["open", "preview", "download", "downloadZip", "toggleFavorite"],
   ["share", "uploadLinks", "tags", "directLink", "newLink", "activity", "settings", "togglePause"],
   ["rename", "copy", "move", "delete"],
-  ["renumber", "duplicates", "versions", "rescan"],
+  ["renumber", "duplicates", "autoClean", "versions", "rescan"],
   ["properties"],
 ];
 

@@ -1,4 +1,6 @@
 import { CONVERSION } from "@/contracts/api";
+import type { AutoCleanView } from "@/contracts/auto-clean";
+import type { CleanRule } from "@/domain/auto-clean";
 import type {
   CreatedFolder,
   DuplicatesResult,
@@ -66,5 +68,10 @@ export const filesApi = {
   renumber: (folderId: string, sort: RenumberSort, order: RenumberOrder, expect: { id: string; to: string }[], count: number) =>
     apiFetch<RenumberResult>(`${node(folderId)}/renumber`, { method: "POST", json: { sort, order, expect, count } }),
   duplicates: (folderId: string, recursive: boolean) => apiFetch<DuplicatesResult>(`${node(folderId)}/duplicates?recursive=${recursive ? 1 : 0}`),
+  /** The folder's auto-clean rule with the files `preview` (or the saved rule) would move now. */
+  autoClean: (folderId: string, preview?: CleanRule, signal?: AbortSignal) =>
+    apiFetch<AutoCleanView>(`${node(folderId)}/auto-clean${preview ? `?days=${preview.olderThanDays}&basis=${preview.basis}` : ""}`, { signal }),
+  saveAutoClean: (folderId: string, rule: CleanRule) => apiFetch<AutoCleanView>(`${node(folderId)}/auto-clean`, { method: "PUT", json: rule }),
+  removeAutoClean: (folderId: string) => apiFetch<{ removed: true }>(`${node(folderId)}/auto-clean`, { method: "DELETE" }),
   searchTags: (tags: string[]) => apiFetch<TaggedItem[]>(`/api/search?tags=${encodeURIComponent(tags.join(","))}`),
 };
