@@ -26,6 +26,7 @@ import { MISSING_REASON, zipResponse, type ZipEntry } from "../services/zip.serv
 import { scanBlock } from "@/domain/scan";
 import { publicImage, publicImageBlock, stripsMedia } from "./share-files.service";
 import { BUSY } from "@/domain/share";
+import { heicCopyName, isHeicType } from "@/domain/heic";
 
 /** Why a file is left out of "Download all", as written in "Not included.txt". */
 type ZipSkip = DownloadBlock | "location" | "not-ready" | "scanning" | "blocked" | "missing";
@@ -123,9 +124,11 @@ export async function zipSharedFolder(linkId: string, folderId: string, viewer: 
     bytes += file.row.size;
     const location = { accountId: owner.id, segments: [...base, ...file.segments] };
     const row = file.row;
+    const strips = stripsMedia(owner, row);
     entries.push({
-      name: file.name,
-      open: stripsMedia(owner, row) ? async () => (await publicImage(driver, location, row)).open() : () => driver.createReadStream(location),
+      // A HEIC photo's public copy is a JPEG (see serveSharedFile).
+      name: strips && isHeicType(row.mime ?? "") ? heicCopyName(file.name) : file.name,
+      open: strips ? async () => (await publicImage(driver, location, row)).open() : () => driver.createReadStream(location),
     });
   }
   if (skipped.length > 0) entries.push({ name: `${folder.name}/Not included.txt`, open: async () => Readable.from([Buffer.from(skippedNote(skipped))]) });

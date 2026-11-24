@@ -10,6 +10,8 @@ import { latestBackupCheck } from "../repositories/backup-check.repo";
 import { listActiveVolumes } from "../repositories/volume.repo";
 import { checkVolume } from "../storage/volume";
 import { lastCleanup, workerAlive } from "./history";
+import { ffmpegVersion } from "../media/ffmpeg-version";
+import { ffmpegStatusText } from "@/domain/heic";
 
 /** SMART health of DISK_DEVICE via `smartctl -j` (needs read access to the device). */
 async function diskHealth(): Promise<ServiceRow> {
@@ -57,7 +59,8 @@ export async function serviceRows(now: Date): Promise<ServiceRow[]> {
   const volumes = await listActiveVolumes(db());
   const states = await Promise.all(volumes.map((volume) => checkVolume(volume.mountPath, volume.id)));
   const offline = states.filter((state) => state.state !== "online").length;
-  const [alive, cleanup, disk, backup] = await Promise.all([workerAlive(), lastCleanup(), diskHealth(), backupRow(now)]);
+  const [alive, cleanup, disk, backup, ffmpeg] = await Promise.all([workerAlive(), lastCleanup(), diskHealth(), backupRow(now), ffmpegVersion()]);
+  const media = ffmpegStatusText(ffmpeg);
   const jobs = getEnv("jobs");
 
   const cleanupDetail = [cronLabel(jobs.CLEANUP_CRON)];
@@ -73,6 +76,8 @@ export async function serviceRows(now: Date): Promise<ServiceRow[]> {
       status: volumes.length > 0 && offline === 0 ? "running" : "offline",
     },
     { name: "Cleanup job", detail: cleanupDetail.join(" · "), status: alive ? "scheduled" : "stopped" },
+    // The app's ffmpeg; the worker runs the same binary (FFMPEG_PATH) on the same host or image.
+    { name: "Media tools", detail: media.detail, status: !ffmpeg ? "failing" : media.heic ? "healthy" : "unknown" },
     disk,
     backup,
   ];

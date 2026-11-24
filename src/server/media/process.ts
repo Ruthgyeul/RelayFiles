@@ -4,6 +4,7 @@ import { access, constants, readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { MEDIA } from "@/config/policy";
 import { LOSSLESS_STRIP_TYPES, stripImageMetadata, type StripMode } from "@/domain/image-metadata";
+import { isHeicType } from "@/domain/heic";
 import { canStripVideo } from "@/domain/video-metadata";
 import { db } from "../db/client";
 import { logger } from "../logger";
@@ -18,13 +19,15 @@ import { dateTaken } from "./date-taken";
 import { shareStripMode, storedStripMode } from "./strip-mode";
 import { writeVideoStrippedCopy } from "./video-strip";
 import { isTransientMediaError } from "./failure";
+import { heicFrame, heicPublicCopy, heicSupported } from "./heic";
 import { imagePreview, imageThumbnail, videoThumbnail, wantsPreview } from "./thumbnail";
 
 /** Image types sharp can rewrite in the same format (metadata is dropped on output). */
 const REENCODE: Readonly<Record<string, "gif" | "avif" | "tiff">> = { "image/gif": "gif", "image/avif": "avif", "image/tiff": "tiff" };
 
 /** Whether a photo or video of this type can get a shared copy without its metadata. */
-export const canStripType = (mime: string, kind: "IMAGE" | "VIDEO" = "IMAGE") => (kind === "VIDEO" ? canStripVideo(mime) : LOSSLESS_STRIP_TYPES.has(mime) || Object.hasOwn(REENCODE, mime));
+export const canStripType = (mime: string, kind: "IMAGE" | "VIDEO" = "IMAGE") =>
+  kind === "VIDEO" ? canStripVideo(mime) : LOSSLESS_STRIP_TYPES.has(mime) || Object.hasOwn(REENCODE, mime) || isHeicType(mime);
 
 /**
  * Copy of an image without location and identifying data, in the original format, and the mode
@@ -103,12 +106,25 @@ export async function processMedia(nodeId: string, signal?: AbortSignal): Promis
   const asset = { accountId: row.accountId, nodeId: row.id };
   const source = { path, volumeId: account.volumeId };
 
-  const thumb = await attempt("thumbnail", row.id, () => (row.kind === "VIDEO" ? videoThumbnail(path) : imageThumbnail(path)), source);
+  // HEIC: browsers and sharp cannot decode it, so ffmpeg does once and every step below reads
+  // the decoded picture. On a host whose ffmpeg is too old nothing is made (Server page says why).
+  const heic = row.kind === "IMAGE" && isHeicType(mime);
+  const frame = heic && (await heicSupported()) ? await attempt("decode heic", row.id, () => heicFrame(path), source) : null;
+  const picture = heic ? frame : path;
+
+  const thumb = row.kind === "VIDEO" ? await attempt("thumbnail", row.id, () => videoThumbnail(path), source) : picture ? await attempt("thumbnail", row.id, () => imageThumbnail(picture), source) : null;
   if (thumb) await driver.writeAsset({ ...asset, kind: "thumb" }, thumb);
   const size = Number(row.size);
   const stripMode = shareStripMode();
   let derivedMode: StripMode | null = null;
-  if (stripMode !== "none" && row.kind === "IMAGE") {
+  if (stripMode !== "none" && heic) {
+    // A JPEG keeps nothing of the original's metadata, so it satisfies every mode.
+    const copy = frame ? await attempt("strip metadata", row.id, () => heicPublicCopy(frame), source) : null;
+    if (copy) {
+      await driver.writeAsset({ ...asset, kind: "derived" }, copy);
+      derivedMode = "all";
+    }
+  } else if (stripMode !== "none" && row.kind === "IMAGE") {
     const copy = await attempt("strip metadata", row.id, () => strippedCopy(path, mime, size, stripMode), source);
     if (copy) {
       await driver.writeAsset({ ...asset, kind: "derived" }, copy.bytes);
@@ -119,9 +135,10 @@ export async function processMedia(nodeId: string, signal?: AbortSignal): Promis
     if (made) derivedMode = stripMode;
   }
   const derived = derivedMode !== null;
-  const preview = row.kind === "IMAGE" && wantsPreview(mime, size) ? await attempt("preview", row.id, () => imagePreview(path), source) : null;
+  // HEIC always gets one: the viewer cannot show the original at all.
+  const preview = frame ? await attempt("preview", row.id, () => imagePreview(frame), source) : row.kind === "IMAGE" && !heic && wantsPreview(mime, size) ? await attempt("preview", row.id, () => imagePreview(path), source) : null;
   // Not smaller than the original (an already small or well-compressed file): show the original.
-  const keepPreview = preview !== null && preview.length < size;
+  const keepPreview = preview !== null && (heic || preview.length < size);
   if (keepPreview) await driver.writeAsset({ ...asset, kind: "preview" }, preview);
   const takenAt = await attempt("date taken", row.id, () => dateTaken(path, row.kind as "IMAGE" | "VIDEO"), source);
 

@@ -24,10 +24,11 @@ export const wantsPreview = (mime: string, size: number) => PREVIEW_TYPES.has(mi
 
 /**
  * Screen-sized WebP of an image for the viewer (upright, no metadata), so a multi-megabyte
- * photo opens with a fraction of the bytes. The original is only read.
+ * photo opens with a fraction of the bytes. The original is only read (or a decoded frame is
+ * given, for HEIC).
  */
-export async function imagePreview(path: string): Promise<Buffer> {
-  return sharp(path, { limitInputPixels: MEDIA.maxInputPixels, failOn: "error" })
+export async function imagePreview(input: string | Buffer): Promise<Buffer> {
+  return sharp(input, { limitInputPixels: MEDIA.maxInputPixels, failOn: "error" })
     .rotate()
     .resize(MEDIA.previewSizePx, MEDIA.previewSizePx, { fit: "inside", withoutEnlargement: true })
     .webp({ quality: MEDIA.previewQuality })
