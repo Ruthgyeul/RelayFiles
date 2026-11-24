@@ -5,10 +5,13 @@ import { useState, type ReactNode } from "react";
 import type { DuplicateFile, NodeItem } from "@/contracts/nodes";
 import { useShell } from "@/features/shell/ShellProvider";
 import { folderHref } from "@/shared/lib/routes";
+import { collectionNameFor } from "@/domain/collection";
+import { CollectionDialog, type CollectionRequest } from "@/features/collections/CollectionDialog";
 import { AutoCleanDialog, type AutoCleanRequest } from "./AutoCleanDialog";
 import { BatchRenameDialog, type BatchRenameRequest } from "./BatchRenameDialog";
 import { DuplicatesDialog, type DuplicatesRequest } from "./DuplicatesDialog";
 import { RenumberDialog, type RenumberRequest } from "./RenumberDialog";
+import { useCopyLink } from "./useCopyLink";
 import { VersionsDialog, type VersionsRequest } from "./VersionsDialog";
 
 interface FolderToolsOpen {
@@ -20,12 +23,16 @@ interface FolderToolsOpen {
   rename: (items: NodeItem[], others: string[] | null) => void;
   /** "Version history" of a file. */
   versions: (file: NodeItem) => void;
+  /** "Share as collection": the selected items behind one new link. */
+  collection: (items: NodeItem[]) => void;
 }
 
 /** Folder-wide tools: "Renumber files", "Find duplicates" and "Auto clean" from the folder menu, "Rename" for a selection, "Version history" of a file. */
 export function useFolderTools(onChanged: () => void): { open: FolderToolsOpen; dialogs: ReactNode } {
   const router = useRouter();
-  const { notify } = useShell();
+  const { notify, activeAccount } = useShell();
+  const { copyLink } = useCopyLink();
+  const [collection, setCollection] = useState<CollectionRequest | null>(null);
   const [renumber, setRenumber] = useState<RenumberRequest | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicatesRequest | null>(null);
   const [rename, setRename] = useState<BatchRenameRequest | null>(null);
@@ -46,6 +53,7 @@ export function useFolderTools(onChanged: () => void): { open: FolderToolsOpen; 
       duplicates: (folder) => setDuplicates({ folderId: folder.id, name: folder.name }),
       versions: (file) => setVersions({ nodeId: file.id, name: file.name }),
       autoClean: (folder) => setAutoClean({ folderId: folder.id, name: folder.name }),
+      collection: (items) => setCollection({ kind: "create", nodeIds: items.map((item) => item.id), name: collectionNameFor(items.map((item) => item.name)) }),
       rename: (items, others) => {
         // Names are unique in a folder, so the selected items' names are the ones to leave out.
         const selected = new Set(items.map((item) => item.name));
@@ -60,6 +68,18 @@ export function useFolderTools(onChanged: () => void): { open: FolderToolsOpen; 
         {/* Mounted per folder, so each opening reads the saved rule afresh. */}
         {autoClean && <AutoCleanDialog key={autoClean.folderId} request={autoClean} onClose={() => setAutoClean(null)} onDone={changed} />}
         <DuplicatesDialog request={duplicates} onClose={() => setDuplicates(null)} onDone={changed} onReveal={reveal} />
+        {collection && (
+          <CollectionDialog
+            request={collection}
+            isAdmin={activeAccount?.isAdmin ?? false}
+            onClose={() => setCollection(null)}
+            onSaved={(saved) => {
+              setCollection(null);
+              onChanged();
+              copyLink(saved.url, "public");
+            }}
+          />
+        )}
       </>
     ),
   };

@@ -128,6 +128,10 @@
 | `GET` | `/api/timeline` | Photos 페이지(`/files/photos`) → `{ items, nextCursor }`. 계정의 사진·영상을 찍은 날짜(`takenAt`, 없으면 `modifiedAt`, 그것도 없으면 `createdAt`) 최신순, 같으면 id 순. `?cursor=`(앞 페이지의 `nextCursor`)`&limit=`(기본 `TIMELINE.pageSize` 120, 최대 `TIMELINE.listLimit` 500). 항목은 `{ id, name, kind, size, hasThumb, date, dated, parentId, parentIsRoot }`(`dated`: `date`가 찍은 날짜인지). 디스크에 없는 파일, 교체되며 비켜난 행, 바이러스 검사 전·실패한 방문자 업로드는 빠진다. 모르는 cursor는 400 |
 | `GET` | `/api/me/storage` | Storage 페이지 → `{ usedBytes, trashBytes, quotaBytes, bars, largest, stale, staleAfterDays }`. `bars`는 루트 바로 아래 항목마다 하위 전체 파일 바이트(큰 순, `STORAGE_VIEW.maxBars` 8개를 넘으면 나머지를 "Other" 하나로). `largest`는 가장 큰 파일 `STORAGE_VIEW.largestFiles` 50개, `stale`은 `STORAGE_VIEW.staleAfterDays`(180일)보다 전에 추가됐고 그 뒤 공유 링크로 열기·보기·재생·다운로드가 없는 파일(최대 200개, 큰 순). 둘 다 `TaggedItem`(경로 포함). 소유자 본인의 다운로드는 기록하지 않으므로 공유 링크 기준이다 |
 | `GET` | `/api/shares` | Shared by me → `{ items, truncated }`. 밖에서 열 수 있는 항목, 새것부터. 공개된 부분의 맨 위 항목(위가 비공개인데 자기가 Public), 그리고 공개 상태에서 자기 비밀번호·다운로드 한도·만료·첫 다운로드 후 삭제·다운로드 중지가 있는 항목만 나온다. 위 폴더 덕분에 공개된 항목은 따로 나오지 않는다. 항목은 `TaggedItem` + `lastActivityAt`(공유 링크의 마지막 열기·재생·다운로드, 없으면 null). 후보는 `SHARE.sharedListMax`(1,000)개까지 읽고, 넘으면 `truncated: true` |
+| `GET` | `/api/collections` | 컬렉션 링크 `CollectionDto[] { id, linkId, url, name, note, expiry, expAt, burn, downloadLimit, downloads, hasPassword, access, createdAt, items }`(새것부터, `items`는 순서대로이고 지운 항목은 빠진다) |
+| `POST` | `/api/collections` | `{ name, nodeIds, note?, expiry?, burn?, downloadLimit?, password?, access? }` → 201 `CollectionDto`. 이 계정의 파일·폴더 여러 개(`SHARE.collectionMaxItems` 500개까지)를 링크 하나로 공유한다. 다른 계정의 항목이 하나라도 있으면 404. `expiry`·`burn`은 관리자만 적용된다(항목 설정과 같다). 계정당 `SHARE.collectionsPerAccount`(200)개 |
+| `PATCH` | `/api/collections/:id` | 보낸 필드만 바꾼다(`nodeIds`는 항목 전체를 그 순서로 바꾼다, `password: ""`는 해제) → `CollectionDto`. 다른 계정의 것은 404 |
+| `DELETE` | `/api/collections/:id` | 컬렉션 링크를 지운다(링크는 즉시 404, 항목은 그대로) → `{ deleted: true }` |
 | `POST` | `/api/shares/private` | `{ ids }`(최대 `FILES.maxBatchItems`)를 한꺼번에 Private로 바꾼다 → `{ updated }`. 모두 이 계정의 항목이어야 하고, 하나라도 아니면 아무것도 바꾸지 않고 404 |
 | `PATCH` | `/api/me/preferences` | `{ stripMetadataOnShare }` 공개 링크 사진의 위치·카메라 정보 제거 |
 | `POST` | `/api/me/purge` | "Purge now": 만료된 항목(만료 시각이 지났거나 1회 다운로드 후 삭제가 사용됨)을 바로 삭제 → `{ deleted }` |
@@ -156,6 +160,8 @@
 | `GET`·`HEAD` | `/api/v1/files/:id` | `files:read` | 원본 다운로드(Range·ETag는 웹 앱과 같다). `HEAD`는 같은 헤더(`Content-Length`·`ETag`)에 본문 없음, 트래픽으로 세지 않는다 |
 | `GET` | `/api/v1/search?q=` | `files:read` | 웹 앱 `/api/search`와 같다: 빈 값이면 최근 파일, `#태그`(URL에서는 `%23`), `type:`, `newer:`/`older:` 조건과 이름(규칙은 `/api/search`). `?tags=a,b`도 받는다. 결과마다 폴더 경로(`TaggedItem[]`) |
 | `GET` | `/api/v1/shares` | `files:read` | 웹 앱 `/api/shares`와 같은 `{ items, truncated }` |
+| `GET` | `/api/v1/collections` | `files:read` | 웹 앱 `/api/collections`와 같은 `CollectionDto[]` |
+| `POST` | `/api/v1/collections` | `files:write` | 웹 앱 `POST /api/collections`와 같다 → 201 `CollectionDto` |
 | `GET` | `/api/v1/favorites?folder=` | `files:read` | 웹 앱 `/api/favorites`와 같은 `FavoritesView`. 정리용 폴더 관리(만들기·이름 변경·이동·삭제)는 웹 앱에서만 한다 |
 | `PATCH` | `/api/v1/nodes/:id` | `files:write` | `{ name?, parentId?: "root"\|id, favorite?: boolean }`(하나 이상) 이름 변경·이동(디스크도 함께)·즐겨찾기(`true` = Favorites 맨 위에 추가, 이미 있으면 그대로, `false` = 빼기) → `NodeItem`. 이동이 먼저라 새 이름은 대상 폴더에서 검사한다. 끝나는 곳에 같은 이름이 있으면 409와 `Suggested:` 문구(웹 앱 이동과 달리 "Name (2)"로 바꾸지 않는다). 자기 자신·하위·루트 이동은 400 |
 | `DELETE` | `/api/v1/nodes/:id` | `files:write` | 파일이나 폴더(안의 모든 것 포함) 삭제, 볼륨 휴지통으로 → `{ deleted }` |
@@ -232,7 +238,7 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 
 ### 공유 링크 (공개, 로그인 불필요)
 
-페이지 `/d/<linkId>`(하위 폴더는 `?f=<folderId>`)는 서버가 상태를 판정한다. 순서: 만료(링크나 위 폴더의 만료 시각이 지났거나, "다운로드 1회 후 삭제"가 사용됨, 또는 소유자 계정이 삭제일에 닿음) → 다운로드 한도 도달 → 비공개 → 비밀번호(링크와 위 폴더의 비밀번호 모두) → 열림. 비공개이거나 자기 비밀번호가 있거나 만료된 하위 항목은 목록·크기·zip에서 빠진다. 열 수 있거나 비밀번호로 열 수 있는 링크만 `name`을 보낸다([security.md](security.md#공유-링크다운로드)). 링크 소유자가 보면 "Visitor preview" 바가 붙고, 다운로드 수·활동 기록에 남지 않는다.
+페이지 `/d/<linkId>`(하위 폴더는 `?f=<folderId>`)는 서버가 상태를 판정한다. 링크 id는 항목(`Node.linkId`)이나 컬렉션(`ShareCollection.linkId`)의 것이다. 컬렉션 페이지는 컬렉션 이름의 폴더처럼 보이고(맨 위 `view.root.id`·`folder.id` = 컬렉션 id, "Download all"은 `zip?folder=<컬렉션 id>`), 그 안의 폴더 항목으로 들어갈 수 있다. 상태는 컬렉션 자신의 만료·첫 다운로드 후 삭제·한도·비밀번호(와 소유자 계정 삭제일)로 정하고 항상 공개다. 항목은 비공개여도 컬렉션에 넣은 것이면 나오지만, 계정 루트부터 그 항목까지에 비밀번호가 있거나 만료됐거나 첫 다운로드 후 삭제가 쓰인 항목은 빠진다(파일 요청 404). 다운로드는 컬렉션과, 경로 위에서 한도가 걸린 항목에 함께 센다. 순서: 만료(링크나 위 폴더의 만료 시각이 지났거나, "다운로드 1회 후 삭제"가 사용됨, 또는 소유자 계정이 삭제일에 닿음) → 다운로드 한도 도달 → 비공개 → 비밀번호(링크와 위 폴더의 비밀번호 모두) → 열림. 비공개이거나 자기 비밀번호가 있거나 만료된 하위 항목은 목록·크기·zip에서 빠진다. 열 수 있거나 비밀번호로 열 수 있는 링크만 `name`을 보낸다([security.md](security.md#공유-링크다운로드)). 링크 소유자가 보면 "Visitor preview" 바가 붙고, 다운로드 수·활동 기록에 남지 않는다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -245,4 +251,4 @@ ShareX 예: Request URL `https://<도메인>/api/v1/files?name={filename}`, Meth
 | `GET`·`HEAD` | `/api/share/:linkId/files/:id/download` | 방문자 다운로드. 파일, 링크, 경로 위의 한도·첫 다운로드 후 삭제 항목의 다운로드 수 +1(이어받기 허가는 `rf_dv` 쿠키, `If-Range`가 ETag와 다르면 파일 전체로 판단), "Downloaded" 기록, 10분 창 혼잡도에 반영. 5회 이상이면 속도 제한(`X-Accel-Limit-Rate` 또는 앱 스로틀), 10회 이상이면 429 + `Retry-After`. 경로 위 항목(링크의 항목과 그 위 폴더, 파일 자신)의 일일 트래픽 한도나 계정의 `SHARE_DAILY_BYTES_CAP_GB`를 다 쓰면 429 + `Retry-After`(UTC 자정까지, `stream`·`zip`도 같다). Stream only 링크는 403. HEAD는 확인만 하고 세지 않는다 |
 | `GET`·`HEAD` | `/api/share/:linkId/zip?folder=id` | "Download all": 방문자가 볼 수 있는 내용만 zip으로. HEAD는 확인만(세지 않음, 주소당 1분에 30회). 항목이 `SHARE.zipMaxItems`(100,000)를 넘으면 413 |
 
-- 이미지는 계정 설정 "Strip metadata on public links"(기본 켬)일 때 위치·카메라 정보를 지운 사본으로 나간다(워커가 만든 사본만, 요청 중에는 이미지를 디코딩하지 않는다). 사본이 아직 없으면 503 `MEDIA_NOT_READY`와 `Retry-After`(다시 큐에 넣는다), 지울 수 없는 형식(HEIC 등)이나 워커가 실패한 파일(`Node.stripFailed`)은 415로 거절한다. zip에서는 빼고 `Not included.txt`에 이유와 함께 적는다.
+- 이미지는 계정 설정 "Strip metadata on public links"(기본 켬)일 때 위치·카메라 정보를 지운 사본으로 나간다(워커가 만든 사본만, 요청 중에는 이미지를 디코딩하지 않는다). 사본이 아직 없으면 503 `MEDIA_NOT_READY`와 `Retry-After`(다시 큐에 넣는다), 지울 수 없는 형식이나 워커가 실패한 파일(ffmpeg 7.1 미만의 HEIC 포함)(`Node.stripFailed`)은 415로 거절한다. zip에서는 빼고 `Not included.txt`에 이유와 함께 적는다.

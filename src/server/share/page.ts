@@ -34,9 +34,11 @@ export async function sharePageForRequest(linkId: string, folderId: string | nul
   // To anyone but the owner a private link looks like one that does not exist: a "This link is
   // private" card would tell someone guessing ids that they found a real one.
   if (page.status === "private" && !page.owner) return missed();
-  if (page.status === "open" && !page.owner && !folderId) {
-    after(() => logLinkEvent(link.root, "OPEN", client));
-    noteLinkOpened(link.root, client.country);
+  // Link activity belongs to an item; a collection has none of its own.
+  if (page.status === "open" && !page.owner && !folderId && link.kind === "node") {
+    const { root } = link;
+    after(() => logLinkEvent(root, "OPEN", client));
+    noteLinkOpened(root, client.country);
   }
   return page;
 }

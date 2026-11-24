@@ -148,7 +148,7 @@
 | 5-5 — [#178](https://github.com/Ruthgyeul/RelayFiles/pull/178), [#179](https://github.com/Ruthgyeul/RelayFiles/pull/179) | 파일 목록 키보드 탐색 | 2-5, 4-4 | 방향키, Enter, Space, Home/End. 단축키 시스템(`features/shortcuts`)을 쓴다. 이름 영역을 `<button>`으로 바꾼다 |
 | 5-6 | 관리자 패스키(WebAuthn) | — | 관리자 계정에 두 번째 로그인 수단을 둔다. 스키마는 expand로 시작한다 |
 | 5-7 | S3 호환 오프사이트 드라이버 | 3-5 | 예약된 `StorageDriver.S3`를 쓴다. 우선 백업과 콜드 데이터용 |
-| 5-8 | HEIC 사진 썸네일·미리보기 | 3-4 | 아래 상세 |
+| 5-8 — [#180](https://github.com/Ruthgyeul/RelayFiles/pull/180) | HEIC 사진 썸네일·미리보기 | 3-4 | 아래 상세 |
 | 5-9 | 컬렉션 공유 링크 | 3-1, 3-2 | 아래 상세 |
 | 5-10 — [#175](https://github.com/Ruthgyeul/RelayFiles/pull/175), [#176](https://github.com/Ruthgyeul/RelayFiles/pull/176) | 저장된 검색 · 폴더 자동 정리 규칙 | 2-3, 3-6 | 아래 상세 |
 

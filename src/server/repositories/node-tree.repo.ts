@@ -88,6 +88,26 @@ export async function childStats(db: DbClient, folderId: string, open: Prisma.Sq
   return new Map(rows.map((row) => [row.id, { size: BigInt(row.size), files: Number(row.files), items: Number(row.items) }]));
 }
 
+/**
+ * {@link ChildStats} of the given items themselves (a collection's top level): one walk below
+ * all of them. `open` limits the walk below them as in {@link childStats}; the items themselves
+ * are always counted.
+ */
+export async function itemStats(db: DbClient, ids: readonly string[], open: Prisma.Sql = Prisma.sql`TRUE`): Promise<Map<string, ChildStats>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.$queryRaw<{ id: string; size: bigint; files: bigint; items: bigint }[]>`
+    WITH RECURSIVE sub AS (
+      SELECT n.id AS top, n.id, n.type, n.size, 0 AS depth FROM "Node" n WHERE n.id = ANY(${[...new Set(ids)]}::text[])
+      UNION ALL
+      SELECT s.top, n.id, n.type, n.size, s.depth + 1 FROM "Node" n JOIN sub s ON n."parentId" = s.id
+      WHERE s.type = 'FOLDER' AND ${open}
+    )
+    SELECT top AS id, COALESCE(SUM(size) FILTER (WHERE type = 'FILE'), 0)::bigint AS size,
+           COUNT(*) FILTER (WHERE type = 'FILE')::bigint AS files, COUNT(*) FILTER (WHERE depth = 1)::bigint AS items
+    FROM sub GROUP BY top`;
+  return new Map(rows.map((row) => [row.id, { size: BigInt(row.size), files: Number(row.files), items: Number(row.items) }]));
+}
+
 /** Files and folders anywhere below a folder. */
 export async function descendantCounts(db: DbClient, folderId: string): Promise<{ files: number; folders: number }> {
   const [row] = await db.$queryRaw<{ files: bigint; folders: bigint }[]>`

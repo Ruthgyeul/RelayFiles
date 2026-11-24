@@ -25,6 +25,8 @@ const ACTIONS = {
   showInFolder: { label: "Show in folder", icon: "arrow-up-right" },
   moveInFavorites: { label: "Move in favorites", icon: "arrow-bend-up-right" },
   share: { label: "Share", icon: "share-network", when: (item) => item.type === "folder" },
+  /** The selected items behind one link with its own settings. */
+  shareCollection: { label: "Share as collection", icon: "stack", bulk: { label: "Collection", title: "Share as one link" } },
   uploadLinks: { label: "Upload links", icon: "tray-arrow-down", when: (item) => item.type === "folder" },
   tags: { label: "Tags", icon: "tag", bulk: {} },
   directLink: { label: "Direct link", icon: "link-simple" },
@@ -86,7 +88,7 @@ export const FAVORITE_MENU: readonly (readonly ActionId[])[] = [
 ];
 
 /** The selection toolbar of the File Manager, in order. */
-export const SELECTION_TOOLBAR = ["download", "downloadZip", "tags", "toggleFavorite", "copy", "move", "rename", "delete"] as const satisfies readonly ActionId[];
+export const SELECTION_TOOLBAR = ["download", "downloadZip", "tags", "toggleFavorite", "shareCollection", "copy", "move", "rename", "delete"] as const satisfies readonly ActionId[];
 
 const resolve = <T>(value: T | ((item: ActionItem, ctx: ActionContext) => T), item: ActionItem, ctx: ActionContext): T => (typeof value === "function" ? (value as (item: ActionItem, ctx: ActionContext) => T)(item, ctx) : value);
 

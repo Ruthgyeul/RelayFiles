@@ -4,21 +4,29 @@ import { MEDIA, MS } from "@/config/policy";
 import { ffmpegRelease, type FfmpegRelease } from "@/domain/heic";
 import { runCommand } from "../process/run-command";
 
-/** What `ffmpeg -version` said: its first line and release; null when ffmpeg did not run. */
+/** What `ffmpeg -version` said: its first line and release. */
 export interface FfmpegVersion {
   line: string;
   release: FfmpegRelease | null;
 }
 
-let cached: Promise<FfmpegVersion | null> | null = null;
+let cached: Promise<FfmpegVersion> | null = null;
 
-/** The FFMPEG_PATH binary's version, asked once per process (the binary does not change while it runs). */
-export function ffmpegVersion(): Promise<FfmpegVersion | null> {
-  cached ??= runCommand(getEnv("jobs").FFMPEG_PATH, ["-hide_banner", "-version"], { timeoutMs: MEDIA.ffmpegTimeoutSec * MS.second, logFailures: false })
-    .then(({ stdout }) => {
+/**
+ * The FFMPEG_PATH binary's version, asked once per process (the binary does not change while it
+ * runs). Throws when ffmpeg did not run (missing, timed out): only an answer is kept, so a
+ * passing failure is asked again the next time.
+ */
+export function ffmpegVersion(): Promise<FfmpegVersion> {
+  cached ??= runCommand(getEnv("jobs").FFMPEG_PATH, ["-hide_banner", "-version"], { timeoutMs: MEDIA.ffmpegTimeoutSec * MS.second, logFailures: false }).then(
+    ({ stdout }) => {
       const text = stdout.toString("utf8");
       return { line: text.split("\n", 1)[0] ?? "", release: ffmpegRelease(text) };
-    })
-    .catch(() => null);
+    },
+    (error: unknown) => {
+      cached = null;
+      throw error;
+    },
+  );
   return cached;
 }

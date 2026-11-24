@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { CollectionDto } from "@/contracts/collections";
 import type { SharedItem, SharedView } from "@/contracts/shared-items";
 import { matchesSharedFilter, SHARED_FILTER_LABEL, SHARED_FILTERS, type SharedFilter } from "@/domain/shared-items";
 import { useCopyLink } from "@/features/files/useCopyLink";
@@ -13,6 +14,7 @@ import { Button } from "@/shared/ui/Button";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { FilterChip } from "@/shared/ui/FilterChip";
 import { sharesApi } from "./api";
+import { CollectionsCard } from "./CollectionsCard";
 import { SharedRow } from "./SharedRow";
 import { shareUrl } from "@/shared/lib/routes";
 
@@ -27,7 +29,7 @@ function privateText(items: readonly SharedItem[]): { title: string; text: strin
 }
 
 /** "Shared by me": every item that can be opened from outside, to check and close in one place. */
-export function SharedPage({ data }: { data: SharedView }) {
+export function SharedPage({ data, collections }: { data: SharedView; collections: CollectionDto[] }) {
   usePageTitle("Shared by me");
   const router = useRouter();
   const now = useNow(false);
@@ -111,6 +113,7 @@ export function SharedPage({ data }: { data: SharedView }) {
         )}
         {data.truncated && <span className="text-[12px] text-t4">Only the newest items with share settings are listed. Make some private to see the rest.</span>}
       </section>
+      <CollectionsCard collections={collections} now={now} />
       <ConfirmDialog
         open={confirm !== null}
         title={confirm?.title ?? ""}

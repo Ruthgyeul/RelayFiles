@@ -87,6 +87,7 @@ model Account {
   versions             FileVersion[]
   savedSearches        SavedSearch[]
   folderRules          FolderRule[]
+  collections          ShareCollection[]
 
   @@index([volumeId])
 }
@@ -230,6 +231,7 @@ model Node {
   fileRequests  FileRequest[]
   favorite      Favorite?
   cleanRule     FolderRule?
+  inCollections ShareCollectionItem[]
 
   @@unique([parentId, name])
   @@index([accountId, parentId])
@@ -639,4 +641,44 @@ model SavedSearch {
   createdAt DateTime @default(now())
 
   @@unique([accountId, query])
+}
+
+/// Several files and folders shared through one link (/d/<linkId>), with settings of its own. Each
+/// item keeps its own settings too (stream only, download limits, paused downloads, the folders
+/// above it): visitors get the strictest of both, like a folder inside a shared folder.
+model ShareCollection {
+  id            String                @id
+  accountId     String
+  account       Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Public link id, unique across Node.linkId too (checked when one is made). Never changes during migrations.
+  linkId        String                @unique
+  name          String
+  note          String                @default("")
+  expiryLabel   String                @default("Never")
+  expAt         DateTime?
+  burn          Boolean               @default(false)
+  downloadLimit Int?
+  downloads     Int                   @default(0)
+  passwordHash  String?
+  access        Access                @default(BOTH)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  items         ShareCollectionItem[]
+
+  @@index([accountId, createdAt])
+  @@index([expAt])
+}
+
+/// A file or folder in a collection. Deleting the item removes it from its collections (Recently
+/// deleted remembers them for a restore).
+model ShareCollectionItem {
+  collectionId String
+  collection   ShareCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  nodeId       String
+  node         Node            @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  /// Order on the collection page.
+  position     Int
+
+  @@id([collectionId, nodeId])
+  @@index([nodeId])
 }

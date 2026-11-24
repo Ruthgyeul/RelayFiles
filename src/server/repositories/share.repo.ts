@@ -1,7 +1,7 @@
 import "server-only";
 import { ranOutWith } from "@/domain/share-limits";
 import { Prisma, type DbClient, type PrismaClient } from "../db/client";
-import { childStats } from "./node-tree.repo";
+import { childStats, itemStats } from "./node-tree.repo";
 import { NODE_SELECT } from "./node.repo";
 
 export function findByLinkId(db: DbClient, linkId: string) {
@@ -90,6 +90,11 @@ export function publicChildStats(db: DbClient, folderId: string, now: Date) {
   return childStats(db, folderId, openBelowLink(now));
 }
 
+/** {@link publicChildStats} of a collection's items themselves (bytes and items visitors may see inside each). */
+export function publicItemStats(db: DbClient, ids: readonly string[], now: Date) {
+  return itemStats(db, ids, openBelowLink(now));
+}
+
 /**
  * A node on the way from the account root down to a file, with its own link settings: every
  * one of them guards the file, whichever link it is reached through (share-link `loadLink`, `strictestGuard`).
@@ -117,6 +122,26 @@ export async function sharedChain(db: DbClient, nodeId: string): Promise<ChainRo
     SELECT ${SHARED_COLUMNS}, n.visibility::text AS visibility, n."linkId", n."expAt", n."passwordHash", n."dailyBytesCap"
     FROM chain JOIN "Node" n ON n.id = chain.id
     ORDER BY chain.depth DESC`;
+}
+
+/**
+ * {@link sharedChain} for several nodes in one query: each one's chain from the account root
+ * down (nodes that do not exist are absent). A collection link checks all of its items this way.
+ */
+export async function sharedChains(db: DbClient, nodeIds: readonly string[]): Promise<Map<string, ChainRow[]>> {
+  if (nodeIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<(ChainRow & { start: string })[]>`
+    WITH RECURSIVE chain AS (
+      SELECT id AS start, id, "parentId", 0 AS depth FROM "Node" WHERE id = ANY(${[...new Set(nodeIds)]}::text[])
+      UNION ALL
+      SELECT c.start, n.id, n."parentId", c.depth + 1 FROM "Node" n JOIN chain c ON n.id = c."parentId"
+    )
+    SELECT chain.start, ${SHARED_COLUMNS}, n.visibility::text AS visibility, n."linkId", n."expAt", n."passwordHash", n."dailyBytesCap"
+    FROM chain JOIN "Node" n ON n.id = chain.id
+    ORDER BY chain.start, chain.depth DESC`;
+  const chains = new Map<string, ChainRow[]>();
+  for (const { start, ...row } of rows) chains.set(start, [...(chains.get(start) ?? []), row]);
+  return chains;
 }
 
 /** Thrown inside the claim transaction to roll back counts already made. */
@@ -153,9 +178,18 @@ const usedUp = (rows: readonly ClaimedRow[]): UsedUpItem[] =>
  * UPDATE re-checks the limit on the locked row, so concurrent requests at N-1 cannot all pass.
  * Returns null (nothing counted) when a limit is reached, else the items this download used up.
  */
-export async function claimDownload(db: PrismaClient, ids: readonly string[]): Promise<{ usedUp: UsedUpItem[] } | null> {
+export async function claimDownload(db: PrismaClient, ids: readonly string[], collectionId: string | null = null): Promise<{ usedUp: UsedUpItem[] } | null> {
   try {
     const claimed = await db.$transaction(async (tx) => {
+      // A collection link counts too, under the same rule as an item's own link.
+      if (collectionId !== null) {
+        const counted = await tx.$executeRaw`
+          UPDATE "ShareCollection" SET downloads = downloads + 1
+          WHERE id = ${collectionId}
+            AND ("downloadLimit" IS NULL OR "downloadLimit" <= 0 OR downloads < "downloadLimit")
+            AND NOT (burn AND downloads >= 1)`;
+        if (counted === 0) throw new LimitReached();
+      }
       const rows: ClaimedRow[] = [];
       for (const id of new Set(ids)) {
         const [row] = await tx.$queryRaw<ClaimedRow[]>`

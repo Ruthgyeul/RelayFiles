@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ffmpegRelease, ffmpegReadsHeic, ffmpegStatusText, heicCopyName, isHeicType } from "./heic";
+import { ffmpegRelease, ffmpegReadsHeic, ffmpegStatusText, heicCopyName, isHeicType, uniqueHeicCopyName } from "./heic";
 
 describe("isHeicType", () => {
   it("knows HEIC and HEIF", () => {
@@ -41,6 +41,14 @@ describe("heicCopyName", () => {
     expect(heicCopyName(".heic")).toBe(".heic.jpg");
     expect(heicCopyName("Trip.v1/IMG_0042.HEIC")).toBe("Trip.v1/IMG_0042.jpg");
     expect(heicCopyName("Trip.v1/scan")).toBe("Trip.v1/scan.jpg");
+  });
+});
+
+describe("uniqueHeicCopyName", () => {
+  it("keeps the copy's name apart from the zip's other files", () => {
+    expect(uniqueHeicCopyName("Trip/IMG.HEIC", new Set(["Trip/a.txt"]))).toBe("Trip/IMG.jpg");
+    expect(uniqueHeicCopyName("Trip/IMG.HEIC", new Set(["Trip/IMG.jpg"]))).toBe("Trip/IMG.HEIC.jpg");
+    expect(uniqueHeicCopyName("Trip/IMG.HEIC", new Set(["Trip/IMG.jpg", "Trip/IMG.HEIC.jpg", "Trip/IMG (2).jpg"]))).toBe("Trip/IMG (3).jpg");
   });
 });
 

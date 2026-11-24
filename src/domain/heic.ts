@@ -47,3 +47,20 @@ export function ffmpegStatusText(version: { line: string; release: FfmpegRelease
     ? { detail: `${name} · HEIC photos supported`, heic: true }
     : { detail: `${name} · HEIC photos need ffmpeg ${MEDIA.heicMinFfmpeg.join(".")}: they get no thumbnail or preview`, heic: false };
 }
+
+/**
+ * {@link heicCopyName} for an entry of a zip that holds other entries (`taken`): when another
+ * file already has that name ("IMG_0042.jpg" next to "IMG_0042.HEIC"), "IMG_0042.HEIC.jpg",
+ * then "IMG_0042 (2).jpg", "IMG_0042 (3).jpg", …
+ */
+export function uniqueHeicCopyName(name: string, taken: ReadonlySet<string>): string {
+  const plain = heicCopyName(name);
+  if (!taken.has(plain)) return plain;
+  const kept = `${name}.jpg`;
+  if (!taken.has(kept)) return kept;
+  const stem = plain.slice(0, -".jpg".length);
+  for (let copy = 2; ; copy++) {
+    const candidate = `${stem} (${copy}).jpg`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}

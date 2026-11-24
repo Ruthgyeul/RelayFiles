@@ -1819,6 +1819,234 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Collection links of the account
+         * @description Newest first, each with its items in order.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Success */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @constant */
+                            success: true;
+                            data: {
+                                id: string;
+                                linkId: string;
+                                url: string;
+                                name: string;
+                                note: string;
+                                expiry: string;
+                                expAt: string | null;
+                                burn: boolean;
+                                downloadLimit: number | null;
+                                downloads: number;
+                                hasPassword: boolean;
+                                /** @enum {string} */
+                                access: "both" | "stream";
+                                createdAt: string;
+                                /** @description Its items in order */
+                                items: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    type: "file" | "folder";
+                                    name: string;
+                                    kind: ("video" | "audio" | "image" | "other") | null;
+                                }[];
+                            }[];
+                        };
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing, unknown or expired API token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description The token lacks the scope, or the account may not do this */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found (also another account's item) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Too many requests (Retry-After) */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Share several items as one link
+         * @description `nodeIds`: files and folders of the account, in the order the share page lists them. The collection has settings of its own (expiry and `burn`: admins only); each item keeps its own too, and items behind a password or expired are not shown.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @default  */
+                        note?: string;
+                        /** @default Never */
+                        expiry?: string;
+                        /** @default false */
+                        burn?: boolean;
+                        /** @default null */
+                        downloadLimit?: number | null;
+                        /** @default  */
+                        password?: string;
+                        /**
+                         * @default both
+                         * @enum {string}
+                         */
+                        access?: "both" | "stream";
+                        nodeIds: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Success */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @constant */
+                            success: true;
+                            data: {
+                                id: string;
+                                linkId: string;
+                                url: string;
+                                name: string;
+                                note: string;
+                                expiry: string;
+                                expAt: string | null;
+                                burn: boolean;
+                                downloadLimit: number | null;
+                                downloads: number;
+                                hasPassword: boolean;
+                                /** @enum {string} */
+                                access: "both" | "stream";
+                                createdAt: string;
+                                /** @description Its items in order */
+                                items: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    type: "file" | "folder";
+                                    name: string;
+                                    kind: ("video" | "audio" | "image" | "other") | null;
+                                }[];
+                            };
+                        };
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing, unknown or expired API token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description The token lacks the scope, or the account may not do this */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found (also another account's item) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Too many requests (Retry-After) */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;

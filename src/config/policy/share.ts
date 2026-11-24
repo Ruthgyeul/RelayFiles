@@ -56,6 +56,17 @@ export const SHARE = {
    */
   zipMaxItems: 100_000,
   /**
+   * Most files and folders one collection link holds (its top level; folders in it count once):
+   * the collection page reads the chain of each to check it, one query for all.
+   */
+  collectionMaxItems: 500,
+  /** Longest collection name (shown as the share page title). */
+  collectionNameMax: 120,
+  /** Collections one account may have at once. */
+  collectionsPerAccount: 200,
+  /** Tries at a link id no item, collection or ended link has (each collides with odds of about 2^-79). */
+  collectionLinkAttempts: 5,
+  /**
    * "Download all" checks (HEAD, counts nothing) per address and window: each one walks the
    * folder's tree in the database, so they are limited like guesses rather than left open.
    */

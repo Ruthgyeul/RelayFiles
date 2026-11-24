@@ -93,6 +93,7 @@ describe("SELECTION_TOOLBAR", () => {
       "Zip (Download as zip)",
       "Tags",
       "Favorite (Add to favorites)",
+      "Collection (Share as one link)",
       "Copy",
       "Move",
       "Rename (Rename the selected items)",

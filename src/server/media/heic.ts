@@ -7,9 +7,12 @@ import { runCommand } from "../process/run-command";
 import { ffmpegInput } from "./ffmpeg-input";
 import { ffmpegVersion } from "./ffmpeg-version";
 
-/** Whether this host's ffmpeg reads HEIC photos (tile grids need ffmpeg 7.1). */
+/**
+ * Whether this host's ffmpeg reads HEIC photos (tile grids need ffmpeg 7.1). Throws when ffmpeg
+ * did not answer, so the media job is tried again rather than the photo marked as unreadable.
+ */
 export async function heicSupported(): Promise<boolean> {
-  return ffmpegReadsHeic((await ffmpegVersion())?.release ?? null);
+  return ffmpegReadsHeic((await ffmpegVersion()).release);
 }
 
 /**
@@ -18,6 +21,10 @@ export async function heicSupported(): Promise<boolean> {
  * as a local file through the MP4 family demuxer HEIF uses.
  */
 export async function heicFrame(path: string): Promise<Buffer> {
+  // The size from the container header (nothing decoded): ffmpeg's own limit (max_pixels) holds
+  // per tile, not for the joined picture, so a huge grid is refused before ffmpeg starts.
+  const { width, height } = await sharp(path).metadata();
+  if (!width || !height || width * height > MEDIA.maxInputPixels) throw new Error("HEIC photo too large to decode");
   const args = ["-nostdin", "-hide_banner", "-loglevel", "error", ...ffmpegInput(path), "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1"];
   const { stdout } = await runCommand(getEnv("jobs").FFMPEG_PATH, args, { timeoutMs: MEDIA.ffmpegTimeoutSec * MS.second, maxStdoutBytes: MEDIA.maxFrameBytes });
   if (stdout.length === 0) throw new Error("ffmpeg returned no picture");

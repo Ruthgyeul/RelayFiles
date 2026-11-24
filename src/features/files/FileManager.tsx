@@ -114,6 +114,7 @@ export function FileManager({ view, autoClean, nav, isAdmin, initialView }: File
       downloadZip: () => (media.zip(selectedItems), clearSelection()),
       tags: () => open.tags(selectedItems),
       toggleFavorite: () => void open.toggleFavorite(selectedItems, true),
+      shareCollection: () => folderTools.open.collection(selectedItems),
       copy: () => open.move(selectedItems, "copy", folder.id),
       move: () => open.move(selectedItems, "move", folder.id),
       rename: () => folderTools.open.rename(selectedItems, tagMode ? null : children.map((child) => child.name)),

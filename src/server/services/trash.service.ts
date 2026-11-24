@@ -9,7 +9,7 @@ import { isUniqueViolation } from "../db/errors";
 import { ApiError, DISK_IN_THE_WAY_MESSAGE } from "../http/api-error";
 import { enqueueScan, queueMediaFor } from "../jobs/queue";
 import { logger } from "../logger";
-import { favoritesOfSnapshot, findDeletedItem, fromSnapshot, listDeletedItems, takeDeletedItem, takenLinkIds } from "../repositories/deleted-item.repo";
+import { collectionsOfSnapshot, favoritesOfSnapshot, findDeletedItem, fromSnapshot, listDeletedItems, takeDeletedItem, takenLinkIds } from "../repositories/deleted-item.repo";
 import { findNode, findRootFolder, insertNodes, listSiblingNames } from "../repositories/node.repo";
 import { removeTrashedBytes } from "../repositories/trash.repo";
 import { StorageEntryMissingError, StorageTargetExistsError } from "../storage/driver";
@@ -21,6 +21,7 @@ import type { NodeOwner } from "./node-access";
 import { driverForAccount, lockAccountForWrite } from "./volume.service";
 import { trashRetentionHours } from "../storage/trash-retention";
 import { kindOf } from "./node-dto";
+import { relistCollectionItems } from "../repositories/collection.repo";
 
 const MOVED_MESSAGE = "This item was deleted before your files moved to new storage, so it can't be restored. It is removed for good with the rest of the old storage's trash.";
 const NAME_TAKEN_MESSAGE = "Something with the same name was just added there. Try again.";
@@ -115,6 +116,7 @@ export async function restoreDeletedItem(owner: NodeOwner, id: string): Promise<
         })),
       );
       await relistFavorites(tx, owner.id, favoritesOfSnapshot(item.nodes));
+      await relistCollectionItems(tx, owner.id, collectionsOfSnapshot(item.nodes));
       if (item.trashedBytesId) await removeTrashedBytes(tx, owner.id, item.trashedBytesId);
       const to = { accountId: owner.id, segments: [...target.segments, name] };
       await driver.restoreFromTrash(item.trashPath, to);

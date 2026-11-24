@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { GET as preview } from "@/app/api/files/[id]/preview/route";
 import { GET as shareDownload } from "@/app/api/share/[linkId]/files/[id]/download/route";
 import { getEnv } from "@/config/env";
+import { MEDIA } from "@/config/policy";
 import { exifDateTaken, toInstant } from "@/domain/media-date";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { closeQueues } from "@/server/jobs/queue";
@@ -53,6 +54,23 @@ function download(linkId: string, id: string) {
 }
 
 describe("HEIC photos", () => {
+  // First in the file: the version probe is kept once ffmpeg answered (this file runs in its own module scope).
+  it("tries again later when ffmpeg did not answer, instead of marking the photo unreadable", async () => {
+    const { id } = await sharedHeic();
+    const jobs = getEnv("jobs") as { FFMPEG_PATH: string };
+    const ffmpeg = jobs.FFMPEG_PATH;
+    jobs.FFMPEG_PATH = "/nonexistent/ffmpeg";
+    try {
+      await expect(processMedia(id)).rejects.toThrow();
+      expect(await prisma.node.findUniqueOrThrow({ where: { id } })).toMatchObject({ stripFailed: false });
+    } finally {
+      jobs.FFMPEG_PATH = ffmpeg;
+    }
+    // The failed probe was not kept: the next run asks again.
+    await processMedia(id);
+    expect((await prisma.node.findUniqueOrThrow({ where: { id } })).hasThumb).toBe(await heicSupported());
+  });
+
   it("reads the date taken from the EXIF block, whatever the ffmpeg", async () => {
     const { id, original } = await sharedHeic();
     const exif = (await sharp(original).metadata()).exif!;
@@ -62,6 +80,20 @@ describe("HEIC photos", () => {
     const expected = toInstant(exifDateTaken(exif)!, getEnv("jobs").JOBS_TIMEZONE, new Date());
     expect(expected).not.toBeNull();
     expect(takenAt?.toISOString()).toBe(expected?.toISOString());
+  });
+
+  it("leaves a photo larger than MEDIA.maxInputPixels undecoded, without starting ffmpeg", async () => {
+    stripMode("sensitive");
+    const { id } = await sharedHeic();
+    const limits = MEDIA as { maxInputPixels: number };
+    const limit = limits.maxInputPixels;
+    limits.maxInputPixels = 64 * 48 - 1;
+    try {
+      expect(await processMedia(id)).toEqual({ thumb: false, derived: false, preview: false });
+      expect(await prisma.node.findUniqueOrThrow({ where: { id } })).toMatchObject({ hasThumb: false, stripFailed: true });
+    } finally {
+      limits.maxInputPixels = limit;
+    }
   });
 
   it.runIf(mustDecode)("is decoded by the ffmpeg this run must support", async () => {
