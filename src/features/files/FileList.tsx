@@ -9,6 +9,7 @@ import { RowButton } from "./ItemButtons";
 import type { ItemProps } from "./item-props";
 import { NodeRow } from "./NodeRow";
 import type { ListedItem } from "./useFolderItems";
+import { useListKeyboard } from "./useListKeyboard";
 
 interface FileListProps {
   items: ListedItem[];
@@ -33,8 +34,13 @@ export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onO
   const [filesOver, setFilesOver] = useState(false);
   const lazy = items.length > FILES.lazyRenderAfter;
   const cards = view === "grid" && leadingCards !== undefined;
+  const onKeyDown = useListKeyboard(view, (id, range) => {
+    const item = items.find((entry) => entry.id === id);
+    if (item) itemProps(item).onToggle(range);
+  });
   return (
     <div
+      onKeyDown={onKeyDown}
       onDragOver={(event) => {
         if (!onDropFiles || !hasFiles(event.dataTransfer)) return;
         event.preventDefault();

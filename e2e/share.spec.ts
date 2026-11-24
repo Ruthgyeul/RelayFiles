@@ -239,6 +239,10 @@ test("visitors search, sort and switch a shared folder to a grid", async ({ page
   await visitor.getByRole("button", { name: "Grid view" }).click();
   const grid = visitor.getByRole("list", { name: "Items" });
   await expect(grid.locator("[data-item]")).toHaveCount(3);
+  // Each card keeps the list's download action.
+  const downloading = visitor.waitForEvent("download");
+  await grid.getByRole("button", { name: "Download agenda.txt" }).click();
+  expect((await downloading).suggestedFilename()).toBe("agenda.txt");
   await grid.getByRole("button", { name: "Open beach.png" }).click();
   await expect(visitor.getByRole("dialog", { name: "beach.png" })).toBeVisible();
   await visitor.getByRole("button", { name: "Close viewer" }).click();

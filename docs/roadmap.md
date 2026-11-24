@@ -144,7 +144,7 @@
 | 순서 | 기능 | 전제 | 핵심 설계 |
 |---|---|---|---|
 | 5-1 — [#174](https://github.com/Ruthgyeul/RelayFiles/pull/174) | 휴지통 일괄 작업 + Undo 토스트 | 2-3 | `RecentlyDeletedPage`에 다중 선택, 모두 복원, 비우기를 넣는다. `NoticePill`에 action을 추가하고, 삭제 후 Undo는 복원 API를 재사용한다 |
-| 5-4 | 공유 페이지 탐색 | 2-6 | `/d/…`에 정렬, 검색, 그리드 전환을 넣는다. FileList와 `sortNodes`를 재사용한다 |
+| 5-4 — [#177](https://github.com/Ruthgyeul/RelayFiles/pull/177) | 공유 페이지 탐색 | 2-6 | `/d/…`에 정렬, 검색, 그리드 전환을 넣는다. FileList와 `sortNodes`를 재사용한다 |
 | 5-5 | 파일 목록 키보드 탐색 | 2-5, 4-4 | 방향키, Enter, Space, Home/End. 단축키 시스템(`features/shortcuts`)을 쓴다. 이름 영역을 `<button>`으로 바꾼다 |
 | 5-6 | 관리자 패스키(WebAuthn) | — | 관리자 계정에 두 번째 로그인 수단을 둔다. 스키마는 expand로 시작한다 |
 | 5-7 | S3 호환 오프사이트 드라이버 | 3-5 | 예약된 `StorageDriver.S3`를 쓴다. 우선 백업과 콜드 데이터용 |

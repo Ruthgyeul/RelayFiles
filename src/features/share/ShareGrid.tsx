@@ -14,10 +14,12 @@ interface ShareGridProps {
   thumbUrl: (id: string) => string;
   folderHref: (folderId: string) => Route;
   onOpen: (item: ShareItem) => void;
+  /** A file, or a folder as a zip (as the list rows do); shown when the item can be downloaded. */
+  onDownload: (item: ShareItem) => void;
 }
 
 /** Grid view of a shared folder: 4:3 preview (thumbnail or type icon), name and size; folders open, files open in the viewer. */
-export function ShareGrid({ items, thumbUrl, folderHref, onOpen }: ShareGridProps) {
+export function ShareGrid({ items, thumbUrl, folderHref, onOpen, onDownload }: ShareGridProps) {
   return (
     <ul aria-label="Items" className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] gap-3 rounded-2xl border border-card-line bg-card p-3.5">
       {items.map((item) => {
@@ -49,7 +51,7 @@ export function ShareGrid({ items, thumbUrl, folderHref, onOpen }: ShareGridProp
         );
         const look = "flex w-full flex-col overflow-hidden rounded-xl border border-card-line bg-sunk p-0 no-underline";
         return (
-          <li key={item.id} data-item={item.name}>
+          <li key={item.id} data-item={item.name} className="relative">
             {folder ? (
               <Link href={folderHref(item.id)} aria-label={`Open ${item.name}`} className={look}>
                 {body}
@@ -57,6 +59,17 @@ export function ShareGrid({ items, thumbUrl, folderHref, onOpen }: ShareGridProp
             ) : (
               <button type="button" aria-label={`Open ${item.name}`} onClick={() => onOpen(item)} className={`${look} cursor-pointer`}>
                 {body}
+              </button>
+            )}
+            {item.canDownload && (
+              <button
+                type="button"
+                title="Download"
+                aria-label={`Download ${item.name}`}
+                onClick={() => onDownload(item)}
+                className="absolute top-1.5 right-1.5 flex size-8 items-center justify-center rounded-lg border-0 bg-overlay-dark p-0 text-white"
+              >
+                <Icon name="download-simple" size={16} />
               </button>
             )}
           </li>

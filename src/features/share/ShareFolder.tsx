@@ -137,7 +137,7 @@ export function ShareFolder({ linkId, url, view, notify }: ShareFolderProps) {
       )}
       {list.searchOpen && <SearchBox value={list.query} onChange={list.setQuery} placeholder="Search in this folder" />}
       {list.view === "grid" && !fileLink && list.visible.length > 0 ? (
-        <ShareGrid items={list.visible} thumbUrl={rowUrls.thumb} folderHref={folderHref} onOpen={(item) => setViewing(item.id)} />
+        <ShareGrid items={list.visible} thumbUrl={rowUrls.thumb} folderHref={folderHref} onOpen={(item) => setViewing(item.id)} onDownload={downloadItem} />
       ) : list.query && list.visible.length === 0 ? (
         <div className="rounded-2xl border border-card-line bg-card px-4 py-10 text-center text-[14px] text-t4">Nothing here matches “{list.query}”.</div>
       ) : (
