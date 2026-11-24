@@ -177,6 +177,26 @@ export async function relativePaths(db: DbClient, folderId: string): Promise<Map
   return new Map(rows.map((row) => [row.path, { id: row.id, type: row.type }]));
 }
 
+/**
+ * Which of `rels` (paths below `folderId`, "a/b/c.txt") are files already. Walks only those
+ * paths, one name per level through the (parentId, name) index, so the cost follows the batch,
+ * not the size of the folder's tree.
+ */
+export async function existingFilePaths(db: DbClient, folderId: string, rels: readonly string[]): Promise<Set<string>> {
+  if (rels.length === 0) return new Set();
+  const rows = await db.$queryRaw<{ rel: string }[]>`
+    WITH RECURSIVE wanted AS (
+      SELECT rel, string_to_array(rel, '/') AS names FROM unnest(${[...new Set(rels)]}::text[]) AS rel
+    ), walk AS (
+      SELECT w.rel, w.names, 1 AS depth, n.id, n.type FROM wanted w JOIN "Node" n ON n."parentId" = ${folderId} AND n.name = w.names[1]
+      UNION ALL
+      SELECT w.rel, w.names, w.depth + 1, n.id, n.type FROM walk w JOIN "Node" n ON n."parentId" = w.id AND n.name = w.names[w.depth + 1]
+      WHERE w.depth < cardinality(w.names)
+    )
+    SELECT rel FROM walk WHERE depth = cardinality(names) AND type = 'FILE'`;
+  return new Set(rows.map((row) => row.rel));
+}
+
 /** Every item below a folder with its path, size and "missing" flag (npm run storage:fsck). */
 export function treeEntries(db: DbClient, folderId: string) {
   return db.$queryRaw<{ id: string; path: string; type: "FILE" | "FOLDER"; size: bigint; missing: boolean }[]>`
