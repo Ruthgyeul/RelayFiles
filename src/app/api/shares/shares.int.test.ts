@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { POST as createToken } from "@/app/api/me/api-tokens/route";
 import { GET as v1Shares } from "@/app/api/v1/shares/route";
 import type { CreatedApiToken } from "@/contracts/api-tokens";
-import type { SharedView } from "@/contracts/shares";
+import type { SharedView } from "@/contracts/shared-items";
 import { newLinkId, newNodeId } from "@/domain/ids";
 import { callRoute } from "../../../../test/route-call";
 import { fileFixtures, type FixtureMember } from "../../../../test/file-fixtures";

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import type { SharedItem } from "@/contracts/shares";
+import type { SharedItem } from "@/contracts/shared-items";
 import { formatDateTime } from "@/domain/format";
 import { settingTags } from "@/domain/tree";
 import { toShareSettings } from "@/features/files/settings";

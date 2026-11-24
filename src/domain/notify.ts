@@ -1,4 +1,4 @@
-import { formatSize } from "./format";
+import { formatSize, plural } from "./format";
 
 /**
  * Owner notifications (docs/runbook.md "알림 설정"): what each event says and the request body
@@ -44,7 +44,6 @@ export interface NotifyText {
 /** Control characters (a newline in a file name) would break the message layout or a header. */
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
 const clean = (value: string) => value.replace(CONTROL, " ");
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 function fileRequestText(event: Extract<NotifyEvent, { kind: "file-request" }>): NotifyText {
   const request = `"${clean(event.request)}"`;

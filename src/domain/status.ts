@@ -1,5 +1,5 @@
 import { MS, STATUS } from "@/config/policy";
-import { UI_LOCALE } from "./format";
+import { UI_LOCALE, utcDay } from "./format";
 
 /**
  * Service status levels from the design's Status page. The footer and the Status
@@ -214,7 +214,7 @@ export function dayKeyIn(at: Date, timeZone: string): string {
 /** The `count` days ending with `lastDay`, oldest first. */
 export function dayKeysEndingWith(lastDay: string, count: number): string[] {
   const last = Date.parse(`${lastDay}T00:00:00Z`);
-  return Array.from({ length: count }, (_, i) => new Date(last - (count - 1 - i) * MS.day).toISOString().slice(0, 10));
+  return Array.from({ length: count }, (_, i) => utcDay(last - (count - 1 - i) * MS.day));
 }
 
 /** "Oct 5" / "Oct 5, 2026" for a calendar day, independent of the viewer's time zone. */

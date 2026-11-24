@@ -1,3 +1,5 @@
+import { utcDay } from "./format";
+
 /**
  * Account export (Profile, "Export account"): the tar's name, where its manifest sits, and
  * the paths of Favorites' organizing folders.
@@ -11,7 +13,7 @@ const UNSAFE_FILE_NAME = /[^A-Za-z0-9._-]+/g;
 /** "relayfiles-<account>-20261112.tar": the account name with only safe characters, the UTC date. */
 export function exportFileName(accountName: string, at: Date): string {
   const name = accountName.replace(UNSAFE_FILE_NAME, "-").replace(/^-+|-+$/g, "") || "account";
-  const day = at.toISOString().slice(0, 10).replace(/-/g, "");
+  const day = utcDay(at).replace(/-/g, "");
   return `relayfiles-${name}-${day}.tar`;
 }
 

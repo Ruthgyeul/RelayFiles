@@ -4,7 +4,7 @@
  */
 
 import { MS } from "@/config/policy";
-import { formatSize } from "./format";
+import { formatSize, plural } from "./format";
 
 const HOUR_MS = MS.hour;
 
@@ -51,7 +51,6 @@ export interface DeletedItem {
   fileCount: number;
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** `"name"` for one item, "3 items" for several: the subject of a dialog title. */
 export function itemsLabel(items: readonly Pick<DeletedItem, "name">[]): string {

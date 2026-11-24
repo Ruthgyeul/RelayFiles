@@ -1,6 +1,6 @@
 import "server-only";
 import { SHARE } from "@/config/policy";
-import type { SharedView } from "@/contracts/shares";
+import type { SharedView } from "@/contracts/shared-items";
 import { isListedShare, visibilityInside, type ShareFolder } from "@/domain/shared-items";
 import { db } from "../db/client";
 import { ApiError } from "../http/api-error";

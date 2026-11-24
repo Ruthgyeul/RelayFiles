@@ -4,6 +4,7 @@ import { join, relative, resolve, sep } from "node:path";
 import { STORAGE } from "@/config/policy";
 import { isAccountId } from "@/domain/ids";
 import { nameError } from "@/domain/names";
+import { utf8Length } from "@/domain/format";
 
 export class UnsafePathError extends Error {
   constructor(message: string) {
@@ -12,7 +13,6 @@ export class UnsafePathError extends Error {
   }
 }
 
-const utf8Length = (value: string) => Buffer.byteLength(value, "utf8");
 
 /** Absolute path of an account's root folder (`<volume>/users/<accountId>`). */
 export function userRootOf(volumeRoot: string, accountId: string): string {

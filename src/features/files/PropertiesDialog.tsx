@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { NodeProperties } from "@/contracts/nodes";
-import { formatCount, formatDateTime, formatLeft, formatSize } from "@/domain/format";
+import { formatCount, formatDateTime, formatLeft, formatSize, plural } from "@/domain/format";
 import { useApiQuery } from "@/shared/hooks/useApiQuery";
 import { useNow } from "@/shared/hooks/useNow";
 import { Button } from "@/shared/ui/Button";
@@ -24,10 +24,6 @@ interface PropertiesDialogProps {
   onEditTags?: (nodeId: string) => void;
   onEditSettings?: (nodeId: string) => void;
   onZip?: (nodeId: string) => void;
-}
-
-function plural(count: number, word: string) {
-  return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
 /** Rows of the Properties table in the design's order. */

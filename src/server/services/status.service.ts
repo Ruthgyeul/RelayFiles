@@ -2,7 +2,7 @@ import "server-only";
 import { getAppEnv, getEnv } from "@/config/env";
 import { MS, STATUS } from "@/config/policy";
 import type { IncidentDto, IncidentInput, LatencyHourDto, StatusComponentDto, StatusData } from "@/contracts/status";
-import { formatSize } from "@/domain/format";
+import { formatSize, utcDay } from "@/domain/format";
 import { newNodeId } from "@/domain/ids";
 import { COMPONENTS, dayKeyIn, dayKeysEndingWith, dayLevel, uptimePercent, type IncidentSeverity } from "@/domain/status";
 import { cached, cacheKey, invalidate } from "../cache/cached";
@@ -13,10 +13,9 @@ import { createIncident, deleteIncident, recentIncidents, updateIncident, type I
 import { storageCapacity } from "../metrics/storage";
 import { certificateState } from "../metrics/tls";
 
-const toDay = (date: Date) => date.toISOString().slice(0, 10);
 
 function toIncidentDto(row: IncidentRow): IncidentDto {
-  return { id: row.id, title: row.title, text: row.text, severity: row.severity.toLowerCase() as IncidentSeverity, date: toDay(row.date), duration: row.duration, resolved: row.resolved };
+  return { id: row.id, title: row.title, text: row.text, severity: row.severity.toLowerCase() as IncidentSeverity, date: utcDay(row.date), duration: row.duration, resolved: row.resolved };
 }
 
 /** The last STATUS.latencyHours hours of website probe latency, oldest first. */
@@ -37,7 +36,7 @@ async function components(now: Date, today: string): Promise<{ list: StatusCompo
   const stripDays = uptimeDays.slice(-STATUS.serviceDays);
   const fresh = new Date(now.getTime() - STATUS.freshProbes * getEnv("jobs").HEALTH_PROBE_INTERVAL_SEC * MS.second);
   const [daily, latest, capacity] = await Promise.all([dailySince(db(), uptimeDays[0]!), latestSamples(db(), fresh), storageCapacity()]);
-  const counts = new Map(daily.map((row) => [`${row.component}:${toDay(row.day)}`, row]));
+  const counts = new Map(daily.map((row) => [`${row.component}:${utcDay(row.day)}`, row]));
   const sum = (key: string, days: readonly string[]) =>
     days.reduce(
       (total, day) => {
