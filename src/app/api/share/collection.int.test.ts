@@ -167,6 +167,37 @@ describe("collection links", () => {
     expect((await download(linkId, notes)).status).toBe(403);
   });
 
+  it("resumes only through the link that counted the download, and never past its password", async () => {
+    const { m, notes } = await account();
+    // A grant for notes.txt earned through the file's own link…
+    await prisma.node.update({ where: { id: notes }, data: { visibility: "PUBLIC" } });
+    const { linkId } = await prisma.node.findUniqueOrThrow({ where: { id: notes } });
+    const browser = visitorCookie(await download(linkId, notes));
+    // …does not continue a download through a collection whose last download someone else took.
+    const spent = (await create(m, { name: "Spent", downloadLimit: 1, nodeIds: [notes] })).json.data;
+    expect((await download(spent.linkId, notes)).status).toBe(200);
+    expect((await download(spent.linkId, notes, [browser], { range: "bytes=2-" })).status).toBe(403);
+
+    // A delete-after-download collection: the browser that took it may finish, nobody else.
+    const once = (await create(m, { name: "Burn", nodeIds: [notes] })).json.data;
+    await prisma.shareCollection.update({ where: { id: once.id }, data: { burn: true } });
+    const taken = await download(once.linkId, notes);
+    expect(taken.status).toBe(200);
+    expect((await sharePage(once.linkId, null, noViewer, Date.now()))!.page.status).toBe("expired");
+    expect((await download(once.linkId, notes, [visitorCookie(taken)], { range: "bytes=2-" })).status).toBe(206);
+    expect((await download(once.linkId, notes, [], { range: "bytes=2-" })).status).toBe(410);
+
+    // Spent and locked: the grant does not stand in for the password.
+    const locked = (await create(m, { name: "Locked", password: "open sesame", downloadLimit: 1, nodeIds: [notes] })).json.data;
+    const unlocked = await visit(unlock, `/api/share/${locked.linkId}/unlock`, { linkId: locked.linkId }, { method: "POST", body: { password: "open sesame" } });
+    const pass = unlocked.headers.getSetCookie().find((line) => line.startsWith(`${UNLOCK_COOKIE}=`))!.split(";")[0]!;
+    const first = await download(locked.linkId, notes, [pass]);
+    expect(first.status).toBe(200);
+    // Refused with the card's answer ("limit reached" comes before "locked" in the design's order).
+    expect((await download(locked.linkId, notes, [visitorCookie(first)], { range: "bytes=2-" })).status).toBe(403);
+    expect((await download(locked.linkId, notes, [visitorCookie(first), pass], { range: "bytes=2-" })).status).toBe(206);
+  });
+
   it("shows items under a folder with no downloads left as not downloadable", async () => {
     const { m, trip, b } = await account();
     await prisma.node.update({ where: { id: trip }, data: { downloadLimit: 1, downloads: 1 } });

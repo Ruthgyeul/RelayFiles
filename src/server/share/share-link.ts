@@ -30,13 +30,15 @@ export const kindOf = (row: Pick<NodeRow, "kind">) => kindOfValue(row.kind);
 
 export const shareUrl = (linkId: string) => `${getAppEnv().PUBLIC_URL}/d/${linkId}`;
 
-/** The status of a link from its own facts and the strictest guard on the way to it. */
-function linkStatus(guard: StrictestGuard, own: { burn: boolean; downloads: number; downloadLimit: number | null }, visibility: "private" | "public", now: number): ShareStatus {
-  if (guard.burnUsed) return "expired";
-  return shareStatus(
-    { expAt: guard.expAt, burn: own.burn, downloads: own.downloads, downloadLimit: own.downloadLimit, effectiveVisibility: visibility, hasPassword: guard.hasPassword, unlocked: guard.unlocked },
-    now,
-  );
+/**
+ * The status of a link from its own facts and the strictest guard on the way to it, and whether
+ * it would be open but for downloads used up (a download limit reached, a delete-after-download
+ * link downloaded): only then may a browser continue a download it was counted for.
+ */
+function linkStatus(guard: StrictestGuard, own: { burn: boolean; downloads: number; downloadLimit: number | null }, visibility: "private" | "public", now: number): { status: ShareStatus; resumable: boolean } {
+  const facts = { expAt: guard.expAt, effectiveVisibility: visibility, hasPassword: guard.hasPassword, unlocked: guard.unlocked };
+  const status = guard.burnUsed ? "expired" : shareStatus({ ...facts, burn: own.burn, downloads: own.downloads, downloadLimit: own.downloadLimit }, now);
+  return { status, resumable: shareStatus({ ...facts, burn: false, downloads: 0, downloadLimit: null }, now) === "open" };
 }
 
 const accountDeletesAt = (owner: AccountRow) => deletionDate(owner, getEnv("policy").ACCOUNT_TTL_DAYS)?.getTime() ?? null;
@@ -64,13 +66,13 @@ export async function loadLink(linkId: string, viewer: ShareViewer, now: number)
     })),
     accountDeletesAt(owner),
   );
-  const status = linkStatus(guard, root, visibility, now);
+  const { status, resumable } = linkStatus(guard, root, visibility, now);
   const isOwner = viewer.accountIds.includes(root.accountId);
   // To anyone but its owner a private link is "private" whatever else is true of it, and every
   // caller answers that as a link that does not exist: an "expired" or "limit reached" card (or
   // a 410/403, or an argon2 check on unlock) would tell someone guessing ids they found a real one.
   // The owner keeps the design's order and sees why the link is closed.
-  return { kind: "node", root, chain, owner, status: !isOwner && visibility !== "public" ? "private" : status, isOwner };
+  return { kind: "node", root, chain, owner, status: !isOwner && visibility !== "public" ? "private" : status, resumable, isOwner };
 }
 
 /** A collection link: public while it exists, with its own expiry, limits and password. */
@@ -91,12 +93,14 @@ async function loadCollectionLink(linkId: string, viewer: ShareViewer, now: numb
     ],
     accountDeletesAt(owner),
   );
-  return { kind: "collection", collection, items: new Set(collection.nodeIds), owner, status: linkStatus(guard, collection, "public", now), isOwner: viewer.accountIds.includes(collection.accountId) };
+  return { kind: "collection", collection, items: new Set(collection.nodeIds), owner, ...linkStatus(guard, collection, "public", now), isOwner: viewer.accountIds.includes(collection.accountId) };
 }
 
 interface LinkBase {
   owner: AccountRow;
   status: ShareStatus;
+  /** Open but for downloads used up: a counted browser may continue its download (`openLink`). */
+  resumable: boolean;
   isOwner: boolean;
 }
 

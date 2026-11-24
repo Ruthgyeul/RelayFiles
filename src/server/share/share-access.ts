@@ -39,6 +39,8 @@ function busyError(busy: Busy, now: number): ApiError {
 }
 
 export interface SharedFile {
+  /** The link id the file was reached through (download grants belong to it). */
+  linkId: string;
   link: LoadedLink;
   row: SharedRow;
   /** Ids from the shared item down to the file (for busy tracking). */
@@ -64,8 +66,8 @@ export interface SharedFile {
 export async function openLink(linkId: string, viewer: ShareViewer, now: number, resuming = false): Promise<LoadedLink> {
   const link = await loadLink(linkId, viewer, now);
   if (!link) throw await missingLinkError(linkId);
-  // A download counted before the limit was reached may still be continued (see resolveSharedFile).
-  if (link.status !== "open" && !(resuming && link.status === "blocked")) throw statusError(link.status);
+  // A download counted before its downloads ran out may still be continued (see resolveSharedFile).
+  if (link.status !== "open" && !(resuming && link.resumable)) throw statusError(link.status);
   return link;
 }
 
@@ -114,7 +116,7 @@ export async function resolveSharedFile(linkId: string, nodeId: string, viewer: 
     }
   }
   const collectionId = collectionIdOf(link);
-  return { link, row, path, segments: segmentsBelowRoot(chain), counted, collectionId, limited: guarded.length > 0 || hasLimit(link), busy, capped: cappedOn(chain) };
+  return { linkId, link, row, path, segments: segmentsBelowRoot(chain), counted, collectionId, limited: guarded.length > 0 || hasLimit(link), busy, capped: cappedOn(chain) };
 }
 
 /**
