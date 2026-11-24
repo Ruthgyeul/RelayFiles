@@ -75,6 +75,8 @@ export const SEARCH = {
   debounceMs: 150,
   /** Items a tag search (File Manager "#tag", global search) returns at most. */
   tagResultLimit: 500,
+  /** The account's most used tags offered in the Tags dialog. */
+  tagSuggestions: 100,
 } as const;
 
 export const UPLOAD = {

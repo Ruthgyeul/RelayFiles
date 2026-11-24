@@ -11,7 +11,8 @@ import { db } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { countFavorites, favoriteFoldersOf } from "../repositories/favorite.repo";
-import { childCounts, createFolderNode, findByName, findByTags, listChildren, listFolders, listSiblingNames, recentFiles, tagUsage, type NodeRow } from "../repositories/node.repo";
+import { childCounts, createFolderNode, findByName, findByTags, listChildren, listFolders, listSiblingNames, recentFiles, type NodeRow } from "../repositories/node.repo";
+import { tagUsage } from "../repositories/node-usage.repo";
 import { ancestorChain, ancestorChains, childStats, descendantCounts, folderSizes, type AncestorRow, type ChildStats } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
 import { withStorageTransaction } from "../storage/storage-transaction";
@@ -181,7 +182,7 @@ export async function createFolder(account: Pick<AccountRow, "id" | "volumeId" |
 
 /** Tags in use with counts (tag dialog suggestions). */
 export function tagSuggestions(accountId: string) {
-  return tagUsage(db(), accountId);
+  return tagUsage(db(), accountId, SEARCH.tagSuggestions);
 }
 
 /** Every folder of an account (id, name, parent) for the move/copy picker. */

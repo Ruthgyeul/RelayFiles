@@ -1,7 +1,7 @@
 import "server-only";
 import { MIGRATION } from "@/config/policy";
 import { enqueueDateTaken } from "../jobs/queue";
-import { mediaWithoutDateTaken } from "../repositories/node.repo";
+import { mediaWithoutDateTaken } from "../repositories/node-backfill.repo";
 import type { DataMigrationStep } from "./data-migrations";
 
 /**

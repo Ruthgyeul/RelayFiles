@@ -1,7 +1,7 @@
 import "server-only";
 import { MIGRATION } from "@/config/policy";
 import { logger } from "../logger";
-import { filesWithoutSha256, setFileFacts } from "../repositories/node.repo";
+import { filesWithoutSha256, setFileFacts } from "../repositories/node-backfill.repo";
 import { sha256Of } from "../storage/hash";
 import type { DataMigrationStep } from "./data-migrations";
 import { fileReader } from "./file-backfill";

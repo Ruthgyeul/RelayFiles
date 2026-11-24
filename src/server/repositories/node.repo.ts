@@ -1,5 +1,4 @@
 import "server-only";
-import { MEDIA } from "@/config/policy";
 import type { DbClient, Prisma } from "../db/client";
 
 /** Name of every account's root folder; it maps to users/<accountId>/ on the volume. */
@@ -7,31 +6,6 @@ const ROOT_FOLDER_NAME = "root";
 
 export async function createRootFolder(db: DbClient, data: { id: string; accountId: string; linkId: string }): Promise<void> {
   await db.node.create({ data: { ...data, parentId: null, type: "FOLDER", name: ROOT_FOLDER_NAME } });
-}
-
-/** Bytes stored by an account (sum of file sizes) and the number of items in its root folder. */
-export async function accountUsage(db: DbClient, accountId: string): Promise<{ usedBytes: bigint; rootItems: number }> {
-  const [sum, rootItems] = await Promise.all([
-    db.node.aggregate({ where: { accountId, type: "FILE" }, _sum: { size: true } }),
-    db.node.count({ where: { accountId, parent: { parentId: null, accountId } } }),
-  ]);
-  return { usedBytes: sum._sum.size ?? 0n, rootItems };
-}
-
-/** Items of an account that expire (and lose their link) after `from` and by `until`. */
-export function countExpiring(db: DbClient, accountId: string, from: Date, until: Date): Promise<number> {
-  return db.node.count({ where: { accountId, expAt: { gt: from, lte: until } } });
-}
-
-/** Files and folders of an account, its root folder included. */
-export function countItems(db: DbClient, accountId: string): Promise<number> {
-  return db.node.count({ where: { accountId } });
-}
-
-/** Bytes stored by all anonymous (non-admin) accounts, for ANON_TOTAL_QUOTA_GB. */
-export async function anonUsage(db: DbClient): Promise<bigint> {
-  const sum = await db.node.aggregate({ where: { type: "FILE", account: { isAdmin: false } }, _sum: { size: true } });
-  return sum._sum.size ?? 0n;
 }
 
 /** Columns the File Manager shows (password hash only as a flag). */
@@ -74,28 +48,6 @@ export function findNode(db: DbClient, accountId: string, nodeId: string) {
 /** A node by id for background jobs (no account scope: the caller is the server itself). */
 export function findNodeForJob(db: DbClient, nodeId: string) {
   return db.node.findUnique({ where: { id: nodeId }, select: NODE_SELECT });
-}
-
-/** Images and videos still without a thumbnail, in id order (a keyset cursor), for the backfill script. */
-export function mediaWithoutThumbs(db: DbClient, take: number, afterId?: string) {
-  return db.node.findMany({
-    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, hasThumb: false, missing: false },
-    select: { id: true },
-    orderBy: { id: "asc" },
-    take,
-    ...(afterId ? { cursor: { id: afterId }, skip: 1 } : {}),
-  });
-}
-
-/** Images large enough for a viewer preview, in id order (a keyset cursor), for `media:backfill -- --previews`. */
-export function imagesForPreview(db: DbClient, take: number, afterId?: string) {
-  return db.node.findMany({
-    where: { type: "FILE", kind: "IMAGE", missing: false, size: { gte: MEDIA.previewMinBytes }, mime: { in: [...MEDIA.previewTypes] } },
-    select: { id: true },
-    orderBy: { id: "asc" },
-    take,
-    ...(afterId ? { cursor: { id: afterId }, skip: 1 } : {}),
-  });
 }
 
 export function findRootFolder(db: DbClient, accountId: string) {
@@ -144,20 +96,6 @@ export function findByName(db: DbClient, accountId: string, text: string, limit:
   return db.node.findMany({ where: { accountId, parentId: { not: null }, name: { contains: text, mode: "insensitive" } }, select: NODE_SELECT, take: limit });
 }
 
-/**
- * Photos and videos whose shared copy does not match `mode` (SHARE_METADATA_STRIP): none made
- * yet, one made in another mode, or one from before modes. "npm run media:backfill -- --derived".
- */
-export function mediaWithStaleCopies(db: DbClient, mode: "SENSITIVE" | "ALL", take: number, afterId?: string) {
-  return db.node.findMany({
-    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, missing: false, stripFailed: false, OR: [{ derivedMode: null }, { derivedMode: { not: mode } }] },
-    select: { id: true },
-    orderBy: { id: "asc" },
-    take,
-    ...(afterId ? { cursor: { id: afterId }, skip: 1 } : {}),
-  });
-}
-
 export function setScanState(db: DbClient, nodeId: string, scanState: "PENDING" | "CLEAN" | "FAILED", only?: "PENDING") {
   return db.node.updateMany({ where: { id: nodeId, ...(only ? { scanState: only } : {}) }, data: { scanState } });
 }
@@ -177,13 +115,6 @@ export async function childCounts(db: DbClient, parentIds: string[]): Promise<Ma
   if (parentIds.length === 0) return new Map();
   const rows = await db.node.groupBy({ by: ["parentId"], where: { parentId: { in: parentIds } }, _count: { _all: true } });
   return new Map(rows.map((row) => [row.parentId!, row._count._all]));
-}
-
-/** Tags used in an account with how many items carry each, most used first. */
-export function tagUsage(db: DbClient, accountId: string): Promise<{ tag: string; count: number }[]> {
-  return db.$queryRaw<{ tag: string; count: bigint }[]>`
-    SELECT tag, COUNT(*)::bigint AS count FROM "Node", unnest(tags) AS tag
-    WHERE "accountId" = ${accountId} GROUP BY tag ORDER BY count DESC, tag ASC LIMIT 100`.then((rows) => rows.map((row) => ({ tag: row.tag, count: Number(row.count) })));
 }
 
 export interface NewFolder {
@@ -265,13 +196,6 @@ export function createFileNode(db: DbClient, data: NewFile) {
   return db.node.create({ data: { ...data, type: "FILE" }, select: NODE_SELECT });
 }
 
-/** Files and folders of an account (the root folder is not counted). */
-export async function contentCounts(db: DbClient, accountId: string): Promise<{ files: number; folders: number }> {
-  const rows = await db.node.groupBy({ by: ["type"], where: { accountId, parentId: { not: null } }, _count: { _all: true } });
-  const count = (type: "FILE" | "FOLDER") => rows.find((row) => row.type === type)?._count._all ?? 0;
-  return { files: count("FILE"), folders: count("FOLDER") };
-}
-
 /** Items past their own expiry, or delete-after-download items that were downloaded. */
 export function expiredItemIds(db: DbClient, accountId: string | null, now: Date) {
   return db.node.findMany({
@@ -313,43 +237,6 @@ export function filesInFolders(db: DbClient, accountId: string, folderIds: strin
   });
 }
 
-/** Files without a modification time, by id, for the backfill data migration. */
-export function filesWithoutModifiedAt(db: DbClient, take: number, afterId: string | null) {
-  return db.node.findMany({
-    where: { type: "FILE", modifiedAt: null, ...(afterId ? { id: { gt: afterId } } : {}) },
-    select: { id: true, accountId: true, createdAt: true, missing: true, account: { select: { volumeId: true } } },
-    orderBy: { id: "asc" },
-    take,
-  });
-}
-
-/** Files without a content hash, by id, for the backfill data migration. */
-export function filesWithoutSha256(db: DbClient, take: number, afterId: string | null) {
-  return db.node.findMany({
-    where: { type: "FILE", sha256: null, ...(afterId ? { id: { gt: afterId } } : {}) },
-    select: { id: true, accountId: true, size: true, missing: true, account: { select: { volumeId: true } } },
-    orderBy: { id: "asc" },
-    take,
-  });
-}
-
-/** Records a value a backfill computed. */
-export async function setFileFacts(db: DbClient, nodeId: string, data: { modifiedAt?: Date; sha256?: string; takenAt?: Date }): Promise<void> {
-  await db.node.update({ where: { id: nodeId }, data });
-}
-
-/** Records the modification time of many files in one statement (a backfill batch). */
-export async function setModifiedTimes(db: DbClient, times: readonly { id: string; modifiedAt: Date }[]): Promise<void> {
-  if (times.length === 0) return;
-  const ids = times.map((time) => time.id);
-  // Prisma keeps DateTime as UTC in a timestamp without time zone.
-  const ats = times.map((time) => time.modifiedAt.toISOString());
-  await db.$executeRaw`
-    UPDATE "Node" AS n SET "modifiedAt" = v.at::timestamptz AT TIME ZONE 'UTC'
-    FROM unnest(${ids}::text[], ${ats}::text[]) AS v(id, at)
-    WHERE n.id = v.id`;
-}
-
 /**
  * Renames many children of one folder in a single statement (renumbering) and returns how many
  * rows changed (fewer when one was deleted or moved meanwhile). Each new name must be free when
@@ -377,33 +264,4 @@ export async function moveIntoFolder(tx: DbClient, accountId: string, folderId: 
     UPDATE "Node" AS n SET "parentId" = ${folderId}, name = v.name, "updatedAt" = now()
     FROM unnest(${ids}::text[], ${names}::text[]) AS v(id, name)
     WHERE n.id = v.id AND n."accountId" = ${accountId}`;
-}
-
-/** Photos and videos whose date taken was never read, by id (the release data migration queues them). */
-export function mediaWithoutDateTaken(db: DbClient, take: number, afterId: string | null) {
-  return db.node.findMany({
-    where: { type: "FILE", kind: { in: ["IMAGE", "VIDEO"] }, takenAt: null, missing: false, ...(afterId ? { id: { gt: afterId } } : {}) },
-    select: { id: true },
-    orderBy: { id: "asc" },
-    take,
-  });
-}
-
-/** The account's largest files (Storage page), largest first. */
-export function largestFiles(db: DbClient, accountId: string, limit: number) {
-  return db.node.findMany({ where: { accountId, type: "FILE", size: { gt: 0n } }, orderBy: [{ size: "desc" }, { id: "asc" }], select: NODE_SELECT, take: limit });
-}
-
-/**
- * Files added before `before` that nobody opened, played or downloaded through a share link
- * since (Storage page "Not opened lately"), largest first. The owner's own downloads are not
- * recorded, so this is about share links only.
- */
-export function staleFiles(db: DbClient, accountId: string, before: Date, limit: number) {
-  return db.node.findMany({
-    where: { accountId, type: "FILE", createdAt: { lt: before }, events: { none: { kind: { in: ["OPEN", "VIEW", "PLAY", "DOWNLOAD"] }, at: { gte: before } } } },
-    orderBy: [{ size: "desc" }, { id: "asc" }],
-    select: NODE_SELECT,
-    take: limit,
-  });
 }
