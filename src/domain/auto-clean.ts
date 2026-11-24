@@ -48,7 +48,12 @@ export function cleanRuleText(rule: CleanRule): string {
   return `Files directly in this folder ${BASIS_TEXT[rule.basis]} more than ${cleanAgeText(rule.olderThanDays)} ago move to Recently deleted every day.`;
 }
 
-/** "12 files would move now" / "No files would move now": the preview under the choices. */
-export function cleanPreviewText(count: number): string {
-  return count === 0 ? "No files would move now." : `${plural(count, "file")} would move now.`;
+/**
+ * "12 files would move now" / "No files would move now": the preview under the choices. Past
+ * `perRun` (the most one daily run moves), it says the rest follow on the next days.
+ */
+export function cleanPreviewText(count: number, perRun: number): string {
+  if (count === 0) return "No files would move now.";
+  if (count > perRun) return `${plural(count, "file")} are due: ${plural(perRun, "file")} move today, the rest on the next days.`;
+  return `${plural(count, "file")} would move now.`;
 }

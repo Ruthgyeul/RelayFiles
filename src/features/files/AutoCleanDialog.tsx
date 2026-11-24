@@ -80,7 +80,7 @@ export function AutoCleanDialog({ request, onClose, onDone }: { request: AutoCle
         </FieldGroup>
         <p className="m-0 text-[13px] text-t3">{cleanRuleText(rule)} Folders inside are left alone.</p>
         <p className="m-0 text-[13px] font-semibold text-t2" aria-live="polite">
-          {preview.data && preview.status !== "loading" ? cleanPreviewText(preview.data.due) : "Counting files…"}
+          {preview.data && preview.status !== "loading" ? cleanPreviewText(preview.data.due, AUTO_CLEAN.perRunLimit) : "Counting files…"}
         </p>
         {(error || failed) && <p className="m-0 text-[13px] text-danger-text">{error || failed}</p>}
       </div>

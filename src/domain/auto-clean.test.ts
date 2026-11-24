@@ -45,8 +45,11 @@ describe("texts", () => {
     expect(cleanRuleText({ olderThanDays: 90, basis: "modified" })).toContain("modified more than 90 days ago");
   });
   it("counts the files a rule would move now", () => {
-    expect(cleanPreviewText(0)).toBe("No files would move now.");
-    expect(cleanPreviewText(1)).toBe("1 file would move now.");
-    expect(cleanPreviewText(12)).toBe("12 files would move now.");
+    expect(cleanPreviewText(0, 5)).toBe("No files would move now.");
+    expect(cleanPreviewText(1, 5)).toBe("1 file would move now.");
+    expect(cleanPreviewText(5, 5)).toBe("5 files would move now.");
+  });
+  it("says when one run takes only part of them", () => {
+    expect(cleanPreviewText(12, 5)).toBe("12 files are due: 5 files move today, the rest on the next days.");
   });
 });
