@@ -18,6 +18,8 @@ export interface DownloadFacts {
   streamOnly: boolean;
   downloadLimit: number | null;
   downloads: number;
+  /** A folder above it limits downloads and has none left (every download below it counts there). */
+  limitUsedAbove: boolean;
   /** Delete after the first download: once downloaded, no more downloads. */
   burn: boolean;
   /** 0 normal, 1 throttled, 2 paused (see `busyOf`). */
@@ -29,7 +31,7 @@ export type DownloadBlock = "stream-only" | "limit" | "paused";
 /** Why visitors may not download a file now, or null when they may. */
 export function downloadBlock(facts: DownloadFacts): DownloadBlock | null {
   if (facts.linkStreamOnly || facts.streamOnly) return "stream-only";
-  if (downloadsUsedUp(facts)) return "limit";
+  if (facts.limitUsedAbove || downloadsUsedUp(facts)) return "limit";
   if (facts.busyLevel === BUSY.paused) return "paused";
   return null;
 }

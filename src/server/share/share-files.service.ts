@@ -2,7 +2,7 @@ import "server-only";
 import { MEDIA, SHARE } from "@/config/policy";
 import { PREFETCH_HEADER, SUBTITLE_PARAM } from "@/contracts/api";
 import { isSubtitleName } from "@/domain/subtitles";
-import { effectiveRange, parseRange } from "@/domain/serving";
+import { continuesDownload, effectiveRange, parseRange } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadDecision } from "@/domain/share-access";
 import { HEIC_COPY_MIME, heicCopyName, isHeicType } from "@/domain/heic";
 import { mimeFromName } from "@/domain/upload";
@@ -112,7 +112,9 @@ async function applyDecision(decision: DownloadDecision, file: SharedFile, viewe
 /** A visitor's playback (`stream`) or download of a file inside a share link. */
 export async function serveSharedFile(req: Request, linkId: string, nodeId: string, mode: "stream" | "download", viewer: ShareViewer, client: ClientInfo): Promise<Response> {
   const now = Date.now();
-  const file = await resolveSharedFile(linkId, nodeId, viewer, mode, now);
+  // Continuing a download (or playback) this browser was counted for: limits it used up do not stop it.
+  const resuming = continuesDownload(req.headers.get("range")) && (await hasDownloadGrant(nodeId, viewer.visitorId));
+  const file = await resolveSharedFile(linkId, nodeId, viewer, mode, now, resuming);
   const { link, row } = file;
   // loadLink read the owner already (the storage volume and the metadata setting).
   const { owner } = link;

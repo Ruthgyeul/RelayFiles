@@ -1,4 +1,5 @@
 import "server-only";
+import { FILES } from "@/config/policy";
 import type { SearchKind } from "@/domain/search";
 import type { DbClient, Prisma } from "../db/client";
 
@@ -167,6 +168,13 @@ export function createFolderNode(db: DbClient, data: NewFolder) {
 
 export function findNodes(db: DbClient, accountId: string, ids: string[]) {
   return db.node.findMany({ where: { accountId, id: { in: ids } }, select: NODE_SELECT });
+}
+
+/** {@link findNodes} for any number of ids, FILES.idsPerQuery per query. */
+export async function findNodesMany(db: DbClient, accountId: string, ids: readonly string[]): Promise<NodeRow[]> {
+  const rows: NodeRow[] = [];
+  for (let start = 0; start < ids.length; start += FILES.idsPerQuery) rows.push(...(await findNodes(db, accountId, ids.slice(start, start + FILES.idsPerQuery))));
+  return rows;
 }
 
 export function updateNode(db: DbClient, nodeId: string, data: Prisma.NodeUpdateInput) {

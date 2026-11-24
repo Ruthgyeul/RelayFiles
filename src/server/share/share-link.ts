@@ -4,6 +4,7 @@ import { deletionDate } from "@/domain/account";
 import { collectionItemIndex, collectionItemOpen, type CollectionGuardRow } from "@/domain/collection";
 import { shareStatus, strictestGuard, type Busy, type ShareStatus, type StrictestGuard } from "@/domain/share";
 import { downloadBlock, type DownloadBlock } from "@/domain/share-access";
+import { downloadsUsedUp } from "@/domain/share-limits";
 import { effectiveVisibility } from "@/domain/tree";
 import { cookieSecrets } from "../auth/keys";
 import { db } from "../db/client";
@@ -141,18 +142,24 @@ export function linkTrail(link: LoadedLink, chain: readonly ChainRow[], now: num
 }
 
 /**
- * Stream only and paused downloads set on the items above a row, from the account root down
- * to its parent. Like passwords and expiry (`strictestGuard`), a folder's setting applies to
- * everything inside it, whichever link the item is opened through.
+ * Stream only, paused downloads and used-up download limits on the items above a row, from the
+ * account root down to its parent. Like passwords and expiry (`strictestGuard`), a folder's
+ * setting applies to everything inside it, whichever link the item is opened through (every
+ * download below a limiting folder is counted there, `claimDownload`).
  */
 export interface WayAbove {
   streamOnly: boolean;
   dlPaused: boolean;
+  limitUsed: boolean;
 }
 
-type WayRow = Pick<SharedRow, "access" | "dlPaused">;
-const NOTHING_ABOVE: WayAbove = { streamOnly: false, dlPaused: false };
-export const through = (way: WayAbove, row: WayRow): WayAbove => ({ streamOnly: way.streamOnly || row.access === "STREAM", dlPaused: way.dlPaused || row.dlPaused });
+type WayRow = Pick<SharedRow, "access" | "dlPaused" | "downloadLimit" | "downloads" | "burn">;
+const NOTHING_ABOVE: WayAbove = { streamOnly: false, dlPaused: false, limitUsed: false };
+export const through = (way: WayAbove, row: WayRow): WayAbove => ({
+  streamOnly: way.streamOnly || row.access === "STREAM",
+  dlPaused: way.dlPaused || row.dlPaused,
+  limitUsed: way.limitUsed || downloadsUsedUp(row),
+});
 
 /** The way above the last row of a chain (account root first). */
 export const wayAboveEnd = (chain: readonly WayRow[]) => chain.slice(0, -1).reduce(through, NOTHING_ABOVE);
@@ -187,6 +194,7 @@ export function downloadBlockOf(row: SharedRow, above: WayAbove, busy: Busy | un
     streamOnly: row.access === "STREAM",
     downloadLimit: row.downloadLimit,
     downloads: row.downloads,
+    limitUsedAbove: above.limitUsed,
     burn: row.burn,
     busyLevel: busy?.level ?? 0,
   });

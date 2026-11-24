@@ -4,7 +4,7 @@ import { parseRange } from "./serving";
 import { downloadBlock, downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadFacts } from "./share-access";
 
 describe("downloadBlock", () => {
-  const open: DownloadFacts = { linkStreamOnly: false, streamOnly: false, downloadLimit: null, downloads: 0, burn: false, busyLevel: 0 };
+  const open: DownloadFacts = { linkStreamOnly: false, streamOnly: false, downloadLimit: null, downloads: 0, limitUsedAbove: false, burn: false, busyLevel: 0 };
 
   it("allows downloads unless stream-only, used up or paused", () => {
     expect(downloadBlock(open)).toBeNull();
@@ -13,6 +13,7 @@ describe("downloadBlock", () => {
     expect(downloadBlock({ ...open, linkStreamOnly: true })).toBe("stream-only");
     expect(downloadBlock({ ...open, streamOnly: true })).toBe("stream-only");
     expect(downloadBlock({ ...open, downloadLimit: 1, downloads: 1 })).toBe("limit");
+    expect(downloadBlock({ ...open, limitUsedAbove: true })).toBe("limit");
     expect(downloadBlock({ ...open, busyLevel: 2 })).toBe("paused");
     // Delete after download: the first download is allowed, none after it.
     expect(downloadBlock({ ...open, burn: true })).toBeNull();

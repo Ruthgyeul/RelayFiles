@@ -13,6 +13,7 @@ import { newLinkId, newNodeId } from "@/domain/ids";
 import { closeQueues } from "@/server/jobs/queue";
 import { sharePage } from "@/server/share/share-view";
 import { UNLOCK_COOKIE, type Unlocks } from "@/server/share/unlock-cookie";
+import { VISITOR_COOKIE } from "@/server/share/visitor-cookie";
 import { callRoute } from "../../../../test/route-call";
 import { fileFixtures, randomTestIp, type FixtureMember } from "../../../../test/file-fixtures";
 
@@ -51,14 +52,16 @@ const create = (m: FixtureMember, body: Record<string, unknown>) => callRoute<Co
 const patch = (m: FixtureMember, id: string, body: Record<string, unknown>) => callRoute<CollectionDto, { id: string }>(patchCollection, { method: "PATCH", cookie: m.cookie, body, params: { id } });
 
 /** A visitor's request (no account), with optional cookies. */
-function visit<P>(handler: (req: NextRequest, ctx: { params: Promise<P> }) => Promise<Response>, path: string, params: P, options: { method?: string; body?: unknown; cookies?: string[] } = {}) {
-  const headers = new Headers({ "x-real-ip": randomTestIp() });
+function visit<P>(handler: (req: NextRequest, ctx: { params: Promise<P> }) => Promise<Response>, path: string, params: P, options: { method?: string; body?: unknown; cookies?: string[]; headers?: Record<string, string> } = {}) {
+  const headers = new Headers({ "x-real-ip": randomTestIp(), ...options.headers });
   if (options.cookies?.length) headers.set("cookie", options.cookies.join("; "));
   if (options.body !== undefined) headers.set("content-type", "application/json");
   return handler(new NextRequest(`http://localhost${path}`, { method: options.method ?? "GET", headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) }), { params: Promise.resolve(params) });
 }
 
-const download = (linkId: string, id: string, cookies: string[] = []) => visit(shareDownload, `/api/share/${linkId}/files/${id}/download`, { linkId, id }, { cookies });
+const download = (linkId: string, id: string, cookies: string[] = [], headers: Record<string, string> = {}) => visit(shareDownload, `/api/share/${linkId}/files/${id}/download`, { linkId, id }, { cookies, headers });
+/** The `rf_dv=<id>` pair a response set (the browser a counted download start belongs to). */
+const visitorCookie = (res: Response) => res.headers.getSetCookie().find((line) => line.startsWith(`${VISITOR_COOKIE}=`))!.split(";")[0]!;
 const zip = (linkId: string, folderId: string) => visit(shareZip, `/api/share/${linkId}/zip?folder=${folderId}`, { linkId });
 
 describe("collection links", () => {
@@ -138,6 +141,39 @@ describe("collection links", () => {
     expect((await callRoute(removeCollection, { method: "DELETE", cookie: m.cookie, params: { id: streamOnly.id } })).status).toBe(200);
     expect((await download(streamOnly.linkId, notes)).status).toBe(404);
     expect(await prisma.node.count({ where: { id: notes } })).toBe(1);
+  });
+
+  it("lets the browser that took the last download resume it, and nobody else", async () => {
+    const { m, notes } = await account();
+    const limited = (await create(m, { name: "Once", downloadLimit: 1, nodeIds: [notes] })).json.data;
+    const first = await download(limited.linkId, notes);
+    expect(first.status).toBe(200);
+    const browser = visitorCookie(first);
+    expect((await sharePage(limited.linkId, null, noViewer, Date.now()))!.page.status).toBe("blocked");
+    // The interrupted transfer continues from byte 2; a new start or another browser is refused.
+    const resumed = await download(limited.linkId, notes, [browser], { range: "bytes=2-" });
+    expect(resumed.status).toBe(206);
+    expect(await resumed.text()).toBe("pha");
+    expect((await download(limited.linkId, notes, [browser])).status).toBe(403);
+    expect((await download(limited.linkId, notes, [], { range: "bytes=2-" })).status).toBe(403);
+    expect((await prisma.shareCollection.findUniqueOrThrow({ where: { id: limited.id } })).downloads).toBe(1);
+
+    // The same for a file's own limit, through its own link.
+    await prisma.node.update({ where: { id: notes }, data: { visibility: "PUBLIC", downloadLimit: 2 } });
+    const { linkId } = await prisma.node.findUniqueOrThrow({ where: { id: notes } });
+    const own = await download(linkId, notes);
+    expect(own.status).toBe(200);
+    expect((await download(linkId, notes, [visitorCookie(own)], { range: "bytes=1-" })).status).toBe(206);
+    expect((await download(linkId, notes)).status).toBe(403);
+  });
+
+  it("shows items under a folder with no downloads left as not downloadable", async () => {
+    const { m, trip, b } = await account();
+    await prisma.node.update({ where: { id: trip }, data: { downloadLimit: 1, downloads: 1 } });
+    const { data } = (await create(m, { name: "Spent", nodeIds: [b] })).json;
+    const view = (await sharePage(data.linkId, null, noViewer, Date.now()))!.page.view!;
+    expect(view.items).toMatchObject([{ name: "b.txt", canDownload: false }]);
+    expect((await download(data.linkId, b)).status).toBe(403);
   });
 
   it("zips the whole collection under its name, leaving out what visitors cannot see", async () => {

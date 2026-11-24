@@ -55,6 +55,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Fixed
 
+- A download interrupted after it used a link's or file's last allowed download can be resumed by the same browser, and share pages no longer offer Download for files under a folder with no downloads left
 - An item menu offers Preview for documents the viewer shows (PDF, text, code, Markdown, tables, …) in the File Manager too, and no longer for download-only files in Favorites
 - Tag search hits (`#tag`) and Favorites show, copy and share with the visibility of the folder each item is in, and move or copy from that folder, instead of the folder being viewed; the full-screen viewer on phones keeps keyboard focus inside and gives it back when closed; the Favorites list no longer lights up as a drop zone for files it does not take
 - A search (Ctrl/⌘ K, `#tag` in the File Manager and Favorites), link activity or the upload links of a folder that fail to load say so instead of showing an empty list
