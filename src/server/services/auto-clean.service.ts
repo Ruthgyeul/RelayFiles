@@ -17,7 +17,7 @@ async function ruleFolder(accountId: string, folderRef: string) {
   return folder;
 }
 
-/** The folder's rule and how many files `preview` (or the saved rule) would move at `now`. */
+/** The folder's rule and how many files `preview` (or the saved rule) would move at `now` (the total; the dialog says when a run takes only part). */
 export async function getAutoClean(owner: NodeOwner, folderRef: string, preview: CleanRule | null, now = new Date()): Promise<AutoCleanView> {
   const folder = await ruleFolder(owner.id, folderRef);
   const saved = await findFolderRule(db(), owner.id, folder.id);
@@ -50,11 +50,29 @@ export async function removeAutoClean(owner: NodeOwner, folderRef: string): Prom
  */
 async function cleanFolder(owner: NodeOwner, rule: FolderRuleRow, now: Date, limit: number): Promise<number> {
   const cutoff = cleanCutoff(rule.olderThanDays, now);
+  // Files that could not be moved this run (gone from disk before fsck flagged them, locked):
+  // left out of the next batches, so one bad file does not hold back the rest of the folder.
+  const skipped: string[] = [];
   let moved = 0;
   while (moved < limit) {
-    const ids = await dueFileIds(db(), owner.id, rule.folderId, rule.basis, cutoff, Math.min(AUTO_CLEAN.batchSize, limit - moved));
+    const ids = await dueFileIds(db(), owner.id, rule.folderId, rule.basis, cutoff, Math.min(AUTO_CLEAN.batchSize, limit - moved), skipped);
     if (ids.length === 0) break;
-    moved += (await deleteItems(owner, ids)).deleted;
+    try {
+      moved += (await deleteItems(owner, ids)).deleted;
+    } catch {
+      // One batch is one transaction: retry its files one by one and skip the ones that fail.
+      const before = moved;
+      for (const id of ids) {
+        try {
+          moved += (await deleteItems(owner, [id])).deleted;
+        } catch (fileError) {
+          logger.warn("auto clean: file not moved", { folderId: rule.folderId, nodeId: id, error: fileError });
+          skipped.push(id);
+        }
+      }
+      // Nothing in the batch could move (the volume is read-only or offline): stop this folder for today.
+      if (moved === before) break;
+    }
   }
   return moved;
 }

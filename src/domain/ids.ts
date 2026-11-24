@@ -11,7 +11,7 @@ const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz2345678
 /** Upper-case invite code alphabet. */
 const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-export const ID_LENGTH = { account: 12, node: 12, link: 16, legacyLink: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12, fileRequest: 12, deletedItem: 12, fileVersion: 16 } as const;
+export const ID_LENGTH = { account: 12, node: 12, link: 16, legacyLink: 10, token: 40, session: 32, anonSuffix: 6, inviteGroup: 4, apiToken: 43, apiTokenId: 12, fileRequest: 12, deletedItem: 12, fileVersion: 16, savedSearch: 12 } as const;
 
 /**
  * Personal API tokens are `rfp_<token id>_<43 random characters>`: the prefix tells them apart
@@ -54,6 +54,7 @@ export const ID_PATTERN = {
   fileRequest: pattern(ID_LENGTH.fileRequest, ID_ALPHABET),
   deletedItem: pattern(ID_LENGTH.deletedItem, ID_ALPHABET),
   fileVersion: pattern(ID_LENGTH.fileVersion, ID_ALPHABET),
+  savedSearch: pattern(ID_LENGTH.savedSearch, ID_ALPHABET),
   anonName: new RegExp(`^anon-[${ID_ALPHABET}]{${ID_LENGTH.anonSuffix}}$`),
   invite: new RegExp(`^[${INVITE_ALPHABET}]{4}-[${INVITE_ALPHABET}]{4}$`),
   /** Request ids (x-request-id) are UUIDs; anything else a client sends is replaced. */
@@ -75,6 +76,7 @@ export const newFileRequestId = () => randomString(ID_LENGTH.fileRequest, ID_ALP
 export const newDeletedItemId = () => randomString(ID_LENGTH.deletedItem, ID_ALPHABET);
 /** 16 characters: never equal to a 12-character node id in the shared `system/<dir>/<accountId>/` folders. */
 export const newFileVersionId = () => randomString(ID_LENGTH.fileVersion, ID_ALPHABET);
+export const newSavedSearchId = () => randomString(ID_LENGTH.savedSearch, ID_ALPHABET);
 export const newInviteCode = () => `${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}-${randomString(ID_LENGTH.inviteGroup, INVITE_ALPHABET)}`;
 
 export const isAccountId = (value: string) => ID_PATTERN.account.test(value);

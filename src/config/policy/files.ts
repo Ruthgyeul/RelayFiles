@@ -89,6 +89,8 @@ export const SEARCH = {
   nameCandidates: 200,
   /** Longest query accepted. */
   maxQueryLength: 200,
+  /** Searches one account can keep under "Saved searches". */
+  maxSaved: 50,
   /** Delay before a query runs while typing. */
   debounceMs: 150,
   /** Items a tag search (File Manager "#tag", global search) returns at most. */

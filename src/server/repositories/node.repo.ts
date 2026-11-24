@@ -1,4 +1,5 @@
 import "server-only";
+import type { SearchKind } from "@/domain/search";
 import type { DbClient, Prisma } from "../db/client";
 
 /** Name of every account's root folder; it maps to users/<accountId>/ on the volume. */
@@ -91,9 +92,44 @@ export async function makeNodesPrivate(db: DbClient, accountId: string, ids: rea
   return count;
 }
 
-/** Items whose name contains `text` (any case), outside the account root. */
-export function findByName(db: DbClient, accountId: string, text: string, limit: number) {
-  return db.node.findMany({ where: { accountId, parentId: { not: null }, name: { contains: text, mode: "insensitive" } }, select: NODE_SELECT, take: limit });
+/** What a global search asks for (domain/search.ts), with its ages as dates. */
+export interface NodeSearch {
+  text: string;
+  tags: string[];
+  /** "folder" or file kinds; empty: any. */
+  kinds: SearchKind[];
+  /** Date modified (date added without one) on or after this. */
+  newerThan: Date | null;
+  /** Date modified (date added without one) before this. */
+  olderThan: Date | null;
+}
+
+const KIND_TO_DB = { video: "VIDEO", audio: "AUDIO", image: "IMAGE", other: "OTHER" } as const;
+
+/** The date-modified rule of a search: modifiedAt, or createdAt where a row has none (folders). */
+function modifiedWhere(op: "gte" | "lt", at: Date) {
+  return { OR: [{ modifiedAt: { [op]: at } }, { modifiedAt: null, createdAt: { [op]: at } }] };
+}
+
+/** Items (not the root) matching every part of a search; the name part uses the trigram index. */
+export function searchNodes(db: DbClient, accountId: string, search: NodeSearch, limit: number) {
+  const fileKinds = search.kinds.flatMap((kind) => (kind === "folder" ? [] : [KIND_TO_DB[kind]]));
+  const and = [
+    ...(search.kinds.length ? [{ OR: [...(search.kinds.includes("folder") ? [{ type: "FOLDER" as const }] : []), ...(fileKinds.length ? [{ type: "FILE" as const, kind: { in: fileKinds } }] : [])] }] : []),
+    ...(search.newerThan ? [modifiedWhere("gte", search.newerThan)] : []),
+    ...(search.olderThan ? [modifiedWhere("lt", search.olderThan)] : []),
+  ];
+  return db.node.findMany({
+    where: {
+      accountId,
+      parentId: { not: null },
+      ...(search.text ? { name: { contains: search.text, mode: "insensitive" as const } } : {}),
+      ...(search.tags.length ? { tags: { hasEvery: search.tags } } : {}),
+      ...(and.length ? { AND: and } : {}),
+    },
+    select: NODE_SELECT,
+    take: limit,
+  });
 }
 
 export function setScanState(db: DbClient, nodeId: string, scanState: "PENDING" | "CLEAN" | "FAILED", only?: "PENDING") {

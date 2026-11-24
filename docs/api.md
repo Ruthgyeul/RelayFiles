@@ -103,8 +103,11 @@
 | `GET` | `/api/favorites/folders/:id` | `{ favorites }`: 그 폴더와 하위 폴더 안의 즐겨찾기 수(삭제 대화상자) |
 | `PATCH` | `/api/favorites/folders/:id` | `{ name }` 이름 변경(같은 이름 409) |
 | `DELETE` | `/api/favorites/folders/:id?mode=remove\|lift` | 정리용 폴더 삭제 → `{ removedFavorites, movedUp }`. `remove`: 안의 즐겨찾기(하위 폴더 포함)를 함께 해제, `lift`: 즐겨찾기와 하위 폴더를 한 단계 위로 옮긴다(겹치는 폴더 이름은 "Name (2)"). 어느 쪽이든 항목 자체는 지우지 않는다 |
-| `GET` | `/api/search?q=…` | 전역 검색(Ctrl/⌘ K): 빈 값이면 최근 파일 8개, `#태그`로 시작하면 모든 태그를 가진 항목, 그 밖에는 이름 검색(후보 200개를 순위로 정렬해 최대 30개). 결과마다 폴더 경로. `q`는 200자까지 |
+| `GET` | `/api/search?q=…` | 전역 검색(Ctrl/⌘ K): 빈 값이면 최근 파일 8개. 그 밖에는 모든 조건에 맞는 항목: `#태그`(모두 가진 항목), `type:folder\|video\|audio\|image\|other`(여러 개면 그중 하나), `newer:30d` / `older:1y`(수정일, 없으면 추가일. 단위 `d` `w` `m`(30일) `y`(365일)), 나머지 단어는 이름(후보 200개를 순위로 정렬해 최대 30개). 모르는 `type:`·`newer:` 값은 이름의 일부로 본다(`domain/search.ts`). 결과마다 폴더 경로. `q`는 200자까지 |
 | `GET` | `/api/search?tags=a,b` | 계정 전체에서 모든 태그를 가진 항목(최대 500개)과 폴더 경로 |
+| `GET` | `/api/saved-searches` | 저장한 전역 검색 `SavedSearchDto[] { id, query }`(오래된 순) |
+| `POST` | `/api/saved-searches` | `{ query }` → `SavedSearchDto`. 정규화한 형태(`#trip type:image newer:14d beach`)로 저장하고, 같은 검색을 다시 저장하면 있는 것을 돌려준다. 빈 검색은 400, 계정당 `SEARCH.maxSaved`(50)개를 넘으면 400 |
+| `DELETE` | `/api/saved-searches/:id` | → `{ deleted: true }`. 다른 계정의 것이나 없는 것은 404 |
 | `GET`·`HEAD` | `/api/files/:id/download` | 원본 그대로 첨부 파일로 받기. SHA-256 ETag(304), Range(206/416), RFC 6266 파일명(한글). `STORAGE_ACCEL_ENABLED`면 Nginx `X-Accel-Redirect`로 넘긴다. 받은 바이트는 `TrafficDaily`에 기록 |
 | `GET` | `/api/files/:id/hls/:segment` | 브라우저가 못 여는 영상의 HLS 재생. `index.m3u8`: 영상 전체의 VOD 목록(4초 세그먼트, 이름에 `?v=<버전>`). `<n>.ts`: 그 세그먼트(MPEG-TS, 720p H.264/AAC, 메타데이터 없음), 요청할 때 그 자리부터 변환한다. 아직 변환 중이면 503 `VIDEO_CONVERTING` + `Retry-After`, 변환 슬롯이 없으면 429, ffmpeg가 열 수 없는 파일은 404 |
 | `GET`·`HEAD` | `/api/files/:id/stream` | 뷰어·인라인 재생용. 영상·음악·이미지만 inline, SVG·HTML은 항상 첨부(`nosniff`). `?transcode=1`: 브라우저가 못 여는 영상을 ffmpeg로 720p H.264/AAC fragmented MP4로 변환하며 전송(동시 `VIDEO_TRANSCODE_MAX`개, 꽉 차면 429 + `Retry-After`, 0이면 404). 저장된 변환본이 있으면 그것을 Range로 보낸다. 응답(HEAD 포함)의 `x-relayfiles-transcode`가 `stored` 또는 `live` |
@@ -151,7 +154,7 @@
 | `POST` | `/api/v1/files?folder=root\|id&name=` | `files:write` | 요청 본문 전체가 파일 하나(`Content-Length` 필수). 이름이 겹치면 "name (2)". 용량·항목 수·크기 한도는 tus 업로드와 같다. 201 `{ nodeId, name, folderId, linkId, url }` — `url`은 공유 링크(공개 여부는 폴더 설정을 따른다). 본문은 Nginx `client_max_body_size`(`NGINX_MAX_BODY_MB`)까지, 더 큰 파일은 `POST /api/v1/uploads`(tus)로 |
 | `POST` | `/api/v1/uploads` | `files:write` | 큰 파일·이어 올리기용 tus 배치를 만든다. 본문 `{ folder: "root"\|id, files: [{ rel, size }], dup? }` → 웹 앱 `/api/uploads`와 같은 `{ kind: "ready", batchId, endpoint, folder, files }`(이름이 겹치고 `dup`이 없으면 `{ kind: "duplicates", names }`). 각 파일은 `endpoint`로 tus 1.0(메타데이터 `batch`·`index`·`filename`)을 보낸다. **같은 토큰**(`Authorization: Bearer`, `files:write`)만 그 배치의 파일을 만들고·이어 보내고·취소할 수 있다(다른 토큰은 404, 토큰 없음 401). tus 요청은 토큰마다 분당 `API.uploadRequestsPerMinute`(600)회까지. `dup: "replace"`면 덮어쓴 파일은 버전으로 남는다. CLI(`cli/`)가 이것을 쓴다 |
 | `GET`·`HEAD` | `/api/v1/files/:id` | `files:read` | 원본 다운로드(Range·ETag는 웹 앱과 같다). `HEAD`는 같은 헤더(`Content-Length`·`ETag`)에 본문 없음, 트래픽으로 세지 않는다 |
-| `GET` | `/api/v1/search?q=` | `files:read` | 웹 앱 `/api/search`와 같다: 빈 값이면 최근 파일, `#태그`(URL에서는 `%23`)는 모든 태그를 가진 항목, 그 밖에는 이름. `?tags=a,b`도 받는다. 결과마다 폴더 경로(`TaggedItem[]`) |
+| `GET` | `/api/v1/search?q=` | `files:read` | 웹 앱 `/api/search`와 같다: 빈 값이면 최근 파일, `#태그`(URL에서는 `%23`), `type:`, `newer:`/`older:` 조건과 이름(규칙은 `/api/search`). `?tags=a,b`도 받는다. 결과마다 폴더 경로(`TaggedItem[]`) |
 | `GET` | `/api/v1/shares` | `files:read` | 웹 앱 `/api/shares`와 같은 `{ items, truncated }` |
 | `GET` | `/api/v1/favorites?folder=` | `files:read` | 웹 앱 `/api/favorites`와 같은 `FavoritesView`. 정리용 폴더 관리(만들기·이름 변경·이동·삭제)는 웹 앱에서만 한다 |
 | `PATCH` | `/api/v1/nodes/:id` | `files:write` | `{ name?, parentId?: "root"\|id, favorite?: boolean }`(하나 이상) 이름 변경·이동(디스크도 함께)·즐겨찾기(`true` = Favorites 맨 위에 추가, 이미 있으면 그대로, `false` = 빼기) → `NodeItem`. 이동이 먼저라 새 이름은 대상 폴더에서 검사한다. 끝나는 곳에 같은 이름이 있으면 409와 `Suggested:` 문구(웹 앱 이동과 달리 "Name (2)"로 바꾸지 않는다). 자기 자신·하위·루트 이동은 400 |

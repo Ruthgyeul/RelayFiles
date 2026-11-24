@@ -85,6 +85,7 @@ model Account {
   favoriteFolders      FavoriteFolder[]
   events               AccountEvent[]
   versions             FileVersion[]
+  savedSearches        SavedSearch[]
   folderRules          FolderRule[]
 
   @@index([volumeId])
@@ -626,4 +627,16 @@ model FolderRule {
   updatedAt     DateTime   @updatedAt
 
   @@index([accountId])
+}
+
+/// A global search query an account kept (Ctrl/⌘ K "Saved searches"), as typed: "#trip type:image newer:30d".
+model SavedSearch {
+  id        String   @id
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Normalized by domain/search.ts (lowercase, one space between words); unique per account.
+  query     String
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, query])
 }

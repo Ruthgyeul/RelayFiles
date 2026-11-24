@@ -51,3 +51,38 @@ test("offers global search only in the File Manager", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page.getByRole("dialog", { name: "Search all files" })).toHaveCount(0);
 });
+
+test("filters by kind and keeps a search to run again", async ({ page }) => {
+  await openFiles(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await (await chooser).setFiles([
+    { name: "sunset.png", mimeType: "image/png", buffer: PNG },
+    { name: "sunset.txt", mimeType: "text/plain", buffer: Buffer.from("notes") },
+  ]);
+  await expect(page.locator('[data-item="sunset.txt"]')).toBeVisible();
+  await page.getByRole("region", { name: "Transfers" }).getByRole("button", { name: "Close transfers" }).click();
+
+  await page.getByRole("button", { name: "Search files" }).click();
+  const dialog = page.getByRole("dialog", { name: "Search all files" });
+  const box = dialog.getByRole("textbox", { name: "Search all files and folders" });
+  await box.fill("sunset type:image newer:7d");
+  await expect(dialog.getByText("1 result · images · modified in the last 7 days")).toBeVisible();
+  await expect(dialog.getByRole("option")).toHaveCount(1);
+  await expect(dialog.getByRole("option", { name: /sunset\.png/ })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Save this search" }).click();
+  await expect(page.getByText("Search saved")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Remove from saved searches" })).toHaveAttribute("aria-pressed", "true");
+
+  await box.fill("");
+  const saved = dialog.getByRole("region", { name: "Saved searches" });
+  await saved.getByRole("button", { name: "type:image newer:7d sunset", exact: true }).click();
+  await expect(box).toHaveValue("type:image newer:7d sunset");
+  await expect(dialog.getByRole("option", { name: /sunset\.png/ })).toBeVisible();
+
+  await box.fill("");
+  await saved.getByRole("button", { name: "Delete saved search type:image newer:7d sunset" }).click();
+  await expect(page.getByText("Saved search deleted")).toBeVisible();
+  await expect(saved).toHaveCount(0);
+});

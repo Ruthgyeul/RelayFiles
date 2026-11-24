@@ -121,7 +121,7 @@ export const API_V1_ROUTES: readonly ApiV1Route[] = [
     path: "/api/v1/search",
     scope: "files:read",
     summary: "Search the account",
-    description: "`q`: recent files when empty, items with every `#tag`, or names. Without `q`, `tags=a,b` lists every item carrying all the tags.",
+    description: "`q`: recent files when empty; otherwise items matching every part: `#tag`, `type:folder|video|audio|image|other`, `newer:30d` / `older:1y` (date modified, units d w m y) and words in the name. Without `q`, `tags=a,b` lists every item carrying all the tags.",
     query: z.object({ q: z.string().max(SEARCH.maxQueryLength).optional(), tags: z.string().optional().describe("Comma-separated tags") }),
     response: z.array(taggedItemSchema),
     status: 200,

@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { POST as createFolder } from "@/app/api/folders/route";
 import { AUTO_CLEAN, MS } from "@/config/policy";
@@ -94,5 +96,18 @@ describe("folder auto-clean rules", () => {
     expect(await names(id)).toHaveLength(1);
     await runAutoClean(new Date(), 2);
     expect(await names(id)).toEqual([]);
+  });
+
+  it("skips a file that is gone from disk but not flagged yet, and moves the rest", async () => {
+    const m = await member();
+    const id = await folder(m, "Mixed");
+    const gone = await oldFile(m, id, "Mixed", "a-gone.txt", 30);
+    await oldFile(m, id, "Mixed", "b-here.txt", 30);
+    await rm(join(m.dir, "Mixed", "a-gone.txt"));
+    await save(m, id, { olderThanDays: 7, basis: "created" });
+    await runAutoClean(new Date());
+    // The missing one stays for fsck to flag; the other one moved.
+    expect(await names(id)).toEqual(["a-gone.txt"]);
+    expect(await prisma.node.count({ where: { id: gone } })).toBe(1);
   });
 });

@@ -48,7 +48,9 @@ export function countDueFiles(db: DbClient, accountId: string, folderId: string,
   return db.node.count({ where: dueWhere(accountId, folderId, basis, cutoff) });
 }
 
-export async function dueFileIds(db: DbClient, accountId: string, folderId: string, basis: CleanBasis, cutoff: Date, take: number): Promise<string[]> {
-  const rows = await db.node.findMany({ where: dueWhere(accountId, folderId, basis, cutoff), orderBy: { id: "asc" }, take, select: { id: true } });
+/** Due files in id order, leaving out `skip` (files that could not be moved this run). */
+export async function dueFileIds(db: DbClient, accountId: string, folderId: string, basis: CleanBasis, cutoff: Date, take: number, skip: readonly string[] = []): Promise<string[]> {
+  const where = dueWhere(accountId, folderId, basis, cutoff);
+  const rows = await db.node.findMany({ where: skip.length ? { ...where, id: { notIn: [...skip] } } : where, orderBy: { id: "asc" }, take, select: { id: true } });
   return rows.map((row) => row.id);
 }
