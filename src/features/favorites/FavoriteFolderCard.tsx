@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NAV_ITEM_ATTR } from "@/features/files/useListKeyboard";
 import type { FavoriteFolderDto } from "@/contracts/favorites";
 import { itemCount } from "@/domain/tree";
 import { MenuButton } from "@/features/files/ItemButtons";
@@ -15,7 +16,7 @@ interface Props {
 export function FavoriteFolderCard({ folder, menuOpen, onMenu }: Props) {
   return (
     <div data-entry={folder.name} className="relative flex flex-col overflow-hidden rounded-xl border border-card-line bg-sunk">
-      <Link href={favoritesHref(folder.id)} aria-label={folder.name} className="relative flex aspect-[4/3] items-center justify-center bg-bg text-inherit no-underline">
+      <Link href={favoritesHref(folder.id)} aria-label={folder.name} {...{ [NAV_ITEM_ATTR]: folder.id }} className="relative flex aspect-[4/3] items-center justify-center bg-bg text-inherit no-underline">
         <span className="relative flex">
           <Icon name="folder-simple" weight="fill" size={48} className="text-t3" />
           <Icon name="star" weight="fill" size={20} className="absolute -right-1 -bottom-1 text-warn-strong" />

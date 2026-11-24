@@ -35,20 +35,31 @@ export interface CardBox {
 const SAME_EDGE_PX = 2;
 
 /**
- * The card ↑ or ↓ moves to in a grid: the nearest card in the row above or below whose left edge
- * is closest to this one's (a shorter last row takes its last card). Null at the top or bottom row.
+ * The card ↑ or ↓ moves to in a grid: in the row above or below, the card whose left edge is
+ * closest to this one's (a shorter last row takes its nearest card). Null at the top or bottom row.
+ * `boxAt` is asked only for the cards between here and the end of that next row (two rows at
+ * most), so a long grid is not measured as a whole on every key press.
  */
-export function gridNavIndex(boxes: readonly CardBox[], index: number, key: "ArrowUp" | "ArrowDown"): number | null {
-  const from = boxes[index];
-  if (!from) return null;
-  const down = key === "ArrowDown";
-  const rowTops = boxes.map((box) => box.top).filter((top) => (down ? top > from.top + SAME_EDGE_PX : top < from.top - SAME_EDGE_PX));
-  if (rowTops.length === 0) return null;
-  const rowTop = down ? Math.min(...rowTops) : Math.max(...rowTops);
+export function gridNavIndex(count: number, index: number, key: "ArrowUp" | "ArrowDown", boxAt: (at: number) => CardBox): number | null {
+  if (index < 0 || index >= count) return null;
+  const from = boxAt(index);
+  const step = key === "ArrowDown" ? 1 : -1;
+  const past = (top: number, edge: number) => (step > 0 ? top > edge + SAME_EDGE_PX : top < edge - SAME_EDGE_PX);
+  let rowTop: number | null = null;
   let best: number | null = null;
-  boxes.forEach((box, at) => {
-    if (Math.abs(box.top - rowTop) > SAME_EDGE_PX) return;
-    if (best === null || Math.abs(box.left - from.left) < Math.abs(boxes[best]!.left - from.left)) best = at;
-  });
+  let bestGap = Infinity;
+  for (let at = index + step; at >= 0 && at < count; at += step) {
+    const box = boxAt(at);
+    if (rowTop === null) {
+      // Still in this card's own row: keep going until the next row starts.
+      if (!past(box.top, from.top)) continue;
+      rowTop = box.top;
+    } else if (past(box.top, rowTop)) break;
+    const gap = Math.abs(box.left - from.left);
+    if (gap < bestGap) {
+      best = at;
+      bestGap = gap;
+    }
+  }
   return best;
 }

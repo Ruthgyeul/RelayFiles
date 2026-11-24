@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NAV_ITEM_ATTR } from "@/features/files/useListKeyboard";
 import type { FavoriteFolderDto } from "@/contracts/favorites";
 import { itemCount } from "@/domain/tree";
 import { MenuButton } from "@/features/files/ItemButtons";
@@ -15,7 +16,7 @@ interface Props {
 export function FavoriteFolderRow({ folder, menuOpen, onMenu }: Props) {
   return (
     <div data-entry={folder.name} className="flex items-center gap-3 bg-card px-4 py-3">
-      <Link href={favoritesHref(folder.id)} className="flex min-w-0 flex-1 items-center gap-3 text-inherit no-underline">
+      <Link href={favoritesHref(folder.id)} {...{ [NAV_ITEM_ATTR]: folder.id }} className="flex min-w-0 flex-1 items-center gap-3 text-inherit no-underline">
         <span className="flex size-10 shrink-0 sm:size-[30px]" />
         <span className="relative flex w-9 shrink-0 justify-center">
           <Icon name="folder-simple" weight="fill" size={28} className="text-t3" />

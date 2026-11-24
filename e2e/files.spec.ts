@@ -116,9 +116,12 @@ test("moves between items with the keyboard, selects with Space and opens with E
   await expect(name("Beta")).toBeFocused();
   await page.keyboard.press("End");
   await expect(name("Gamma")).toBeFocused();
+  // The Favorites entry above the items is the first stop.
   await page.keyboard.press("Home");
-  await expect(name("Alpha")).toBeFocused();
+  await expect(page.locator('[data-entry="Favorites"]')).toBeFocused();
   await page.keyboard.press("ArrowUp");
+  await expect(page.locator('[data-entry="Favorites"]')).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await expect(name("Alpha")).toBeFocused();
 
   await page.keyboard.press("Space");
