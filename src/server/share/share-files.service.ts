@@ -83,9 +83,9 @@ export async function publicImage(driver: StorageDriver, location: StorageLocati
  */
 async function countSharedDownload(file: SharedFile, viewer: ShareViewer, client: ClientInfo, now: number): Promise<string> {
   const { row } = file;
-  const claimed = await claimDownload(db(), file.counted);
+  const claimed = await claimDownload(db(), file.counted, file.collectionId);
   if (!claimed) throw new ApiError("FORBIDDEN", "Download limit reached");
-  noteUsedUp(file.link.root.accountId, claimed.usedUp);
+  noteUsedUp(file.link.owner.id, claimed.usedUp);
   const visitorId = viewer.visitorId ?? newVisitorId();
   // Already counted: a Redis hiccup only costs the visitor resuming, never the download itself
   // (a delete-after-download file would otherwise be used up without anyone receiving it).

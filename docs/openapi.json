@@ -3814,6 +3814,495 @@
         }
       }
     },
+    "/api/v1/collections": {
+      "get": {
+        "summary": "Collection links of the account",
+        "description": "Newest first, each with its items in order.",
+        "x-scope": "files:read",
+        "security": [
+          {
+            "apiToken": [
+              "files:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "linkId": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "note": {
+                            "type": "string"
+                          },
+                          "expiry": {
+                            "type": "string"
+                          },
+                          "expAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "burn": {
+                            "type": "boolean"
+                          },
+                          "downloadLimit": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "downloads": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "hasPassword": {
+                            "type": "boolean"
+                          },
+                          "access": {
+                            "type": "string",
+                            "enum": [
+                              "both",
+                              "stream"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "file",
+                                    "folder"
+                                  ]
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "video",
+                                        "audio",
+                                        "image",
+                                        "other"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "type",
+                                "name",
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "description": "Its items in order"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "linkId",
+                          "url",
+                          "name",
+                          "note",
+                          "expiry",
+                          "expAt",
+                          "burn",
+                          "downloadLimit",
+                          "downloads",
+                          "hasPassword",
+                          "access",
+                          "createdAt",
+                          "items"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or expired API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the scope, or the account may not do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (also another account's item)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests (Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Share several items as one link",
+        "description": "`nodeIds`: files and folders of the account, in the order the share page lists them. The collection has settings of its own (expiry and `burn`: admins only); each item keeps its own too, and items behind a password or expired are not shown.",
+        "x-scope": "files:write",
+        "security": [
+          {
+            "apiToken": [
+              "files:write"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "note": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "expiry": {
+                    "default": "Never",
+                    "type": "string",
+                    "maxLength": 16
+                  },
+                  "burn": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "downloadLimit": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "password": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "access": {
+                    "default": "both",
+                    "type": "string",
+                    "enum": [
+                      "both",
+                      "stream"
+                    ]
+                  },
+                  "nodeIds": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{12}$"
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "nodeIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "linkId": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "note": {
+                          "type": "string"
+                        },
+                        "expiry": {
+                          "type": "string"
+                        },
+                        "expAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "burn": {
+                          "type": "boolean"
+                        },
+                        "downloadLimit": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "downloads": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "hasPassword": {
+                          "type": "boolean"
+                        },
+                        "access": {
+                          "type": "string",
+                          "enum": [
+                            "both",
+                            "stream"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "file",
+                                  "folder"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "video",
+                                      "audio",
+                                      "image",
+                                      "other"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "name",
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "Its items in order"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "linkId",
+                        "url",
+                        "name",
+                        "note",
+                        "expiry",
+                        "expAt",
+                        "burn",
+                        "downloadLimit",
+                        "downloads",
+                        "hasPassword",
+                        "access",
+                        "createdAt",
+                        "items"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or expired API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the scope, or the account may not do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (also another account's item)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests (Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "summary": "Search the account",

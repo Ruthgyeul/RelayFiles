@@ -2,7 +2,8 @@ import { z } from "zod";
 import { SEARCH } from "@/config/policy";
 import { MAX_NAME_BYTES } from "@/domain/names";
 import { apiV1NodePatchSchema, apiV1SharePatchSchema, type ApiScope } from "./api-tokens";
-import { apiV1AccountSchema, apiV1ShareSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, fileVersionSchema, folderViewSchema, nodeItemSchema, preparedUploadSchema, sharedViewSchema, taggedItemSchema } from "./api-v1";
+import { apiV1AccountSchema, apiV1ShareSchema, collectionSchema, apiV1UploadedFileSchema, createdFolderSchema, deletedCountSchema, favoritesViewSchema, fileVersionSchema, folderViewSchema, nodeItemSchema, preparedUploadSchema, sharedViewSchema, taggedItemSchema } from "./api-v1";
+import { createCollectionSchema } from "./collections";
 import { createFolderSchema } from "./nodes";
 import { apiV1PrepareUploadSchema } from "./uploads";
 
@@ -115,6 +116,26 @@ export const API_V1_ROUTES: readonly ApiV1Route[] = [
       "Items that can be opened from outside, newest first: the top of each public part of the tree, and public items with a password, download limit, expiry, first-download delete or paused downloads of their own. Items public only through a folder above are not listed on their own.",
     response: sharedViewSchema,
     status: 200,
+  },
+  {
+    method: "GET",
+    path: "/api/v1/collections",
+    scope: "files:read",
+    summary: "Collection links of the account",
+    description: "Newest first, each with its items in order.",
+    response: z.array(collectionSchema),
+    status: 200,
+  },
+  {
+    method: "POST",
+    path: "/api/v1/collections",
+    scope: "files:write",
+    summary: "Share several items as one link",
+    description:
+      "`nodeIds`: files and folders of the account, in the order the share page lists them. The collection has settings of its own (expiry and `burn`: admins only); each item keeps its own too, and items behind a password or expired are not shown.",
+    body: createCollectionSchema,
+    response: collectionSchema,
+    status: 201,
   },
   {
     method: "GET",

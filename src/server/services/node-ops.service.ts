@@ -12,6 +12,7 @@ import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { createDeletedItems, nodeRowsByIds, toSnapshot } from "../repositories/deleted-item.repo";
 import { favoriteFoldersOf } from "../repositories/favorite.repo";
+import { collectionPlacesOf, type CollectionPlace } from "../repositories/collection.repo";
 import { deleteNodes, findNodes, listSiblingNames, updateNode, type NodeRow } from "../repositories/node.repo";
 import { ancestorChains, lockSubtrees, type AncestorRow } from "../repositories/node-tree.repo";
 import { addTrashedBytesEach, recordTrashed } from "../repositories/trash.repo";
@@ -108,6 +109,8 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
     const full = recoverable ? await nodeRowsByIds(tx, rows.map((row) => row.id)) : [];
     // Favorites go with the rows (FK cascade); the snapshot remembers them for a restore.
     const favorites = recoverable ? await favoriteFoldersOf(tx, rows.map((row) => row.id)) : new Map<string, string | null>();
+    // Collection items too.
+    const collections = recoverable ? await collectionPlacesOf(tx, rows.map((row) => row.id)) : new Map<string, CollectionPlace[]>();
     await deleteNodes(tx, itemIds);
     const trashed: string[] = [];
     for (const location of locations) {
@@ -117,7 +120,7 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
     }
     const deleted = rows.filter((row) => row.type === "FILE");
     // The bytes stay on disk until the daily job empties the trash, and count until then.
-    if (recoverable) return { files: deleted, trashIds: await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites, malware }) };
+    if (recoverable) return { files: deleted, trashIds: await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites, collections, malware }) };
     await recordTrashed(
       tx,
       owner.id,
@@ -141,6 +144,8 @@ interface DeletedTrees {
   full: Node[];
   /** Where each row was listed in Favorites. */
   favorites: ReadonlyMap<string, string | null>;
+  /** The collections each row was in. */
+  collections: ReadonlyMap<string, readonly CollectionPlace[]>;
   /** Removed by the virus scan: listed (with the signature) but never restored. */
   malware?: string;
 }
@@ -184,7 +189,7 @@ async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: str
       originalPath: chain.slice(0, -1).map((ancestor) => ancestor.name),
       deletedAt: at,
       ...(trees.malware ? { reason: "INFECTED" as const, malware: trees.malware } : {}),
-      nodes: toSnapshot(deleted[index]!.tree, trees.favorites),
+      nodes: toSnapshot(deleted[index]!.tree, trees.favorites, trees.collections),
     })),
   );
   return ids;

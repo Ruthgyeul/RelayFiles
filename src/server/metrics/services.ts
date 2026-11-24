@@ -59,7 +59,7 @@ export async function serviceRows(now: Date): Promise<ServiceRow[]> {
   const volumes = await listActiveVolumes(db());
   const states = await Promise.all(volumes.map((volume) => checkVolume(volume.mountPath, volume.id)));
   const offline = states.filter((state) => state.state !== "online").length;
-  const [alive, cleanup, disk, backup, ffmpeg] = await Promise.all([workerAlive(), lastCleanup(), diskHealth(), backupRow(now), ffmpegVersion()]);
+  const [alive, cleanup, disk, backup, ffmpeg] = await Promise.all([workerAlive(), lastCleanup(), diskHealth(), backupRow(now), ffmpegVersion().catch(() => null)]);
   const media = ffmpegStatusText(ffmpeg);
   const jobs = getEnv("jobs");
 

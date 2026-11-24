@@ -136,3 +136,21 @@ export const fileVersionSchema = z.object({
   replacedAt: z.string(),
   expiresAt: z.string(),
 });
+
+/** A collection link: several files and folders behind one share link with settings of its own. */
+export const collectionSchema = z.object({
+  id: z.string(),
+  linkId: z.string(),
+  url: z.string(),
+  name: z.string(),
+  note: z.string(),
+  expiry: z.string(),
+  expAt: z.string().nullable(),
+  burn: z.boolean(),
+  downloadLimit: z.number().int().nullable(),
+  downloads: z.number().int(),
+  hasPassword: z.boolean(),
+  access: z.enum(["both", "stream"]),
+  createdAt: z.string(),
+  items: z.array(z.object({ id: z.string(), type: z.enum(["file", "folder"]), name: z.string(), kind: z.enum(["video", "audio", "image", "other"]).nullable() })).describe("Its items in order"),
+});

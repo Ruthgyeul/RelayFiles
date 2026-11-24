@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { DbClient, Prisma } from "../db/client";
+import type { CollectionPlace } from "./collection.repo";
 import type { Node } from "../db/generated/client";
 import { Access, FileKind, NodeType, ScanState, Visibility } from "../db/generated/enums";
 
@@ -45,14 +46,16 @@ const snapshotRowSchema = z.object({
   scanState: z.enum(ScanState).optional(),
   /** Where the item was listed in Favorites (organizing folder, null: the top); absent: not a favorite. */
   favorite: z.object({ folderId: z.string().nullable() }).optional(),
+  /** The collections the item was in and its place there; absent: none. */
+  collections: z.array(z.object({ collectionId: z.string(), position: z.number().int() })).optional(),
 });
 type SnapshotRow = z.infer<typeof snapshotRowSchema>;
 const snapshotSchema = z.array(snapshotRowSchema).min(1);
 
 const iso = (date: Date | null) => (date ? date.toISOString() : null);
 
-/** The rows of a deleted tree as stored in DeletedItem.nodes (parents before children), with their favorites. */
-export function toSnapshot(rows: readonly Node[], favorites: ReadonlyMap<string, string | null> = new Map()): Prisma.InputJsonValue {
+/** The rows of a deleted tree as stored in DeletedItem.nodes (parents before children), with their favorites and collections. */
+export function toSnapshot(rows: readonly Node[], favorites: ReadonlyMap<string, string | null> = new Map(), collections: ReadonlyMap<string, readonly CollectionPlace[]> = new Map()): Prisma.InputJsonValue {
   return rows.map(
     (row): SnapshotRow => ({
       id: row.id,
@@ -82,6 +85,7 @@ export function toSnapshot(rows: readonly Node[], favorites: ReadonlyMap<string,
       takenAt: iso(row.takenAt),
       ...(row.scanState !== "NONE" ? { scanState: row.scanState } : {}),
       ...(favorites.has(row.id) ? { favorite: { folderId: favorites.get(row.id) ?? null } } : {}),
+      ...(collections.has(row.id) ? { collections: [...collections.get(row.id)!] } : {}),
     }),
   );
 }
@@ -90,7 +94,7 @@ const date = (value: string | null) => (value === null ? null : new Date(value))
 
 /** The Node rows to insert for a restore of `accountId`'s item, generated-file flags cleared. */
 export function fromSnapshot(nodes: Prisma.JsonValue, accountId: string, now: Date): Prisma.NodeCreateManyInput[] {
-  return snapshotSchema.parse(nodes).map(({ favorite: _favorite, dailyBytesCap, ...row }) => ({
+  return snapshotSchema.parse(nodes).map(({ favorite: _favorite, collections: _collections, dailyBytesCap, ...row }) => ({
     ...row,
     accountId,
     size: BigInt(row.size),
@@ -109,6 +113,11 @@ export function fromSnapshot(nodes: Prisma.JsonValue, accountId: string, now: Da
 /** The favorites a deleted tree had, to list them again on restore (snapshots before favorites have none). */
 export function favoritesOfSnapshot(nodes: Prisma.JsonValue): { nodeId: string; folderId: string | null }[] {
   return snapshotSchema.parse(nodes).flatMap((row) => (row.favorite ? [{ nodeId: row.id, folderId: row.favorite.folderId }] : []));
+}
+
+/** The collection places a deleted tree had, to put its items back on restore. */
+export function collectionsOfSnapshot(nodes: Prisma.JsonValue): (CollectionPlace & { nodeId: string })[] {
+  return snapshotSchema.parse(nodes).flatMap((row) => (row.collections ?? []).map((place) => ({ ...place, nodeId: row.id })));
 }
 
 /** Full rows of these nodes (every column, for a snapshot), in no particular order. */
@@ -185,6 +194,9 @@ export async function forgetDeletedBefore(db: DbClient, before: Date, volumeIds:
 /** Which of these link ids some node holds now (a restore gives those rows a new link). */
 export async function takenLinkIds(db: DbClient, linkIds: readonly string[]): Promise<Set<string>> {
   if (linkIds.length === 0) return new Set();
-  const rows = await db.node.findMany({ where: { linkId: { in: [...linkIds] } }, select: { linkId: true } });
-  return new Set(rows.map((row) => row.linkId));
+  const [rows, collections] = await Promise.all([
+    db.node.findMany({ where: { linkId: { in: [...linkIds] } }, select: { linkId: true } }),
+    db.shareCollection.findMany({ where: { linkId: { in: [...linkIds] } }, select: { linkId: true } }),
+  ]);
+  return new Set([...rows, ...collections].map((row) => row.linkId));
 }
