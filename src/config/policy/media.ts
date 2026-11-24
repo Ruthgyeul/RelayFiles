@@ -19,6 +19,16 @@ export const MEDIA = {
   previewMinBytes: 512 * 1024,
   /** Types sharp rewrites for the preview (GIF is left as is: it may be animated). */
   previewTypes: ["image/jpeg", "image/png", "image/webp", "image/avif", "image/tiff"],
+  /**
+   * HEIC/HEIF photos (iPhone): browsers cannot show them, so the worker decodes them with
+   * ffmpeg (tile grids need ffmpeg 7.1) into a thumbnail, a viewer preview whatever the size, and
+   * a JPEG without metadata for share links.
+   */
+  heicTypes: ["image/heic", "image/heif"],
+  /** Oldest ffmpeg release (major, minor) whose command line joins HEIC tile grids; older ones skip HEIC (Server page says so). */
+  heicMinFfmpeg: [7, 1],
+  /** JPEG quality of a HEIC photo's copy for share links. */
+  heicCopyQuality: 90,
   /** Video thumbnails use the frame at this time (or the first frame of shorter clips). */
   videoFrameSeconds: 1,
   /** Images larger than this get no metadata-stripped copy (held in memory while stripping). */

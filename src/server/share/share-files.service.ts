@@ -4,6 +4,7 @@ import { PREFETCH_HEADER, SUBTITLE_PARAM } from "@/contracts/api";
 import { isSubtitleName } from "@/domain/subtitles";
 import { effectiveRange, parseRange } from "@/domain/serving";
 import { downloadDecision, limitedStreamDecision, streamReach, withinReach, type DownloadDecision } from "@/domain/share-access";
+import { HEIC_COPY_MIME, heicCopyName, isHeicType } from "@/domain/heic";
 import { mimeFromName } from "@/domain/upload";
 import type { ClientInfo } from "../auth/client-info";
 import { noteUsedUp } from "./link-notify";
@@ -148,8 +149,9 @@ export async function serveSharedFile(req: Request, linkId: string, nodeId: stri
   const response = await sendFile(req, {
     driver,
     location,
-    name: row.name,
-    mime: row.mime ?? mimeFromName(row.name),
+    // A HEIC photo's public copy is a JPEG: named and typed as one, so it opens anywhere.
+    name: body && isHeicType(row.mime ?? "") ? heicCopyName(row.name) : row.name,
+    mime: body && isHeicType(row.mime ?? "") ? HEIC_COPY_MIME : (row.mime ?? mimeFromName(row.name)),
     size,
     etag,
     mode,

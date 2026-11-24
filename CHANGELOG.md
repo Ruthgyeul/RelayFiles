@@ -6,6 +6,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Added
 
+- HEIC photos (iPhone) get thumbnails and a viewer preview, and share links give visitors a JPEG copy without metadata; this needs ffmpeg 7.1 or later (the Docker image has it), and the Server page's "Media tools" row shows the ffmpeg version and whether HEIC is supported. Run `npm run media:backfill` once for HEIC photos uploaded before
 - File Manager and Favorites keyboard navigation: arrow keys move between items (by column in the grid), Home and End jump to the ends, Space selects (Shift+Space a range) and Enter opens
 - Shared folder pages: visitors can search by name, sort (name, date, size, type) and switch to a grid of previews; the choice is remembered on their device
 - Global search filters (`type:image`, `newer:30d`, `older:1y`, combined with `#tags` and words) and saved searches listed before typing (`/api/saved-searches`)

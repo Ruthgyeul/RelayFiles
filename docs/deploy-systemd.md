@@ -103,9 +103,11 @@ sudo apt install -y postgresql-16
 ```bash
 node -v && npm -v                          # v24.x, 10.x 이상
 psql --version                             # 16.x
-ffmpeg -version | head -1
+ffmpeg -version | head -1                  # HEIC 사진은 7.1 이상 (아래)
 systemctl is-active nginx redis-server postgresql
 ```
+
+HEIC 사진(iPhone)의 썸네일·미리보기·공개 링크용 JPEG는 ffmpeg 7.1 이상이 만든다(타일 그리드를 하나로 합치는 기능). Ubuntu 26.04의 ffmpeg는 7.1 이상이고 24.04는 6.1이다. 낮은 버전이면 HEIC 처리만 건너뛰고(원본은 그대로, 공개 링크는 415) Server 페이지 "Media tools" 행에 그 이유가 보인다. 서버를 26.04로 올리면 `rf.sh media:backfill`로 기존 HEIC를 다시 처리한다. Docker 배포는 이미지에 ffmpeg 7.1이 들어 있다.
 
 Ubuntu 기본 저장소의 PostgreSQL은 배포판마다 메이저 버전이 다르다. 운영 데이터와 덤프 호환성을 위해 프로젝트 기준(16)을 공식 저장소에서 설치한다. 같은 서버에 다른 버전이 이미 있으면 `pg_lsclusters`로 16 클러스터의 포트를 확인해 `.env`의 `POSTGRES_PORT`에 맞춘다.
 
@@ -499,7 +501,7 @@ Node.js, PostgreSQL, Redis, Nginx, ffmpeg는 apt가 관리한다. `sudo apt upgr
 | `/admin`이 집에서도 403 | Tunnel로 들어와 공인 IP로 보인다 | §2 `ADMIN_ALLOWED_CIDRS` 주의 |
 | 로그인 후 바로 풀림 | `PUBLIC_URL`이 https인데 http로 접속 | scheme을 맞춘다(§6) |
 | certbot 설정이 사라짐 | `install.sh`가 사이트를 다시 렌더링했다 | 스크립트가 출력한 `certbot install …` 실행 |
-| 썸네일이 안 생긴다 | 워커가 멈췄거나 ffmpeg 없음 | `systemctl status relayfiles-worker`, `which ffmpeg` → `rf.sh media:backfill` |
+| 썸네일이 안 생긴다 | 워커가 멈췄거나 ffmpeg 없음(HEIC는 ffmpeg 7.1 미만) | `systemctl status relayfiles-worker`, `which ffmpeg` → `rf.sh media:backfill` |
 | `npm ci` 후 빌드가 `Cannot find module '@tailwindcss/postcss'` 등으로 실패 | devDependencies 없이 설치됐다 | 셸의 `NODE_ENV`를 풀고(`unset NODE_ENV`) `npm ci` |
 
 ## 13. 배포 후 보안 점검
