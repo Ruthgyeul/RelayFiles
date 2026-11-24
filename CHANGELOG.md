@@ -6,6 +6,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Added
 
+- Shared folder pages: visitors can search by name, sort (name, date, size, type) and switch to a grid of previews; the choice is remembered on their device
 - Global search filters (`type:image`, `newer:30d`, `older:1y`, combined with `#tags` and words) and saved searches listed before typing (`/api/saved-searches`)
 - Folder auto clean: a folder's menu can move files older than 7, 30, 90 or 365 days (by date added or date modified) to Recently deleted every day, with a count of what would move now and a tag on the folder (`/api/nodes/:id/auto-clean`)
 - Recently deleted: select several items to restore or delete forever, "Restore all" and "Empty"; deleting items in the File Manager, Favorites or Storage offers Undo in its notice for a few seconds (`POST /api/trash/bulk`)
