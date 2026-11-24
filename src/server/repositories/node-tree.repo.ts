@@ -100,18 +100,6 @@ export async function descendantCounts(db: DbClient, folderId: string): Promise<
   return { files: Number(row?.files ?? 0), folders: Number(row?.folders ?? 0) };
 }
 
-/** Ids of every node below a folder (not including it). */
-async function descendantIds(db: DbClient, folderId: string): Promise<string[]> {
-  const rows = await db.$queryRaw<{ id: string }[]>`
-    WITH RECURSIVE sub AS (
-      SELECT id FROM "Node" WHERE "parentId" = ${folderId}
-      UNION ALL
-      SELECT n.id FROM "Node" n JOIN sub s ON n."parentId" = s.id
-    )
-    SELECT id FROM sub`;
-  return rows.map((row) => row.id);
-}
-
 /**
  * Full rows of each item and everything below it, parents before children (for copying and
  * zipping a selection): one walk for all items and one read of their rows, whatever their number.
@@ -161,8 +149,15 @@ export async function subtreeHeight(db: DbClient, topIds: readonly string[]): Pr
 
 /** "Apply to all subfolders and files": everything inside follows the folder again. */
 export async function inheritVisibilityBelow(db: DbClient, folderId: string): Promise<void> {
-  const ids = await descendantIds(db, folderId);
-  if (ids.length) await db.node.updateMany({ where: { id: { in: ids } }, data: { visibility: "INHERIT" } });
+  // One statement for the whole tree; rows that inherit already are left as they are.
+  await db.$executeRaw`
+    WITH RECURSIVE sub AS (
+      SELECT id FROM "Node" WHERE "parentId" = ${folderId}
+      UNION ALL
+      SELECT n.id FROM "Node" n JOIN sub s ON n."parentId" = s.id
+    )
+    UPDATE "Node" SET visibility = 'INHERIT', "updatedAt" = now()
+    WHERE id IN (SELECT id FROM sub) AND visibility <> 'INHERIT'`;
 }
 
 /** Every node below a folder with its path relative to it ("Photos/a.jpg"). */
