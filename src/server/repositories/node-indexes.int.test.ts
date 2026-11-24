@@ -62,4 +62,24 @@ describe("account usage", () => {
     expect(plan).not.toContain("Sort");
     await prisma.node.deleteMany({ where: { accountId: m.id, parentId: m.rootId } });
   });
+
+  it("pages the Photos timeline from its index, newest first, without sorting", async () => {
+    const m = await member();
+    await prisma.$executeRaw`
+      INSERT INTO "Node" (id, "accountId", "parentId", type, kind, name, size, "linkId", "createdAt", "takenAt", "updatedAt")
+      SELECT 'photo' || lpad(g::text, 6, '0'), ${m.id}, ${m.rootId}, 'FILE', 'IMAGE', 'p-' || g || '.jpg', 1, md5(random()::text || g::text),
+        timestamp '2026-01-01' + g * interval '1 minute', CASE WHEN g % 2 = 0 THEN timestamp '2020-01-01' + g * interval '1 minute' END, now()
+      FROM generate_series(1, 1000) AS g`;
+    await prisma.$executeRaw`VACUUM (ANALYZE) "Node"`;
+
+    const order = `ORDER BY COALESCE(n."takenAt", n."modifiedAt", n."createdAt") DESC, n.id DESC LIMIT 60`;
+    const where = `n."accountId" = $1 AND n.type = 'FILE' AND n.kind IN ('IMAGE', 'VIDEO') AND NOT n.missing`;
+    const first = await planOf(`SELECT n.id FROM "Node" n WHERE ${where} ${order}`, m.id);
+    const later = await planOf(`SELECT n.id FROM "Node" n WHERE ${where} AND (COALESCE(n."takenAt", n."modifiedAt", n."createdAt"), n.id) < ($2::timestamp, $3) ${order}`, m.id, "2026-01-01T08:00:00", "photo000500");
+    for (const plan of [first, later]) {
+      expect(plan).toContain("Node_timeline_idx");
+      expect(plan).not.toContain("Sort");
+    }
+    await prisma.node.deleteMany({ where: { accountId: m.id, parentId: m.rootId } });
+  });
 });

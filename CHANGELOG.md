@@ -34,6 +34,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Changed
 
+- Photos reads each page of the timeline from an index in its order (`Node_timeline_idx`, created by its migration) instead of sorting every photo and video of the account
 - The daily cleanup finds old Status page samples through an index on their time (`HealthSample_at_idx`, created by its migration) instead of reading the whole table
 - Pages re-render less while uploads run and notices come and go: only the transfers panel follows upload progress, and only the notice pill follows notices
 - Pages load less JavaScript up front (14–21 kB gzip on every app page): the upload client and the QR encoder load when first used. `npm run check:bundle` keeps every page within its budget
