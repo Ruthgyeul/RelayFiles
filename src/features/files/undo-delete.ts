@@ -17,6 +17,10 @@ export function undoDelete(trashIds: readonly string[], { notify, done }: { noti
           notify(restored.length === 1 ? "Restored" : `${restored.length} items restored`);
           done();
         })
-        .catch((caught: unknown) => notify(errorMessage(caught))),
+        .catch((caught: unknown) => {
+          notify(errorMessage(caught));
+          // Entries before the failing one may be back already: show the folder as it is now.
+          done();
+        }),
   };
 }
