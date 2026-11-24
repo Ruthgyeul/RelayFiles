@@ -14,6 +14,8 @@ import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { PromptDialog } from "@/shared/ui/PromptDialog";
 import { MoveInFavoritesDialog, type MoveInFavoritesRequest } from "./MoveInFavoritesDialog";
 import { plural } from "@/domain/format";
+import { undoDelete } from "@/features/files/undo-delete";
+import type { NoticeAction } from "@/shared/hooks/useNotice";
 
 
 interface Options {
@@ -36,12 +38,13 @@ export function useFavoriteDialogs({ view, onChanged }: Options) {
   const [deleting, setDeleting] = useState<{ folder: FavoriteFolderDto; inside: number } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const run = async (action: () => Promise<string>, close: () => void, onError?: (message: string) => void) => {
+  const run = async (action: () => Promise<string | { message: string; undo?: NoticeAction }>, close: () => void, onError?: (message: string) => void) => {
     setBusy(true);
     try {
-      const message = await action();
+      const done = await action();
       close();
-      notify(message);
+      if (typeof done === "string") notify(done);
+      else notify(done.message, done.undo);
       onChanged();
       router.refresh();
     } catch (caught) {
@@ -117,7 +120,13 @@ export function useFavoriteDialogs({ view, onChanged }: Options) {
           label: "Remove from favorites",
           onSelect: () => removing && void run(async () => (await favoritesApi.remove(removing.map((item) => item.id)), "Removed from favorites"), () => setRemoving(null)),
         }}
-        onConfirm={() => removing && void run(async () => (await filesApi.remove(removing.map((item) => item.id)), "Moved to Recently deleted"), () => setRemoving(null))}
+        onConfirm={() =>
+          removing &&
+          void run(async () => {
+            const { trashIds } = await filesApi.remove(removing.map((item) => item.id));
+            return { message: "Moved to Recently deleted", undo: undoDelete(trashIds, { notify, done: () => router.refresh() }) };
+          }, () => setRemoving(null))
+        }
         onCancel={() => setRemoving(null)}
       />
       <ConfirmDialog

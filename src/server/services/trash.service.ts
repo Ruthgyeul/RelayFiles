@@ -1,6 +1,6 @@
 import "server-only";
 import { STORAGE } from "@/config/policy";
-import type { DeletedItemDto, RestoredItem } from "@/contracts/trash";
+import type { DeletedItemDto, RestoredItem, TrashBulkInput, TrashBulkResult } from "@/contracts/trash";
 import { newLinkId } from "@/domain/ids";
 import { uniqName } from "@/domain/names";
 import { trashExpiresAt } from "@/domain/trash";
@@ -147,3 +147,26 @@ export async function deleteForever(owner: NodeOwner, id: string): Promise<void>
   // After the commit: removed files cannot come back if the commit failed. Left over, the daily job removes them.
   await driver.removeFromTrash(item.trashPath).catch((error: unknown) => logger.warn("trash entry not removed", { error }));
 }
+
+/**
+ * Restores or deletes forever several items, one after the other (each in its own
+ * transaction, as from its row). An item gone meanwhile is counted as missing; any other
+ * failure (no room, an infected item, a busy volume) stops there, after the items before it.
+ */
+export async function bulkTrashAction(owner: NodeOwner, { action, ids }: TrashBulkInput): Promise<TrashBulkResult> {
+  const result: TrashBulkResult = { restored: [], deleted: 0, missing: 0 };
+  for (const id of new Set(ids)) {
+    try {
+      if (action === "restore") result.restored.push(await restoreDeletedItem(owner, id));
+      else {
+        await deleteForever(owner, id);
+        result.deleted += 1;
+      }
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.code !== "NOT_FOUND") throw error;
+      result.missing += 1;
+    }
+  }
+  return result;
+}
+

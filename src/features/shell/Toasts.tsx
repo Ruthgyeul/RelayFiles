@@ -11,7 +11,7 @@ export function Toasts() {
   const { accountToast, dismissAccountToast } = useShell();
   return (
     <>
-      {notice && <NoticePill message={notice} />}
+      {notice && <NoticePill notice={notice} />}
       {accountToast && (
         <div
           role="status"

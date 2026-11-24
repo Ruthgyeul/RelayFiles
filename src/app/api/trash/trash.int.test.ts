@@ -8,10 +8,11 @@ import { POST as createFolder } from "@/app/api/folders/route";
 import { POST as remove } from "@/app/api/nodes/delete/route";
 import { DELETE as deleteForever } from "@/app/api/trash/[id]/route";
 import { POST as restore } from "@/app/api/trash/[id]/restore/route";
+import { POST as bulk } from "@/app/api/trash/bulk/route";
 import { GET as listTrash } from "@/app/api/trash/route";
 import { FILES, MS, STORAGE } from "@/config/policy";
 import type { CreatedFolder } from "@/contracts/nodes";
-import type { DeletedItemDto, RestoredItem } from "@/contracts/trash";
+import type { DeletedItemDto, RestoredItem, TrashBulkResult } from "@/contracts/trash";
 import { forgetDeletedBefore } from "@/server/repositories/deleted-item.repo";
 import { forgetTrashedBefore } from "@/server/repositories/trash.repo";
 import { purgeExpired } from "@/server/services/profile.service";
@@ -34,7 +35,7 @@ afterAll(async () => {
 });
 
 const folder = async (m: FixtureMember, parentId: string, name: string) => (await callRoute<CreatedFolder>(createFolder, { method: "POST", cookie: m.cookie, body: { parentId, name } })).json.data.folder.id;
-const del = (m: FixtureMember, ids: string[]) => callRoute<{ deleted: number }>(remove, { method: "POST", cookie: m.cookie, body: { ids } });
+const del = (m: FixtureMember, ids: string[]) => callRoute<{ deleted: number; trashIds: string[] }>(remove, { method: "POST", cookie: m.cookie, body: { ids } });
 const list = async (m: FixtureMember) => (await callRoute<DeletedItemDto[]>(listTrash, { cookie: m.cookie })).json.data;
 const restoreItem = (m: FixtureMember, id: string) => callRoute<RestoredItem, { id: string }>(restore, { method: "POST", cookie: m.cookie, params: { id } });
 const forget = (m: FixtureMember, id: string) => callRoute<{ deleted: true }, { id: string }>(deleteForever, { method: "DELETE", cookie: m.cookie, params: { id } });
@@ -52,6 +53,8 @@ const kept = (rows: { id: string; parentId: string | null; name: string; linkId:
     .map(({ id, parentId, name, linkId, tags, visibility, note, downloads, passwordHash, size, createdAt, modifiedAt }) => ({ id, parentId, name, linkId, tags, visibility, note, downloads, passwordHash, size, createdAt, modifiedAt }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
+const bulkAction = (m: FixtureMember, action: "restore" | "delete", ids: string[]) => callRoute<TrashBulkResult>(bulk, { method: "POST", cookie: m.cookie, body: { action, ids } });
+
 describe("recently deleted", () => {
   it("restores a folder with the same ids, links, settings, tags and bytes, and the quota counts the same", async () => {
     const m = await member();
@@ -63,7 +66,7 @@ describe("recently deleted", () => {
     const before = kept(await prisma.node.findMany({ where: { accountId: m.id, parentId: { not: null } } }));
     const quota = await counted(m);
 
-    expect((await del(m, [trip])).json.data).toEqual({ deleted: 1 });
+    expect((await del(m, [trip])).json.data).toMatchObject({ deleted: 1 });
     expect(await prisma.node.count({ where: { accountId: m.id } })).toBe(1);
     expect(await counted(m)).toBe(quota);
     const [item, ...rest] = await list(m);
@@ -187,7 +190,7 @@ describe("recently deleted", () => {
     const file = await addFile(m, m.rootId, [], "expired.txt", "e", "text/plain");
     await prisma.node.update({ where: { id: file }, data: { expAt: new Date(Date.now() - MS.minute) } });
     const owner = await prisma.account.findUniqueOrThrow({ where: { id: m.id } });
-    expect(await purgeExpired(owner, new Date())).toEqual({ deleted: 1 });
+    expect(await purgeExpired(owner, new Date())).toMatchObject({ deleted: 1 });
     expect(await list(m)).toEqual([]);
     expect((await prisma.trashedBytes.aggregate({ where: { accountId: m.id }, _sum: { bytes: true } }))._sum.bytes).toBe(1n);
   });
@@ -306,5 +309,34 @@ describe("cleanup and volumes", () => {
     // Leave no trash of this test on the shared volume.
     const trash = layoutOf((await prisma.storageVolume.findUniqueOrThrow({ where: { id: old } })).mountPath).trash;
     for (const name of (await readdir(trash)).filter((entry) => entry.includes(m.id))) await rm(join(trash, name), { recursive: true, force: true });
+  });
+
+  it("undoes a delete with the entries it answered, and restores or empties many at once", async () => {
+    const m = await member();
+    const a = await folder(m, "root", "Undo A");
+    const b = await folder(m, "root", "Undo B");
+    const deleted = await del(m, [a, b]);
+    expect(deleted.json.data).toMatchObject({ deleted: 2, trashIds: [expect.any(String), expect.any(String)] });
+    const undo = await bulkAction(m, "restore", deleted.json.data.trashIds);
+    expect(undo.status).toBe(200);
+    expect(undo.json.data.restored.map((item) => item.name).sort()).toEqual(["Undo A", "Undo B"]);
+    expect(await prisma.node.count({ where: { id: { in: [a, b] } } })).toBe(2);
+
+    const again = await del(m, [a, b]);
+    // An entry restored meanwhile (another device) is counted as missing; the others still go.
+    await restoreItem(m, again.json.data.trashIds[0]!);
+    const emptied = await bulkAction(m, "delete", again.json.data.trashIds);
+    expect(emptied.json.data).toMatchObject({ deleted: 1, missing: 1, restored: [] });
+    expect(await list(m)).toEqual([]);
+  });
+
+  it("acts on another account's entries as on missing ones", async () => {
+    const m = await member();
+    const other = await member();
+    const gone = await del(m, [await folder(m, "root", "Mine")]);
+    const tried = await bulkAction(other, "delete", gone.json.data.trashIds);
+    expect(tried.json.data).toMatchObject({ deleted: 0, missing: 1 });
+    expect(await list(m)).toHaveLength(1);
+    expect((await callRoute(bulk, { method: "POST", cookie: m.cookie, body: { action: "restore", ids: [] } })).status).toBe(400);
   });
 });

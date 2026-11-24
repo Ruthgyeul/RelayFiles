@@ -93,13 +93,13 @@ export const topLocation = (accountId: string, item: TopItem): StorageLocation =
  * unless `recoverable` is false: items the cleanup deletes because their link expired or was
  * downloaded once are gone for good (a restore would bring back the ended link).
  */
-export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable = true, malware }: { recoverable?: boolean; malware?: string } = {}): Promise<{ deleted: number }> {
+export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable = true, malware }: { recoverable?: boolean; malware?: string } = {}): Promise<{ deleted: number; trashIds: string[] }> {
   const items = await topLevel(owner.id, ids);
   if (items.length === 0) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner, "write");
   const locations = items.map((item) => topLocation(owner.id, item));
   const itemIds = items.map(({ row }) => row.id);
-  const files = await withStorageTransaction(db(), async (tx, undo) => {
+  const { files, trashIds } = await withStorageTransaction(db(), async (tx, undo) => {
     await lockAccountForWrite(tx, owner.id, driver.volumeId);
     // Counted from the rows this transaction deletes: nothing can be added below them meanwhile.
     const rows = await lockSubtrees(tx, itemIds, STORAGE.subtreeLockAttempts);
@@ -117,18 +117,18 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
     }
     const deleted = rows.filter((row) => row.type === "FILE");
     // The bytes stay on disk until the daily job empties the trash, and count until then.
-    if (recoverable) await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites, malware });
-    else
-      await recordTrashed(
-        tx,
-        owner.id,
-        deleted.reduce((sum, row) => sum + row.size, 0n),
-      );
-    return deleted;
+    if (recoverable) return { files: deleted, trashIds: await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites, malware }) };
+    await recordTrashed(
+      tx,
+      owner.id,
+      deleted.reduce((sum, row) => sum + row.size, 0n),
+    );
+    return { files: deleted, trashIds: [] };
   });
   // Thumbnails and stripped copies are rebuilt on demand, so they are removed right away.
   await driver.removeAssets(owner.id, files.map((row) => row.id)).catch((error: unknown) => logger.warn("assets not removed", { error }));
-  return { deleted: items.length };
+  // `trashIds`: the "Recently deleted" entries, for an Undo right after (empty when not recoverable).
+  return { deleted: items.length, trashIds };
 }
 
 interface DeletedTrees {
@@ -150,7 +150,7 @@ interface DeletedTrees {
  * its file bytes as a TrashedBytes row of its own. The rows add up to what one row for all of
  * them would hold, so the quota counts exactly as before; a restore takes back only its own.
  */
-async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: string, trees: DeletedTrees): Promise<void> {
+async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: string, trees: DeletedTrees): Promise<string[]> {
   const byId = new Map(trees.full.map((row) => [row.id, row]));
   const groups = groupByTop(
     trees.rows.map((row) => byId.get(row.id)!),
@@ -166,10 +166,11 @@ async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: str
     tx,
     deleted.map(({ bytes }) => ({ accountId, volumeId, bytes, at })),
   );
+  const ids = trees.items.map(() => newDeletedItemId());
   await createDeletedItems(
     tx,
     trees.items.map(({ row, chain }, index) => ({
-      id: newDeletedItemId(),
+      id: ids[index]!,
       accountId,
       volumeId,
       trashPath: trees.trashed[index]!,
@@ -186,4 +187,5 @@ async function recordDeletedItems(tx: DbClient, accountId: string, volumeId: str
       nodes: toSnapshot(deleted[index]!.tree, trees.favorites),
     })),
   );
+  return ids;
 }

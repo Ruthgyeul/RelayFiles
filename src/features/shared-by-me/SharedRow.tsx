@@ -11,6 +11,7 @@ import { Icon } from "@/shared/ui/icon/Icon";
 import { LocalDate } from "@/shared/ui/LocalDate";
 import { Tag } from "@/shared/ui/Tag";
 import { kindOf } from "@/shared/ui/node-kind";
+import { SelectBox } from "@/shared/ui/SelectBox";
 
 const iconButton = "flex size-8 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent p-0 text-t3 no-underline hover:bg-btn hover:text-t3";
 
@@ -36,16 +37,7 @@ export function SharedRow({ item, selected, now, onToggle, onCopy, onMakePrivate
   const tags = settingTags(toShareSettings(item.settings), item.downloads, null, now).filter((tag) => tag.icon !== "globe-simple");
   return (
     <li className="flex items-start gap-2.5 border-t border-ctrl py-2.5 first:border-t-0">
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={selected}
-        aria-label={`Select ${item.name}`}
-        onClick={onToggle}
-        className="flex size-[30px] shrink-0 items-center justify-center border-0 bg-transparent p-0"
-      >
-        <Icon name={selected ? "check-square" : "square"} weight={selected ? "fill" : "regular"} size={20} className={selected ? "text-accent-hi" : "text-t5"} />
-      </button>
+      <SelectBox checked={selected} label={`Select ${item.name}`} onToggle={onToggle} />
       <Icon name={kind.icon} weight={item.type === "folder" ? "fill" : "regular"} size={20} className="mt-[5px] shrink-0" style={{ color: kind.color }} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-[14px] font-semibold" title={item.name}>

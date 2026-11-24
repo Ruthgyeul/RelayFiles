@@ -6,6 +6,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Added
 
+- Recently deleted: select several items to restore or delete forever, "Restore all" and "Empty"; deleting items in the File Manager, Favorites or Storage offers Undo in its notice for a few seconds (`POST /api/trash/bulk`)
 - Worker watch: `/api/health` reports the worker (`components.worker`, not part of the overall status), the app sends "Background worker stopped" and "running again" notifications itself, and the Docker Compose worker has a healthcheck (k3s: a liveness probe) that `npm run worker:health` runs
 - Videos browsers cannot play (AVI, WMV, MPEG-TS, …) can be seeked anywhere while they convert: the viewer plays them over HLS (natively in Safari and recent Chrome, through hls.js elsewhere), converting from wherever the player jumps
 - The File Manager link shows how many items expire within the next 24 hours (orange badge)
