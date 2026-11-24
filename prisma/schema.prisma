@@ -392,6 +392,8 @@ model HealthSample {
   ms        Int?
 
   @@index([component, at])
+  /// The daily cleanup deletes old samples of every component by time.
+  @@index([at])
 }
 
 model HealthHourly {

@@ -123,7 +123,7 @@
 | 3-5 `refactor(storage): staging in the driver` — [#165](https://github.com/Ruthgyeul/RelayFiles/pull/165) | `StorageDriver`에 `stagingWrite`, `stagedSize`, `discardStaged`를 둔다. 서비스 5곳의 `layoutOf().uploads`·`fs` 직접 사용을 없애고, direct-upload와 import의 같은 흐름을 `placeStream()`과 `spaceOf(volume)`로 합친다 |
 | 3-6 `refactor(jobs): job and probe registry` — [#166](https://github.com/Ruthgyeul/RelayFiles/pull/166) | `{id, every, run}` 등록표로 `scheduleMaintenance`와 `runProbe`를 합치고, media task 분기를 맵으로 바꾼다. `runScript`가 큐를 닫게 한다(`scripts/lib/bootstrap.mts`) |
 | 3-7 `refactor(domain): shared helpers` — [#167](https://github.com/Ruthgyeul/RelayFiles/pull/167) | `utcDay` 5벌, `plural` 5벌(프론트 포함), `BYTES_PER_GB`(number와 bigint), `utf8Length` 2벌, `hashTree` → `sha256Of`를 정리한다. `contracts/shares.ts`는 `contracts/shared-items.ts`로 이름을 바꾼다 |
-| 3-8 `refactor(deploy): single source for defaults` | `scripts/print-env-defaults.mjs`(zod 스키마의 기본값)를 만들어 `install.sh`와 k3s `deploy.sh`가 읽게 한다. host-only 키 목록은 `scripts/lib/host-only-env.mjs` 하나에서 읽는다. nginx 공통 location을 `locations.inc.template`로 뺀다. 이 값들이 같은지 보는 parity 테스트를 `scripts/*.test.ts`에 둔다 |
+| 3-8 `refactor(deploy): single source for defaults` — [#168](https://github.com/Ruthgyeul/RelayFiles/pull/168) | `scripts/print-env-defaults.mjs`(zod 스키마의 기본값)를 만들어 `install.sh`와 k3s `deploy.sh`가 읽게 한다. host-only 키 목록은 `scripts/lib/host-only-env.mjs` 하나에서 읽는다. nginx 공통 location을 `locations.inc.template`로 뺀다. 이 값들이 같은지 보는 parity 테스트를 `scripts/*.test.ts`에 둔다 |
 
 ---
 
