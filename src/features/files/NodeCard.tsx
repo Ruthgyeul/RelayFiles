@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 import { BusyPill } from "@/shared/ui/BusyPill";
 import { Pill } from "@/shared/ui/Pill";
@@ -11,8 +11,8 @@ import { MenuButton } from "./ItemButtons";
 import { itemMeta, NAME_BUTTON, type ItemProps } from "./item-props";
 import { NAV_ITEM_ATTR } from "./useListKeyboard";
 
-/** Grid card: 4:3 preview area with the type icon, corner checkbox, name, meta and menu. */
-export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy }: ItemProps) {
+/** Grid card: 4:3 preview area with the type icon, corner checkbox, name, meta and menu (memoized like NodeRow). */
+export const NodeCard = memo(function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy }: ItemProps) {
   const kind = kindOf(item);
   const media = item.kind === "video" || item.kind === "image";
   return (
@@ -76,7 +76,7 @@ export function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPr
       </div>
     </div>
   );
-}
+});
 
 /** Empty list state with the design's five titles and the folder actions. */
 export function EmptyFolder({ title, actions }: { title: string; actions?: ReactNode }) {
