@@ -87,6 +87,18 @@ export const FAVORITE_MENU: readonly (readonly ActionId[])[] = [
   ["properties"],
 ];
 
+/** A file in "All Files": it acts on the file itself, where it is. */
+export const ALL_FILES_MENU: readonly (readonly ActionId[])[] = [
+  ["preview", "download", "downloadZip", "showInFolder", "toggleFavorite"],
+  ["tags", "directLink", "activity", "settings"],
+  ["rename", "move", "delete"],
+  ["versions", "rescan"],
+  ["properties"],
+];
+
+/** The selection toolbar of "All Files" (no copy or batch rename: the files are in many folders). */
+export const ALL_FILES_TOOLBAR = ["download", "downloadZip", "tags", "toggleFavorite", "shareCollection", "move", "delete"] as const satisfies readonly ActionId[];
+
 /** The selection toolbar of the File Manager, in order. */
 export const SELECTION_TOOLBAR = ["download", "downloadZip", "tags", "toggleFavorite", "shareCollection", "copy", "move", "rename", "delete"] as const satisfies readonly ActionId[];
 

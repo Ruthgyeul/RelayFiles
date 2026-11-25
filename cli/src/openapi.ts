@@ -246,6 +246,8 @@ export interface paths {
                                 }[];
                                 /** @description The root only: items in Favorites */
                                 favoriteCount?: number;
+                                /** @description The root only: files in the account */
+                                allFileCount?: number;
                             };
                         };
                     };

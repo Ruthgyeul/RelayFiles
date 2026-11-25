@@ -77,7 +77,8 @@ export function PathBar({ path, onCopyPath, dropFor, over, hrefOf, rootIcon = "h
       <button
         type="button"
         title="Copy path"
-        aria-label="Copy path"
+        // The visible path is part of the name (WCAG 2.5.3 label in name).
+        aria-label={`Copy path ${text}`}
         onClick={() => onCopyPath(text)}
         className="flex h-[30px] max-w-full items-center gap-1.5 overflow-hidden rounded-lg border-0 bg-transparent px-2 font-mono text-[12px] font-semibold text-t4 hover:bg-btn"
       >

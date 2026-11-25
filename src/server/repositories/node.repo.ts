@@ -133,6 +133,63 @@ export function searchNodes(db: DbClient, accountId: string, search: NodeSearch,
   });
 }
 
+/** What "All Files" lists: files only, by name text, every tag, file kinds (empty: any) and date modified. */
+export type FilesFilter = Omit<NodeSearch, "kinds"> & { kinds: Exclude<SearchKind, "folder">[] };
+
+function filesWhere(accountId: string, filter: FilesFilter): Prisma.NodeWhereInput {
+  return {
+    accountId,
+    type: "FILE",
+    missing: false,
+    // A replaced file's earlier version steps aside under a name with "/" until it is kept as a version.
+    NOT: { name: { contains: "/" } },
+    ...(filter.text ? { name: { contains: filter.text, mode: "insensitive" as const } } : {}),
+    ...(filter.tags.length ? { tags: { hasEvery: filter.tags } } : {}),
+    ...(filter.kinds.length ? { kind: { in: filter.kinds.map((kind) => KIND_TO_DB[kind]) } } : {}),
+    AND: [...(filter.newerThan ? [modifiedWhere("gte", filter.newerThan)] : []), ...(filter.olderThan ? [modifiedWhere("lt", filter.olderThan)] : [])],
+  };
+}
+
+/**
+ * One page of an account's files ("All Files"), ordered by `column` then id, starting after
+ * `after` (keyset paging: a page costs the same however far down it is).
+ */
+export function filesPage(
+  db: DbClient,
+  accountId: string,
+  filter: FilesFilter,
+  order: { column: "createdAt" | "name" | "size"; desc: boolean },
+  after: { value: Date | string | bigint; id: string } | null,
+  limit: number,
+) {
+  const { column, desc } = order;
+  const beyond = desc ? "lt" : "gt";
+  const keyset: Prisma.NodeWhereInput | null = after ? { OR: [{ [column]: { [beyond]: after.value } }, { [column]: after.value, id: { [beyond]: after.id } }] } : null;
+  const where = filesWhere(accountId, filter);
+  const dir = desc ? ("desc" as const) : ("asc" as const);
+  return db.node.findMany({
+    where: keyset ? { ...where, AND: [...(where.AND as Prisma.NodeWhereInput[]), keyset] } : where,
+    orderBy: [{ [column]: dir }, { id: dir }],
+    select: NODE_SELECT,
+    take: limit,
+  });
+}
+
+/** Files {@link filesPage} would list, per kind (the type filter's counts). */
+export async function countFilesByKind(db: DbClient, accountId: string, filter: FilesFilter): Promise<Record<Exclude<SearchKind, "folder">, number>> {
+  const rows = await db.node.groupBy({ by: ["kind"], where: filesWhere(accountId, filter), _count: { _all: true } });
+  const count = (kind: keyof typeof KIND_TO_DB) => rows.find((row) => row.kind === KIND_TO_DB[kind])?._count._all ?? 0;
+  return { video: count("video"), audio: count("audio"), image: count("image"), other: count("other") };
+}
+
+/** No filter: every file. */
+export const NO_FILTER: FilesFilter = { text: "", tags: [], kinds: [], newerThan: null, olderThan: null };
+
+/** Files {@link filesPage} would list in all. */
+export function countFiles(db: DbClient, accountId: string, filter: FilesFilter): Promise<number> {
+  return db.node.count({ where: filesWhere(accountId, filter) });
+}
+
 export function setScanState(db: DbClient, nodeId: string, scanState: "PENDING" | "CLEAN" | "FAILED", only?: "PENDING") {
   return db.node.updateMany({ where: { id: nodeId, ...(only ? { scanState: only } : {}) }, data: { scanState } });
 }

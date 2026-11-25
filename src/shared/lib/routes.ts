@@ -15,6 +15,11 @@ export function shareUrl(publicUrl: string, linkId: string): string {
   return `${publicUrl}${sharePageHref(linkId)}`;
 }
 
+/** "All Files": every file of the account, without folders. */
+export function allFilesHref(): Route {
+  return "/files/all" as Route;
+}
+
 /** Favorites, or one of its organizing folders. */
 export function favoritesHref(folderId?: string | null): Route {
   return (folderId ? `/files/favorites?folder=${encodeURIComponent(folderId)}` : "/files/favorites") as Route;

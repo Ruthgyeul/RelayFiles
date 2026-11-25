@@ -244,6 +244,8 @@ model Node {
   @@index([accountId, type, size])
   /// Newest files of an account (Ctrl/⌘ K before anything is typed), read from the index in order.
   @@index([accountId, type, createdAt, id])
+  /// Files of an account by name ("All Files" sorted by name, read page by page).
+  @@index([accountId, type, name, id])
   /// Photos and videos of an account (the "Photos" timeline).
   @@index([accountId, kind])
   /// Name search (case-insensitive "contains", ILIKE '%text%'): a trigram index, so a search does not
