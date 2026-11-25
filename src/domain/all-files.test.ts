@@ -20,6 +20,11 @@ describe("all files cursor", () => {
     expect(decodeAllFilesCursor("bad id.1", "date")).toBeNull();
     expect(decodeAllFilesCursor("abcdefghjkmn.%E0%A4%A", "name")).toBeNull();
     expect(decodeAllFilesCursor("noseparator", "name")).toBeNull();
+    // Numbers past what the column holds.
+    expect(decodeAllFilesCursor("abcdefghjkmn.8640000000000001", "date")).toBeNull();
+    expect(decodeAllFilesCursor("abcdefghjkmn.8640000000000000", "date")).toEqual({ value: "8640000000000000", id: "abcdefghjkmn" });
+    expect(decodeAllFilesCursor("abcdefghjkmn.9223372036854775808", "size")).toBeNull();
+    expect(decodeAllFilesCursor("abcdefghjkmn.9223372036854775807", "size-asc")).toEqual({ value: "9223372036854775807", id: "abcdefghjkmn" });
   });
   it("takes the sort value of a file", () => {
     const file = { createdAt: new Date(1_000), name: "a.txt", size: 42n };

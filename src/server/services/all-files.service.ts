@@ -12,10 +12,12 @@ type FileKind = Exclude<SearchKind, "folder">;
 
 /**
  * The filters of a page: the type chip and the search box together (`q` reads like global
- * search). Asking for folders only (`type:folder`) lists nothing, as no folder is ever listed.
+ * search). Asking for folders only (`type:folder`) lists nothing, as no folder is ever listed,
+ * and so does a tag search with no tag yet ("#"), as the File Manager shows it.
  */
 function filterOf(query: Pick<AllFilesQuery, "kind" | "q">, now: Date): FilesFilter | null {
   const parsed = parseSearchQuery(query.q);
+  if (query.q.trim().startsWith("#") && (parsed.mode === "recent" || parsed.tags.length === 0)) return null;
   const daysAgo = (days: number | null) => (days === null ? null : new Date(now.getTime() - days * MS.day));
   const chip: FileKind[] = query.kind === "all" ? [] : [query.kind];
   if (parsed.mode === "recent") return { text: "", tags: [], kinds: chip, newerThan: null, olderThan: null };

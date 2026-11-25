@@ -83,6 +83,9 @@ describe("all files", () => {
       expect([sort, seen]).toEqual([sort, order]);
     }
     expect((await page(m, "?sort=size&cursor=abcdefghjkmn.Trip")).status).toBe(400);
+    // Numbers past what the column holds are unknown cursors too, not a failed query.
+    expect((await page(m, "?sort=date&cursor=abcdefghjkmn.99999999999999999999")).status).toBe(400);
+    expect((await page(m, "?sort=size&cursor=abcdefghjkmn.99999999999999999999")).status).toBe(400);
   });
 
   it("filters by type, name, tags and date, and never lists folders", async () => {
@@ -93,6 +96,9 @@ describe("all files", () => {
     expect(names(await page(m, `?q=${encodeURIComponent("type:folder")}`))).toEqual([]);
     expect(names(await page(m, `?q=${encodeURIComponent("type:video")}&kind=image`))).toEqual([]);
     expect(names(await page(m, `?q=${encodeURIComponent("trip")}`))).toEqual([]);
+    // "#" with no tag yet lists nothing, as the File Manager's tag mode does.
+    const hash = await page(m, `?q=${encodeURIComponent("#")}`);
+    expect([names(hash), hash.json.data.counts?.all]).toEqual([[], 0]);
     // The chips count the search without their own type.
     expect((await page(m, "?kind=image&q=.")).json.data.counts).toEqual({ all: 3, video: 1, audio: 0, image: 1, other: 1 });
   });

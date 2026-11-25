@@ -37,6 +37,8 @@ export interface AllFilesPosition {
 
 const ID = /^[a-z0-9]{6,32}$/;
 const DIGITS = /^\d{1,20}$/;
+/** The largest values the columns hold: a JavaScript date (ms) and a PostgreSQL BIGINT (bytes). */
+const MAX_VALUE = { createdAt: 8_640_000_000_000_000n, size: 9_223_372_036_854_775_807n } as const;
 
 /** "abcdefghjkmn.<encoded value>": the position after which the next page starts. */
 export function encodeAllFilesCursor(position: AllFilesPosition): string {
@@ -54,8 +56,9 @@ export function decodeAllFilesCursor(cursor: string, sort: AllFilesSort): AllFil
   } catch {
     return null;
   }
-  // Dates and sizes are whole numbers; a name is any text.
-  if (allFilesOrder(sort).column !== "name" && !DIGITS.test(value)) return null;
+  // Dates and sizes are whole numbers the column can hold; a name is any text.
+  const { column } = allFilesOrder(sort);
+  if (column !== "name" && (!DIGITS.test(value) || BigInt(value) > MAX_VALUE[column])) return null;
   return { value, id };
 }
 

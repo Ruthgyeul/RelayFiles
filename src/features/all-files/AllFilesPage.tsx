@@ -67,7 +67,7 @@ export function AllFilesPage({ initial, isAdmin, initialView }: Props) {
     tags: () => files.open.tags(selected),
     toggleFavorite: () => void files.open.toggleFavorite(selected, true),
     shareCollection: () => folderTools.open.collection(selected),
-    move: () => files.open.move(selected, "move", selected[0]?.parentId ?? "root"),
+    move: () => files.open.move(selected, "move", selected.map((item) => item.parentId)),
     delete: () => files.open.remove(selected),
   };
 
