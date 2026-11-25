@@ -6,10 +6,8 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import type { FolderView } from "@/contracts/nodes";
-import { minimalDocx, minimalXlsx, onePagePdf, openFiles, silentWav } from "./helpers";
-
-/** 1×1 PNG, detected as an image by the server. */
-const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+import { VIEWER } from "@/config/policy";
+import { minimalDocx, minimalXlsx, onePagePdf, openFiles, PNG, silentWav } from "./helpers";
 
 async function uploadTwo(page: Page) {
   await openFiles(page);
@@ -200,6 +198,8 @@ test("loads subtitle files beside a video as WebVTT tracks", async ({ page }) =>
 });
 
 test("plays pictures as a slideshow that stops at the end", async ({ page }) => {
+  // Fake timers that keep running on their own; the end fast-forwards past a slide's time.
+  await page.clock.install();
   await openFiles(page);
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Upload", exact: true }).click();
@@ -233,7 +233,8 @@ test("plays pictures as a slideshow that stops at the end", async ({ page }) => 
   await page.keyboard.press("ArrowRight");
   const second = page.getByRole("dialog", { name: "b.png" });
   await expect(second.getByRole("button", { name: "Play slideshow" })).toBeVisible();
-  await page.waitForTimeout(5_000);
+  // Longer than a slide shows (VIEWER.slideshowIntervalMs): a slideshow still running would have moved on.
+  await page.clock.runFor(VIEWER.slideshowIntervalMs * 2);
   await expect(second).toBeVisible();
 });
 

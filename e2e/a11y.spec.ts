@@ -3,10 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import type { FolderView } from "@/contracts/nodes";
-import { newFolder, openFiles } from "./helpers";
-
-/** 1×1 PNG, detected as an image by the server. */
-const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+import { newFolder, openFiles, PNG } from "./helpers";
 
 /**
  * Serious and critical WCAG 2.1 A/AA problems fail the test. Colour contrast is reported as an
@@ -32,11 +29,26 @@ test("app pages have no serious accessibility problems", async ({ page }) => {
     ["/files/photos", "Photos"],
     ["/files/shared", "Shared by me"],
     ["/files/all", "All Files"],
+    ["/files/favorites", "Favorites"],
+    ["/files/deleted", "Recently deleted"],
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
     await audit(page);
   }
+});
+
+test("an upload link page has no serious accessibility problems", async ({ page, browser, baseURL, viewport }) => {
+  await openFiles(page);
+  const res = await page.request.post("/api/file-requests", { data: { folderId: "root", title: "Trip photos", password: null, expiresInDays: null, maxFiles: null, maxMb: null } });
+  expect(res.status()).toBe(201);
+  const { url } = ((await res.json()) as { data: { url: string } }).data;
+  // A visitor: no account on this device.
+  const visitor = await (await browser.newContext({ baseURL, viewport })).newPage();
+  await visitor.goto(new URL(url).pathname);
+  await expect(visitor.getByRole("heading", { level: 1, name: "Trip photos" })).toBeVisible();
+  await audit(visitor);
+  await visitor.context().close();
 });
 
 test("dialogs and error pages have no serious accessibility problems", async ({ page }) => {

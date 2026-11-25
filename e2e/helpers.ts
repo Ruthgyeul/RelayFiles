@@ -24,6 +24,9 @@ export async function itemMenu(page: Page, name: string, entry: string) {
   await page.getByRole("menuitem", { name: entry }).click();
 }
 
+/** 1×1 PNG, detected as an image by the server. */
+export const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+
 export const names = (page: Page) => page.locator("[data-item]").evaluateAll((els) => els.map((el) => el.getAttribute("data-item")));
 
 const WAV_RATE = 8000;
