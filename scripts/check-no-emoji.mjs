@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 
-const ROOTS = ["src", "deploy", "scripts", "e2e"];
+const ROOTS = ["src", "deploy", "scripts", "e2e", "cli/src"];
 const EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".css", ".html", ".json", ".conf", ".sh", ".yml", ".yaml"]);
 /** Generated third-party output (not committed) is skipped. */
 const SKIP_DIRS = new Set(["node_modules", "generated"]);

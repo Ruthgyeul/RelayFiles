@@ -508,6 +508,8 @@ deploy/scripts/release.sh
 | `BACKUP_KEEP` | 14 | 남길 DB 백업 수 |
 | `IMAGE_KEEP` | 3 | autoclean이 남길 릴리스 이미지 수 (롤백 가능 범위) |
 
+`BACKUP_KEEP`·`IMAGE_KEEP`는 `.env`에 적어 두면 매번 쓰지 않아도 된다(명령 앞에 준 값이 우선한다).
+
 ### 단계별로 실패했을 때
 
 | 실패한 단계 | 상태 | 할 일 |
@@ -528,7 +530,7 @@ deploy/scripts/rollback.sh <태그>    # 특정 릴리스 (tail /srv/relayfiles/
 
 ### 특정 릴리스에서 한 번만 할 일
 
-순번 정리·중복 찾기·파일별 전송 진행률 릴리스는 추가 작업이 없다(`release.sh`가 컬럼 추가와 기존 파일 백필까지 한다). 단계별 설명과 확인 방법은 [upgrade/folder-tools-transfers.md](upgrade/folder-tools-transfers.md).
+순번 정리·중복 찾기·파일별 전송 진행률 릴리스는 추가 작업이 없다(`release.sh`가 컬럼 추가와 기존 파일 백필까지 한다). 단계별 설명과 확인 방법은 [upgrade/v1.5.0.md](upgrade/v1.5.0.md).
 
 뷰어 미리보기가 들어간 릴리스로 처음 올릴 때는 한 번 `$C --profile tools run --rm tools npm run media:backfill -- --previews`를 실행한다(그전에 올린 사진의 미리보기 생성). SSD를 더 붙였다면 `deploy/nginx/volumes/*.conf`에 남아 있는 `add_header Cache-Control …` 줄을 지우고 `$C restart nginx`(재생 캐시가 동작하도록, `deploy/nginx/volumes/README.md`).
 

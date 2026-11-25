@@ -41,6 +41,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Changed
 
+- `BACKUP_KEEP`, `IMAGE_KEEP` and `BUNDLE_KEEP` (backups, release images and systemd bundles kept) can be set in `.env`; a value given on the command line still wins
 - A video without a thumbnail loads its first frame only when its row comes near the screen, so a large folder of such videos no longer opens one request per row at once
 - Tagging many items, and "apply to everything inside" in Sharing & access, write in one statement each instead of one per item (500 items: 502 queries → 7)
 - Starting an upload into a large folder checks only the uploaded paths for duplicates instead of reading the folder's whole tree (50,000 files: 300 ms → 1.4 ms)
@@ -120,7 +121,7 @@ The first version recorded here. It holds everything built before this file exis
 
 ### Added
 
-- Renumber files by the date a photo or video was taken, and Find duplicates ([upgrade notes](docs/upgrade/folder-tools-transfers.md))
+- Renumber files by the date a photo or video was taken, and Find duplicates ([upgrade notes](docs/upgrade/v1.5.0.md))
 
 ### Fixed
 

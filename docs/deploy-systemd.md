@@ -414,7 +414,7 @@ deploy/scripts/systemd/release.sh
 5. `.app/current`를 새 번들로 바꾸고 app과 worker(`relayfiles-dav`를 켰다면 dav도)를 재시작한다. 멈추는 서비스는 진행 중인 요청·작업을 `TimeoutStopSec` 동안 마무리한다(§5).
 6. 앱 포트의 `/api/health`가 `status: "ok"`를 돌려줄 때까지 확인한 뒤(`degraded`는 실패로 본다) 점검 모드를 끄고 `DATA_DIR/releases.log`에 기록한다. 번들은 최근 3개만 남긴다.
 
-`HEALTH_TRIES`(기본 30, 2초 간격), `BUNDLE_KEEP`(기본 3), `BACKUP_KEEP`(기본 14)으로 동작을 바꿀 수 있다.
+`HEALTH_TRIES`(기본 30, 2초 간격), `BUNDLE_KEEP`(기본 3), `BACKUP_KEEP`(기본 14)으로 동작을 바꿀 수 있다. `BUNDLE_KEEP`·`BACKUP_KEEP`는 `.env`에 적어 두어도 된다(명령 앞에 준 값이 우선한다).
 
 알아 둘 점:
 - 앱, 워커, WebDAV 모두 `.app/current` 번들로 돈다(워커·WebDAV 유닛의 `WorkingDirectory`는 `.app/current/tools`). `git pull`과 2단계의 `npm ci`는 실행 중인 서비스의 파일을 바꾸지 않고, `rollback.sh`는 세 서비스를 함께 되돌린다. 이 방식 이전에 설치했다면 한 번 `sudo deploy/scripts/systemd/install.sh`로 유닛을 다시 만든다(`release.sh`가 필요하면 알려 준다). 유닛은 `.env`와 상관없이 `NODE_ENV=production`으로 돈다.

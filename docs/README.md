@@ -12,4 +12,4 @@
 | [runbook.md](runbook.md) | 운영 절차 (백업, 복구, 롤백, 점검, SSD, 마이그레이션, 볼륨 추가·교체, 서버 이전, 비밀값 교체) |
 | [roadmap.md](roadmap.md) | 개선 로드맵: 운영 안전성 → 프론트·서버 구조 정리 → 성능 → 신규 기능 순서의 PR 단위 계획 |
 | [upgrade/README.md](upgrade/README.md) | 릴리스별 업그레이드 노트 목록과 작성 틀. 무엇이 바뀌었는지는 [CHANGELOG.md](../CHANGELOG.md) |
-| [upgrade/folder-tools-transfers.md](upgrade/folder-tools-transfers.md) | 업데이트 가이드: 순번 정리·중복 찾기·파일별 전송 진행률 릴리스를 운영 서버에 올리는 순서, 자동 처리 내용, 확인, 실패·롤백 |
+| [upgrade/v1.5.0.md](upgrade/v1.5.0.md) | 업데이트 가이드: 순번 정리·중복 찾기·파일별 전송 진행률 릴리스를 운영 서버에 올리는 순서, 자동 처리 내용, 확인, 실패·롤백 |

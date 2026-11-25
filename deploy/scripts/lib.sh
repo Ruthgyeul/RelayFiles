@@ -85,10 +85,12 @@ keep_newest() {
 
 # backup_database CMD... → runs CMD (a pg_dump -Fc that writes to stdout) into
 # BACKUP_DIR (default DATA_DIR/backups)/relayfiles-<UTC time>.dump, then keeps the newest
-# BACKUP_KEEP (default 14) dumps. The dump is written to a .partial file and renamed only when CMD
-# succeeds, so a failed run never leaves a cut-off dump for verify-backup.sh to pick.
+# BACKUP_KEEP (the environment, else .env, default 14) dumps. The dump is written to a .partial
+# file and renamed only when CMD succeeds, so a failed run never leaves a cut-off dump for
+# verify-backup.sh to pick.
 backup_database() {
-  local keep="${BACKUP_KEEP:-14}" dir file
+  local keep dir file
+  keep="${BACKUP_KEEP:-$(env_value BACKUP_KEEP 14)}"
   dir="${BACKUP_DIR:-$(env_value DATA_DIR /srv/relayfiles)/backups}"
   mkdir -p "$dir"
   chmod 700 "$dir"

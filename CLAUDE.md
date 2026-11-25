@@ -54,9 +54,10 @@ npm run check:cycles # 기능(src/features/*) 사이 순환 import 검사
 npm run check:ci-images  # CI의 PostgreSQL·Redis 이미지가 deploy/docker-compose.yml과 같은 digest인지 검사
 npm run openapi      # docs/openapi.json 다시 생성 (API v1 계약을 바꾼 뒤)
 npm run check:openapi    # docs/openapi.json이 코드와 같은지 검사
+npm run check:cli        # CI의 CLI job을 로컬에서: cli/src/openapi.ts 재생성 대조, typecheck, test (먼저 npm --prefix cli ci)
 npm run check:changelog  # package.json 버전의 항목이 CHANGELOG.md에 있는지 검사
 npm run check:bundle     # 빌드 뒤 페이지별 첫 로드 JS(gzip)가 scripts/bundle-budget.json 안인지, 지연 로드할 라이브러리가 첫 로드에 없는지 검사
-npm run check        # typecheck · lint · emoji · cycles · migrations · ci-images · openapi · changelog · test · build · bundle 전체
+npm run check        # typecheck · lint · emoji · cycles · migrations · ci-images · openapi · cli · changelog · test · build · bundle 전체
 npm run worker       # 백그라운드 워커(썸네일, 뷰어 미리보기, 공개 링크용 메타데이터 제거본, 매일 정리, 지표·헬스 프로브). WORKER_ROLES로 맡을 일(media·maintenance·notify)을 고른다. ffmpeg 필요(앱도 ?transcode=1 변환에 사용)
 npm run worker:health  # 워커 heartbeat가 살아 있으면 0, 끊겼으면 1 (compose healthcheck·k3s livenessProbe가 실행, maintenance 역할이 없으면 항상 0)
 npm run dav          # WebDAV 서버(/dav/, API 토큰 Basic 인증, 쓰기는 files:write). Next가 PROPFIND를 못 받아 별도 프로세스

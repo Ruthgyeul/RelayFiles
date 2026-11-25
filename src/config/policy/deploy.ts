@@ -11,6 +11,16 @@ export const K3S = {
   mediaConcurrency: 1,
 } as const;
 
+/** What the release and backup scripts keep (defaults of BACKUP_KEEP, IMAGE_KEEP, BUNDLE_KEEP). */
+export const RETENTION = {
+  /** Database dumps in DATA_DIR/backups. */
+  backups: 14,
+  /** Release image tags autoclean.sh leaves (how far back rollback.sh can go). */
+  images: 3,
+  /** Release bundles the systemd release.sh leaves (.app/<release>). */
+  bundles: 3,
+} as const;
+
 /** Redis as the deployment files start it (docker compose, k3s). */
 export const REDIS_SERVER = {
   /** Default for REDIS_MAXMEMORY_MB: queues, limits and reservations take a few MB on this server. */
