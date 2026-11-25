@@ -1,6 +1,6 @@
 /** Environment group schemas: deployment files (Nginx, compose, systemd, k3s), the offsite backup and owner notifications. Assembled in src/config/env.ts. */
 import { z } from "zod";
-import { K3S, MEDIA, NGINX, OFFSITE, REDIS_SERVER, SHUTDOWN } from "../policy";
+import { K3S, MEDIA, NGINX, OFFSITE, REDIS_SERVER, RETENTION, SHUTDOWN } from "../policy";
 import { NOTIFY_FORMATS, bool, cpus, memorySize, port, positiveInt, webhookUrl } from "./fields";
 
 /** An IPv4 address or a host name the cluster nodes resolve (the NFS server of the media workers). */
@@ -35,6 +35,12 @@ export const deployEnv = z
     REDIS_MAXMEMORY_MB: positiveInt.default(REDIS_SERVER.maxMemoryMb),
     /** Host directory for PostgreSQL, Redis and backups (docker compose). */
     DATA_DIR: z.string().startsWith("/").default("/srv/relayfiles"),
+    /** Database dumps the backup scripts keep in DATA_DIR/backups (deploy/scripts/lib.sh). */
+    BACKUP_KEEP: positiveInt.default(RETENTION.backups),
+    /** Release image tags deploy/scripts/autoclean.sh keeps: how far back rollback.sh can go. */
+    IMAGE_KEEP: positiveInt.default(RETENTION.images),
+    /** Release bundles deploy/scripts/systemd/release.sh keeps. */
+    BUNDLE_KEEP: positiveInt.default(RETENTION.bundles),
     /** Docker's data-root (images, containers, build cache); set by deploy/scripts/setup-docker.sh. */
     DOCKER_DATA_ROOT: z.string().startsWith("/").default("/var/lib/docker"),
     /** Private network of the compose services; cloudflared gets a fixed address in it. */

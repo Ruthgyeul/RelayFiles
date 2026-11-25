@@ -50,10 +50,10 @@ rm deploy/maintenance/on       # 해제
 | `.env`, `/etc/relayfiles/ssd.key` | 서버 밖 안전한 곳 (비밀번호 관리자 등) | 바뀔 때마다 |
 | Redis | 백업하지 않는다 (캐시, 세션, 큐. 다시 만들어진다) | — |
 
-매일 새벽 DB 백업 (crontab -e):
+매일 새벽 DB 백업 (crontab -e, `<checkout>`은 저장소를 받은 경로):
 
 ```cron
-15 3 * * * cd /home/ruthgyeul/RelayFiles && deploy/scripts/backup.sh >> /var/log/relayfiles/backup.log 2>&1
+15 3 * * * cd <checkout> && deploy/scripts/backup.sh >> /var/log/relayfiles/backup.log 2>&1
 ```
 
 백업 디스크로 파일을 복사할 때 앱을 멈출 필요는 없다(파일은 원본 그대로 저장되고 업로드는 임시 폴더에서 완성된 뒤 옮겨진다). 단, DB 백업과 시점을 맞추려면 DB 백업 직후에 실행한다.
@@ -87,7 +87,7 @@ rm deploy/maintenance/on       # 해제
 
    ```cron
    # Docker
-   45 3 * * * cd /home/ruthgyeul/RelayFiles && deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1
+   45 3 * * * cd <checkout> && deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1
    # systemd
    45 3 * * * /opt/relayfiles/deploy/scripts/offsite-backup.sh >> /var/log/relayfiles/offsite-backup.log 2>&1
    ```
@@ -122,7 +122,7 @@ sudo rsync -aHAX /tmp/rf-restore/<STORAGE_ROOT>/users/ <STORAGE_ROOT>/users/
 
 ```cron
 # Docker
-15 5 * * 0 cd /home/ruthgyeul/RelayFiles && deploy/scripts/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
+15 5 * * 0 cd <checkout> && deploy/scripts/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
 # systemd (root crontab: 임시 DB를 postgres 계정으로 만들고 지운다)
 15 5 * * 0 cd /opt/relayfiles && deploy/scripts/systemd/verify-backup.sh >> /var/log/relayfiles/backup-verify.log 2>&1
 ```

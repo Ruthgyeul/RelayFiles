@@ -146,13 +146,13 @@
 | 5-1 — [#174](https://github.com/Ruthgyeul/RelayFiles/pull/174) | 휴지통 일괄 작업 + Undo 토스트 | 2-3 | `RecentlyDeletedPage`에 다중 선택, 모두 복원, 비우기를 넣는다. `NoticePill`에 action을 추가하고, 삭제 후 Undo는 복원 API를 재사용한다 |
 | 5-4 — [#177](https://github.com/Ruthgyeul/RelayFiles/pull/177) | 공유 페이지 탐색 | 2-6 | `/d/…`에 정렬, 검색, 그리드 전환을 넣는다. FileList와 `sortNodes`를 재사용한다 |
 | 5-5 — [#178](https://github.com/Ruthgyeul/RelayFiles/pull/178), [#179](https://github.com/Ruthgyeul/RelayFiles/pull/179) | 파일 목록 키보드 탐색 | 2-5, 4-4 | 방향키, Enter, Space, Home/End. 단축키 시스템(`features/shortcuts`)을 쓴다. 이름 영역을 `<button>`으로 바꾼다 |
-| 5-6 | 관리자 패스키(WebAuthn) | — | 관리자 계정에 두 번째 로그인 수단을 둔다. 스키마는 expand로 시작한다 |
-| 5-7 | S3 호환 오프사이트 드라이버 | 3-5 | 예약된 `StorageDriver.S3`를 쓴다. 우선 백업과 콜드 데이터용 |
+| 5-6 — 진행 안 함(사용자 결정) | 관리자 패스키(WebAuthn) | — | 관리자 계정에 두 번째 로그인 수단을 둔다. 스키마는 expand로 시작한다 |
+| 5-7 — 진행 안 함(사용자 결정) | S3 호환 오프사이트 드라이버 | 3-5 | 예약된 `StorageDriver.S3`를 쓴다. 우선 백업과 콜드 데이터용 |
 | 5-8 — [#180](https://github.com/Ruthgyeul/RelayFiles/pull/180) | HEIC 사진 썸네일·미리보기 | 3-4 | 아래 상세 |
-| 5-9 — [#181](https://github.com/Ruthgyeul/RelayFiles/pull/181) | 컬렉션 공유 링크 | 3-1, 3-2 | 아래 상세 |
+| 5-9 — [#181](https://github.com/Ruthgyeul/RelayFiles/pull/181), [#182](https://github.com/Ruthgyeul/RelayFiles/pull/182) | 컬렉션 공유 링크 | 3-1, 3-2 | 아래 상세 |
 | 5-10 — [#175](https://github.com/Ruthgyeul/RelayFiles/pull/175), [#176](https://github.com/Ruthgyeul/RelayFiles/pull/176) | 저장된 검색 · 폴더 자동 정리 규칙 | 2-3, 3-6 | 아래 상세 |
 
-권장 순서: 5-8(소) → 5-1 → 5-10 → 5-4 → 5-9 → 5-5 → 5-6 → 5-7. 5-8은 전제 3-4가 끝나기 전에 해도 된다. 그때는 3-4에서 함께 옮긴다.
+진행한 순서: 5-8(소) → 5-1 → 5-10 → 5-4 → 5-9 → 5-5. 5-6·5-7은 진행하지 않았다(사용자 결정). 5-8은 전제 3-4가 끝나기 전에 해도 되고, 그때는 3-4에서 함께 옮긴다.
 
 ### 5-8 `feat(media): thumbnails and previews for heic photos`
 - **현재 상태**: `src/domain/upload.ts:60`이 `heic`의 MIME만 인식한다. `MEDIA.previewTypes`(`src/config/policy/media.ts:19`)에 HEIC가 없어서 썸네일·미리보기가 없고, Chrome·Firefox에서는 원본도 보이지 않는다.
@@ -213,18 +213,19 @@
 
 ---
 
-## 상시 정리 (관련 PR에서 함께)
+## 상시 정리 · 후속 작업 (2026-11-25)
 
-- `docs/upgrade/` 파일명 규칙을 실제 파일에 맞춘다.
-- `docs/runbook.md` cron 예시의 개인 경로를 `<checkout>`으로 바꾼다.
-- `.gitignore`의 쓰이지 않는 항목(`.vercel`, `/.pnp`, `/deploy/backups/`)을 지운다.
-- `BACKUP_KEEP`·`IMAGE_KEEP`·`BUNDLE_KEEP`를 `.env`의 `env_value`로 읽게 한다.
-- Prisma 이름(`expAt` → `@map`)을 정리하고, 예정된 contract 마이그레이션(`StorageDriver.S3` 외)을 빠뜨리지 않는다.
-- e2e:
-  - a11y 검사에 `/files/favorites`, `/files/deleted`, `/r/[id]`를 추가한다.
-  - 1×1 PNG 상수를 `e2e/helpers.ts`로 모은다.
-  - `waitForTimeout`을 `page.clock`으로 바꾼다.
-- 로컬 `npm run check`에 `check:cli`를 추가하고, emoji 검사 대상에 `cli/src`를 넣는다.
+Phase 1–5가 끝난 뒤 남은 정리를 PR 다섯 개로 나눠 진행한다. 5-2·5-3·5-6·5-7은 진행하지 않는다(사용자 결정).
+
+| PR | 내용 | 상태 |
+|---|---|---|
+| A `chore(repo): standing cleanup and roadmap status` | `docs/upgrade/` 파일 이름을 규칙(`v<버전>.md`)에 맞춘다. `docs/runbook.md` cron 예시의 개인 경로를 `<checkout>`으로 바꾼다. `.gitignore`의 안 쓰는 항목(`.vercel`, `/.pnp`, `/deploy/backups/`)을 지운다. `BACKUP_KEEP`·`IMAGE_KEEP`·`BUNDLE_KEEP`를 `.env`에서 읽는다(`env_value`, deploy 스키마). 로컬 `npm run check`에 `check:cli`를 넣고, 이모지 검사에 `cli/src`를 넣는다 | 이 PR |
+| F `feat(files): all files view` | root의 Favorites 아래에 "All Files" 가상 폴더를 둔다. 하위 폴더까지 모든 파일을 폴더 없이 한 목록으로 보여 주고, 서버에서 정렬·종류·검색·태그로 거른 keyset 페이지와 Load more를 쓴다 | 예정 (사용자 추가 요청, A 다음) |
+| B `test(e2e): wider accessibility checks and shared fixtures` | a11y 검사에 `/files/favorites`, `/files/deleted`, `/r/[id]`를 추가한다. 1×1 PNG 상수를 `e2e/helpers.ts`로 모은다. `waitForTimeout`을 없앤다 | 예정 |
+| C `fix(files): recheck auto clean rules under the lock` | 자동 정리가 잠금을 잡은 뒤 폴더와 날짜 조건을 다시 확인한다. 고른 뒤 옮겨지거나 날짜가 바뀐 파일은 남긴다 | 예정 |
+| D `perf(files): memoize list rows` | `NodeRow`·`NodeCard`를 `memo`로 감싸고 고정 핸들러를 넘긴다. 선택을 바꿔도 다른 행은 다시 렌더하지 않는다 | 예정 |
+| E `test(nginx): keep shared locations of both templates in step` | 컨테이너와 호스트 Nginx 템플릿의 공통 location을 parity 테스트로 맞춘다(3-8에서 남은 부분) | 예정 |
+| — | Prisma 이름 정리(`expAt` → `@map`) | 보류: 운영 DB 컬럼 이름을 바꾸는 파괴적 마이그레이션이 필요하다. 예정된 contract는 `docs/upgrade/README.md` 표에서 관리한다 |
 
 ## 검증 (계획 전체)
 

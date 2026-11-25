@@ -4,7 +4,7 @@
 
 | 릴리스 | 노트 | 내용 |
 |---|---|---|
-| 1.5.0 | [folder-tools-transfers.md](folder-tools-transfers.md) | 순번 정리·중복 찾기·파일별 전송 진행률. `Node.modifiedAt`·`takenAt` 컬럼 추가와 기존 파일 백필(자동) |
+| 1.5.0 | [v1.5.0.md](v1.5.0.md) | 순번 정리·중복 찾기·파일별 전송 진행률. `Node.modifiedAt`·`takenAt` 컬럼 추가와 기존 파일 백필(자동) |
 
 노트가 없는 릴리스는 `git pull` 뒤 릴리스 스크립트만 실행하면 된다.
 

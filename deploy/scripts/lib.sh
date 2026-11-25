@@ -75,6 +75,18 @@ newest_first() {
   done | sort -rn | cut -f2-
 }
 
+# keep_count KEY DEFAULT → how many of something to keep: KEY from the environment, else from .env,
+# else DEFAULT. Anything but a whole number of at least 1 stops the script, so a typo such as
+# BUNDLE_KEEP=0 never prunes the release that is running (or every backup).
+keep_count() {
+  local value="${!1:-$(env_value "$1" "$2")}"
+  if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "$1 must be a whole number of at least 1 (got \"$value\")" >&2
+    exit 1
+  fi
+  echo "$value"
+}
+
 # keep_newest COUNT PATH... → removes all but the newest COUNT of PATHs (pass an unquoted glob).
 keep_newest() {
   local count="$1" path old
@@ -85,10 +97,12 @@ keep_newest() {
 
 # backup_database CMD... → runs CMD (a pg_dump -Fc that writes to stdout) into
 # BACKUP_DIR (default DATA_DIR/backups)/relayfiles-<UTC time>.dump, then keeps the newest
-# BACKUP_KEEP (default 14) dumps. The dump is written to a .partial file and renamed only when CMD
-# succeeds, so a failed run never leaves a cut-off dump for verify-backup.sh to pick.
+# BACKUP_KEEP (the environment, else .env, default 14) dumps. The dump is written to a .partial
+# file and renamed only when CMD succeeds, so a failed run never leaves a cut-off dump for
+# verify-backup.sh to pick.
 backup_database() {
-  local keep="${BACKUP_KEEP:-14}" dir file
+  local keep dir file
+  keep="$(keep_count BACKUP_KEEP 14)"
   dir="${BACKUP_DIR:-$(env_value DATA_DIR /srv/relayfiles)/backups}"
   mkdir -p "$dir"
   chmod 700 "$dir"

@@ -15,7 +15,7 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-KEEP="${IMAGE_KEEP:-3}"
+KEEP="$(keep_count IMAGE_KEEP 3)"
 CACHE_AGE="${BUILD_CACHE_MAX_AGE:-24h}"
 RELEASES="$(env_value DATA_DIR /srv/relayfiles)/releases.log"
 DRY_RUN=0
