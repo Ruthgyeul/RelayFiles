@@ -11,7 +11,7 @@ import { db } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import { ApiError } from "../http/api-error";
 import { countFavorites, favoriteFoldersOf } from "../repositories/favorite.repo";
-import { childCounts, createFolderNode, findByTags, listChildren, listFolders, listSiblingNames, recentFiles, searchNodes, type NodeRow } from "../repositories/node.repo";
+import { childCounts, countFiles, createFolderNode, findByTags, listChildren, listFolders, listSiblingNames, recentFiles, searchNodes, NO_FILTER, type NodeRow } from "../repositories/node.repo";
 import { tagUsage } from "../repositories/node-usage.repo";
 import { ancestorChain, ancestorChains, childStats, descendantCounts, folderSizes, type AncestorRow, type ChildStats } from "../repositories/node-tree.repo";
 import { busyLevels } from "../share/busy";
@@ -60,11 +60,12 @@ async function withFolderStats(rows: NodeRow[]): Promise<NodeItem[]> {
 export async function getFolderView(accountId: string, ref: string): Promise<FolderView> {
   const folder = await requireFolder(accountId, ref);
   const isRoot = folder.parentId === null;
-  const [chain, children, stats, favoriteCount] = await Promise.all([
+  const [chain, children, stats, favoriteCount, fileCount] = await Promise.all([
     ancestorChain(db(), folder.id),
     listChildren(db(), folder.id),
     childStats(db(), folder.id),
     isRoot ? countFavorites(db(), accountId) : Promise.resolve(null),
+    isRoot ? countFiles(db(), accountId, NO_FILTER) : Promise.resolve(null),
   ]);
   const context = await listContext([folder, ...children]);
   const inside = [...stats.values()];
@@ -77,6 +78,7 @@ export async function getFolderView(accountId: string, ref: string): Promise<Fol
     parentVisibility: effectiveVisibility(chain.slice(0, -1).map((row) => VISIBILITY[row.visibility]).reverse()),
     children: children.map((row) => listedItem(row, stats.get(row.id), context)),
     ...(favoriteCount !== null ? { favoriteCount } : {}),
+    ...(fileCount !== null ? { allFileCount: fileCount } : {}),
   };
 }
 

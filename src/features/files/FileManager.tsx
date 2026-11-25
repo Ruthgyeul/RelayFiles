@@ -6,7 +6,7 @@ import type { CleanRule } from "@/domain/auto-clean";
 import { emptyTitle } from "@/domain/tree";
 import { useTransferActions } from "@/features/transfers/transfers-context";
 import { ActionMenu } from "./ActionMenu";
-import { FavoritesEntry } from "./FavoritesEntry";
+import { AllFilesEntry, FavoritesEntry } from "./FavoritesEntry";
 import { FolderHeader } from "./FolderHeader";
 import { buildMenu, NODE_MENU } from "./item-actions";
 import type { ItemProps } from "./item-props";
@@ -175,7 +175,14 @@ export function FileManager({ view, autoClean, nav, isAdmin, initialView }: File
         onOpen={openItem}
         onDownload={media.download}
         onDropFiles={dropFiles}
-        leading={isRoot && !nav && !tagMode && !q ? <FavoritesEntry count={view.favoriteCount ?? 0} /> : undefined}
+        leading={
+          isRoot && !nav && !tagMode && !q ? (
+            <>
+              <FavoritesEntry count={view.favoriteCount ?? 0} />
+              <AllFilesEntry count={view.allFileCount ?? 0} />
+            </>
+          ) : undefined
+        }
       />
       {menu.menu && menuItem && (
         <ActionMenu

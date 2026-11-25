@@ -122,6 +122,8 @@ test("moves between items with the keyboard, selects with Space and opens with E
   await page.keyboard.press("ArrowUp");
   await expect(page.locator('[data-entry="Favorites"]')).toBeFocused();
   await page.keyboard.press("ArrowDown");
+  await expect(page.locator('[data-entry="All Files"]')).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await expect(name("Alpha")).toBeFocused();
 
   await page.keyboard.press("Space");

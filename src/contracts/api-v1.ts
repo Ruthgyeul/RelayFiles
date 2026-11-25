@@ -56,6 +56,7 @@ export const folderViewSchema = z.object({
   parentVisibility: effectiveVisibility,
   children: z.array(nodeItemSchema),
   favoriteCount: z.number().int().optional().describe("The root only: items in Favorites"),
+  allFileCount: z.number().int().optional().describe("The root only: files in the account"),
 });
 
 export const createdFolderSchema = z.object({ folder: nodeItemSchema, requestedName: z.string(), renamed: z.boolean() });

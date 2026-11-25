@@ -53,7 +53,9 @@ export function useFileDialogs({ isAdmin, accountDeletesAt, linkOf, onChanged }:
 
   const open = {
     rename: (item: NodeItem) => setRename({ item }),
-    move: (items: NodeItem[], mode: "move" | "copy", parentId: string) => setMove({ ids: items.map((item) => item.id), mode, label: itemsLabel(items), parentIds: [parentId] }),
+    /** The folders the items are in (one, or several for a selection across folders). */
+    move: (items: NodeItem[], mode: "move" | "copy", parentIds: string | readonly string[]) =>
+      setMove({ ids: items.map((item) => item.id), mode, label: itemsLabel(items), parentIds: typeof parentIds === "string" ? [parentIds] : [...new Set(parentIds)] }),
     remove: (items: NodeItem[]) => setRemove(items),
     tags: (items: NodeItem[]) =>
       setTags({

@@ -126,6 +126,16 @@ export const UPLOAD = {
 } as const;
 
 /** "Photos": every photo and video of the account by the date it was taken (/files/photos). */
+/** "All Files": every file of the account in one list, read page by page. */
+export const ALL_FILES = {
+  /** Files in one page (the first is rendered on the server, the rest load with "Load more"). */
+  pageSize: 120,
+  /** Most files one request may ask for. */
+  listLimit: 500,
+  /** Longest page cursor: a file's id and its name percent-encoded (a 255-byte name takes up to 765). */
+  cursorMaxLength: 1_024,
+} as const;
+
 export const TIMELINE = {
   /** Items in one page (the first is rendered on the server, the rest load as the list grows). */
   pageSize: 120,

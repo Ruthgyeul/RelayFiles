@@ -69,6 +69,8 @@ export interface FolderView {
   children: NodeItem[];
   /** The root only: items in Favorites, for its entry at the top of the list. */
   favoriteCount?: number;
+  /** The root only: files in the account ("All Files" entry). */
+  allFileCount?: number;
 }
 
 /** GET /api/nodes/:id — details for the Properties dialog. */
