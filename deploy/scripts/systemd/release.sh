@@ -16,7 +16,7 @@ SHA="$(git -C "$ROOT" rev-parse --short HEAD)"
 RELEASE="$(date -u +%Y%m%d%H%M%S)-$SHA"
 FLAG="$ROOT/deploy/maintenance/on"
 PORT="$(env_value APP_PORT 3000)"
-KEEP="${BUNDLE_KEEP:-$(env_value BUNDLE_KEEP 3)}"
+KEEP="$(keep_count BUNDLE_KEEP 3)"
 RELEASES="$(env_value DATA_DIR /srv/relayfiles)/releases.log"
 RF="$ROOT/deploy/scripts/systemd/rf.sh"
 

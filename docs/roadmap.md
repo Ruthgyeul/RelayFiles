@@ -152,7 +152,7 @@
 | 5-9 — [#181](https://github.com/Ruthgyeul/RelayFiles/pull/181), [#182](https://github.com/Ruthgyeul/RelayFiles/pull/182) | 컬렉션 공유 링크 | 3-1, 3-2 | 아래 상세 |
 | 5-10 — [#175](https://github.com/Ruthgyeul/RelayFiles/pull/175), [#176](https://github.com/Ruthgyeul/RelayFiles/pull/176) | 저장된 검색 · 폴더 자동 정리 규칙 | 2-3, 3-6 | 아래 상세 |
 
-권장 순서: 5-8(소) → 5-1 → 5-10 → 5-4 → 5-9 → 5-5 → 5-6 → 5-7. 5-8은 전제 3-4가 끝나기 전에 해도 된다. 그때는 3-4에서 함께 옮긴다.
+진행한 순서: 5-8(소) → 5-1 → 5-10 → 5-4 → 5-9 → 5-5. 5-6·5-7은 진행하지 않았다(사용자 결정). 5-8은 전제 3-4가 끝나기 전에 해도 되고, 그때는 3-4에서 함께 옮긴다.
 
 ### 5-8 `feat(media): thumbnails and previews for heic photos`
 - **현재 상태**: `src/domain/upload.ts:60`이 `heic`의 MIME만 인식한다. `MEDIA.previewTypes`(`src/config/policy/media.ts:19`)에 HEIC가 없어서 썸네일·미리보기가 없고, Chrome·Firefox에서는 원본도 보이지 않는다.

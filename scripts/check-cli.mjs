@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * The CI "CLI" job, locally: the CLI's API types (cli/src/openapi.ts) are generated from
- * docs/openapi.json and must be committed with any API change, then the CLI typechecks and
- * its tests pass. Needs the CLI's own dependencies (npm --prefix cli ci). Usage: npm run check:cli
+ * docs/openapi.json and must be committed with any API change, then the CLI typechecks, its
+ * tests pass and it builds. Needs the CLI's own dependencies (npm --prefix cli ci). Usage: npm run check:cli
  */
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -19,6 +19,7 @@ try {
   run("git", ["diff", "--exit-code", "--", "src/openapi.ts"]);
   run("npm", ["run", "-s", "typecheck"]);
   run("npm", ["test"]);
+  run("npm", ["run", "-s", "build"]);
 } catch {
   console.error("check:cli failed (if src/openapi.ts changed above: commit the regenerated cli/src/openapi.ts)");
   process.exit(1);
