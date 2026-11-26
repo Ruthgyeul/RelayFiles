@@ -13,7 +13,8 @@ const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.ur
 const SAME_THING: [RegExp, string][] = [
   [/\$relay_client_ip|\$remote_addr/g, "$CLIENT_IP"],
   [/\$relayfiles_proto|\$relay_proto/g, "$PROTO"],
-  [/\b(relayfiles|relay)_(auth|uploads|api|tus|dav)\b/g, "zone_$2"],
+  // Rate-limit zones only: upstream names (proxy_pass) must match as written.
+  [/\bzone=(relayfiles|relay)_(auth|uploads|api|tus|dav)\b/g, "zone=zone_$2"],
   [/@relayfiles_rate_limited|@relay_rate_limited/g, "@rate_limited"],
   [/\/etc\/nginx\/maintenance\/on|\$\{APP_DIR\}\/deploy\/maintenance\/on/g, "MAINTENANCE_FLAG"],
 ];
@@ -54,5 +55,11 @@ describe("nginx templates", () => {
 
   it.each(SHARED)("%s has the same directives in both", (name) => {
     expect(host.get(name)).toEqual(container.get(name));
+  });
+
+  it("writes only rate-limit zone names the same way, not upstreams", () => {
+    const block = (zone: string, upstream: string) => locations(`location ^~ /dav/ { limit_req zone=${zone}_dav burst=5 nodelay; proxy_pass http://${upstream}_dav; }`).get("^~ /dav/");
+    expect(block("relay", "relayfiles")).toEqual(block("relayfiles", "relayfiles"));
+    expect(block("relay", "relay")).not.toEqual(block("relay", "relayfiles"));
   });
 });
