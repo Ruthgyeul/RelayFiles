@@ -34,4 +34,20 @@ describe("useStableRowProps", () => {
     expect(result.current[0].onToggle()).toBe("a");
     expect(result.current[1].onToggle()).toBe("b");
   });
+
+  it("forgets rows the committed render no longer lists", () => {
+    const { result, rerender } = renderHook(({ ids }) => {
+      const stable = useStableRowProps();
+      return ids.map((id) => stable(id, { onToggle: () => id }));
+    }, { initialProps: { ids: ["a", "b"] } });
+    const [a, b] = result.current;
+    rerender({ ids: ["b"] });
+    // Still listed: the same handler.
+    expect(result.current[0]!.onToggle).toBe(b!.onToggle);
+    rerender({ ids: ["a", "b"] });
+    // Listed again after a render without it: made anew, and calls the current handler.
+    expect(result.current[0]!.onToggle).not.toBe(a!.onToggle);
+    expect(result.current[0]!.onToggle()).toBe("a");
+    expect(result.current[1]!.onToggle).toBe(b!.onToggle);
+  });
 });

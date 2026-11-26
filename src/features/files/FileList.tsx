@@ -5,7 +5,7 @@ import { hasFiles } from "@/features/transfers/read-drop";
 import { FILES } from "@/config/policy";
 import { cn } from "@/shared/lib/cn";
 import { EmptyFolder, NodeCard } from "./NodeCard";
-import type { ItemProps } from "./item-props";
+import { cardProps, type ItemProps } from "./item-props";
 import { NodeRow } from "./NodeRow";
 import type { ListedItem } from "./useFolderItems";
 import { useListKeyboard } from "./useListKeyboard";
@@ -64,7 +64,7 @@ export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onO
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] gap-3 bg-card p-3.5">
           {leadingCards}
           {items.map((item) => (
-            <NodeCard key={item.id} {...stable(item.id, itemProps(item))} lazy={lazy} />
+            <NodeCard key={item.id} {...stable(item.id, cardProps(itemProps(item)))} lazy={lazy} />
           ))}
         </div>
       ) : (

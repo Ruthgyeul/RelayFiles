@@ -8,11 +8,11 @@ import { Icon } from "@/shared/ui/icon/Icon";
 import { kindOf } from "@/shared/ui/node-kind";
 import { MediaThumb, ResumeBar } from "./MediaThumb";
 import { MenuButton } from "./ItemButtons";
-import { itemMeta, NAME_BUTTON, type ItemProps } from "./item-props";
+import { itemMeta, NAME_BUTTON, type CardProps } from "./item-props";
 import { NAV_ITEM_ATTR } from "./useListKeyboard";
 
 /** Grid card: 4:3 preview area with the type icon, corner checkbox, name, meta and menu (memoized like NodeRow). */
-export const NodeCard = memo(function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy }: ItemProps) {
+export const NodeCard = memo(function NodeCard({ item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy }: CardProps) {
   const kind = kindOf(item);
   const media = item.kind === "video" || item.kind === "image";
   return (
