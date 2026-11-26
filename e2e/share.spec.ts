@@ -2,10 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { Browser, Page, ViewportSize } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import type { FolderView, NodeItem } from "@/contracts/nodes";
-import { itemMenu, newFolder, openFiles, silentWav } from "./helpers";
-
-/** 1×1 PNG, detected as an image by the server. */
-const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+import { itemMenu, newFolder, openFiles, PNG, silentWav } from "./helpers";
 
 const rootItems = (page: Page) => page.evaluate(async () => ((await (await fetch("/api/folders/root")).json()) as { data: FolderView }).data.children);
 
@@ -174,7 +171,7 @@ test("share pages show image and audio previews under the file names", async ({ 
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Upload", exact: true }).click();
   await (await chooser).setFiles([
-    { name: "dot.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64") },
+    { name: "dot.png", mimeType: "image/png", buffer: PNG },
     { name: "tone.wav", mimeType: "audio/wav", buffer: silentWav() },
   ]);
   await expect(page.locator('[data-item="tone.wav"]')).toBeVisible();

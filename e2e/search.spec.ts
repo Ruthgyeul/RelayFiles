@@ -1,8 +1,5 @@
 import { expect, test } from "./fixtures";
-import { newFolder, openFiles } from "./helpers";
-
-/** 1×1 PNG, detected as an image by the server. */
-const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+import { newFolder, openFiles, PNG } from "./helpers";
 
 test("finds files anywhere and opens them in their folder", async ({ page }) => {
   await openFiles(page);

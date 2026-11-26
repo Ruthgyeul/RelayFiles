@@ -2,10 +2,7 @@ import { mkdtemp, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "./fixtures";
-import { openFiles } from "./helpers";
-
-/** 1×1 PNG, detected as an image by the server. */
-const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+import { openFiles, PNG } from "./helpers";
 
 test("lists photos by month, opens them in the viewer and leads back to their folder", async ({ page }) => {
   await openFiles(page);
