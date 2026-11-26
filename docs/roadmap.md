@@ -222,8 +222,8 @@ Phase 1–5가 끝난 뒤 남은 정리를 PR 다섯 개로 나눠 진행한다.
 | A `chore(repo): standing cleanup and roadmap status` | `docs/upgrade/` 파일 이름을 규칙(`v<버전>.md`)에 맞춘다. `docs/runbook.md` cron 예시의 개인 경로를 `<checkout>`으로 바꾼다. `.gitignore`의 안 쓰는 항목(`.vercel`, `/.pnp`, `/deploy/backups/`)을 지운다. `BACKUP_KEEP`·`IMAGE_KEEP`·`BUNDLE_KEEP`를 `.env`에서 읽는다(`env_value`, deploy 스키마). 로컬 `npm run check`에 `check:cli`를 넣고, 이모지 검사에 `cli/src`를 넣는다 | [#183](https://github.com/Ruthgyeul/RelayFiles/pull/183) |
 | F `feat(files): all files view` | root의 Favorites 아래에 "All Files" 가상 폴더를 둔다. 하위 폴더까지 모든 파일을 폴더 없이 한 목록으로 보여 주고, 서버에서 정렬·종류·검색·태그로 거른 keyset 페이지와 Load more를 쓴다 | [#184](https://github.com/Ruthgyeul/RelayFiles/pull/184) (사용자 추가 요청) |
 | B `test(e2e): wider accessibility checks and shared fixtures` | a11y 검사에 `/files/favorites`, `/files/deleted`, `/r/[id]`를 추가한다. 1×1 PNG 상수를 `e2e/helpers.ts`로 모은다. `waitForTimeout`을 없앤다 | [#185](https://github.com/Ruthgyeul/RelayFiles/pull/185) |
-| C `fix(files): recheck auto clean rules under the lock` | 자동 정리가 잠금을 잡은 뒤 폴더와 날짜 조건을 다시 확인한다. 고른 뒤 옮겨지거나 날짜가 바뀐 파일은 남긴다 | 이 PR |
-| D `perf(files): memoize list rows` | `NodeRow`·`NodeCard`를 `memo`로 감싸고 고정 핸들러를 넘긴다. 선택을 바꿔도 다른 행은 다시 렌더하지 않는다 | 예정 |
+| C `fix(files): recheck auto clean rules under the lock` | 자동 정리가 잠금을 잡은 뒤 폴더와 날짜 조건을 다시 확인한다. 고른 뒤 옮겨지거나 날짜가 바뀐 파일은 남긴다 | [#186](https://github.com/Ruthgyeul/RelayFiles/pull/186) |
+| D `perf(files): memoize list rows` | `NodeRow`·`NodeCard`를 `memo`로 감싸고 고정 핸들러를 넘긴다. 선택을 바꿔도 다른 행은 다시 렌더하지 않는다 | 이 PR |
 | E `test(nginx): keep shared locations of both templates in step` | 컨테이너와 호스트 Nginx 템플릿의 공통 location을 parity 테스트로 맞춘다(3-8에서 남은 부분) | 예정 |
 | — | Prisma 이름 정리(`expAt` → `@map`) | 보류: 운영 DB 컬럼 이름을 바꾸는 파괴적 마이그레이션이 필요하다. 예정된 contract는 `docs/upgrade/README.md` 표에서 관리한다 |
 

@@ -5,11 +5,11 @@ import { hasFiles } from "@/features/transfers/read-drop";
 import { FILES } from "@/config/policy";
 import { cn } from "@/shared/lib/cn";
 import { EmptyFolder, NodeCard } from "./NodeCard";
-import { RowButton } from "./ItemButtons";
-import type { ItemProps } from "./item-props";
+import { cardProps, type ItemProps } from "./item-props";
 import { NodeRow } from "./NodeRow";
 import type { ListedItem } from "./useFolderItems";
 import { useListKeyboard } from "./useListKeyboard";
+import { useStableRowProps } from "./useStableRowProps";
 
 interface FileListProps {
   items: ListedItem[];
@@ -32,6 +32,8 @@ interface FileListProps {
 /** The items of a folder as rows or cards, and (with `onDropFiles`) a drop zone for files from the computer. */
 export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onOpen, onDownload, onDropFiles, leading, leadingCards, hideEmpty = false }: FileListProps) {
   const [filesOver, setFilesOver] = useState(false);
+  // Rows keep their props while their item and state are the same (memoized NodeRow and NodeCard).
+  const stable = useStableRowProps();
   const lazy = items.length > FILES.lazyRenderAfter;
   const cards = view === "grid" && leadingCards !== undefined;
   const onKeyDown = useListKeyboard(view, (id, range) => {
@@ -62,22 +64,12 @@ export function FileList({ items, view, itemProps, emptyTitle, emptyActions, onO
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] gap-3 bg-card p-3.5">
           {leadingCards}
           {items.map((item) => (
-            <NodeCard key={item.id} {...itemProps(item)} lazy={lazy} />
+            <NodeCard key={item.id} {...stable(item.id, cardProps(itemProps(item)))} lazy={lazy} />
           ))}
         </div>
       ) : (
         items.map((item) => (
-          <NodeRow
-            key={item.id}
-            {...itemProps(item)}
-            lazy={lazy}
-            actions={
-              <>
-                {item.type === "folder" ? <RowButton icon="folder-open" label="Open" onClick={() => onOpen(item)} /> : <RowButton icon="eye" label="Preview" onClick={() => onOpen(item)} />}
-                <RowButton icon="download-simple" label="Download" onClick={() => onDownload(item)} />
-              </>
-            }
-          />
+          <NodeRow key={item.id} {...stable(item.id, { ...itemProps(item), onOpen: () => onOpen(item), onDownload: () => onDownload(item) })} lazy={lazy} />
         ))
       )}
     </div>

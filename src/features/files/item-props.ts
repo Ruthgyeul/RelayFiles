@@ -30,6 +30,18 @@ export interface ItemProps {
   lazy?: boolean;
 }
 
+/**
+ * What a grid card shows: no settings tags, so not the clock (`now`, which ticks every half
+ * minute), the inherited visibility or the tag handler. Leaving them out keeps memoized cards
+ * from rendering again on every tick.
+ */
+export type CardProps = Omit<ItemProps, "now" | "parentVisibility" | "onTag">;
+
+export function cardProps(props: ItemProps): CardProps {
+  const { item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy } = props;
+  return { item, parentPath, selected, onToggle, onPrimary, onPreview, onMenu, menuOpen, drag, drop, dropOver, lazy };
+}
+
 /** "3 items" for folders, the size for files, prefixed with the folder path in tag search. */
 export function itemMeta(item: NodeItem, parentPath?: string): string {
   const own = item.type === "folder" ? itemCount(item.itemCount) : formatSize(Number(item.size));

@@ -42,6 +42,7 @@ What changed in each release, newest first. The format follows [Keep a Changelog
 
 ### Changed
 
+- File lists re-render only the rows that change: selecting a file, or an upload making progress, no longer redraws every other row of a large folder
 - `BACKUP_KEEP`, `IMAGE_KEEP` and `BUNDLE_KEEP` (backups, release images and systemd bundles kept) can be set in `.env`; a value given on the command line still wins
 - A video without a thumbnail loads its first frame only when its row comes near the screen, so a large folder of such videos no longer opens one request per row at once
 - Tagging many items, and "apply to everything inside" in Sharing & access, write in one statement each instead of one per item (500 items: 502 queries → 7)

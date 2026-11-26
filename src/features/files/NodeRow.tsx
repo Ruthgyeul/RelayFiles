@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { memo } from "react";
 import { formatClock, formatDateTime } from "@/domain/format";
 import { settingTags } from "@/domain/tree";
 import { FILES } from "@/config/policy";
@@ -16,7 +16,7 @@ import { Tag } from "@/shared/ui/Tag";
 import { fileUrls } from "@/shared/lib/files-api";
 import { kindOf } from "@/shared/ui/node-kind";
 import { toShareSettings } from "./settings";
-import { MenuButton } from "./ItemButtons";
+import { MenuButton, RowButton } from "./ItemButtons";
 import { itemMeta, NAME_BUTTON, type ItemProps } from "./item-props";
 import { NAV_ITEM_ATTR } from "./useListKeyboard";
 
@@ -61,8 +61,18 @@ function RowTags({ item, parentVisibility, now, onTag }: Pick<ItemProps, "item" 
   );
 }
 
-/** One list row: checkbox, type icon (with folder count), name, meta, tags and actions. */
-export function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onPreview, onMenu, onTag, menuOpen, drag, drop, dropOver, lazy, actions }: ItemProps & { actions: ReactNode }) {
+/** What a row adds to the item props: its Open (or Preview) and Download buttons. */
+interface RowActions {
+  onOpen: () => void;
+  onDownload: () => void;
+}
+
+/**
+ * One list row: checkbox, type icon (with folder count), name, meta, tags and actions. Memoized:
+ * FileList passes props that keep their identity while the item and its state are the same
+ * (`useStableRowProps`), so selecting one row does not render the others again.
+ */
+export const NodeRow = memo(function NodeRow({ item, parentPath, parentVisibility, selected, now, onToggle, onPrimary, onPreview, onMenu, onTag, menuOpen, drag, drop, dropOver, lazy, onOpen, onDownload }: ItemProps & RowActions) {
   const kind = kindOf(item);
   const folder = item.type === "folder";
   const preview = previewKindOf(item.type, item.kind);
@@ -135,7 +145,10 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
           </div>
           <RowTags item={item} parentVisibility={parentVisibility} now={now} onTag={onTag} />
         </div>
-        <div className="flex shrink-0 items-center gap-3 max-sm:order-last max-sm:w-full max-sm:pl-[88px]">{actions}</div>
+        <div className="flex shrink-0 items-center gap-3 max-sm:order-last max-sm:w-full max-sm:pl-[88px]">
+          {folder ? <RowButton icon="folder-open" label="Open" onClick={onOpen} /> : <RowButton icon="eye" label="Preview" onClick={onOpen} />}
+          <RowButton icon="download-simple" label="Download" onClick={onDownload} />
+        </div>
         <MenuButton label={`Actions for ${item.name}`} open={menuOpen} onMenu={onMenu} />
       </div>
       {preview && (
@@ -154,4 +167,4 @@ export function NodeRow({ item, parentPath, parentVisibility, selected, now, onT
       )}
     </div>
   );
-}
+});
