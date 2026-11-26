@@ -1,8 +1,9 @@
 import "server-only";
 import { AUTO_CLEAN } from "@/config/policy";
 import type { AutoCleanView } from "@/contracts/auto-clean";
-import { cleanCutoff, type CleanRule } from "@/domain/auto-clean";
+import { cleanCutoff, isDueForClean, type CleanRule } from "@/domain/auto-clean";
 import { db } from "../db/client";
+import type { Node } from "../db/generated/client";
 import { ApiError } from "../http/api-error";
 import { logger } from "../logger";
 import { findAccountById } from "../repositories/account.repo";
@@ -48,8 +49,17 @@ export async function removeAutoClean(owner: NodeOwner, folderRef: string): Prom
  * Moves one rule's old files to Recently deleted, at most `limit` (the rest
  * move on the next days). Each batch is its own delete, so a failure keeps what moved before it.
  */
+/**
+ * The rule checked again once the chosen files are locked: a file moved out of the folder or
+ * changed since it was chosen (re-uploaded, its date modified updated) stays where it is.
+ */
+export function stillDueFor(rule: Pick<FolderRuleRow, "folderId"> & CleanRule, now: Date): (row: Node) => boolean {
+  return (row) => row.parentId === rule.folderId && row.type === "FILE" && !row.missing && isDueForClean(row, rule, now);
+}
+
 async function cleanFolder(owner: NodeOwner, rule: FolderRuleRow, now: Date, limit: number): Promise<number> {
   const cutoff = cleanCutoff(rule.olderThanDays, now);
+  const stillDue = stillDueFor(rule, now);
   // Files that could not be moved this run (gone from disk before fsck flagged them, locked):
   // left out of the next batches, so one bad file does not hold back the rest of the folder.
   const skipped: string[] = [];
@@ -58,13 +68,13 @@ async function cleanFolder(owner: NodeOwner, rule: FolderRuleRow, now: Date, lim
     const ids = await dueFileIds(db(), owner.id, rule.folderId, rule.basis, cutoff, Math.min(AUTO_CLEAN.batchSize, limit - moved), skipped);
     if (ids.length === 0) break;
     try {
-      moved += (await deleteItems(owner, ids)).deleted;
+      moved += (await deleteItems(owner, ids, { onlyIf: stillDue })).deleted;
     } catch {
       // One batch is one transaction: retry its files one by one and skip the ones that fail.
       const before = moved;
       for (const id of ids) {
         try {
-          moved += (await deleteItems(owner, [id])).deleted;
+          moved += (await deleteItems(owner, [id], { onlyIf: stillDue })).deleted;
         } catch (fileError) {
           logger.warn("auto clean: file not moved", { folderId: rule.folderId, nodeId: id, error: fileError });
           skipped.push(id);

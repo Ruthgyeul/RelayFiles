@@ -5,7 +5,10 @@ import { POST as createFolder } from "@/app/api/folders/route";
 import { AUTO_CLEAN, MS } from "@/config/policy";
 import type { AutoCleanView } from "@/contracts/auto-clean";
 import type { CreatedFolder } from "@/contracts/nodes";
-import { runAutoClean } from "@/server/services/auto-clean.service";
+import { findAccountById } from "@/server/repositories/account.repo";
+import { db } from "@/server/db/client";
+import { runAutoClean, stillDueFor } from "@/server/services/auto-clean.service";
+import { deleteItems } from "@/server/services/node-ops.service";
 import { callRoute } from "../../../../../../test/route-call";
 import { fileFixtures, type FixtureMember } from "../../../../../../test/file-fixtures";
 import { DELETE, GET, PUT } from "./route";
@@ -85,6 +88,27 @@ describe("folder auto-clean rules", () => {
     // Restorable: each moved file waits under Recently deleted.
     const deleted = await prisma.deletedItem.findMany({ where: { accountId: m.id }, select: { name: true } });
     expect(deleted.map((row) => row.name).sort()).toEqual(["a-old.txt", "stale.txt"]);
+  });
+
+  it("checks the rule again once the chosen files are locked", async () => {
+    const m = await member();
+    const inbox = await folder(m, "Inbox");
+    const elsewhere = await folder(m, "Elsewhere");
+    const due = await oldFile(m, inbox, "Inbox", "due.txt", 10);
+    const moved = await oldFile(m, inbox, "Inbox", "moved.txt", 10);
+    const changed = await oldFile(m, inbox, "Inbox", "changed.txt", 10);
+    // Between being chosen and being locked: one moves away, one is changed.
+    await prisma.node.update({ where: { id: moved }, data: { parentId: elsewhere } });
+    await prisma.node.update({ where: { id: changed }, data: { createdAt: new Date() } });
+    const owner = (await findAccountById(db(), m.id))!;
+    const rule = { folderId: inbox, olderThanDays: 7, basis: "created" as const };
+    const onlyIf = stillDueFor(rule, new Date());
+    expect(await deleteItems(owner, [due, moved, changed], { onlyIf })).toMatchObject({ deleted: 1 });
+    expect(await names(inbox)).toEqual(["changed.txt"]);
+    expect(await names(elsewhere)).toEqual(["moved.txt"]);
+    // None still due: nothing is deleted, and that is not an error.
+    expect(await deleteItems(owner, [changed], { onlyIf })).toEqual({ deleted: 0, trashIds: [] });
+    expect(await names(inbox)).toEqual(["changed.txt"]);
   });
 
   it("moves at most the per-run limit, and the rest on the next run", async () => {

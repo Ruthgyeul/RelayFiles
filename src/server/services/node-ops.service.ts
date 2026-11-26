@@ -93,18 +93,35 @@ export const topLocation = (accountId: string, item: TopItem): StorageLocation =
  * Each top-level item stays under "Recently deleted" (a DeletedItem with its rows) until then,
  * unless `recoverable` is false: items the cleanup deletes because their link expired or was
  * downloaded once are gone for good (a restore would bring back the ended link).
+ * `onlyIf`: checked on each item's row once it is locked; items that no longer pass (a file
+ * moved or changed since it was chosen) are left alone, and none passing deletes nothing.
  */
-export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable = true, malware }: { recoverable?: boolean; malware?: string } = {}): Promise<{ deleted: number; trashIds: string[] }> {
-  const items = await topLevel(owner.id, ids);
-  if (items.length === 0) throw new ApiError("NOT_FOUND");
+export async function deleteItems(
+  owner: NodeOwner,
+  ids: string[],
+  { recoverable = true, malware, onlyIf }: { recoverable?: boolean; malware?: string; onlyIf?: (row: Node) => boolean } = {},
+): Promise<{ deleted: number; trashIds: string[] }> {
+  const chosen = await topLevel(owner.id, ids);
+  if (chosen.length === 0) throw new ApiError("NOT_FOUND");
   const driver = await driverForAccount(owner, "write");
-  const locations = items.map((item) => topLocation(owner.id, item));
-  const itemIds = items.map(({ row }) => row.id);
-  const { files, trashIds } = await withStorageTransaction(db(), async (tx, undo) => {
+  const { files, trashIds, deleted: count } = await withStorageTransaction(db(), async (tx, undo) => {
     await lockAccountForWrite(tx, owner.id, driver.volumeId);
     // Counted from the rows this transaction deletes: nothing can be added below them meanwhile.
-    const rows = await lockSubtrees(tx, itemIds, STORAGE.subtreeLockAttempts);
+    let rows = await lockSubtrees(tx, chosen.map(({ row }) => row.id), STORAGE.subtreeLockAttempts);
     if (!rows) throw new ApiError("CONFLICT", "These items are changing. Try again.");
+    let items = chosen;
+    if (onlyIf) {
+      const current = new Map((await nodeRowsByIds(tx, items.map(({ row }) => row.id))).map((row) => [row.id, row]));
+      items = items.filter(({ row }) => {
+        const now = current.get(row.id);
+        return now !== undefined && now.parentId === row.parentId && onlyIf(now);
+      });
+      if (items.length === 0) return { files: [], trashIds: [], deleted: 0 };
+      // The subtrees of the items kept (already locked above).
+      if (items.length < chosen.length) rows = (await lockSubtrees(tx, items.map(({ row }) => row.id), STORAGE.subtreeLockAttempts))!;
+    }
+    const locations = items.map((item) => topLocation(owner.id, item));
+    const itemIds = items.map(({ row }) => row.id);
     // Every column of the locked rows, read before they go, so a restore can put them back.
     const full = recoverable ? await nodeRowsByIds(tx, rows.map((row) => row.id)) : [];
     // Favorites go with the rows (FK cascade); the snapshot remembers them for a restore.
@@ -120,18 +137,18 @@ export async function deleteItems(owner: NodeOwner, ids: string[], { recoverable
     }
     const deleted = rows.filter((row) => row.type === "FILE");
     // The bytes stay on disk until the daily job empties the trash, and count until then.
-    if (recoverable) return { files: deleted, trashIds: await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites, collections, malware }) };
+    if (recoverable) return { files: deleted, trashIds: await recordDeletedItems(tx, owner.id, driver.volumeId, { items, trashed, rows, full, favorites, collections, malware }), deleted: items.length };
     await recordTrashed(
       tx,
       owner.id,
       deleted.reduce((sum, row) => sum + row.size, 0n),
     );
-    return { files: deleted, trashIds: [] };
+    return { files: deleted, trashIds: [], deleted: items.length };
   });
   // Thumbnails and stripped copies are rebuilt on demand, so they are removed right away.
   await driver.removeAssets(owner.id, files.map((row) => row.id)).catch((error: unknown) => logger.warn("assets not removed", { error }));
   // `trashIds`: the "Recently deleted" entries, for an Undo right after (empty when not recoverable).
-  return { deleted: items.length, trashIds };
+  return { deleted: count, trashIds };
 }
 
 interface DeletedTrees {
