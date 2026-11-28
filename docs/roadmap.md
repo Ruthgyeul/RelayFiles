@@ -224,7 +224,7 @@ Phase 1–5가 끝난 뒤 남은 정리를 PR 다섯 개로 나눠 진행한다.
 | B `test(e2e): wider accessibility checks and shared fixtures` | a11y 검사에 `/files/favorites`, `/files/deleted`, `/r/[id]`를 추가한다. 1×1 PNG 상수를 `e2e/helpers.ts`로 모은다. `waitForTimeout`을 없앤다 | [#185](https://github.com/Ruthgyeul/RelayFiles/pull/185) |
 | C `fix(files): recheck auto clean rules under the lock` | 자동 정리가 잠금을 잡은 뒤 폴더와 날짜 조건을 다시 확인한다. 고른 뒤 옮겨지거나 날짜가 바뀐 파일은 남긴다 | [#186](https://github.com/Ruthgyeul/RelayFiles/pull/186) |
 | D `perf(files): memoize list rows` | `NodeRow`·`NodeCard`를 `memo`로 감싸고 고정 핸들러를 넘긴다. 선택을 바꿔도 다른 행은 다시 렌더하지 않는다 | [#187](https://github.com/Ruthgyeul/RelayFiles/pull/187) |
-| E `test(nginx): keep shared locations of both templates in step` | 컨테이너와 호스트 Nginx 템플릿의 공통 location을 parity 테스트로 맞춘다(3-8에서 남은 부분) | 이 PR |
+| E `test(nginx): keep shared locations of both templates in step` | 컨테이너와 호스트 Nginx 템플릿의 공통 location을 parity 테스트로 맞춘다(3-8에서 남은 부분) | [#188](https://github.com/Ruthgyeul/RelayFiles/pull/188) |
 | — | Prisma 이름 정리(`expAt` → `@map`) | 보류: 운영 DB 컬럼 이름을 바꾸는 파괴적 마이그레이션이 필요하다. 예정된 contract는 `docs/upgrade/README.md` 표에서 관리한다 |
 
 ## 검증 (계획 전체)

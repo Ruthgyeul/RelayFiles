@@ -64,7 +64,7 @@ LAN ─────────────── :NGINX_LISTEN_PORT ───�
 | worker | `Dockerfile` `tools` 타깃 | 없음 | SSD, 로그 |
 | postgres / redis | `postgres:16`, `redis:7` | 없음 | `DATA_DIR` (저장 디스크) |
 | tools | `tools` 타깃 (`--profile tools`) | 없음 | 마이그레이션, `volume:init`, `admin:create` 같은 일회성 명령 |
-| cloudflared | `cloudflare/cloudflared:2026.10.0` (`--profile tunnel`) | 없음 (아웃바운드만) | 없음 |
+| cloudflared | `cloudflare/cloudflared` (버전·digest는 `deploy/docker-compose.yml`에 고정, `--profile tunnel`) | 없음 (아웃바운드만) | 없음 |
 
 app·worker·nginx는 모두 저장소 계정(`STORAGE_UID`, 기본 10001)으로 실행한다. SSD의 파일은 이 계정만 읽을 수 있다(디렉터리 `0700`, 파일 `0600`). 빌드 컨텍스트는 `.dockerignore` 허용 목록(Dockerfile이 쓰는 파일만)이라 `.env`, `.app/`, 인증서 같은 파일은 이미지에 들어가지 않는다. tools 이미지는 운영 의존성만 설치한다(`npm ci --omit=dev`). app·tools 이미지는 tini를 PID 1로 실행해 고아 프로세스를 회수하고, 모든 서비스의 컨테이너 로그는 `DOCKER_LOG_MAX_SIZE` × `DOCKER_LOG_MAX_FILE`(기본 10m × 5)까지만 남는다.
 
