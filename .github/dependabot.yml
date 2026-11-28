@@ -20,6 +20,10 @@ updates:
       # typescript-eslint does not support TypeScript 7 yet (CLAUDE.md).
       - dependency-name: typescript
         update-types: [version-update:semver-major]
+      # The types follow the runtime (Node 24 LTS, .nvmrc and engines): newer ones would let code
+      # use APIs Node 24 lacks. Moved by hand with the runtime.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   # The command-line client (cli/, its own package).
   - package-ecosystem: npm
@@ -35,6 +39,8 @@ updates:
         update-types: [minor, patch]
     ignore:
       - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
         update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions

@@ -19,7 +19,7 @@
 | 검증 | zod 4 (env, API 계약) |
 | 데이터 | PostgreSQL 16 + Prisma 7, Redis 7 + BullMQ |
 | 파일 | 외장 SSD `/mnt/relayfilesDB`, 사용자별 루트 폴더에 원본 저장 |
-| 테스트 | Vitest 5 (단위), Playwright 1.64 (E2E, 360/768/1280 뷰포트) |
+| 테스트 | Vitest 5 (단위), Playwright 1.65 (E2E, 360/768/1280 뷰포트) |
 | 린트 | ESLint 10 flat config + `eslint-plugin-boundaries` (레이어 규칙). `eslint-config-next`의 react·import·jsx-a11y 플러그인은 peer 범위가 `^9`까지라 `overrides.eslint = "$eslint"`로 루트 버전을 쓴다 |
 
 ## Next.js 16 주의사항
